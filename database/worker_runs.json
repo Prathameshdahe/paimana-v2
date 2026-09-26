@@ -1,0 +1,102 @@
+[
+  {
+    "id": "5cd6b1e1-e756-4d74-ae7d-d131db630f63",
+    "worker": "auditor",
+    "timestamp": "2026-09-21T21:39:16.323084+00:00",
+    "model_version": "rules-v1 + qwen/qwen2.5-coder-14b (query phrasing only)",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 1,
+    "summary": "Checked 10 top-priority projects for stale/inconsistent figures; 1 flagged."
+  },
+  {
+    "id": "7ff4ee9c-6bfa-413c-a519-2bbcaf8f63a7",
+    "worker": "forecaster",
+    "timestamp": "2026-09-21T21:39:16.323084+00:00",
+    "model_version": "lgbm-v1-2026-09-22",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Looked up slip probability and risk exposure for 10 projects from the trained model's latest scores."
+  },
+  {
+    "id": "1ed8cbf5-dca6-4868-9dbc-69251f5f9f9b",
+    "worker": "scout",
+    "timestamp": "2026-09-21T21:39:16.323084+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "real_projects.json remarks (no live news fetch yet)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Extracted delay-cause tags for 10 projects from existing status remarks (no live news fetch yet)."
+  },
+  {
+    "id": "07350e21-0ea1-4e8d-ad46-38edde04d96c",
+    "worker": "analyst",
+    "timestamp": "2026-09-21T21:39:16.323084+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Drafted risk summaries and recommended actions for 10 projects."
+  },
+  {
+    "id": "0f5718e5-79bb-4f7f-8420-a7177f401a0d",
+    "worker": "dispatcher",
+    "timestamp": "2026-09-21T21:39:16.323084+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 10,
+    "summary": "Drafted 10 escalation memos, all pending human approval."
+  },
+  {
+    "id": "5e91326d-0fdb-4c2b-8b7e-6025f531bfa2",
+    "worker": "auditor",
+    "timestamp": "2026-09-21T22:08:36.269480+00:00",
+    "model_version": "rules-v1 + qwen/qwen2.5-coder-14b (query phrasing only)",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 1,
+    "summary": "Checked 10 top-priority projects for stale/inconsistent figures; 1 flagged."
+  },
+  {
+    "id": "709a4bfd-88e9-48f0-a023-d14920a25387",
+    "worker": "forecaster",
+    "timestamp": "2026-09-21T22:08:36.269480+00:00",
+    "model_version": "lgbm-v1-2026-09-22",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Looked up slip probability and risk exposure for 10 projects from the trained model's latest scores."
+  },
+  {
+    "id": "2db85940-e45c-4bed-89d9-7c172d9260de",
+    "worker": "scout",
+    "timestamp": "2026-09-21T22:08:36.269480+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "real_projects.json remarks (no live news fetch yet)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Extracted delay-cause tags for 10 projects from existing status remarks (no live news fetch yet)."
+  },
+  {
+    "id": "69edb9fb-ddc5-4dab-9e2d-1b3b6fa0e23e",
+    "worker": "analyst",
+    "timestamp": "2026-09-21T22:08:36.269480+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 0,
+    "summary": "Drafted risk summaries and recommended actions for 10 projects."
+  },
+  {
+    "id": "34fb96ea-5f4a-4d35-9740-de111e26ca70",
+    "worker": "dispatcher",
+    "timestamp": "2026-09-21T22:08:36.269480+00:00",
+    "model_version": "qwen/qwen2.5-coder-14b",
+    "dataset": "data/gold/latest_features.csv (top 10 by slip_probability)",
+    "projects_processed": 10,
+    "alerts_raised": 10,
+    "summary": "Drafted 10 escalation memos, all pending human approval."
+  }
+]

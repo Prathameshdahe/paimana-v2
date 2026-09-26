@@ -1,0 +1,300 @@
+[
+  {
+    "id": "343c1265-8081-420b-8fe4-1c9584f8ef04",
+    "project_id": "N18000335",
+    "project_name": "BIKANER SOLAR POWER PROJECT",
+    "draft_memo": "Project: BIKANER SOLAR POWER PROJECT (N18000335)\nSummary: The project has a high slip probability of 0.8281 and significant risk exposure of Cr925.74. The top drivers for the increased risk include agency, percentage time elapsed, physical progress, delay in months, with 'clearance' issues being a major cause.\nBottlenecks: ['agency', 'pct_time_elapsed', 'physical_progress', 'delay_months']\nRecommended action: Address clearance issues immediately by engaging with the nodal officer and MAHARASHTRA level authorities. Accelerate physical progress and manage delays to mitigate risk exposure.",
+    "recommended_recipient_role": "ipmd_analyst",
+    "status": "pending",
+    "created_at": "2026-09-21T21:29:01.223191+00:00",
+    "evidence": [
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Nodal officer reported issues with Expedited Clearances."
+      },
+      {
+        "tag": "utility_shifting",
+        "source_url": null,
+        "note": "Action pending at MAHARASHTRA level."
+      }
+    ]
+  },
+  {
+    "id": "53aca37a-8b8c-4b4c-8e68-dd479760175c",
+    "project_id": "N18000042",
+    "project_name": "VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT",
+    "draft_memo": "Project: VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT (N18000042)\nSummary: The project has a high slip probability of 0.7636 and significant risk exposure of Cr1454.89. The top SHAP drivers indicate that the agency, percentage of time elapsed, physical progress, cost revised, and delay in months are contributing to the risk.\nBottlenecks: ['agency', 'pct_time_elapsed', 'physical_progress', 'cost_revised']\nRecommended action: Focus on mitigating risks associated with agency delays, managing time effectively, ensuring physical progress, and controlling cost revisions. Additionally, address the land acquisition delay reported by the nodal officer.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:30:15.594788+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Nodal officer reported issues with Land Acquisition Delay."
+      }
+    ]
+  },
+  {
+    "id": "2417a598-f7b7-4de3-a245-39aacb6ad6cf",
+    "project_id": "N24001400",
+    "project_name": "SENAPATI- IMPHAL PKG-5B",
+    "draft_memo": "Project: SENAPATI- IMPHAL PKG-5B (N24001400)\nSummary: The project has a high slip probability of 0.759 and significant risk exposure of Cr 97.0987. The top drivers contributing to the risk are state, physical progress, agency, percentage time elapsed, and progress velocity, all worsening the situation.\nBottlenecks: ['state', 'physical_progress', 'agency', 'pct_time_elapsed', 'progress_velocity']\nRecommended action: Implement a comprehensive risk mitigation plan focusing on improving project state management, accelerating physical progress, enhancing agency coordination, optimizing time utilization, and increasing progress velocity.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:31:21.072659+00:00",
+    "evidence": []
+  },
+  {
+    "id": "ec23b22e-ebb0-4809-94cd-b467f4ead424",
+    "project_id": "N18000291",
+    "project_name": "DHAULASIDH HYDROELECTRIC PROJECT (66 MW)",
+    "draft_memo": "Project: DHAULASIDH HYDROELECTRIC PROJECT (66 MW) (N18000291)\nSummary: The project has a high slip probability of 0.7467 with significant risk exposure of Cr 463.04. The top SHAP drivers indicate that agency, physical progress, state, past slip rate, and progress velocity are worsening the risk.\nBottlenecks: ['Land acquisition issues', 'Pending environmental clearance', 'Contractor issues']\nRecommended action: Prioritize resolving land acquisition delays, expedite environmental clearance processes, and address contractor-related challenges to mitigate risks and improve project progress.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:32:38.887327+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Land acquisition issues are delaying the project."
+      },
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Environmental clearance is pending and causing delays."
+      },
+      {
+        "tag": "contractor",
+        "source_url": null,
+        "note": "Contractor issues are impacting the project timeline."
+      }
+    ]
+  },
+  {
+    "id": "c8d65e82-0d5d-4115-8734-cf9eaad180e0",
+    "project_id": "N24001443",
+    "project_name": "CONSTRUCTION OF FOUR LANE EXPRESSWAY FROM START OF SARDAR PATEL RING ROAD TO SINDHREJ VILLAGE (CH. 0",
+    "draft_memo": "Project CONSTRUCTION OF FOUR LANE EXPRESSWAY FROM START OF SARDAR PATEL RING ROAD TO SINDHREJ VILLAGE (CH. 0 (N24001443) has a high slip probability of 0.72 and significant risk exposure of approximately 63.84 Cr. The bottlenecks include pct_time_elapsed, physical_progress, agency, and state. Focus on accelerating physical progress, managing time effectively, improving agency coordination, and addressing state-related issues to mitigate the risk.",
+    "recommended_recipient_role": "ipmd_analyst",
+    "status": "pending",
+    "created_at": "2026-09-21T21:33:30.992600+00:00",
+    "evidence": []
+  },
+  {
+    "id": "5ed41ac5-0ea6-4b73-a964-7cdfc6b9e4a4",
+    "project_id": "N24000749",
+    "project_name": "REHABILITATION AND UP GRADATION OF SECTION FROM KM 206.00 TO KM 242.00 (NIMBUTALA TO AUSTIN CREEK) O",
+    "draft_memo": "Project REHABILITATION AND UP GRADATION OF SECTION FROM KM 206.00 TO KM 242.00 (NIMBUTALA TO AUSTIN CREEK) O (N24000749) has a high slip probability of 69.47% and significant risk exposure of approximately 74.87 Cr. Bottlenecks include pct_time_elapsed, physical_progress, agency, progress_velocity, and optimism_gap. Implement a comprehensive risk mitigation plan focusing on accelerating physical progress, improving agency performance, and reducing the optimism gap. Regularly monitor and adjust strategies based on real-time data to minimize slip probability.",
+    "recommended_recipient_role": "ipmd_analyst",
+    "status": "rejected",
+    "created_at": "2026-09-21T21:34:39.052402+00:00",
+    "evidence": []
+  },
+  {
+    "id": "daf70fc2-5ac9-4fad-aa1a-94dadd161c34",
+    "project_id": "N22000472",
+    "project_name": "SAGAULI VALMIKINAGAR DOUBLING 109.7 KM",
+    "draft_memo": "Project SAGAULI VALMIKINAGAR DOUBLING 109.7 KM (N22000472) has a high slip probability of 0.6816608236574031 with no risk exposure in currency terms. The top SHAP drivers indicate that the percentage of time elapsed, physical progress, state, delay in months, and revised cost are all worsening factors. Bottlenecks include land acquisition issues, environmental clearance pending, and delay in contractor's response. We recommend prioritizing addressing land acquisition issues, expediting environmental clearance, and improving communication with contractors to mitigate delays and ensure project progress.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:36:02.445911+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Top bottleneck: Land acquisition issues"
+      },
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Top bottleneck: Environmental clearance pending"
+      },
+      {
+        "tag": "contractor",
+        "source_url": null,
+        "note": "Top bottleneck: Delay in contractor's response"
+      }
+    ]
+  },
+  {
+    "id": "a73f5588-7186-46ba-b539-c3e724aa657a",
+    "project_id": "N24001271",
+    "project_name": "2-LANING OF CHURACHANDPUR TUIVAI SECTION OF NH-102B (PKG- 2B)",
+    "draft_memo": "Project: 2-LANING OF CHURACHANDPUR TUIVAI SECTION OF NH-102B (PKG- 2B) (N24001271)\nSummary: The project has a high slip probability of 0.6791 and significant risk exposure of Cr 142.07 due to multiple worsening factors.\nBottlenecks: ['state', 'physical_progress', 'agency', 'pct_time_elapsed', 'optimism_gap']\nRecommended action: Implement a comprehensive risk mitigation plan focusing on improving project state, accelerating physical progress, enhancing agency involvement, managing time effectively, and addressing the optimism gap.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:37:17.265764+00:00",
+    "evidence": []
+  },
+  {
+    "id": "e54db7d2-e3b8-4324-9d27-e30476d586eb",
+    "project_id": "N22000177",
+    "project_name": "ARARIA-SUPAUL (NL)",
+    "draft_memo": "Project ARARIA-SUPAUL (NL) (N22000177) has a high slip probability of 0.6768548242710754 with no risk exposure in currency terms. The SHAP analysis identifies several top drivers contributing to the worsening risk, including optimism gap, physical progress, cost revised, state, and agency. Bottlenecks include optimism gap, physical progress, cost revisions, current state, and agency involvement. Recommended action: Conduct a thorough review of these areas and implement corrective measures focusing on realistic planning, accurate tracking of progress, cost control, and ensuring proper agency engagement.",
+    "recommended_recipient_role": "ipmd_analyst",
+    "status": "approved",
+    "created_at": "2026-09-21T21:38:22.163130+00:00",
+    "evidence": []
+  },
+  {
+    "id": "4f49d0d7-899d-409e-8ce3-5a03ab7dc178",
+    "project_id": "N24001685",
+    "project_name": "CONSTRUCTION OF 4 LANE BANGALORE -CHENNAI EXPRESSWAY FROM KM 53.500 TO KM 71.000 SECTION OF NE-7 (BA (NHAI)",
+    "draft_memo": "Project CONSTRUCTION OF 4 LANE BANGALORE - CHENNAI EXPRESSWAY FROM KM 53.500 TO KM 71.000 SECTION OF NE-7 (BA (NHAI) (N24001685) has a high slip probability of 0.67 and significant risk exposure of approximately 517 million Cr. The identified bottlenecks are pct_time_elapsed, agency, physical_progress, delay_months, and optimism_gap. Focus on mitigating these drivers and implementing proactive risk management strategies.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:39:16.320332+00:00",
+    "evidence": []
+  },
+  {
+    "id": "f65f7186-2572-4cfb-ac10-77e7f377e5a9",
+    "project_id": "N18000335",
+    "project_name": "BIKANER SOLAR POWER PROJECT",
+    "draft_memo": "Project BIKANER SOLAR POWER PROJECT (N18000335) has a high slip probability of 0.8281 and significant risk exposure of Cr925.74. Key drivers include agency issues, time elapsed, physical progress, delay in months, and utility shifting. Address clearance issues with expedited action; monitor and mitigate delays in physical progress and time elapsed; coordinate with MAHARASHTRA level to resolve utility shifting actions promptly.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:57:50.174833+00:00",
+    "evidence": [
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Nodal officer reported issues with Expedited Clearances."
+      },
+      {
+        "tag": "utility_shifting",
+        "source_url": null,
+        "note": "Action pending at MAHARASHTRA level."
+      }
+    ]
+  },
+  {
+    "id": "6a62a3fe-f45f-4487-aa6f-ba47cb656f9a",
+    "project_id": "N18000042",
+    "project_name": "VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT",
+    "draft_memo": "Project: VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT (N18000042)\nSummary: The project has a high slip probability of 0.7636 and significant risk exposure of approximately 1454.89 Cr.\nBottlenecks: ['agency', 'pct_time_elapsed', 'physical_progress', 'cost_revised']\nRecommended action: Focus on accelerating land acquisition to improve delay months, enhance physical progress, and manage cost revisions to mitigate the identified risks.",
+    "recommended_recipient_role": "ipmd_analyst",
+    "status": "approved",
+    "created_at": "2026-09-21T21:58:44.812613+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Nodal officer reported issues with Land Acquisition Delay."
+      }
+    ]
+  },
+  {
+    "id": "c90ef036-5619-4713-aaa2-430a101284ca",
+    "project_id": "N24001400",
+    "project_name": "SENAPATI- IMPHAL PKG-5B",
+    "draft_memo": "Project: SENAPATI- IMPHAL PKG-5B (N24001400)\nSummary: The project has a high slip probability of 0.759 and significant risk exposure of Cr97.0987. The top SHAP drivers indicate that the state, physical progress, agency, percentage time elapsed, and progress velocity are all worsening factors.\nBottlenecks: ['state', 'physical_progress', 'agency', 'pct_time_elapsed', 'progress_velocity']\nRecommended action: Implement a comprehensive risk mitigation plan focusing on improving the state of the project, accelerating physical progress, enhancing agency involvement, managing time effectively, and increasing progress velocity. Regularly monitor these factors to ensure they are under control.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T21:59:57.357141+00:00",
+    "evidence": []
+  },
+  {
+    "id": "af04843e-1e1d-404b-9934-95f8e133be4a",
+    "project_id": "N18000291",
+    "project_name": "DHAULASIDH HYDROELECTRIC PROJECT (66 MW)",
+    "draft_memo": "Project: DHAULASIDH HYDROELECTRIC PROJECT (66 MW) (N18000291)\nSummary: The project has a high slip probability of 0.7467 and significant risk exposure of Cr 463.04. The top SHAP drivers indicate that agency, physical progress, state, past slip rate, and progress velocity are worsening the risk.\nBottlenecks: ['Land acquisition issues', 'Pending environmental clearance', 'Contractor issues']\nRecommended action: Prioritize addressing land acquisition delays, expedite environmental clearance processes, and resolve contractor-related issues to mitigate risks and improve project progress.",
+    "recommended_recipient_role": "agency_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:01:26.356690+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Land acquisition issues are delaying the project."
+      },
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Environmental clearance is pending, causing delays."
+      },
+      {
+        "tag": "contractor",
+        "source_url": null,
+        "note": "Contractor issues are impacting the project timeline."
+      }
+    ]
+  },
+  {
+    "id": "08a180a7-8268-4b31-9b4f-7e0ee4c8ed93",
+    "project_id": "N24001443",
+    "project_name": "CONSTRUCTION OF FOUR LANE EXPRESSWAY FROM START OF SARDAR PATEL RING ROAD TO SINDHREJ VILLAGE (CH. 0",
+    "draft_memo": "Project CONSTRUCTION OF FOUR LANE EXPRESSWAY FROM START OF SARDAR PATEL RING ROAD TO SINDHREJ VILLAGE (CH. 0 (N24001443) has a high slip probability of 0.72 and significant risk exposure of approximately 63.84 Cr. The bottlenecks identified are pct_time_elapsed, physical_progress, agency, and state. It is recommended to focus on accelerating physical progress, managing time effectively, improving agency performance, and addressing state-related issues to mitigate the risk.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:02:19.285611+00:00",
+    "evidence": []
+  },
+  {
+    "id": "48dd2576-3fd1-4b03-9628-ecf988b603ed",
+    "project_id": "N24000749",
+    "project_name": "REHABILITATION AND UP GRADATION OF SECTION FROM KM 206.00 TO KM 242.00 (NIMBUTALA TO AUSTIN CREEK) O",
+    "draft_memo": "The REHABILITATION AND UP GRADATION OF SECTION FROM KM 206.00 TO KM 242.00 (NIMBUTALA TO AUSTIN CREEK) O project has a high slip probability of 69.47% and significant risk exposure of approximately 74.87 Cr. Key bottlenecks include pct_time_elapsed, physical_progress, agency, progress_velocity, and optimism_gap. We recommend implementing a comprehensive risk mitigation plan focusing on accelerating physical progress, improving agency performance, and reducing the optimism gap. Consider realigning project timelines to better match actual progress velocity.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:03:18.431781+00:00",
+    "evidence": []
+  },
+  {
+    "id": "442c2688-ec75-4bdd-bcac-cc8adbd00af4",
+    "project_id": "N22000472",
+    "project_name": "SAGAULI VALMIKINAGAR DOUBLING 109.7 KM",
+    "draft_memo": "Project SAGAULI VALMIKINAGAR DOUBLING 109.7 KM (N22000472) has a high slip probability of 0.6816608236574031, with significant risk exposure driven by land acquisition issues, pending environmental clearance, and delays in contractor onboarding. Immediate action is required to resolve these bottlenecks.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:04:45.976854+00:00",
+    "evidence": [
+      {
+        "tag": "land",
+        "source_url": null,
+        "note": "Top bottleneck: Land acquisition issues"
+      },
+      {
+        "tag": "clearance",
+        "source_url": null,
+        "note": "Top bottleneck: Environmental clearance pending"
+      },
+      {
+        "tag": "contractor",
+        "source_url": null,
+        "note": "Top bottleneck: Delays in contractor onboarding"
+      }
+    ]
+  },
+  {
+    "id": "2cc26eec-1fe2-40a9-98e5-02755cf74cba",
+    "project_id": "N24001271",
+    "project_name": "2-LANING OF CHURACHANDPUR TUIVAI SECTION OF NH-102B (PKG- 2B)",
+    "draft_memo": "Project: 2-LANING OF CHURACHANDPUR TUIVAI SECTION OF NH-102B (PKG- 2B) (N24001271)\nSummary: The project has a high slip probability and significant risk exposure due to multiple worsening factors.\nBottlenecks: ['state', 'physical_progress', 'agency', 'pct_time_elapsed', 'optimism_gap']\nRecommended action: Implement immediate mitigation strategies focusing on improving project state, accelerating physical progress, enhancing agency involvement, managing time effectively, and addressing the optimism gap.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:06:10.308873+00:00",
+    "evidence": []
+  },
+  {
+    "id": "5eb9ae87-e76c-4601-afd2-77c51f36e9d8",
+    "project_id": "N22000177",
+    "project_name": "ARARIA-SUPAUL (NL)",
+    "draft_memo": "Project ARARIA-SUPAUL (NL) (N22000177) has a high slip probability of 0.6768 and is exposed to significant risks due to multiple factors including optimism gap, physical progress, cost revisions, state, and agency. Bottlenecks include optimism gap, physical progress, cost revised, state, and agency. Recommended action: Conduct a thorough risk assessment focusing on the identified bottlenecks. Implement mitigation strategies for optimism gap, monitor physical progress closely, manage cost revisions effectively, address state-related issues, and improve agency coordination to reduce overall project risk.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:07:23.193663+00:00",
+    "evidence": []
+  },
+  {
+    "id": "b2258870-7cf3-468d-b296-e37faf089e8d",
+    "project_id": "N24001685",
+    "project_name": "CONSTRUCTION OF 4 LANE BANGALORE -CHENNAI EXPRESSWAY FROM KM 53.500 TO KM 71.000 SECTION OF NE-7 (BA (NHAI)",
+    "draft_memo": "Project CONSTRUCTION OF 4 LANE BANGALORE -CHENNAI EXPRESSWAY FROM KM 53.500 TO KM 71.000 SECTION OF NE-7 (BA (NHAI) (N24001685) has a high slip probability of 0.67 and significant risk exposure of approximately 517 Cr. Bottlenecks include pct_time_elapsed, agency, physical_progress, delay_months, and optimism_gap. Recommended action is to implement a comprehensive risk mitigation plan focusing on reducing the time elapsed, improving agency performance, accelerating physical progress, minimizing delays, and addressing the optimism gap.",
+    "recommended_recipient_role": "ministry_official",
+    "status": "pending",
+    "created_at": "2026-09-21T22:08:36.265925+00:00",
+    "evidence": []
+  }
+]
