@@ -1,0 +1,28 @@
+# env
+.env
+.env.*
+!.env.example
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# scratch
+temp/*
+!temp/.gitkeep
+
+# editor / os
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

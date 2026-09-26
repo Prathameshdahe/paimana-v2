@@ -1,0 +1,44 @@
+/* Import design token layer FIRST — PostCSS requires @import before @tailwind */
+@import './styles/globals.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base layer overrides using tokens */
+@layer base {
+  * {
+    @apply border-border-subtle;
+  }
+
+  body {
+    @apply bg-surface-base text-fg-base font-sans;
+  }
+
+  /* Enforce tabular-nums on all monospace elements globally */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+}
+
+@layer utilities {
+  /* Semantic risk-tier pips — MINIMAL, no background fills */
+  .tier-critical {
+    @apply text-critical;
+  }
+  .tier-warning {
+    @apply text-warning;
+  }
+  .tier-normal {
+    @apply text-stable;
+  }
+
+  /* Structural hairlines — 1px precision grid discipline */
+  .divider-h {
+    @apply h-px w-full bg-border-subtle;
+  }
+  .divider-v {
+    @apply w-px h-full bg-border-subtle;
+  }
+}

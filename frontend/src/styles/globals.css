@@ -1,0 +1,129 @@
+/* ==========================================================================
+   PAIMANA Design Token Layer — FINALIZED
+   Deep Carbon / Obsidian operational command center palette.
+   References: Palantir Gotham, Linear, Bloomberg Terminal, Grafana Enterprise.
+   Zero decorative chroma on surfaces — color is reserved for DATA ONLY.
+   ========================================================================== */
+
+:root {
+  /* ── Surface Tokens ─────────────────────────────────────────────────────── */
+  /* Soft Sand/Mist tone. Distinct from pure white for reduced eye strain. */
+  --color-surface-base:     30 15% 91%;         /* Soft beige/sand canvas  */
+  --color-surface-panel:    30 20% 97.5%;       /* Warm chalk surface (no pure white) */
+  --color-surface-input:    30 12% 87%;         /* Soft recessed wells     */
+  --color-surface-elevated: 30 15% 94%;         /* Subtle hover & raised   */
+
+  /* ── Border Tokens ──────────────────────────────────────────────────────── */
+  /* Balanced structural boundaries    */
+  --color-border-subtle:  30 12% 84%;          /* Soft grid hairlines     */
+  --color-border-default: 30 12% 76%;          /* Structural dividers    */
+  --color-border-strong:  30 15% 62%;          /* Interactive edges       */
+
+  /* ── Semantic Status Colors (Auditor Inks) ──────────────────────────────── */
+  /* Functional, restrained, high-contrast on soft chalk surfaces (AAA)        */
+  /* CRITICAL: Past Point of No Return — demands immediate cabinet attention  */
+  --color-critical: 354 74% 42%;              /* #ba1b2b — deep oxblood / ruby     */
+  /* WARNING: Float depletion > 60% — administrative attention required       */
+  --color-warning:  30 95% 31%;               /* #9c4d04 — deep burnt amber/sienna */
+  /* STABLE/NORMAL: On-track, positive float                                  */
+  --color-stable:   158 82% 25%;              /* #0b7249 — institutional spruce    */
+
+  /* ── Accent (Sovereign Parliamentary Blue) ──────────────────────────────── */
+  /* Minimal usage — focus rings, active state indicators, telemetry metrics   */
+  --color-accent: 215 25% 45%;               /* Professional subtle slate blue     */
+
+  /* ── Foreground Tokens (High-Ink Contrast) ──────────────────────────────── */
+  --color-fg-base:    220 25% 15%;            /* Deep rich charcoal  */
+  --color-fg-muted:   220 15% 38%;            /* Labels, column headers  */
+  --color-fg-dimmed:  220 15% 45%;            /* Timestamps, hints (Darkened for WCAG AA) */
+  --color-fg-inverse: 30 20% 98%;             /* Text on dark surfaces   */
+}
+
+/* ==========================================================================
+   Lenis Smooth Scroll Base
+   ========================================================================== */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+/* ==========================================================================
+   Base Typography & Reset — Industrial Density
+   ========================================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-color: hsl(var(--color-border-subtle));
+}
+
+html {
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  font-size: 15px;                         /* Increased base size for better readability */
+}
+
+body {
+  background-color: hsl(var(--color-surface-base));
+  color: hsl(var(--color-fg-base));
+  min-height: 100dvh;
+  line-height: 1.6;                        /* Looser leading for readability */
+}
+
+/* Telemetry figures: monospace tabular-nums — enforced globally on .mono */
+.mono,
+[data-telemetry] {
+  font-family: 'IBM Plex Mono', 'Fira Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ==========================================================================
+   Print Media — PRAGATI Decision Memo
+   ========================================================================== */
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide Top Telemetry Bar, Header Nav, Policy Sliders, page margins, and interactive controls */
+  header,
+  nav,
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Format active simulation output into formal 1-page A4 brief */
+  [data-print-memo] {
+    display: block !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 10mm 12mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
