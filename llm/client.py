@@ -16,6 +16,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:1234/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "qwen/qwen2.5-coder-14b")
 TIMEOUT = 120.0  # local 14B model can be slow
+CONNECT_TIMEOUT = 3.0  # but a server that is not running fails fast
 
 
 class LLMConnectionError(Exception):
@@ -49,12 +50,17 @@ def _post(system_prompt: str, user_prompt: str) -> str:
                 "temperature": 0.2,
             },
             headers={"Authorization": "Bearer not-needed"},
-            timeout=TIMEOUT,
+            timeout=httpx.Timeout(TIMEOUT, connect=CONNECT_TIMEOUT),
         )
         resp.raise_for_status()
     except httpx.HTTPError as e:
         raise LLMConnectionError(f"LM Studio unreachable at {LLM_BASE_URL}: {e}") from e
     return resp.json()["choices"][0]["message"]["content"]
+
+
+def complete(system_prompt: str, user_prompt: str) -> str:
+    """Plain-text chat completion (no JSON schema); raises LLMConnectionError when LM Studio is unreachable."""
+    return _post(system_prompt, user_prompt)
 
 
 def call_llm(system_prompt: str, user_prompt: str, response_model: type[BaseModel]) -> BaseModel:

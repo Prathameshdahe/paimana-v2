@@ -1,4 +1,4 @@
-"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, audit log.
+"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, briefs, audit log.
 
 database/paimana.db, or the path in PAIMANA_DB. One short connection per call
 (single backend process); the analytics side stays in backend/serving.py.
@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS signal_projects (
 CREATE INDEX IF NOT EXISTS signal_projects_key ON signal_projects (project_key);
 CREATE TABLE IF NOT EXISTS scouted (project_key TEXT PRIMARY KEY, scouted_at TEXT NOT NULL, n_items INTEGER);
 CREATE TABLE IF NOT EXISTS audit_log (at TEXT NOT NULL, role TEXT, action TEXT NOT NULL, target TEXT, detail TEXT);
+CREATE TABLE IF NOT EXISTS briefs (
+    project_key TEXT NOT NULL, asof TEXT NOT NULL, model_version TEXT NOT NULL, generated_at TEXT, text TEXT,
+    n_numbers_checked INTEGER, attempts INTEGER, PRIMARY KEY (project_key, asof, model_version));
 """
 
 
@@ -241,6 +244,26 @@ def project_signals(project_key: str, limit=100) -> dict:
             WHERE sp.project_key = ? ORDER BY s.published_at DESC, s.id DESC LIMIT ?""", [project_key, limit])]
         last = con.execute("SELECT scouted_at FROM scouted WHERE project_key = ?", [project_key]).fetchone()
     return {"key": project_key, "last_scout_at": last and last[0], "items": items}
+
+
+def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None:
+    """An accepted brief (backend/brief.py) for this data version, or None."""
+    with closing(connect()) as con:
+        row = con.execute("SELECT * FROM briefs WHERE project_key = ? AND asof = ? AND model_version = ?",
+                          [project_key, asof, model_version]).fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["key"] = out.pop("project_key")
+    return out
+
+
+def save_brief(b: dict) -> None:
+    with closing(connect()) as con, con:
+        con.execute("""INSERT OR REPLACE INTO briefs (project_key, asof, model_version, generated_at, text,
+            n_numbers_checked, attempts) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    [b["key"], b["asof"], b["model_version"], b["generated_at"], b["text"], b["n_numbers_checked"],
+                     b["attempts"]])
 
 
 def audit(role, action, target, detail=None) -> None:

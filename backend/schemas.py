@@ -306,11 +306,158 @@ class ExternalSummary(CamelModel):
     caveats: list[str]
 
 
+class LiveAccuracy(CamelModel):
+    """Realised outcomes of logged predictions; every metric is None until outcomes are realised (never faked)."""
+    n_logged: int
+    n_realised: int
+    first_asof: date | None
+    n_critical_high_realised: int
+    precision_critical_high: float | None
+    base_rate: float | None
+    pr_auc: float | None
+    note: str
+
+
 class ModelsOut(CamelModel):
+    """registry: one row per registered entry (pooled validation PR-AUC, ECE, test PR-AUC, champion now);
+    decisions: champion / challenger decisions with their reasons (the last 100 of each)."""
     champions: dict[str, Any]
     run_id: str | None
     backtest: list[Record]
     ablation: list[Record]
+    shap_summary: list[Record]
+    calibration: list[Record]
+    registry: list[Record]
+    decisions: list[Record]
+    live_accuracy: LiveAccuracy
+
+
+class AgencyPoint(CamelModel):
+    """One canonical agency (gold/agency_matrix.parquet). schedule_bias / cost_bias are shrunk toward the sector
+    median when n < 10, the *_raw ones are not; CIs are bootstrap 90% intervals of the raw median."""
+    agency: str
+    names: str | None
+    sector: str | None
+    ministry: str | None
+    n_projects: int
+    n_open: int
+    capital_cr: float
+    schedule_bias: float | None
+    schedule_bias_raw: float | None
+    schedule_bias_q25: float | None
+    schedule_bias_q75: float | None
+    schedule_bias_ci_lo: float | None
+    schedule_bias_ci_hi: float | None
+    cost_bias: float | None
+    cost_bias_raw: float | None
+    cost_bias_q25: float | None
+    cost_bias_q75: float | None
+    cost_bias_ci_lo: float | None
+    cost_bias_ci_hi: float | None
+    n_cost: int
+    sector_schedule_bias: float | None
+    sector_cost_bias: float | None
+    shrink_weight: float | None
+    shrunk: bool
+    hidden: bool
+    trend: float | None
+    n_recent: int
+
+
+class AgencyMatrix(CamelModel):
+    asof: date
+    n_agencies: int
+    n_hidden: int
+    method: str
+    points: list[AgencyPoint]
+
+
+class MemberBrief(CamelModel):
+    key: str
+    name: str | None
+    tier: str | None
+    p_any_2q: float | None
+    anticipated_cost_cr: float | None
+
+
+class Bottleneck(CamelModel):
+    """A cluster of current projects sharing an open issue (category, authority, state); level 'state' is the
+    rollup over every authority. headline + note: the projects that would be affected, not a causal claim."""
+    bottleneck_id: str
+    level: Literal["authority", "state"]
+    category: str
+    authority: str | None
+    state: str | None
+    n_projects: int
+    capital_exposed_cr: float
+    mean_p_any_2q: float | None
+    mean_months_p50: float | None
+    n_critical_high: int
+    earliest_first_seen: date | None
+    last_seen: date | None
+    n_signals: int
+    evidence: list[str]
+    headline: str
+    note: str
+    top_members: list[MemberBrief]
+
+
+class BottleneckPage(CamelModel):
+    """summary: gold/bottlenecks_summary.json with the file's own keys."""
+    asof: date
+    total: int
+    page: int
+    size: int
+    summary: dict[str, Any]
+    items: list[Bottleneck]
+
+
+class MemberEvidence(CamelModel):
+    kind: Literal["event", "signal"]
+    authority: str | None
+    first_seen: date | None
+    last_seen: date | None
+    evidence: str | None
+    source_doc_id: str | None
+    source_page: int | None
+    url: str | None
+
+
+class BottleneckMember(CamelModel):
+    key: str
+    name: str | None
+    sector: str | None
+    state: str | None
+    agency: str | None
+    tier: str | None
+    p_any_2q: float | None
+    months_p50: float | None
+    anticipated_cost_cr: float | None
+    evidence: list[MemberEvidence]
+
+
+class BottleneckDetail(CamelModel):
+    asof: date
+    bottleneck: Bottleneck
+    total: int
+    page: int
+    size: int
+    members: list[BottleneckMember]
+
+
+class BriefOut(CamelModel):
+    """A validated brief; payload is every fact the model was given (its own keys), the numbers it may cite."""
+    status: Literal["ok"]
+    key: str
+    asof: str
+    model_version: str
+    text: str
+    paragraphs: list[str]
+    cached: bool
+    generated_at: str | None
+    n_numbers_checked: int | None
+    attempts: int | None
+    payload: dict[str, Any]
 
 
 # ---------- app state (SQLite, backend/db.py) ----------
@@ -462,6 +609,33 @@ class FeedItem(CamelModel):
 class StateHeat(CamelModel):
     state: str | None
     n: int
+
+
+class CountRow(CamelModel):
+    name: str | int | None
+    n: int
+
+
+class LeadTimeStats(CamelModel):
+    n_linked_pairs: int
+    n_with_later_change: int
+    median_lead_days: int | None
+    basis: str
+
+
+class RadarSummary(CamelModel):
+    """Counts over signals published in the last window_days; lead time over every linked signal."""
+    window_days: int
+    since: str
+    n_signals_total: int
+    n_window: int
+    n_linked: int
+    n_unlinked: int
+    by_category: list[CountRow]
+    by_severity: list[CountRow]
+    by_source: list[CountRow]
+    n_projects_scouted: int
+    lead_time: LeadTimeStats
 
 
 class SignalFeed(CamelModel):

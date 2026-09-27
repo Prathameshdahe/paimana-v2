@@ -388,3 +388,32 @@ def heat(days: int = HEAT_DAYS) -> list[dict]:
             JOIN signals s ON s.id = sp.signal_id WHERE s.severity >= 2 AND s.published_at >= ?""", [since]).fetchall()
     n = Counter(st for _, st in {(sid, idx[k]["state"]) for sid, k in pairs if k in idx})
     return [{"state": s, "n": c} for s, c in n.most_common()]
+
+
+def radar_summary(days: int = HEAT_DAYS) -> dict:
+    """Radar rollup: stored signals published in the last `days` days by category, severity and source, linked vs
+    unlinked; lead time over every linked signal (a positive gap: the news came before the CUF row changed)."""
+    since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
+    linked_sql = "EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id)"
+    with closing(db.connect()) as con:
+        def counts(col, limit=20):
+            return [{"name": r[0], "n": r[1]} for r in con.execute(
+                f"""SELECT {col}, count(*) FROM signals s WHERE s.published_at >= ? GROUP BY 1
+                    ORDER BY 2 DESC, 1 LIMIT {limit}""", [since])]
+        total = con.execute("SELECT count(*) FROM signals").fetchone()[0]
+        n_window, n_linked = con.execute(f"""SELECT count(*), count(*) FILTER (WHERE {linked_sql}) FROM signals s
+            WHERE s.published_at >= ?""", [since]).fetchone()
+        by_category, by_severity, by_source = counts("coalesce(s.category, 'none')"), counts("s.severity"), counts(
+            "s.source", 10)
+        pairs = con.execute("""SELECT sp.project_key, s.published_at FROM signal_projects sp
+            JOIN signals s ON s.id = sp.signal_id""").fetchall()
+        scouted = con.execute("SELECT count(*) FROM scouted").fetchone()[0]
+    gaps = [g for g in (lead_time(k, pub)["lead_days"] for k, pub in pairs) if g is not None]
+    gaps.sort()
+    return {"window_days": days, "since": since, "n_signals_total": total, "n_window": n_window,
+            "n_linked": n_linked, "n_unlinked": n_window - n_linked, "by_category": by_category,
+            "by_severity": by_severity, "by_source": by_source, "n_projects_scouted": scouted,
+            "lead_time": {"n_linked_pairs": len(pairs), "n_with_later_change": len(gaps),
+                          "median_lead_days": gaps[len(gaps) // 2] if gaps else None,
+                          "basis": "every linked signal: the first report period after its date whose CUF row "
+                                   "pushed completion or revised cost"}}

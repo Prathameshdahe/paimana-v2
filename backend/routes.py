@@ -2,17 +2,21 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm import worker
 
-from . import db, serving, store
+from . import brief, db, serving, store
 from .live import scheduler, scout, watcher
 from .schemas import (
+    AgencyMatrix,
     Alert,
     AlertKind,
     AlertPage,
     ApprovalRequest,
+    BottleneckDetail,
+    BottleneckPage,
+    BriefOut,
     DispatchDraft,
     ExternalSummary,
     Flag,
@@ -27,6 +31,7 @@ from .schemas import (
     ProjectDetail,
     ProjectPage,
     ProjectSignals,
+    RadarSummary,
     Role,
     RoleBody,
     SignalFeed,
@@ -86,6 +91,53 @@ def get_forecast(key: str):
     out = serving.forecast(_key(key))
     if out is None:
         raise HTTPException(status_code=404, detail=f"project {key} is not in the current scored portfolio")
+    return out
+
+
+@router.get("/projects/{key}/brief", response_model=BriefOut,
+            responses={404: {"description": "not in the scored portfolio"},
+                       422: {"description": "status 'rejected' with reasons: numbers not in the payload"},
+                       503: {"description": "status 'llm_unavailable': LM Studio is not reachable"}})
+def get_brief(key: str):
+    """Two paragraphs from the local LLM citing only the payload's numbers (backend/brief.py), cached per
+    (project, asof, model_version)."""
+    out = brief.generate(_key(key))
+    if out["status"] == "not_scored":
+        raise HTTPException(status_code=404, detail=out["detail"])
+    if out["status"] != "ok":
+        return JSONResponse(status_code=503 if out["status"] == "llm_unavailable" else 422, content=out)
+    return out
+
+
+@router.get("/agencies/matrix", response_model=AgencyMatrix)
+def get_agency_matrix(sector: str | None = Query(None, max_length=60),
+                      ministry: str | None = Query(None, max_length=100), include_hidden: bool = False):
+    """Agency Performance Matrix: one point per canonical agency (n >= 5 unless include_hidden)."""
+    return serving.agency_matrix(sector, ministry, include_hidden)
+
+
+@router.get("/agencies/{agency}/projects", response_model=ProjectPage)
+def get_agency_projects(agency: str, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    """Current projects of one canonical agency (every printed name that maps to it), riskiest first."""
+    name = agency.strip().upper()
+    if not serving.agency_known(name):
+        raise HTTPException(status_code=404, detail=f"agency {agency} not found")
+    return serving.projects(agency=name, page=page, size=size)
+
+
+@router.get("/bottlenecks", response_model=BottleneckPage)
+def get_bottlenecks(category: str | None = Query(None, max_length=40), state: str | None = Query(None, max_length=60),
+                    min_projects: int | None = Query(None, ge=1), level: Literal["authority", "state"] | None = None,
+                    page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    """Bottleneck Intelligence: clusters by capital exposed, each with its top 5 members."""
+    return serving.bottlenecks(category, state, min_projects, level, page, size)
+
+
+@router.get("/bottlenecks/{bottleneck_id}", response_model=BottleneckDetail)
+def get_bottleneck(bottleneck_id: str, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    out = serving.bottleneck(bottleneck_id, page, size)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f"bottleneck {bottleneck_id} not found")
     return out
 
 
@@ -184,6 +236,12 @@ def get_signal_feed(since: datetime | None = None, category: str | None = Query(
                     linked: bool | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
     """External Evidence Radar: one page of signals (severity = at least) and the state heat."""
     return scout.feed(since and since.isoformat(), category, state, severity, linked, page, size)
+
+
+@router.get("/radar/summary", response_model=RadarSummary)
+def get_radar_summary():
+    """External Evidence Radar rollup: last 90 days by category / severity / source, linked vs unlinked, lead time."""
+    return scout.radar_summary()
 
 
 @router.get("/live/status", response_model=LiveStatus)

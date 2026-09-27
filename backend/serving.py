@@ -2,7 +2,8 @@
 
 Each data version is loaded once into an in-memory DuckDB: `cur` holds one
 row per scored project (scores + latest observation + features + open flags),
-the other tables are the per-project Parquet files as written by the pipeline.
+the other tables are the per-project Parquet files as written by the pipeline,
+plus the cross-project ones: agency matrix and map, bottlenecks and members.
 The version is the mtime of external_summary.json: the profile step writes it
 last, so score and analogues rewriting their files first (predictions_latest.json
 before scenarios_/analogues_/risk_profile_<month>) never serves a half-written
@@ -29,8 +30,9 @@ from pipeline.identity.identity_map import IdentityMap
 ROOT = Path(__file__).resolve().parents[1]
 GOLD, SILVER, MODEL = ROOT / "dataset" / "gold", ROOT / "dataset" / "silver", ROOT / "model"
 POINTER, SILVER_MANIFEST = GOLD / "predictions_latest.json", SILVER / "silver_manifest.json"
-EXTERNAL_SUMMARY = GOLD / "external_summary.json"
+EXTERNAL_SUMMARY, BOTTLENECKS_SUMMARY = GOLD / "external_summary.json", GOLD / "bottlenecks_summary.json"
 RETRY_S = 30
+TOP_MEMBERS = 5
 
 TIERS = ["Critical", "High", "Medium", "Low"]
 # list flag -> risk-profile dimension that raises it
@@ -57,6 +59,16 @@ BAND_METHOD = (
     "(own recent velocity, sector-median velocity, agency pattern) and the middle line is the own-velocity curve; "
     "it is a scenario range, not a statistical interval. Completion band: anticipated completion plus the 5th, "
     "50th and 95th percentile of predicted slip over the next 2 quarters (LightGBM quantile models), to the month.")
+AGENCY_METHOD = (
+    "Schedule bias = (latest anticipated completion, or completion) - sanction over (first printed scheduled "
+    "completion - sanction), minus 1; cost bias = latest anticipated cost / first original cost - 1; only projects "
+    "with a known planned duration. Median, IQR and a bootstrap 90% CI of the median per canonical agency (printed "
+    "names merged, gold/agency_map.csv). With n < 10 the shown median is shrunk toward the sector median with weight "
+    "n / (n + 10) (raw kept); agencies with n < 5 are hidden. Trend = median schedule bias of projects sanctioned in "
+    "the last 3 years of data minus that of earlier ones: recent projects have had less time to slip, so a negative "
+    "trend is partly that. Capital and n_open are the current portfolio.")
+LIVE_NOTE = ("Live accuracy compares logged predictions with outcomes once the report 2 quarters after their asof "
+             "is in silver; PR-AUC needs at least 30 realised rows.")
 
 _lock = threading.Lock()
 _state: dict = {}
@@ -92,6 +104,10 @@ def _load() -> dict:
         # sorted by key so a one-project filter skips most row groups
         order = "ORDER BY project_key" if name not in ("scurve",) else ""
         con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}') {order}")
+    for name, path in (("agencies", GOLD / "agency_matrix.parquet"), ("bottlenecks", GOLD / "bottlenecks.parquet"),
+                       ("bmembers", GOLD / "bottleneck_members.parquet")):
+        con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}')")
+    con.execute(f"CREATE TABLE amap AS SELECT * FROM read_csv_auto('{_posix(GOLD / 'agency_map.csv')}')")
     con.execute(f"""CREATE TABLE review AS SELECT project_key, count(*) AS n_rows, min(period) AS first_period,
         max(period) AS last_period FROM read_parquet('{_posix(SILVER / "observations_review.parquet")}') GROUP BY 1""")
     flag_cols = ",\n".join(f"coalesce(bool_or(dimension = '{d}' AND state = 'flagged'), false) AS f_{f}"
@@ -135,6 +151,7 @@ def _load() -> dict:
         "latest_report_period": report[0].date() if report else None,
         "latest_report_doc": report[1] if report else None,
         "external_summary": json.loads(EXTERNAL_SUMMARY.read_text(encoding="utf-8")),
+        "bottlenecks_summary": json.loads(BOTTLENECKS_SUMMARY.read_text(encoding="utf-8")),
     }
 
 
@@ -202,8 +219,11 @@ def _one(s: dict, sql: str, params: list | tuple = ()) -> dict | None:
     return rows[0] if rows else None
 
 
-def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None) -> tuple[str, list]:
+def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None, agency=None) -> tuple[str, list]:
     conds, params = [], []
+    if agency:  # canonical agency (gold/agency_map.csv): every printed name that maps to it
+        conds.append("agency IN (SELECT raw FROM amap WHERE canonical = ?)")
+        params.append(agency)
     for col, v in (("ministry", ministry), ("sector", sector), ("state", state_)):
         if v:
             conds.append(f"{col} = ?")
@@ -273,10 +293,10 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None):
 
 @cached
 def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag=None, sort="risk", order=None,
-             page=1, size=50):
+             page=1, size=50, agency=None):
     size = max(1, min(int(size), 100))
     page = max(1, int(page))
-    where, params = _where(ministry, sector, state_, tier, q, flag)
+    where, params = _where(ministry, sector, state_, tier, q, flag, agency)
     direction = (order or ("asc" if sort == "name" else "desc")).upper()
     total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
@@ -440,9 +460,125 @@ def models(s):
     run_id = (champ.get("y_any_h2") or next(iter(champ.values()), {})).get("run_id")
     run = MODEL / "runs" / str(run_id)
 
-    def csv(name):
+    def csv(name, sql="SELECT * FROM t"):
         path = run / name
-        return _rows(s, f"SELECT * FROM read_csv_auto('{_posix(path)}')") if path.exists() else []
+        return _rows(s, sql.replace("FROM t", f"FROM read_csv_auto('{_posix(path)}')")) if path.exists() else []
 
+    champions = {c["entry_id"] for c in champ.values()}
+    runs = [{"entry_id": r["entry_id"], "run_id": r["run_id"], "model": r["model"], "target": r["target"],
+             "horizon": r["horizon"], "gold_version": r["gold_version"], "created_at": r.get("created_at"),
+             "pr_auc": r["metrics"]["pooled"].get("pr_auc"), "ece": r["metrics"]["pooled"].get("ece"),
+             "test_pr_auc": (r["metrics"].get("test") or {}).get("pr_auc"), "champion": r["entry_id"] in champions}
+            for r in reg.get("runs", [])]
     return {"champions": champ, "run_id": run_id, "backtest": csv("backtest_summary.csv"),
-            "ablation": csv("ablation.csv")}
+            "ablation": csv("ablation.csv"),
+            "shap_summary": csv("shap_summary.csv", """SELECT feature, "group", mean_abs_shap FROM t
+                WHERE target = 'y_any' AND horizon = 2 ORDER BY mean_abs_shap DESC LIMIT 20"""),
+            "calibration": csv("calibration.csv", "SELECT * FROM t ORDER BY target, horizon, model, bin"),
+            "registry": runs[-100:], "decisions": reg.get("decisions", [])[-100:], "live_accuracy": live_accuracy()}
+
+
+def average_precision(y: list[int], p: list[float]) -> float | None:
+    """PR-AUC as average precision: the mean of the precision at each positive, ranked by p (ties by order)."""
+    order = sorted(range(len(p)), key=lambda i: -p[i])
+    hits, total = 0, 0.0
+    for rank, i in enumerate(order, 1):
+        if y[i]:
+            hits += 1
+            total += hits / rank
+    return total / hits if hits else None
+
+
+@cached
+def live_accuracy(s):
+    """Realised 2-quarter outcomes of logged predictions (latest model per project and asof): filled in the log by
+    the watcher, or read from the h=2 labels once silver has the report 2 quarters after the asof."""
+    rows = _rows(s, f"""
+        WITH p AS (SELECT * FROM read_parquet('{_posix(GOLD / "prediction_log.parquet")}')
+                   QUALIFY row_number() OVER (PARTITION BY project_key, "asof" ORDER BY model_version DESC) = 1),
+             l AS (SELECT project_key, period AS "asof", y_any FROM read_parquet('{_posix(GOLD / "labels_h2.parquet")}')
+                   WHERE y_any IS NOT NULL)
+        SELECT p."asof", p.tier, p.p_any_2q, coalesce(p.y_any_2q, l.y_any) AS y
+        FROM p LEFT JOIN l USING (project_key, "asof")""")
+    done = [r for r in rows if r["y"] is not None]
+    watch = [r for r in done if r["tier"] in ("Critical", "High")]
+    scored = [r for r in done if r["p_any_2q"] is not None]
+    first = min((r["asof"] for r in rows), default=None)
+    out = {"n_logged": len(rows), "n_realised": len(done), "first_asof": first,
+           "n_critical_high_realised": len(watch),
+           "precision_critical_high": sum(r["y"] for r in watch) / len(watch) if watch else None,
+           "base_rate": sum(r["y"] for r in done) / len(done) if done else None,
+           "pr_auc": average_precision([r["y"] for r in scored], [r["p_any_2q"] for r in scored])
+           if len(scored) >= 30 else None, "note": LIVE_NOTE}
+    if not done:
+        out["note"] = (f"No logged prediction is realised yet: the earliest asof is {first}, and its 2-quarter outcome "
+                       "is known once the report 2 quarters later is in silver. " + LIVE_NOTE)
+    return out
+
+
+# ------------------------------------------------------ agencies, bottlenecks
+
+@cached
+def agency_matrix(s, sector=None, ministry=None, include_hidden=False):
+    conds, params = ([] if include_hidden else ["NOT hidden"]), []
+    for col, v in (("sector", sector), ("ministry", ministry)):
+        if v:
+            conds.append(f"{col} = ?")
+            params.append(v)
+    where = (" WHERE " + " AND ".join(conds)) if conds else ""
+    counts = _one(s, "SELECT count(*) AS n, count(*) FILTER (WHERE hidden) AS n_hidden FROM agencies")
+    points = _rows(s, f"""SELECT * EXCLUDE ("asof") FROM agencies{where}
+        ORDER BY hidden, capital_cr DESC, n_projects DESC, agency LIMIT 500""", params)
+    return {"asof": s["asof"], "n_agencies": counts["n"], "n_hidden": counts["n_hidden"], "method": AGENCY_METHOD,
+            "points": points}
+
+
+@cached
+def agency_known(s, agency):
+    return _one(s, "SELECT 1 AS ok FROM agencies WHERE agency = ?", [agency]) is not None
+
+
+def _top_members(s, rows):
+    """Replace each bottleneck row's member_keys by its first TOP_MEMBERS members (key, name, tier, p, cost)."""
+    keys = sorted({k for r in rows for k in r["member_keys"][:TOP_MEMBERS]})
+    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, tier, p_any_2q,
+        anticipated_cost_cr FROM cur WHERE project_key IN ({','.join('?' * len(keys))})""", keys)} if keys else {}
+    for r in rows:
+        r["top_members"] = [got[k] for k in r.pop("member_keys")[:TOP_MEMBERS] if k in got]
+    return rows
+
+
+@cached
+def bottlenecks(s, category=None, state_=None, min_projects=None, level=None, page=1, size=50):
+    conds, params = [], []
+    for sql, v in (("category = ?", category), ("state = ?", state_), ("n_projects >= ?", min_projects),
+                   ("level = ?", level)):
+        if v is not None:
+            conds.append(sql)
+            params.append(v)
+    where = (" WHERE " + " AND ".join(conds)) if conds else ""
+    total = _one(s, f"SELECT count(*) AS n FROM bottlenecks{where}", params)["n"]
+    rows = _rows(s, f"""SELECT * EXCLUDE ("asof") FROM bottlenecks{where}
+        ORDER BY capital_exposed_cr DESC, bottleneck_id LIMIT ? OFFSET ?""", params + [size, (page - 1) * size])
+    return {"asof": s["asof"], "total": total, "page": page, "size": size, "summary": s["bottlenecks_summary"],
+            "items": _top_members(s, rows)}
+
+
+@cached
+def bottleneck(s, bid, page=1, size=50):
+    """One bottleneck and one page of its member projects (riskiest first) with their evidence lines."""
+    b = _one(s, 'SELECT * EXCLUDE ("asof") FROM bottlenecks WHERE bottleneck_id = ?', [bid])
+    if b is None:
+        return None
+    keys = b["member_keys"]
+    page_keys = keys[(page - 1) * size: page * size]
+    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, agency,
+        tier, p_any_2q, months_p50, anticipated_cost_cr FROM cur
+        WHERE project_key IN ({','.join('?' * len(page_keys))})""", page_keys)} if page_keys else {}
+    ev = {}
+    for e in _rows(s, """SELECT * EXCLUDE (bottleneck_id) FROM bmembers WHERE bottleneck_id = ?
+            ORDER BY project_key, last_seen DESC""", [bid]):
+        ev.setdefault(e.pop("project_key"), []).append(e)
+    members = [{**got[k], "evidence": ev.get(k, [])} for k in page_keys if k in got]
+    return {"asof": s["asof"], "bottleneck": _top_members(s, [b])[0], "total": len(keys), "page": page, "size": size,
+            "members": members}
