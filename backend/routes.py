@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from llm import worker
 
 from . import db, serving, store
-from .live import scout, watcher
+from .live import scheduler, scout, watcher
 from .schemas import (
     Alert,
     AlertKind,
@@ -19,6 +20,7 @@ from .schemas import (
     Ingested,
     JobRun,
     JobStarted,
+    LiveStatus,
     Meta,
     ModelsOut,
     Portfolio,
@@ -182,6 +184,21 @@ def get_signal_feed(since: datetime | None = None, category: str | None = Query(
                     linked: bool | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
     """External Evidence Radar: one page of signals (severity = at least) and the state heat."""
     return scout.feed(since and since.isoformat(), category, state, severity, linked, page, size)
+
+
+@router.get("/live/status", response_model=LiveStatus)
+def get_live_status():
+    return scheduler.status()
+
+
+@router.get("/stream")
+async def get_stream(request: Request, after: int | None = Query(None, ge=0)):
+    """Server-Sent Events: each new alert as `event: alert` (id = alert id, data = the alert JSON), a comment line
+    every 15 s. Resumes after Last-Event-ID (EventSource sends it on reconnect) or ?after=, else from now."""
+    last = request.headers.get("last-event-id")
+    start = after if after is not None else int(last) if last and last.isdigit() else None
+    return StreamingResponse(scheduler.alert_stream(start), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/projects/{key}/signals", response_model=ProjectSignals)

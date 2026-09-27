@@ -390,6 +390,24 @@ class JobStarted(CamelModel):
     summary: dict[str, Any] | None = None
 
 
+class LiveJob(CamelModel):
+    """One background loop: its in-memory tick state and its last recorded run (job_runs; None: never ran)."""
+    interval_s: float | None
+    running: bool
+    last_tick: str | None
+    next_due: str | None
+    last_error: str | None
+    last_run: JobRun | None
+
+
+class LiveStatus(CamelModel):
+    """enabled False: LIVE_JOBS=0, the loops are not running (jobs still start from the API)."""
+    enabled: bool
+    inbox_pending: int
+    watch: LiveJob
+    scout: LiveJob
+
+
 class LeadTime(CamelModel):
     """The first report period after the signal date whose CUF row changed (completion pushed or cost revised) and
     the gap in days; None while no report has changed since."""

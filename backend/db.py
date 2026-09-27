@@ -148,6 +148,17 @@ def alerts(since=None, kind=None, acked=None, page=1, size=50) -> dict:
     return {"total": total, "page": page, "size": size, "items": items}
 
 
+def max_alert_id() -> int:
+    with closing(connect()) as con:
+        return con.execute("SELECT coalesce(max(id), 0) FROM alerts").fetchone()[0]
+
+
+def alerts_after(alert_id: int, limit=100) -> list[dict]:
+    """Alerts with an id above alert_id, oldest first (the live stream)."""
+    with closing(connect()) as con:
+        return [dict(r) for r in con.execute("SELECT * FROM alerts WHERE id > ? ORDER BY id LIMIT ?", [alert_id, limit])]
+
+
 def ack(alert_id: int, role: str) -> dict | None:
     """Mark an alert acknowledged by role (the first ack stands); None if there is no such alert."""
     with closing(connect()) as con, con:

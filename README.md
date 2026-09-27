@@ -111,11 +111,35 @@ the model scores. The auditor's checks are plain Python and it calls the LLM
 only to word a query to the agency when one fails. Memo drafts from the
 dispatcher wait in the Approval Inbox until someone approves or rejects them.
 
-Treat the scout step as plumbing for now. Its input is placeholder remark text
-that `pipeline/build_real_projects.py` fills in from the heuristic drivers. For
-projects outside the 300 in `real_projects.json` it gets no text at all and
-still returns cause tags. That's 8 of the current top 10, and you can see the
-made-up evidence in `database/dispatch_drafts.json`.
+The scout step reads only recorded evidence: the delay events found in the
+project's report remarks (`gold/project_events`, with document and page) and
+the news signals linked to it (see Live tracking). A project with neither gets
+no LLM call and no cause tags.
+
+### Live tracking
+
+The backend runs two background loops (`backend/live/scheduler.py`):
+
+- **Report watcher**, every `WATCH_INTERVAL_S` seconds (60). Drop a portal
+  `Projects_Report.csv` export or a PAIMANA flash PDF into `dataset/raw/inbox/`,
+  or upload one with `POST /api/jobs/ingest`. The watcher runs the extractor,
+  the clean merge and `pipeline.run` silver, external, gold, score and profile,
+  then raises tier-change and new-project alerts and fills realised outcomes
+  in `gold/prediction_log.parquet`. `train` is not part of it; retrain by hand
+  each month. One portal file takes about two minutes. If a step fails, the old
+  scores keep serving and a `pipeline_error` alert is raised.
+- **News scout**, every `SCOUT_INTERVAL_H` hours (24; the first run is 10
+  minutes after start). It searches Google News for up to 50 projects
+  (watchlists first, then Critical and High) and reads the PIB feed, links items
+  to projects and raises `signal` alerts for severity 2 and 3 items.
+  `POST /api/jobs/scout?project_key=PRJ-...` scouts one project on the spot.
+
+`POST /api/jobs/watch` runs the watcher now. `GET /api/live/status` shows the
+last and next runs and the inbox count, and `GET /api/stream` pushes each new
+alert as a Server-Sent Event. `GET /api/signals/feed` pages the stored signals
+with the state heat and, for each linked project, the first report after the
+news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn both
+loops off; the tests do.
 
 ## Rebuilding data and the model
 
