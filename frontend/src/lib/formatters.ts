@@ -88,6 +88,19 @@ export function formatDate(isoDate: string): string {
 }
 
 /**
+ * Formats an ISO 8601 timestamp to day, month and local time.
+ * Example: "2026-09-27T15:17:36+00:00" → "27 Sep, 8:47 pm" (IST)
+ */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
  * Formats a date range as "start → end".
  * Example: "2022-06-30", "2027-09-30" → "Jun 2022 → Sep 2027"
  */

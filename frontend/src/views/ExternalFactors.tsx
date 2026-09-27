@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { MonoFigure } from '@/components/ui/MonoFigure'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { EvidenceFeed } from './external-factors/EvidenceFeed'
 import { useExternalSummary } from '@/lib/queries'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
 import type { Flag } from '@/contracts/project'
@@ -40,7 +41,8 @@ const slip = (v: number | null) => orDash(v, (x) => `${x.toFixed(0)}mo`)
 /**
  * External Factors (/external) over /api/external/summary: per-factor rollups,
  * the early-notice list, coverage and caveats, and the composite score. Every
- * figure comes from gold/external_summary.json (one aggregate response).
+ * figure comes from gold/external_summary.json (one aggregate response). The
+ * news evidence below it pages /api/signals/feed.
  */
 export function ExternalFactors() {
   const { data, error, isLoading } = useExternalSummary()
@@ -82,6 +84,8 @@ export function ExternalFactors() {
           </div>
         </>
       )}
+
+      <EvidenceFeed />
 
       <p className="font-mono text-[11px] text-fg-dimmed">External-factor datasets and rulebook: Garvit</p>
     </div>

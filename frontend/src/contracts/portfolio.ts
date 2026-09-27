@@ -96,6 +96,76 @@ export interface AlertPage {
   items: Alert[]
 }
 
+/* live jobs (backend/live): GET /api/live/status, POST /api/jobs/watch, GET /api/signals/feed */
+
+export interface JobRun {
+  id: number
+  job: string
+  startedAt: string | null
+  finishedAt: string | null
+  status: string | null
+  summary: unknown
+}
+
+/** one background loop: in-memory tick state and its last recorded run (null: never ran) */
+export interface LiveJob {
+  intervalS: number | null
+  running: boolean
+  lastTick: string | null
+  nextDue: string | null
+  lastError: string | null
+  lastRun: JobRun | null
+}
+
+/** enabled false: LIVE_JOBS=0, the loops are not running (jobs still start from the API) */
+export interface LiveStatus {
+  enabled: boolean
+  inboxPending: number
+  watch: LiveJob
+  scout: LiveJob
+}
+
+export interface JobStarted {
+  started: boolean
+  detail: string
+  pending: number | null
+  summary: Record<string, unknown> | null
+}
+
+export interface FeedProject {
+  key: string
+  name: string | null
+  state: string | null
+  tier: string | null
+  linkScore: number | null
+  method: string | null
+  /** first report period after the article whose CUF row changed; null while none has */
+  cufChangePeriod: string | null
+  leadDays: number | null
+}
+
+/** a stored news signal; projects is empty for the unlinked pool (ambiguous or weak matches) */
+export interface FeedItem {
+  id: number
+  url: string
+  title: string | null
+  source: string | null
+  publishedAt: string | null
+  fetchedAt: string | null
+  summary: string | null
+  category: string | null
+  severity: number | null
+  projects: FeedProject[]
+}
+
+export interface SignalFeed {
+  total: number
+  page: number
+  size: number
+  items: FeedItem[]
+  stateHeat: Array<{ state: string | null; n: number }>
+}
+
 /* gold/external_summary.json: the nested blocks below keep the file's own snake_case keys */
 
 export type ExternalFactorKey =

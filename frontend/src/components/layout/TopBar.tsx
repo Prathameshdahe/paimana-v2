@@ -4,6 +4,8 @@ import { useRole } from '@/lib/auth/RoleContext'
 import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
 import { formatDate } from '@/lib/formatters'
+import { useAlertStream } from '@/lib/useAlertStream'
+import { AlertBell } from './AlertBell'
 
 const ROLE_LABELS: Record<string, string> = {
   ipmd_analyst: 'IPMD Analyst',
@@ -24,6 +26,7 @@ export function TopBar() {
   const tierN = (t: string) => p?.tiers.find((x) => x.tier === t)?.n ?? 0
   const { role, displayName, clearRole } = useRole()
   const navigate = useNavigate()
+  useAlertStream()
 
   return (
     <header data-no-print className="sticky top-0 z-40 w-full border-b border-border-default bg-surface-base/95 backdrop-blur-sm shadow-sm">
@@ -66,16 +69,18 @@ export function TopBar() {
         )}
 
         {/* Right: Navigation Segments + role identity */}
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-3 xl:gap-4">
           <NavigationMenuWithActiveItem />
+
+          <AlertBell />
 
           <span className="text-border-strong/40">│</span>
 
           {role ? (
             <div className="flex items-center gap-2 font-mono text-[11px]">
-              {/* name and role only from xl; below it they are the button's tooltip, so the nav fits 1024px */}
-              <span className="hidden xl:inline whitespace-nowrap text-fg-muted">
-                {displayName} <span className="text-fg-dimmed">· {ROLE_LABELS[role]}</span>
+              {/* the role only from 2xl, the name always in the tooltip: six nav labels, the bell and this fit 1024px */}
+              <span className="hidden 2xl:inline whitespace-nowrap text-fg-muted" title={displayName}>
+                {ROLE_LABELS[role]}
               </span>
               <button
                 title={`${displayName} · ${ROLE_LABELS[role]}`}

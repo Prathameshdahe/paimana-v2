@@ -5,6 +5,7 @@
  * Medium/Low); a project with no anticipated completion date is untiered.
  */
 import type { Flag, Tier, TierFilter } from '@/contracts/project'
+import type { AlertKind } from '@/contracts/portfolio'
 
 export const TIERS: Tier[] = ['Critical', 'High', 'Medium', 'Low']
 
@@ -62,4 +63,21 @@ export const FLAG_LABEL: Record<Flag, string> = {
   litigation: 'litigation',
   contractor: 'contractor',
   early_notice: 'early notice',
+}
+
+export const ALERT_KIND_LABEL: Record<AlertKind, string> = {
+  tier_up: 'tier up',
+  tier_down: 'tier down',
+  new_project: 'new project',
+  slip_realised: 'slip realised',
+  signal: 'news signal',
+  early_notice: 'early notice',
+  pipeline_error: 'pipeline error',
+}
+
+/** Badge variant per alert severity (3 highest) */
+export const ALERT_SEVERITY = { 3: 'critical', 2: 'warning', 1: 'muted' } as const
+
+export function alertVariant(severity: number) {
+  return ALERT_SEVERITY[severity as 1 | 2 | 3] ?? 'muted'
 }

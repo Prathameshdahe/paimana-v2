@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { KPIRibbon } from '@/views/command-center/KPIRibbon'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
+import { LiveStatus } from '@/views/home/LiveStatus'
 
 /**
  * Landing page. Overview + geography + action inbox — the "what does the
@@ -27,6 +28,7 @@ export function Home() {
       </div>
 
       <KPIRibbon />
+      <LiveStatus />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <IndiaMap />

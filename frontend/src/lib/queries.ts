@@ -8,7 +8,17 @@
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost } from '@/lib/api'
-import type { AlertKind, Alert, AlertPage, ExternalSummary, Meta, Portfolio } from '@/contracts/portfolio'
+import type {
+  AlertKind,
+  Alert,
+  AlertPage,
+  ExternalSummary,
+  JobStarted,
+  LiveStatus,
+  Meta,
+  Portfolio,
+  SignalFeed,
+} from '@/contracts/portfolio'
 import type {
   Flag,
   Forecast,
@@ -38,6 +48,8 @@ export type ProjectQuery = PortfolioFilters & {
 }
 
 export type AlertQuery = {
+  /** ISO time; created at or after */
+  since?: string
   kind?: AlertKind
   acked?: boolean
   page?: number
@@ -111,10 +123,12 @@ export function useAlerts(query: AlertQuery = {}) {
     queryKey: ['alerts', query],
     queryFn: () => apiGet<AlertPage>('/api/alerts', query),
     placeholderData: keepPreviousData,
-    // ponytail: polling; the backend also has an SSE stream (/api/stream) if a minute is too slow
-    refetchInterval: 60_000,
+    // no polling: useAlertStream refetches every alert query when /api/stream pushes one
   })
 }
+
+/** roles that may acknowledge an alert (the backend records whoever does) */
+export const ACK_ROLES: Role[] = ['ipmd_analyst', 'ministry_official']
 
 export function useAckAlert() {
   const client = useQueryClient()
@@ -122,5 +136,30 @@ export function useAckAlert() {
     mutationFn: (vars: { id: number; role: Role }) =>
       apiPost<Alert>(`/api/alerts/${vars.id}/ack`, { role: vars.role }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['alerts'] }),
+  })
+}
+
+export function useLiveStatus() {
+  return useQuery({
+    queryKey: ['live', 'status'],
+    queryFn: () => apiGet<LiveStatus>('/api/live/status'),
+    refetchInterval: 30_000,
+  })
+}
+
+/** Runs the inbox watcher now (in the background on the server); its result shows in the status and the alerts. */
+export function useWatchNow() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (role: Role) => apiPost<JobStarted>('/api/jobs/watch', undefined, { role }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['live'] }),
+  })
+}
+
+export function useSignalFeed(page: number, size = 20) {
+  return useQuery({
+    queryKey: ['signals', 'feed', page, size],
+    queryFn: () => apiGet<SignalFeed>('/api/signals/feed', { page, size }),
+    placeholderData: keepPreviousData,
   })
 }

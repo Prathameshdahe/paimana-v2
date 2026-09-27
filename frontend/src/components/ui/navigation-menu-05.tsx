@@ -1,4 +1,3 @@
-import { Home, Terminal, Layers, ClipboardCheck, ListChecks, Inbox } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/formatters";
 import { useRole, type Role } from "@/lib/auth/RoleContext";
@@ -10,21 +9,19 @@ import {
 } from "@/components/ui/navigation-menu";
 
 const navigationMenuItems = [
-  { title: "HOME", href: "/", icon: Home, end: true, roles: undefined as Role[] | undefined },
-  { title: "COMMAND", href: "/command", icon: Terminal, end: false, roles: undefined },
-  { title: "EXTERNAL FACTORS", href: "/external", icon: Layers, end: false, roles: undefined },
-  { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, roles: undefined },
+  { title: "HOME", href: "/", end: true, roles: undefined as Role[] | undefined },
+  { title: "COMMAND", href: "/command", end: false, roles: undefined },
+  { title: "EXTERNAL FACTORS", href: "/external", end: false, roles: undefined },
+  { title: "AUDIT", href: "/audit", end: false, roles: undefined },
   {
     title: "WORKERS",
     href: "/workers",
-    icon: ListChecks,
     end: false,
     roles: ["ipmd_analyst", "ministry_official"] as Role[],
   },
   {
     title: "APPROVALS",
     href: "/approvals",
-    icon: Inbox,
     end: false,
     roles: ["ipmd_analyst", "ministry_official", "agency_official"] as Role[],
   },
@@ -39,7 +36,7 @@ export function NavigationMenuWithActiveItem() {
 
   return (
     <NavigationMenu>
-      <NavigationMenuList className="space-x-4 xl:space-x-8">
+      <NavigationMenuList className="space-x-3 xl:space-x-6 2xl:space-x-8">
         {visibleItems.map((item) => {
           // Determine if active based on current location and whether it requires exact match (end)
           const isActive = item.end
@@ -62,9 +59,7 @@ export function NavigationMenuWithActiveItem() {
                   "hover:bg-transparent focus:bg-transparent active:bg-transparent"
                 )}
               >
-                <NavLink to={item.href} end={item.end} className="flex flex-row items-center gap-2">
-                  {/* icons only from xl: six labels plus the role fit a 1024px window without them */}
-                  <item.icon className="hidden xl:block h-4 w-4 shrink-0 opacity-70" />
+                <NavLink to={item.href} end={item.end} className="flex flex-row items-center">
                   {item.title}
                 </NavLink>
               </NavigationMenuLink>

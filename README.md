@@ -16,10 +16,10 @@ paimana-v2/
   model/         trained LightGBM model, feature schema, metrics
   pipeline/      data prep scripts
   dataset/       all data, raw to processed
-    raw/         QPISR PDFs and MoSPI CSVs, never edited
-    silver/      cleaned CSVs
-    gold/        model features and latest scores
-  database/      JSON store for worker runs and memo drafts
+    raw/         QPISR PDFs and MoSPI CSVs, never edited; raw/inbox/ takes new reports
+    silver/      cleaned observations (Parquet)
+    gold/        features, labels, scores, risk profile (Parquet + JSON)
+  database/      paimana.db (SQLite app state, gitignored) and JSON for worker runs and memo drafts
   docs/          design notes and pitch
   temp/          scratch, gitignored
 ```
@@ -51,11 +51,15 @@ One `.env` at the root is shared by the Python code and Vite (see `envDir` in
 
 ## Running
 
-Backend, with the venv active:
+The dashboard needs the backend; there is no bundled data. Backend, with the venv active:
 
 ```
 uvicorn backend.main:app --reload --port 8000
 ```
+
+It starts the report watcher and the news scout in the background (see Live
+tracking). `LIVE_JOBS=0` in `.env` or the shell turns both loops off; the jobs
+still start from the API.
 
 Dashboard, in a second terminal:
 
@@ -69,10 +73,19 @@ page except Home sends you to `/login` until you pick a role. It's only a role
 picker, there's no auth. Public can't open the Approval Inbox, and the Worker
 Console is for IPMD Analyst and Ministry Official only.
 
-The dashboard also runs without the backend, on heuristic scores (details in
-`frontend/README.md`). The backend reads `dataset/gold/` on each request and
-keeps worker runs and memo drafts as JSON in `database/`. Routes are in
-`backend/routes.py`.
+Pages: `/` (map, live status, alert inbox), `/command` (triage), `/external`
+(external factors and news evidence), `/projects/:key`, `/audit`, `/workers`,
+`/approvals` and `/login`.
+
+To feed a new report, drop a portal `Projects_Report.csv` export or a PAIMANA
+flash PDF into `dataset/raw/inbox/`. The watcher picks it up within a minute, or
+at once from "Check inbox now" on Home (IPMD Analyst). New alerts reach the top
+bar bell and the Home inbox through `/api/stream`.
+
+The backend reads `dataset/silver/` and `dataset/gold/` through DuckDB and
+reloads when a new score or profile lands. Alerts, watchlists and the audit log
+are in SQLite (`database/paimana.db`, created on first start); worker runs and
+memo drafts stay JSON in `database/`. Routes are in `backend/routes.py`.
 
 Gotchas:
 
@@ -222,12 +235,6 @@ elapsed and recorded delay.
 - IDs are stable from 2024-25 on, but the 2005-10 and 2021-24 files use other ID
   formats, so history before 2024-25 can't be linked yet. The model uses
   2024-25 and 2025-26. 2026-27 is cleaned but not used for training yet.
-- The Sandbox coefficients are hand-set.
 - Forecast overrun in crore reads Rs 0 for many projects because `cost_revised`
   is often missing in the source.
-- `GET /api/projects/{id}/forecast` returns a 500 for projects with no risk
-  exposure. `risk_exposure_cr` is a plain float in `backend/schemas.py` and NaN
-  can't be serialised.
-- 12 of the 300 dashboard projects show predicted delays above 150 months, up to
-  275. That's what the source dates say and we haven't capped it.
 - The JSON store in `database/` has no locking, so one user at a time.
