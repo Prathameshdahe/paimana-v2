@@ -8,10 +8,12 @@ Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
          raw/external/land_acquisition_*.csv (Bhoomi Rashi stretch tables: Maharashtra, and the other 28 states with
          data in land_acquisition_india.csv) and raw/external/bhoomi_rashi/ (raw Bhoomi Rashi state exports, parsed by
-         pipeline/bhoomi_rashi.py)
+         pipeline/bhoomi_rashi.py), raw/external/parivesh_fc_proposals_legacy.csv, parivesh_fc_timelines_remarks.csv
+         and fc_project_links_reviewed.csv (PARIVESH proposals, pipeline/parivesh.py)
 Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/remark_status.parquet,
          gold/external_fc.parquet, gold/external_land.parquet, gold/external_land_links.parquet (its stretches),
-         gold/external_land_pairs.parquet (the model's land input, see LA_MODEL_TABLE), gold/external_composite.parquet
+         gold/external_land_pairs.parquet (the model's land input, see LA_MODEL_TABLE), gold/external_composite.parquet,
+         gold/fc_proposal_status.parquet and gold/external_fc_portal.parquet (PARIVESH proposals)
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -41,6 +43,10 @@ exemptions to defence projects only; the public-utility-in-LWE exemption (<= 0.1
 fc_prior_* repeat the match from sector and name alone (no remark hectares or violation): the same at every t,
 so gold can use them as features without reading later remarks.
 
+PARIVESH (pipeline/parivesh.py): proposal numbers named in the remarks are looked up in the saved PARIVESH 1.0 list
+(or its timeline pages) and set the project's forest hectares and pending flag; hand-reviewed name matches add
+proposals to external_fc_portal (stage at asof, months in it, open on the portal while the report is silent).
+
 Land acquisition: road projects are linked to the Bhoomi Rashi NH stretches of their own state (a Multi-State
 project: of each state whose district its name mentions) and of the NH number in their name (not one it names only as
 a junction): stretches at the km range in the name first, then (NH, district), then NH alone. Only a km match rates a
@@ -62,6 +68,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline import parivesh  # noqa: E402
 from pipeline.bhoomi_rashi import aggregate_stretches, parse_bhoomi_rashi  # noqa: E402
 from pipeline.silver import ROOT, SILVER, quarter  # noqa: E402
 
@@ -810,8 +817,10 @@ def fc_summary(match, p):
                            f"(scenario {w['scenario_id']})"}
 
 
-def forest_clearance(master, ev, scen):
-    """One row per project_key: its Parivesh profile and the complexity of the scenarios it matches."""
+def forest_clearance(master, ev, scen, portal=None):
+    """One row per project_key: its Parivesh profile and the complexity of the scenarios it matches. portal
+    (project_key, area_ha, pending) overrides the remark hectares and the pending flag of the projects whose report
+    remarks name a Parivesh proposal number found on the portal (pipeline/parivesh.py)."""
     name, sector = master["project_name"], master["sector"]
     lin = shape(sector, name).eq("Linear")
     fe_ev = ev[ev["category"].eq("forest_env")]
@@ -823,6 +832,8 @@ def forest_clearance(master, ev, scen):
         "defence": sector.eq("Defence") | name.fillna("").str.contains(DEFENCE_NAME, case=False, regex=True),
         "survey": name.fillna("").str.contains(SURVEY_NAME, case=False, regex=True),
         "area_ha": master["project_key"].map(fe["forest_area_ha"].max()).astype("float64")})
+    if portal is not None:
+        d["area_ha"] = d["project_key"].map(portal.set_index("project_key")["area_ha"]).fillna(d["area_ha"])
     prof = ["linear", "mining", "violation", "ofc", "defence", "survey", "area_ha"]
     # ponytail: one scenario scan per distinct profile, a few dozen; vectorise if hectares become common
     keys = d[prof].drop_duplicates()
@@ -832,6 +843,9 @@ def forest_clearance(master, ev, scen):
     out["fc_area_known"] = out["area_ha"].notna()
     out["fc_mentioned"] = out["project_key"].isin(fe_ev["project_key"])
     out["fc_pending"] = out["project_key"].isin(fe_ev.loc[fe_ev["status"].eq("open"), "project_key"])
+    if portal is not None:
+        out["fc_pending"] = out["project_key"].map(portal.set_index("project_key")["pending"]).fillna(
+            out["fc_pending"]).astype(bool)
     out = out.rename(columns={"mining": "fc_mining", "violation": "fc_violation", "area_ha": "fc_area_ha"})
     return out[FC_COLS]
 
@@ -1180,8 +1194,29 @@ def main(out=GOLD, silver=SILVER):
             ["project_key", "category", "subtype", "first_seen", "last_seen", "n_mentions", "status", "authority",
              "evidence"]].to_string(index=False))
 
+    asof = obs["period"].max()
+    links = pd.concat([parivesh.remark_links(rs), pd.read_csv(parivesh.LINKS, dtype="str").assign(
+        link_source="reviewed name match")[["project_key", "proposal_no", "link_source"]]], ignore_index=True)
+    links = links.drop_duplicates(["project_key", "proposal_no"])     # a remark number wins over a name match
+    prop = parivesh.proposal_rows(links, parivesh.load_legacy(), parivesh.load_timelines(), asof)
+    named = prop.merge(links.loc[links["link_source"].eq("report remarks"), ["project_key", "proposal_no"]])
+    named.to_parquet(out / "fc_proposal_status.parquet", index=False)
+    portal = parivesh.portal_projects(prop, links, ev, asof)
+    portal.to_parquet(out / "external_fc_portal.parquet", index=False)
+    # the remark-named proposals found on the portal set the forest area and whether the clearance is pending
+    found = named[named["found_in"].ne("not_found")]
+    over = found.groupby("project_key").agg(area_ha=("area_ha", "sum"),
+                                            pending=("stage_at_asof", lambda s: s.ne(parivesh.STAGE_ORDER[3]).any()))
+    pc = portal[portal["project_key"].isin(cur)]
+    print(f"PARIVESH: {len(named)} proposal numbers named in remarks ({int(found.shape[0])} found), "
+          f"{len(portal)} projects with a linked proposal ({len(pc)} current; open at {asof:%Y-%m}: "
+          f"{int(pc['n_open'].gt(0).sum())}, open on the portal but not in the report: "
+          f"{int(pc['open_not_in_report'].sum())})")
+    with pd.option_context("display.width", 250, "display.max_colwidth", 250):
+        print(named[["project_key", "evidence"]].to_string(index=False))
+
     scen = pd.read_csv(EXTERNAL / "parivesh_fc_scenarios.csv")
-    fc = forest_clearance(master, ev, scen)
+    fc = forest_clearance(master, ev, scen, over.reset_index())
     # the prior uses sector and name only (no remark hectares or violations), so it is the same at every t
     prior = forest_clearance(master, ev.iloc[:0], scen)[["project_key", *FC_PRIOR]]
     fc = fc.merge(prior.rename(columns={c: c.replace("fc_", "fc_prior_") for c in FC_PRIOR}), on="project_key")

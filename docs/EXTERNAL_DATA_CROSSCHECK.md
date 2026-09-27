@@ -84,9 +84,28 @@ references it and that every gold key is a real PRJ key.
   them current: 135 flagged (complexity 4 or more) and 277 clear. 378 more (133 current) have only a possible link.
   FC still has no linking key in the land table. Each project gets a rulebook profile from its sector and name,
   plus any forest hectares or violations in its report remarks.
-- **Parivesh proposal tracker.** Still missing. Forest events in the report remarks cover part of it. In the
-  current portfolio, 71 projects mention forest or environment clearance, 35 have an open forest event, and 20
-  report forest hectares.
+- **Parivesh proposal tracker.** Partly filled from the public legacy portal (pipeline/parivesh.py):
+  - `dataset/raw/external/parivesh_fc_proposals_legacy.csv`: 10,025 proposals visible in the PARIVESH 1.0 online
+    list (received 2014 to mid-2022). It is not a census: a known proposal (FP/MP/RAIL/41734/2019) is missing, it
+    holds 42% of the Stage-II approvals Parliament reports for 2014-2024, and state counts diverge widely from
+    the official receipts. User agency names are kept only for government bodies and PSUs.
+  - The three proposal numbers the remarks name are looked up (gold/fc_proposal_status.parquet) and set the
+    project's forest hectares and pending flag. FP/JH/MIN/44804/2020 (Muraidih, PRJ-001354) was filed in March
+    2020 and still had no Stage-I 76 months later, at July 2026. FP/MP/RAIL/41734/2019 (Katni-Singrauli,
+    PRJ-002234, 72.8 ha in Sanjay Tiger Reserve) has a DFO query of 17 Jan 2023 with no reply on its timeline
+    page, and the page now notes the proposal as withdrawn, so that forest land has no approval on PARIVESH 1.0.
+  - Project links: we reviewed all 1,312 automatic name/NH/km candidates (656 projects) by hand and kept 470
+    links (396 projects, 376 proposals) in `dataset/raw/external/fc_project_links_reviewed.csv`, each with its
+    reason. 394 are specific (same named section, km or package, or the same named mine or line); 76 are softer
+    (a corridor-wide proposal, ancillary works such as muck disposal, or a mine proposal that names no phase).
+    Our precision estimate is about 95% for the specific links and 70-80% for the softer ones. This is a
+    self-check by the same reviewer, not an independent audit.
+  - gold/external_fc_portal.parquet: 173 current projects have a linked proposal. At July 2026, 36 of them had
+    one still open (filed with no Stage-I, or Stage-I awaiting Stage-II), and none of those 36 has an open forest
+    event in its report remarks. These projects are open on PARIVESH but not mentioned in the report.
+  - Forest events in the report remarks cover the rest. In the current portfolio, 71 projects mention forest or
+    environment clearance, 34 had a forest event still open when the remarks ended, and 21 have known forest
+    hectares.
 - **Multi-state land data.** Done for the 29 states with data (see above). To refresh a state, drop its
   whole-state export into `dataset/raw/external/bhoomi_rashi/` (see the README there) and rerun
   `python -m pipeline.run external`. Most states' latest Publish Date is 2025-05-09, so the register has barely
