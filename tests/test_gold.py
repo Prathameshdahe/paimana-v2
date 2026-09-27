@@ -233,15 +233,30 @@ def test_external_open_at_t_follows_the_last_two_remark_quarters():
 def test_land_features_count_only_stretches_notified_by_t():
     k = "PRJ-000001"
     d = obs_rows(k, [(q, 100.0, "2020-01", False) for q in range(8)])
-    ext = external(stretches=[(k, 100, 4, QUARTERS[4], "2018-01-01"), (k, 50, 1, QUARTERS[6], QUARTERS[6])],
+    ext = external(stretches=[(k, 100, 4, QUARTERS[4], QUARTERS[7]), (k, 50, 1, QUARTERS[6], QUARTERS[6])],
                    fc_keys=[k])
     f = build(d, ext=ext).set_index("period")
     assert f.loc[QUARTERS[3], ["la_parcels_by_t", "la_complexity_max_by_t"]].isna().all()   # unknown, not 0
     assert f["la_linked"].tolist() == [0] * 4 + [1] * 4
-    assert f.loc[QUARTERS[5], ["la_parcels_by_t", "la_complexity_max_by_t", "la_notif_span_by_t"]].tolist() == \
-        [100, 4, (QUARTERS[5] - QUARTERS[4]).days]                        # span cut at t, not the final 2018 date
+    # still being notified at t: linked with its span so far (cut at t), parcels and complexity not known yet
+    assert f.loc[QUARTERS[5], ["la_notif_span_by_t"]].tolist() == [(QUARTERS[5] - QUARTERS[4]).days]
+    assert f.loc[QUARTERS[5], ["la_parcels_by_t", "la_complexity_max_by_t"]].isna().all()
+    assert f.loc[QUARTERS[6], ["la_parcels_by_t", "la_complexity_max_by_t"]].tolist() == [50, 1]
     assert f.loc[QUARTERS[7], ["la_parcels_by_t", "la_complexity_max_by_t"]].tolist() == [150, 4]
     assert f["fc_worst_complexity"].eq(7).all()
+
+
+def test_land_totals_notified_after_t_do_not_reach_t():
+    k = "PRJ-000001"
+    d = obs_rows(k, [(q, 100.0, "2020-01", False) for q in range(8)])
+    small, big = (build(d, ext=external(stretches=[(k, n, c, QUARTERS[2], QUARTERS[6])])) for n, c in [(10, 0), (900, 5)])
+    cols = ["la_linked", "la_parcels_by_t", "la_complexity_max_by_t", "la_notif_span_by_t"]
+    pd.testing.assert_frame_equal(small.loc[small["period"] < QUARTERS[6], cols],
+                                  big.loc[big["period"] < QUARTERS[6], cols])
+    assert small["la_linked"].tolist() == [0, 0] + [1] * 6
+    assert big.loc[big["period"] >= QUARTERS[6], "la_parcels_by_t"].eq(900).all()
+    cut = gold.external_until(external(stretches=[(k, 900, 5, QUARTERS[2], QUARTERS[6])]), QUARTERS[4])["land_pairs"]
+    assert cut[["num_parcels", "acquisition_complexity_score", "last_notif_date"]].isna().all(axis=None)
 
 
 def test_external_features_at_t_ignore_later_remarks_and_stretches():

@@ -1,8 +1,8 @@
 {
-  "gold_version": "c83ab1ac1810",
+  "gold_version": "07a71772d464",
   "silver_version": "0d8abdcfc7cf",
-  "run_id": "RUN-20260927-133045",
-  "built_at": "2026-09-27T13:30:45+00:00",
+  "run_id": "RUN-20260927-140537",
+  "built_at": "2026-09-27T14:05:37+00:00",
   "latest_period": "2026-07-01",
   "horizons_quarters": [
     2,

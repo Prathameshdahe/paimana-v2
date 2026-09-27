@@ -69,6 +69,24 @@ def test_subtype_authority_area_and_resolved():
     assert (lit.subtype, lit.authority) == ("court", "High Court")
 
 
+def test_forest_area_skips_non_forest_and_other_clauses():
+    s = pd.Series(["Forest land of 111.89 Ha and non-forest land of 648.86 Ha are under process of possession",
+                   "Total land of 155.16 Ha is required to be acquired(PVT-152.059 Ha and Forest - 3.101)",
+                   "Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired",
+                   "Total land required is 1426.08 Ha including forest and nonforest land",
+                   "Principal Chief Conservator of Forest 4", "Stage-I FC(323.49Ha): NOC for GMJJ of 152.60Ha"])
+    assert X.forest_area(s).fillna(-1).tolist() == [111.89, 3.101, 71.72, -1, -1, 323.49]
+
+
+def test_a_recommendation_tor_or_request_for_approval_is_not_done():
+    s = pd.Series(["WBCZMA issued recommendation to Secretary, MoEF & CC for CRZ Approval",
+                   "Environmental Clearance: ToR issued on 14.02.2022",
+                   "All approvals received except for Forest Diversion Approval (Stage II)",
+                   "Stage II FC issued by MoEF on 03.05.2021", "EMP for approval has been completed"])
+    m = X.tag(s)
+    assert m[m.category.eq("forest_env")].sort_values("text_id").resolved.tolist() == [False, False, False, True]
+
+
 def test_free_text_strips_templates():
     s = pd.Series(["Milestones achieved/total: 0/7", "start: 2025-04",
                    "Milestones achieved/total: 2/7; Delay in land acquisition"])
@@ -93,6 +111,22 @@ def test_events_split_on_gaps_and_open_only_at_the_end():
     assert ev.source_doc_id.tolist() == ["d0", "d3", "d5"]
     done = X.events(seen, m, master.assign(completed_period=q[-1]))
     assert (done.status == "closed").all()                        # a completed project has no open events
+
+
+def test_event_quote_comes_from_its_last_quarter_and_agrees_with_its_state():
+    q = pd.date_range("2021-01-01", periods=2, freq="QS").astype("datetime64[us]")
+    remarks = ["Stage-II forest clearance issued on 27/10/2021.",
+               "Stage-II forest clearance issued on 27/10/2021. FC proposals for diversion of 101.60 Ha have been "
+               "submitted online"]
+    rows = pd.DataFrame({"project_key": "PRJ-1", "period": q, "remarks": remarks, "source_doc_id": "d",
+                         "source_page": 1, "report": [str(p) for p in q]})
+    master = pd.DataFrame({"project_key": ["PRJ-1"], "state": "Bihar", "sector": "Railways",
+                           "completed_period": pd.NaT})
+    ev = X.events(*X.mentions(rows), master).iloc[0]
+    assert (ev.status, ev.resolved, ev.n_quarters) == ("open", False, 2)
+    assert ev.evidence.startswith("FC proposals for diversion")    # not the shorter 'issued' sentence
+    done = X.events(*X.mentions(rows.iloc[:1]), master).iloc[0]
+    assert (done.status, done.evidence) == ("closed", "Stage-II forest clearance issued on 27/10/2021.")
 
 
 SCEN = pd.read_csv(X.EXTERNAL / "parivesh_fc_scenarios.csv")
@@ -176,9 +210,12 @@ def test_nh_from_text_patterns_old_new_and_chainage():
     s = pd.Series(["Sarsam - Kothari of NH-161A - 2L PS from Km.33/00 to 90/00", "NH 161 section", "NH161",
                    "National Highway 161", "NH No. 161", "NH 85 (OLD NH 49)", "NH-11A(NEW NH-148)",
                    "NH-17 & 48 (KARNATAKA)", "NH548 D from KM 132/600", "NH- 965DD upto Junction of NH-66 Ch-22700",
-                   "NH-4B & 4 KM 12", "4L from Km 95.400 Udaipura to Km 147.450", "Mumbai-Nagpur NE-4 pkg"])
+                   "NH-4B & 4 KM 12", "4L from Km 95.400 Udaipura to Km 147.450", "Mumbai-Nagpur NE-4 pkg",
+                   "Up-gradation to 2-lane for NH- 965DD from Pacharal-Mandangad-Mhapral-Rajewadi Upto Junction of "
+                   "NH-66 Ch-22700 to 75100 Km", "of Kolde to Visarwadi Near Junction with NH-6 section of NH 752G total",
+                   "Duttalur at NH-565 Junction to Kavali", "from Jn. with NH 30 near Bela"])
     assert X.nh_from_text(s).fillna("-").tolist() == ["161A", "161", "161", "161", "161", "85", "148", "17;48", "548D",
-                                                      "66;965DD", "4B", "-", "NE4"]
+                                                      "965DD", "4B", "-", "NE4", "965DD", "752G", "-", "-"]
 
 
 LA = pd.DataFrame({
@@ -211,14 +248,3 @@ def test_link_land_district_first_then_nh_and_unknown_elsewhere():
     by_nh, by_d = X.land_tables(st)
     assert by_nh.set_index("nh").loc["161", "parcels"] == 150
     assert by_d.set_index(["nh", "district"]).loc[("161", "NANDED"), "stretches"] == 2
-
-
-def test_land_at_uses_only_stretches_notified_by_t():
-    st = X.stretches(LA)
-    _, pairs = X.link_land(pd.DataFrame({"project_key": ["P2"], "sector": "Roads & Highways", "state": "Maharashtra",
-                                         "project_name": ["Widening of NH 161"], "codes_seen": None}), st)
-    early = X.land_at(pairs, st, pd.Timestamp("2020-01-01")).set_index("project_key")
-    assert (early.loc["P2", "stretches"], early.loc["P2", "complexity_max"]) == (1, 4)
-    late = X.land_at(pairs, st, pd.Timestamp("2023-01-01")).set_index("project_key")
-    assert (late.loc["P2", "stretches"], late.loc["P2", "parcels"]) == (2, 150)
-    assert X.land_at(pairs, st, pd.Timestamp("2018-01-01")).empty

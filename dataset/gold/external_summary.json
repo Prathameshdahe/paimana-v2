@@ -1,12 +1,12 @@
 {
   "as_of_date": "2026-07-01",
   "n_projects": 1763,
-  "model_version": "lgbm-any2q-20260927-133251",
+  "model_version": "lgbm-any2q-20260927-140554",
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
-      "n_flagged": 84,
-      "capital_exposed_cr": 202746.1,
+      "n_flagged": 82,
+      "capital_exposed_cr": 202055.4,
       "top": [
         {
           "project_key": "PRJ-003795",
@@ -18,7 +18,7 @@
           "p_any_2q": null,
           "slip_to_date_months": null,
           "evidence": [
-            "land: open in reports, mentioned Jul 2022 to Apr 2023: 'Land acquisition of 263 acres is completed'"
+            "land: open in reports, mentioned Jul 2022 to Apr 2023: '\"1.Engineering A. \u00bf Acquisition of additional land by Government of Tamil Nadu (GoTN) for the project is in advanced sta'"
           ]
         },
         {
@@ -28,10 +28,10 @@
           "state": "Manipur",
           "anticipated_cost_cr": 21886.0,
           "tier": "Low",
-          "p_any_2q": 0.408,
+          "p_any_2q": 0.382,
           "slip_to_date_months": 30.0,
           "evidence": [
-            "land: open in reports, mentioned Jan 2022 to Apr 2023: '\"Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.):(Scope=738.95/Physic'"
+            "land: open in reports, mentioned Jan 2022 to Apr 2023: 'Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.):(Scope=738.95/Physica'"
           ]
         },
         {
@@ -41,10 +41,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 15310.2,
           "tier": "Low",
-          "p_any_2q": 0.196,
+          "p_any_2q": 0.191,
           "slip_to_date_months": 57.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2014 to Apr 2023: 'Land acquisition is pending.'"
+            "land: open in reports, mentioned Apr 2014 to Apr 2023: 'Land Acquisition (Hect):(Scope:795.734 /Physical progress : 795.734)=100% Earthwork(Lakh cum): (Scope: 231.25/Physical p'"
           ]
         },
         {
@@ -54,10 +54,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 13314.5,
           "tier": "Low",
-          "p_any_2q": 0.208,
+          "p_any_2q": 0.214,
           "slip_to_date_months": 18.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Total land acquisition is 21.50 ha'"
+            "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Payment of compensation is made'"
           ]
         },
         {
@@ -67,10 +67,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 9217.2,
           "tier": "Medium",
-          "p_any_2q": 0.692,
+          "p_any_2q": 0.659,
           "slip_to_date_months": 0.0,
           "evidence": [
-            "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquistion completedeExcept for Sardarpur-jhabua section for which FLS is in progress'"
+            "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress'"
           ]
         },
         {
@@ -80,10 +80,10 @@
           "state": "Andhra Pradesh",
           "anticipated_cost_cr": 5906.0,
           "tier": "Low",
-          "p_any_2q": 0.288,
+          "p_any_2q": 0.285,
           "slip_to_date_months": 10.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'D)LAND POSITION: 57% of LA and handing over completed'"
+            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Further, LA in Prakasam and Nellore Dists to be expedited'"
           ]
         },
         {
@@ -96,7 +96,7 @@
           "p_any_2q": null,
           "slip_to_date_months": null,
           "evidence": [
-            "land: open in reports, mentioned Oct 2014 to Apr 2023: 'The project requires 2185.47 Ha of land and for that 2495.30 Ha of land has been acquired in CBA Act'"
+            "land: open in reports, mentioned Oct 2014 to Apr 2023: 'R & R is also under process'"
           ]
         },
         {
@@ -106,7 +106,7 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 4612.0,
           "tier": "Low",
-          "p_any_2q": 0.275,
+          "p_any_2q": 0.323,
           "slip_to_date_months": 149.0,
           "evidence": [
             "land: open in reports, mentioned Apr 2023 to Apr 2023: 'submitted by the Collector/Ananthapuram so as to reduce the land acquisition involved in the project and the completion '"
@@ -119,7 +119,7 @@
           "state": "Himachal Pradesh",
           "anticipated_cost_cr": 4345.3,
           "tier": "Low",
-          "p_any_2q": 0.381,
+          "p_any_2q": 0.363,
           "slip_to_date_months": 52.0,
           "evidence": [
             "land: open in reports, mentioned Apr 2023 to Apr 2023: 'Proposal for private land compensation and RoW for transmission line has been prepared'"
@@ -132,7 +132,7 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 4076.2,
           "tier": "Low",
-          "p_any_2q": 0.397,
+          "p_any_2q": 0.412,
           "slip_to_date_months": 24.0,
           "evidence": [
             "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition'"
@@ -142,7 +142,7 @@
     },
     "forest_clearance": {
       "n_flagged": 35,
-      "capital_exposed_cr": 84257.9,
+      "capital_exposed_cr": 81810.2,
       "top": [
         {
           "project_key": "PRJ-001244",
@@ -151,10 +151,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 13314.5,
           "tier": "Low",
-          "p_any_2q": 0.208,
+          "p_any_2q": 0.214,
           "slip_to_date_months": 18.0,
           "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Forest land and 58.131 Hect. revenue land needs to be acquired'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
+            "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Alignment is passing through Melghat tiger Reserve'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
           ]
         },
         {
@@ -164,7 +164,7 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 9129.3,
           "tier": "Medium",
-          "p_any_2q": 0.659,
+          "p_any_2q": 0.657,
           "slip_to_date_months": 99.0,
           "evidence": [
             "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land for substation, RoW and forest clearance hampering progress'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
@@ -177,7 +177,7 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 6700.0,
           "tier": "Low",
-          "p_any_2q": 0.569,
+          "p_any_2q": 0.583,
           "slip_to_date_months": 99.0,
           "evidence": [
             "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land handover and forest clearance hampering progress'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
@@ -190,10 +190,10 @@
           "state": "Andhra Pradesh",
           "anticipated_cost_cr": 5906.0,
           "tier": "Low",
-          "p_any_2q": 0.288,
+          "p_any_2q": 0.285,
           "slip_to_date_months": 10.0,
           "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+            "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process. 4'; linear, 7.48 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
           ]
         },
         {
@@ -206,7 +206,7 @@
           "p_any_2q": null,
           "slip_to_date_months": null,
           "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2022 to Jan 2023: 'Conducting Public Hearing for EC for 40 MTY'; non-linear mining, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 6.5)"
+            "forest_clearance: open in reports, mentioned Apr 2022 to Jan 2023: '\"Conducting Public Hearing for EC for 40 MTY'; non-linear mining, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 6.5)"
           ]
         },
         {
@@ -229,23 +229,10 @@
           "state": "Himachal Pradesh",
           "anticipated_cost_cr": 4345.3,
           "tier": "Low",
-          "p_any_2q": 0.381,
+          "p_any_2q": 0.363,
           "slip_to_date_months": 52.0,
           "evidence": [
             "forest_clearance: open in reports, mentioned Apr 2023 to Apr 2023: 'Case for diversion of forest land submitted on 06.06.2023'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002241",
-          "project_name": "Daund - Manmad 247.50 km",
-          "sector": "Railways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 3554.7,
-          "tier": "Low",
-          "p_any_2q": 0.424,
-          "slip_to_date_months": 3.0,
-          "evidence": [
-            "forest_clearance: high clearance complexity expected: linear, 152.059 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Jul 2021 to Oct 2021, not mentioned since: 'Total land of 155.16 Ha is required to be acquired(PVT-152.059 Ha and Forest - 3.101)'"
           ]
         },
         {
@@ -255,7 +242,7 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 3029.0,
           "tier": "Low",
-          "p_any_2q": 0.534,
+          "p_any_2q": 0.529,
           "slip_to_date_months": 12.0,
           "evidence": [
             "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Forest clearance in forest patch i.e. kurkura-orga (55 km) section got on 28.10.2021 and tree cutting permission also go'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
@@ -268,10 +255,23 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 2700.4,
           "tier": "Low",
-          "p_any_2q": 0.377,
+          "p_any_2q": 0.399,
           "slip_to_date_months": 0.0,
           "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Balance demand awaited from Forest Deptt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+            "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Forest land application for 9.14 Hect ( 22.50 acres ) has been accepted by Forest Deptt, Jharkhand Govt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+          ]
+        },
+        {
+          "project_key": "PRJ-002260",
+          "project_name": "Koraput-Singapur Road 164.56 km",
+          "sector": "Railways",
+          "state": "Odisha",
+          "anticipated_cost_cr": 2462.2,
+          "tier": "Low",
+          "p_any_2q": 0.297,
+          "slip_to_date_months": 3.0,
+          "evidence": [
+            "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Preparation of details for forest diversion and Land acquisition in Tikiri-Bhalumaska section (45.86 Km) is  . 7'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
           ]
         }
       ]
@@ -300,7 +300,7 @@
           "state": "Jammu & Kashmir",
           "anticipated_cost_cr": 4526.1,
           "tier": "Low",
-          "p_any_2q": 0.487,
+          "p_any_2q": 0.506,
           "slip_to_date_months": 16.0,
           "evidence": [
             "litigation: open in reports, mentioned Apr 2023 to Apr 2023: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'"
@@ -313,7 +313,7 @@
           "state": "Delhi",
           "anticipated_cost_cr": 248.2,
           "tier": "Medium",
-          "p_any_2q": 0.733,
+          "p_any_2q": 0.737,
           "slip_to_date_months": 79.0,
           "evidence": [
             "litigation: open in reports, mentioned Oct 2022 to Jan 2023: 'Opening of Sports Complex including swimming pool and Badminton Court, Library Block redesigning, Status of domestic ele'"
@@ -332,7 +332,7 @@
           "state": "Andhra Pradesh",
           "anticipated_cost_cr": 34012.0,
           "tier": "Medium",
-          "p_any_2q": 0.657,
+          "p_any_2q": 0.673,
           "slip_to_date_months": 75.0,
           "evidence": [
             "contractor: open in reports, mentioned Jan 2022 to Apr 2023: 'Contract for Bundle Testing Services re- awarded to M/s'"
@@ -345,10 +345,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 9129.3,
           "tier": "Medium",
-          "p_any_2q": 0.659,
+          "p_any_2q": 0.657,
           "slip_to_date_months": 99.0,
           "evidence": [
-            "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'Award have been delayed due to poor response & high prices quoted by bidders. 1 EHV line package in Arunachal Pradesh ha'"
+            "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'DMS packages in Arunachal Pradesh, the contract was terminated due to non-performance of the agency and the packages hav'"
           ]
         },
         {
@@ -358,7 +358,7 @@
           "state": "Jammu & Kashmir",
           "anticipated_cost_cr": 4526.1,
           "tier": "Low",
-          "p_any_2q": 0.487,
+          "p_any_2q": 0.506,
           "slip_to_date_months": 16.0,
           "evidence": [
             "contractor: open in reports, mentioned Apr 2023 to Apr 2023: 'Hydro mechanical Package (Lot-II) Due to poor response, the earlier tender was cancelled and Fresh re-tender NIT floated'"
@@ -371,10 +371,10 @@
           "state": "Jharkhand",
           "anticipated_cost_cr": 1752.3,
           "tier": "Low",
-          "p_any_2q": 0.525,
+          "p_any_2q": 0.53,
           "slip_to_date_months": -4.0,
           "evidence": [
-            "contractor: open in reports, mentioned Oct 2022 to Apr 2023: '\"For executing the balance work under scope of M/s BEC through new contractor at the Risk & Cost of the defaulting contr'"
+            "contractor: open in reports, mentioned Oct 2022 to Apr 2023: 'executing the balance work under scope of M/s BEC through new contractor at the Risk & Cost of the defaulting contractor'"
           ]
         },
         {
@@ -384,7 +384,7 @@
           "state": "Odisha",
           "anticipated_cost_cr": 483.0,
           "tier": "Low",
-          "p_any_2q": 0.516,
+          "p_any_2q": 0.519,
           "slip_to_date_months": 13.0,
           "evidence": [
             "contractor: open in reports, mentioned Jan 2023 to Jan 2023: 'Poor Performance by MECON the contractor engaged for crusher package, affected the project schedule. \"'"
@@ -403,7 +403,7 @@
           "state": "Kerala",
           "anticipated_cost_cr": 315.6,
           "tier": "Low",
-          "p_any_2q": 0.455,
+          "p_any_2q": 0.488,
           "slip_to_date_months": 82.0,
           "evidence": [
             "utility_shifting: open in reports, mentioned Jul 2021 to Apr 2023: 'Estimate for Utility Shifting Approved by Ministry and work is in progress'"
@@ -425,7 +425,7 @@
           "p_any_2q": null,
           "slip_to_date_months": null,
           "evidence": [
-            "inter_agency: open in reports, mentioned Apr 2015 to Apr 2023: 'Collector, Sundergarh has been requested for early issue of NOC on 12.01.2015'"
+            "inter_agency: open in reports, mentioned Apr 2015 to Apr 2023: 'Collector, Sundergarh has been requested for early issue of NOC on 12.01.2015.DGPS survey is expexted on March 2016'"
           ]
         },
         {
@@ -435,10 +435,10 @@
           "state": "Multi-State",
           "anticipated_cost_cr": 2700.4,
           "tier": "Low",
-          "p_any_2q": 0.377,
+          "p_any_2q": 0.399,
           "slip_to_date_months": 0.0,
           "evidence": [
-            "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: '(a) NOC obtained from Coal India Limited on 30.08.21'"
+            "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: 'Census for forest trees, NOC under FRA Act (for protected forest land ) has been received, but for ?Jungle jhari land? i'"
           ]
         },
         {
@@ -448,7 +448,7 @@
           "state": "Delhi",
           "anticipated_cost_cr": 701.9,
           "tier": "Medium",
-          "p_any_2q": 0.35,
+          "p_any_2q": 0.299,
           "slip_to_date_months": 57.0,
           "evidence": [
             "inter_agency: open in reports, mentioned Jul 2021 to Apr 2023: 'Permission awaited from Forest deptt. for cutting of approx 6576 trees (for which applications have been submitted in 3 '"
@@ -458,18 +458,18 @@
     }
   },
   "early_notice": {
-    "n_projects": 75,
-    "capital_exposed_cr": 201245.3,
+    "n_projects": 79,
+    "capital_exposed_cr": 206333.2,
     "by_factor": {
-      "land": 57,
+      "land": 60,
       "forest_clearance": 25,
       "litigation": 2,
       "contractor": 5,
       "utility_shifting": 1,
       "inter_agency": 2
     },
-    "n_flagged_any": 108,
-    "capital_flagged_any_cr": 280875.7,
+    "n_flagged_any": 107,
+    "capital_flagged_any_cr": 281291.9,
     "no_slip_to_date": {
       "n_projects": 18,
       "capital_exposed_cr": 26202.0
@@ -482,7 +482,7 @@
         "state": "Andhra Pradesh",
         "anticipated_cost_cr": 34012.0,
         "tier": "Medium",
-        "p_any_2q": 0.657,
+        "p_any_2q": 0.673,
         "slip_to_date_months": 75.0,
         "evidence": [
           "contractor: open in reports, mentioned Jan 2022 to Apr 2023: 'Contract for Bundle Testing Services re- awarded to M/s'"
@@ -495,10 +495,10 @@
         "state": "Manipur",
         "anticipated_cost_cr": 21886.0,
         "tier": "Low",
-        "p_any_2q": 0.408,
+        "p_any_2q": 0.382,
         "slip_to_date_months": 30.0,
         "evidence": [
-          "land: open in reports, mentioned Jan 2022 to Apr 2023: '\"Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.):(Scope=738.95/Physic'"
+          "land: open in reports, mentioned Jan 2022 to Apr 2023: 'Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.):(Scope=738.95/Physica'"
         ]
       },
       {
@@ -508,10 +508,10 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 15310.2,
         "tier": "Low",
-        "p_any_2q": 0.196,
+        "p_any_2q": 0.191,
         "slip_to_date_months": 57.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2014 to Apr 2023: 'Land acquisition is pending.'"
+          "land: open in reports, mentioned Apr 2014 to Apr 2023: 'Land Acquisition (Hect):(Scope:795.734 /Physical progress : 795.734)=100% Earthwork(Lakh cum): (Scope: 231.25/Physical p'"
         ]
       },
       {
@@ -521,11 +521,11 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 13314.5,
         "tier": "Low",
-        "p_any_2q": 0.208,
+        "p_any_2q": 0.214,
         "slip_to_date_months": 18.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Total land acquisition is 21.50 ha'",
-          "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Forest land and 58.131 Hect. revenue land needs to be acquired'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
+          "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Payment of compensation is made'",
+          "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Alignment is passing through Melghat tiger Reserve'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
         ]
       },
       {
@@ -535,10 +535,10 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 9217.2,
         "tier": "Medium",
-        "p_any_2q": 0.692,
+        "p_any_2q": 0.659,
         "slip_to_date_months": 0.0,
         "evidence": [
-          "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquistion completedeExcept for Sardarpur-jhabua section for which FLS is in progress'"
+          "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress'"
         ]
       },
       {
@@ -548,11 +548,11 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 9129.3,
         "tier": "Medium",
-        "p_any_2q": 0.659,
+        "p_any_2q": 0.657,
         "slip_to_date_months": 99.0,
         "evidence": [
           "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land for substation, RoW and forest clearance hampering progress'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)",
-          "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'Award have been delayed due to poor response & high prices quoted by bidders. 1 EHV line package in Arunachal Pradesh ha'"
+          "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'DMS packages in Arunachal Pradesh, the contract was terminated due to non-performance of the agency and the packages hav'"
         ]
       },
       {
@@ -562,7 +562,7 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 6700.0,
         "tier": "Low",
-        "p_any_2q": 0.569,
+        "p_any_2q": 0.583,
         "slip_to_date_months": 99.0,
         "evidence": [
           "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land handover and forest clearance hampering progress'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
@@ -575,11 +575,11 @@
         "state": "Andhra Pradesh",
         "anticipated_cost_cr": 5906.0,
         "tier": "Low",
-        "p_any_2q": 0.288,
+        "p_any_2q": 0.285,
         "slip_to_date_months": 10.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'D)LAND POSITION: 57% of LA and handing over completed'",
-          "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Further, LA in Prakasam and Nellore Dists to be expedited'",
+          "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process. 4'; linear, 7.48 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
         ]
       },
       {
@@ -589,7 +589,7 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 4612.0,
         "tier": "Low",
-        "p_any_2q": 0.275,
+        "p_any_2q": 0.323,
         "slip_to_date_months": 149.0,
         "evidence": [
           "land: open in reports, mentioned Apr 2023 to Apr 2023: 'submitted by the Collector/Ananthapuram so as to reduce the land acquisition involved in the project and the completion '"
@@ -602,7 +602,7 @@
         "state": "Jammu & Kashmir",
         "anticipated_cost_cr": 4526.1,
         "tier": "Low",
-        "p_any_2q": 0.487,
+        "p_any_2q": 0.506,
         "slip_to_date_months": 16.0,
         "evidence": [
           "litigation: open in reports, mentioned Apr 2023 to Apr 2023: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'",
@@ -616,7 +616,7 @@
         "state": "Himachal Pradesh",
         "anticipated_cost_cr": 4345.3,
         "tier": "Low",
-        "p_any_2q": 0.381,
+        "p_any_2q": 0.363,
         "slip_to_date_months": 52.0,
         "evidence": [
           "land: open in reports, mentioned Apr 2023 to Apr 2023: 'Proposal for private land compensation and RoW for transmission line has been prepared'",
@@ -630,7 +630,7 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 4076.2,
         "tier": "Low",
-        "p_any_2q": 0.397,
+        "p_any_2q": 0.412,
         "slip_to_date_months": 24.0,
         "evidence": [
           "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition'"
@@ -643,7 +643,7 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 3785.4,
         "tier": "Low",
-        "p_any_2q": 0.287,
+        "p_any_2q": 0.311,
         "slip_to_date_months": 39.0,
         "evidence": [
           "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land Acquisition in Progress.'"
@@ -656,10 +656,10 @@
         "state": "Karnataka",
         "anticipated_cost_cr": 3668.2,
         "tier": "Low",
-        "p_any_2q": 0.363,
+        "p_any_2q": 0.398,
         "slip_to_date_months": 9.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition is in progress'"
+          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition is in progress for the Jumlapur road- Kekkra section and EPC Tender will be called when 90% of land is '"
         ]
       },
       {
@@ -669,11 +669,23 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 3554.7,
         "tier": "Low",
-        "p_any_2q": 0.424,
+        "p_any_2q": 0.428,
         "slip_to_date_months": 3.0,
         "evidence": [
-          "land: open in reports, mentioned Oct 2022 to Apr 2023: 'Total land of 79.086 Ha is to be acquired. out of which 7.25 Ha land acquired.'",
-          "forest_clearance: high clearance complexity expected: linear, 152.059 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Jul 2021 to Oct 2021, not mentioned since: 'Total land of 155.16 Ha is required to be acquired(PVT-152.059 Ha and Forest - 3.101)'"
+          "land: open in reports, mentioned Oct 2022 to Apr 2023: 'Total land of 79.086 Ha is to be acquired. out of which 7.25 Ha land acquired.'"
+        ]
+      },
+      {
+        "project_key": "PRJ-005971",
+        "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 3466.6,
+        "tier": "Medium",
+        "p_any_2q": 0.854,
+        "slip_to_date_months": 69.0,
+        "evidence": [
+          "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
         ]
       },
       {
@@ -683,7 +695,7 @@
         "state": "Odisha",
         "anticipated_cost_cr": 3034.8,
         "tier": "Low",
-        "p_any_2q": 0.507,
+        "p_any_2q": 0.5,
         "slip_to_date_months": 0.0,
         "evidence": [
           "land: open in reports, mentioned Jul 2021 to Apr 2023: 'The project commissioning is getting delayed due to delay in land acquisition - early acquisition of 38.82 Ha. of privat'"
@@ -696,7 +708,7 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 3029.0,
         "tier": "Low",
-        "p_any_2q": 0.534,
+        "p_any_2q": 0.529,
         "slip_to_date_months": 12.0,
         "evidence": [
           "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Forest clearance in forest patch i.e. kurkura-orga (55 km) section got on 28.10.2021 and tree cutting permission also go'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
@@ -709,11 +721,11 @@
         "state": "Multi-State",
         "anticipated_cost_cr": 2700.4,
         "tier": "Low",
-        "p_any_2q": 0.377,
+        "p_any_2q": 0.399,
         "slip_to_date_months": 0.0,
         "evidence": [
-          "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Balance demand awaited from Forest Deptt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)",
-          "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: '(a) NOC obtained from Coal India Limited on 30.08.21'"
+          "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Forest land application for 9.14 Hect ( 22.50 acres ) has been accepted by Forest Deptt, Jharkhand Govt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)",
+          "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: 'Census for forest trees, NOC under FRA Act (for protected forest land ) has been received, but for ?Jungle jhari land? i'"
         ]
       },
       {
@@ -723,36 +735,23 @@
         "state": "Bihar",
         "anticipated_cost_cr": 2621.0,
         "tier": "Medium",
-        "p_any_2q": 0.621,
+        "p_any_2q": 0.645,
         "slip_to_date_months": 34.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'State Govt. has transferred Rs. 214.5 Crore to DM/Supaul for land acquisition of Araria \u2013 Supaul NL from the already dep'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002238",
-        "project_name": "Wardha-Balharshah - 3rd line 132 km",
-        "sector": "Railways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 2603.1,
-        "tier": "Low",
-        "p_any_2q": 0.385,
-        "slip_to_date_months": 2.0,
-        "evidence": [
-          "land: open in reports, mentioned Jan 2022 to Apr 2023: 'Out of total 126.69 Ha land,116.702 Ha land acquired'"
+          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'State Govt. has transferred Rs. 214.5 Crore to DM/Supaul for land acquisition of Araria \u00bf Supaul NL from the already dep'"
         ]
       }
     ]
   },
   "notice_backtest": {
     "land_or_forest": {
-      "n_with": 807,
-      "slip_rate_with": 0.2392,
-      "n_without": 2863,
-      "slip_rate_without": 0.4342,
+      "n_with": 814,
+      "slip_rate_with": 0.2396,
+      "n_without": 2856,
+      "slip_rate_without": 0.4345,
       "lift": 0.551,
-      "projects_with": 154,
-      "lift_within_sector_year": 1.008,
+      "projects_with": 156,
+      "lift_within_sector_year": 0.986,
       "by_sector": {
         "Coal": {
           "n_with": 594,
@@ -762,11 +761,11 @@
           "lift": 0.647
         },
         "Petroleum & Natural Gas": {
-          "n_with": 52,
-          "slip_rate_with": 0.4231,
-          "n_without": 725,
-          "slip_rate_without": 0.5297,
-          "lift": 0.799
+          "n_with": 59,
+          "slip_rate_with": 0.4068,
+          "n_without": 718,
+          "slip_rate_without": 0.532,
+          "lift": 0.765
         },
         "Power": {
           "n_with": 70,
@@ -824,13 +823,13 @@
       }
     },
     "forest_env": {
-      "n_with": 435,
-      "slip_rate_with": 0.2874,
-      "n_without": 3235,
-      "slip_rate_without": 0.4053,
+      "n_with": 442,
+      "slip_rate_with": 0.2873,
+      "n_without": 3228,
+      "slip_rate_without": 0.4055,
       "lift": 0.709,
-      "projects_with": 86,
-      "lift_within_sector_year": 1.221,
+      "projects_with": 88,
+      "lift_within_sector_year": 1.176,
       "by_sector": {
         "Coal": {
           "n_with": 332,
@@ -838,6 +837,13 @@
           "n_without": 722,
           "slip_rate_without": 0.1814,
           "lift": 0.963
+        },
+        "Petroleum & Natural Gas": {
+          "n_with": 33,
+          "slip_rate_with": 0.5152,
+          "n_without": 744,
+          "slip_rate_without": 0.5228,
+          "lift": 0.985
         },
         "Railways": {
           "n_with": 35,

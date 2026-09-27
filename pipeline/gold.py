@@ -13,8 +13,8 @@ Point-in-time rule: the feature row at (key, t) reads only rows with period <= t
 groupby cumulative ops and backward as-of joins; cross-project statistics use rows at or before t only: the
 sector velocity median uses the same quarter, the S-curve for calendar year Y is fitted on rows before Y-01-01
 of projects completed before Y-01-01, and agency rates use label rows whose outcome period t0 + h is <= t.
-The external group reads remark quarters <= t and land stretches first notified by t; the forest-clearance prior
-(sector and name) does not change with t.
+The external group reads remark quarters <= t and land stretches first notified by t (parcels and complexity only
+of stretches last notified by t); the forest-clearance prior (sector and name) does not change with t.
 """
 import hashlib
 import json
@@ -269,9 +269,13 @@ def load_external(gold=GOLD):
 
 
 def external_until(ext, t):
-    """The external inputs as they stood at t: later remark quarters and later-notified stretches removed."""
+    """The external inputs as they stood at t: later remark quarters and later-notified stretches removed, and a
+    stretch still being notified at t has no parcels, complexity or last notification yet."""
     m, p = ext["mentions"], ext["land_pairs"]
-    return {**ext, "mentions": m[m["period"] <= t], "land_pairs": p[p["first_notif_date"] <= t]}
+    p = p[p["first_notif_date"] <= t]
+    live = p["last_notif_date"] > t
+    p = p.assign(**{c: p[c].mask(live) for c in ["num_parcels", "acquisition_complexity_score", "last_notif_date"]})
+    return {**ext, "mentions": m[m["period"] <= t], "land_pairs": p}
 
 
 def asof_join(d, right, cols):
@@ -287,8 +291,9 @@ def external_features(d, ext):
     """External group at each (project_key, period) row of d. A category is open at t when it is mentioned in one
     of the key's last OPEN_LAST_Q remark-observed quarters up to t and that latest mention does not report it done
     (the pipeline/external.py rule applied at t, not the final status). Land: a key is linked at t when a stretch
-    of its NH (pipeline/external.py link_land) was first notified by t; the notification span is cut at t and the
-    land values of a key not linked at t are null (unknown), not 0."""
+    of its NH (pipeline/external.py link_land) was first notified by t; the notification span is cut at t, parcels
+    and complexity count only stretches fully notified by t, and the land values of a key not linked at t are null
+    (unknown), not 0."""
     out = pd.DataFrame(index=d.index)
     mq = ext["mentions"]
     seen = mq[PK].drop_duplicates().sort_values(PK, kind="mergesort")
@@ -312,12 +317,16 @@ def external_features(d, ext):
         out[c] = d["project_key"].map(fc[c.replace("fc_", "fc_prior_")]).astype("float64")
     r = d[PK].reset_index().merge(ext["land_pairs"], on="project_key")
     r = r[r["first_notif_date"] <= r["period"]]
-    span = r["last_notif_date"].where(r["last_notif_date"] <= r["period"], r["period"]) - r["first_notif_date"]
-    g = r.assign(span=span.dt.days).groupby("index")
-    la = pd.DataFrame({"la_complexity_max_by_t": g["acquisition_complexity_score"].max(),
-                       "la_parcels_by_t": g["num_parcels"].sum(), "la_notif_span_by_t": g["span"].max()})
+    # parcels and complexity are snapshot totals that count later notifications: only a stretch whose last
+    # notification is by t gives them; one still being notified gives its span so far
+    done = r["last_notif_date"] <= r["period"]
+    span = r["last_notif_date"].where(done, r["period"]) - r["first_notif_date"]
+    g = r.assign(span=span.dt.days, parcels=r["num_parcels"].where(done),
+                 complexity=r["acquisition_complexity_score"].where(done)).groupby("index")
+    la = pd.DataFrame({"la_complexity_max_by_t": g["complexity"].max(),
+                       "la_parcels_by_t": g["parcels"].sum(min_count=1), "la_notif_span_by_t": g["span"].max()})
     la = la.reindex(d.index).astype("float64")
-    out["la_linked"] = la["la_parcels_by_t"].notna().astype("float64")
+    out["la_linked"] = la["la_notif_span_by_t"].notna().astype("float64")
     out[list(la.columns)] = la
     return out
 

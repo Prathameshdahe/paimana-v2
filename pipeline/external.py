@@ -15,7 +15,8 @@ Remarks are free text only in 2014-2023 reports; later reports print templates (
 with TAXONOMY. A quarter counts as remark-observed for a project when one of its reports has free text left,
 and an event is a run of consecutive remark-observed quarters that mention the category. It is open when its
 last mention is in one of the project's last OPEN_LAST_Q remark-observed quarters, that quarter's mentions do not
-all report it done ('EC received on ...'), and the project is not completed.
+all report it done ('EC received on ...'), and the project is not completed. Its quote is a mention from its last
+quarter that agrees with that state.
 
 Remarks come from typed_rows (every accepted clean report row), not observations (the quarter's last remark):
 it finds every observations mention plus 6% more key-quarter-category mentions and 16% more events, and the
@@ -31,7 +32,8 @@ so gold can use them as features without reading later remarks.
 
 Land acquisition: road projects in Maharashtra (or Multi-State naming a Maharashtra district) are linked to the
 Bhoomi Rashi NH stretches of the NH number in their name, on (NH, district) first, then NH alone. Everything else
-is 'unknown', never 'clear'. land_at() is the point-in-time view: only stretches first notified by t.
+is 'unknown', never 'clear'. The table is one snapshot: a stretch's parcels and complexity count every notification,
+so gold reads them at t only for stretches whose last notification is by t (external_land_pairs keeps the dates).
 """
 import re
 import sys
@@ -167,9 +169,15 @@ BOILERPLATE = (r"milestones achieved/total:\s*\d+/\d+|start:\s*\d{4}-\d{2}|doc r
                r"|this project was approved on \w+ \d+ with capital investment of rs\.? [\d.,]+ crores?"
                r"(?: with schedule completion date \w+ \d+)?|under progress(?: \(p\))?|work in progress")
 SENTENCE = r"\s*(?:[;•\n\r]|\.\s+(?=[A-Z(])|\s-\s*(?=[A-Z])|(?:^|(?<=\s))\(?(?:[ivx]{1,4}|\d{1,2})\)\s)\s*"
-FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha|hect\w*)\.?\s*(?:of\s+)?(?:\w+\s+){0,2}(?<!non )forest"
-             r"|forest\s+land\s*(?:of|:|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)"
-             r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)")
+# forest hectares: '12.5 ha of reserved forest', 'forest land of 30 ha', 'Forest land-71.72 hect', 'Forest - 3.101)',
+# 'FC (323.49 Ha)'; not 'non-forest land of 648 ha', '3.2 hect and forest land ...' or '1426 Ha including forest and
+# nonforest land'
+_NOT_NON = r"(?<!non-)(?<!non )(?<!non)"
+FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha\b|hect\w*)\.?\s*(?:of\s+)?(?:(?!(?:and|or|including|non)\b)\w+\s+){0,2}"
+             + _NOT_NON + r"forest(?!\s*(?:and|&|or|/)\s*non)"
+             r"|" + _NOT_NON + r"forest\s*(?:land|area)?\s*(?:(?:of|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*"
+             r"(?:ha\b|hect)|[-:]\s*(\d+(?:\.\d+)?)(?:\s*(?:ha\b|hect)|(?=\s*[)\];,]|\s*$)))"
+             r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha\b|hect)")
 VIOLATION = (r"violat\w*|post[\s-]*facto|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC"
              r"|environment\w*\s+clearance|clearance)")
 # a mention that reports the matter done ('EC received on 31.07.23') and names no hold-up is resolved
@@ -177,7 +185,11 @@ DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed|achieved|appr
         r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available)\b")
 BLOCKED = (r"\b(?:await\w*|pending|delay\w*|yet\s+to|not|non|no|hold|held\s+up|stopp\w*|stalled|hamper\w*|affect\w*"
            r"|problems?|issues?|constraints?|balance|slow|obstruct\w*|disput\w*|ban|banned|under\s+process"
-           r"|in\s+progress|expected|anticipated|likely|shortly)\b")
+           r"|in\s+progress|expected|anticipated|likely|shortly)\b"
+           # a step, not the clearance: a recommendation, proposal or ToR issued, or something sent 'for ... approval'
+           r"|\bissued\s+(?:\S+\s+){0,2}(?:recommendation|proposal|ToR|terms\s+of\s+reference)\b"
+           r"|\b(?:recommendation|proposal|ToR|terms\s+of\s+reference)s?\s+(?:\S+\s+){0,3}issued"
+           r"|\bfor\s+(?:(?!and\b)[a-z&-]+\s+){0,3}approval(?!\s+(?:has|have|was|were)\s+been)")
 MIN_FREE_WORDS = 3        # a report has free text when this many 3+ letter words survive the template strip
 OPEN_LAST_Q = 2           # an event is open when seen in one of the project's last 2 remark-observed quarters
 SNIPPET = 200
@@ -199,7 +211,8 @@ def first_match(s, patterns):
 
 
 def forest_area(s):
-    """Hectares of forest a sentence names ('12.5 ha forest', 'forest land of 30 ha'), largest if several."""
+    """Hectares of forest a sentence names ('12.5 ha forest', 'forest land of 30 ha'), largest if several: a total
+    and its parts ('out of total 336.58 Ha of Forest Land ... balance of 59.53 Ha of Forest land')."""
     m = s.str.extractall(FOREST_HA, flags=2).astype("float64")
     return m.max(axis=1).groupby(level=0).max().reindex(s.index)
 
@@ -302,8 +315,10 @@ def events(seen, m, master):
     ev["authority"] = g["authority"].agg(lambda s: s.mode().iloc[0] if s.notna().any() else pd.NA)
     first = q.drop_duplicates(key).set_index(key)
     ev[["source_doc_id", "source_page"]] = first[["source_doc_id", "source_page"]]
-    # shortest sentence of the event's subtype that still says something; very short ones only when nothing longer
-    best = q[q["subtype"].eq(ev["subtype"].reindex(pd.MultiIndex.from_frame(q[key])).to_numpy())]
+    # quote a mention of the event's last quarter that agrees with its state (unresolved for an open event, resolved
+    # for one reported done): the shortest that still says something, very short ones only when nothing longer
+    end = q[at_end]
+    best = end[end["resolved"].eq(ev["resolved"].reindex(pd.MultiIndex.from_frame(end[key])).to_numpy())]
     best = best.assign(_short=best["_len"].lt(12)).sort_values(key + ["_short", "_len"], kind="mergesort")
     best = best.drop_duplicates(key).set_index(key)
     cats = best.index.get_level_values("category")
@@ -463,9 +478,11 @@ def forest_clearance(master, ev, scen):
 
 # NH number in a project name: 'NH-161A', 'NH 161', 'NH161', 'National Highway 161', 'NH No. 161', 'NH-17 & 48';
 # 'OLD NH-6' is dropped and a 'NEW NH-148' replaces the rest. A number followed by '.5' or 'km' is a chainage.
+# An end point is not the road: 'Junction of NH-66', 'Jn. with NH 30' and 'from NH-565 Junction' are dropped.
 _NH_NO = r"(\d{1,3}(?:-?[A-Z]{1,2}|\s[A-Z])?)\b(?![.,]\d)"   # '161A', '548-DD', '548 D'; not 'NH-66 CH-227'
-NH_TEXT = (r"(?:\b(OLD|NEW|ERSTWHILE)\s*)?(?:\bNH|\bN\.H\.|\bNATIONAL\s+HIGHWAY)\s*(?:NO\.?|NUMBER)?\s*[-:.]?\s*"
-           + _NH_NO + r"(?:\s*(?:&|AND|/)\s*" + _NH_NO + r"(?!\s*K\.?M))?")
+NH_TEXT = (r"(?:\b(OLD|NEW|ERSTWHILE|JUNCTION\s+(?:OF|WITH)|JN\.?\s*(?:OF|WITH)?)\s*)?"
+           r"(?:\bNH|\bN\.H\.|\bNATIONAL\s+HIGHWAY)\s*(?:NO\.?|NUMBER)?\s*[-:.]?\s*"
+           + _NH_NO + r"(?:\s*(?:&|AND|/)\s*" + _NH_NO + r"(?!\s*K\.?M))?(\s*(?:JUNCTION|JN)\b)?")
 NE_TEXT = r"\b(NE)[-\s]?(\d{1,2})\b"   # national expressways, 'NE-4'
 LA_FLAG = 3               # a linked project is flagged at acquisition complexity >= 3 of 5, else clear
 DISTRICT_ALIAS = {"AURANGABAD": ["CHHATRAPATI SAMBHAJINAGAR", "SAMBHAJINAGAR"], "AHMEDNAGAR": ["AHILYANAGAR"],
@@ -492,12 +509,13 @@ def nh_from_text(s):
     """NH ids named in each text (Series index -> sorted ;-joined ids, null when none)."""
     up = s.fillna("").str.upper()
     m, ne = up.str.extractall(NH_TEXT), up.str.extractall(NE_TEXT)
+    m[0] = m[0].mask(m[0].str.startswith("J", na=False) | m[3].notna(), "JUNCTION")
     cols = ["tag", "nh"]
     ids = pd.concat([m[[0, 1]].set_axis(cols, axis=1), m[[0, 2]].set_axis(cols, axis=1),
                      pd.DataFrame({"tag": pd.NA, "nh": ne[0] + ne[1]}, index=ne.index)])
     ids = ids[ids["nh"].notna()].reset_index(level=1, drop=True)
     new = ids["tag"].eq("NEW").groupby(level=0).transform("any")
-    ids = ids[(ids["tag"].eq("NEW") | ~new) & ~ids["tag"].isin(["OLD", "ERSTWHILE"])]
+    ids = ids[(ids["tag"].eq("NEW") | ~new) & ~ids["tag"].isin(["OLD", "ERSTWHILE", "JUNCTION"])]
     ids = ids["nh"].str.replace(r"[\s-]", "", regex=True).str.lstrip("0")
     return ids.groupby(level=0).agg(joined).reindex(s.index)
 
@@ -576,12 +594,6 @@ def link_land(master, st):
                           + years + " years of notifications, complexity " + out["la_complexity_max"].astype("str")
                           + "/5").where(out["la_linked"])
     return out[LA_COLS], pairs
-
-
-def land_at(pairs, st, t):
-    """Point-in-time land features per linked project at period t: only stretches first notified by t count."""
-    rows = pairs.merge(st[st["first_notif_date"] <= t].drop(columns="nh"), on="stretch_id")
-    return aggregate(rows, ["project_key"])[["project_key", "stretches", "parcels", "complexity_max"]]
 
 
 def current_keys(obs, master):
