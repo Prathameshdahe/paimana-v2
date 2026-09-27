@@ -20,7 +20,9 @@ The Parivesh rule (linear, worst complexity >= 6) flags only when forest hectare
 no hectares every area band counts and every linear project's worst case is 7, which says nothing about it.
 
 The composite row (pipeline/external.py external_composite: 0.5 forest/7 + 0.5 land/5) is rated only where land
-is linked (coverage fc+la): flagged at score >= COMPOSITE_HIGH, else clear. Without land (fc_only) it is unknown and
+is linked (coverage fc+la): flagged at score >= COMPOSITE_HIGH. It is clear only when both halves are known and
+neither the land nor the forest row is flagged: without forest hectares (or a clearance reported done) the forest
+half is the rulebook's expected value, an estimate, so the row is unknown. Without land (fc_only) it is unknown and
 says why the land half is missing. It is not a model feature and not an early-notice factor, since its inputs are
 already both.
 
@@ -208,7 +210,8 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     opened, _, line = info["land"]
     la_flag, la_clear = la["la_state"].eq("flagged"), la["la_state"].eq("clear")
     la_line = la["la_evidence"].fillna(la["la_match_method"].map(LA_REASON)).fillna("not in the land linkage")
-    add("land_acquisition", opened | la_flag, la_clear,
+    land_flag = opened | la_flag
+    add("land_acquisition", land_flag, la_clear,
         pd.Series(np.where(opened, line + np.where(la["la_linked"].fillna(False), "; " + la_line, ""),
                            la_line + "; " + line), index=cur.index),
         pd.Series(np.where(opened, "report", "bhoomi_rashi"), index=cur.index))
@@ -221,7 +224,11 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     high = f["fc_shape"].eq("Linear") & (f["fc_worst_complexity"] >= FC_HIGH) & informed
     rules = (f["fc_evidence"].fillna("no Parivesh profile") + " (expected "
              + num(f["fc_expected_complexity"], ".1f") + ")")
-    add("forest_clearance", opened | high, done,
+    fc_flag = opened | high
+    # the forest half is measured only with hectares (or a clearance reported done); else it is the rulebook's
+    # expected value over every area band, an estimate
+    fc_known = (f["fc_area_known"].fillna(False).astype(bool) | done) & ~fc_flag
+    add("forest_clearance", fc_flag, done,
         pd.Series(np.select([opened, high], [line + "; " + rules, "high clearance complexity expected: " + rules + "; "
                                              + line], line + "; " + rules), index=cur.index),
         pd.Series(np.where(opened | done, "report", "parivesh_rules"), index=cur.index))
@@ -229,11 +236,17 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     comp = external.external_composite(fc, land).set_index("project_key").reindex(k).set_axis(cur.index)
     both, score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
     missing = la["la_match_method"].map(LA_REASON).fillna("not in the land linkage")
-    add("external_composite", both & (score >= COMPOSITE_HIGH), both,
+    # clear needs both halves positively known and neither checklist row flagged; flagged needs only the score
+    comp_flag = both & (score >= COMPOSITE_HIGH)
+    comp_clear = both & fc_known & la_clear & ~land_flag
+    why = np.select([comp_flag | comp_clear, ~both, land_flag, fc_flag],
+                    ["", " (" + missing + "), so the score is the forest half alone and is not rated",
+                     "; not rated clear: the land row is flagged", "; not rated clear: the forest row is flagged"],
+                    "; not rated clear: forest area unknown, so the forest half is the rulebook's estimate")
+    add("external_composite", comp_flag, comp_clear,
         "score " + num(score, ".2f") + " (" + comp["coverage"].fillna("n/a") + "): "
-        + comp["ext_score_evidence"].fillna("no Parivesh profile")
-        + pd.Series(np.where(both, "", " (" + missing + "), so the score is the forest half alone and is not "
-                                       "rated"), index=cur.index), "external_composite")
+        + comp["ext_score_evidence"].fillna("no Parivesh profile") + pd.Series(why, index=cur.index),
+        "external_composite")
 
     for dim, cat in [("litigation", "litigation"), ("contractor_stress", "contractor")]:
         opened, _, line = info[cat]
@@ -328,7 +341,9 @@ def composite_summary(cur, comp):
                            "la_component": 4})
     return {"rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage "
                     "fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= "
-                    f"{COMPOSITE_HIGH} with fc+la. Informational, not a model feature.",
+                    f"{COMPOSITE_HIGH} with fc+la; clear below it only with forest hectares known (or a clearance "
+                    "reported done) and neither the land nor the forest row flagged, else unknown. Informational, "
+                    "not a model feature.",
             "by_coverage": by, "top_fc_la": json.loads(top.to_json(orient="records"))}
 
 

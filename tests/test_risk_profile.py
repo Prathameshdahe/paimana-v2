@@ -14,10 +14,11 @@ ASOF = pd.Timestamp("2026-07-01")
 T = pd.Timestamp
 
 
-def checklist():
+def checklist(fc_p1=None, land_p1=None):
     """Four projects: P1 Maharashtra road linked with low land complexity, remarks but no mentions; P2 outside
     Maharashtra with no remarks at all; P3 open land and litigation events, a forest clearance reported done;
-    P4 untiered, linear with 50 ha forest known, a small agency, stale data, no sector data."""
+    P4 untiered, linear with 50 ha forest known, a small agency, stale data, no sector data. fc_p1 / land_p1
+    override P1's forest / land columns."""
     keys = ["P1", "P2", "P3", "P4"]
     cur = pd.DataFrame({
         "project_key": keys, "p_date_push_2q": [0.9, 0.5, 0.1, np.nan], "p_cost_rev_2q": [0.1, 0.2, 0.3, 0.4],
@@ -52,6 +53,9 @@ def checklist():
                             index=pd.Index(["NHAI", "SMALL"], name="agency"))
     sector = pd.DataFrame({"actual_target_ratio": [0.9, 1.0, 1.0, np.nan], "trend_4q": [2.0, 1.0, 1.0, np.nan],
                            "period": [T("2026-01-01")] * 3 + [pd.NaT]})
+    for df, over in ((fc, fc_p1), (land, land_p1)):
+        for col, v in (over or {}).items():
+            df.loc[0, col] = v
     rows = R.build_rows(cur, ASOF, ev, mentions, fc, land, agencies, sector)
     return rows.set_index(["project_key", "dimension"])
 
@@ -111,11 +115,26 @@ def test_mh_ratio_removes_a_stratum_confound():
 
 def test_external_composite_row_is_rated_only_with_land():
     r = checklist()
-    # P1: forest 3/7 + land 1/5 -> 0.31 clear; P3: 3/7 + 5/5 -> 0.71 flagged; P2, P4: no land -> unknown
-    assert [r.loc[(k, "external_composite"), "state"] for k in ("P1", "P2", "P3", "P4")] == ["clear", "unknown",
+    # P1: forest 3/7 (area unknown, the rulebook estimate) + land 1/5 -> 0.31 unknown; P3: 3/7 + 5/5 -> 0.71
+    # flagged; P2, P4: no land -> unknown
+    assert [r.loc[(k, "external_composite"), "state"] for k in ("P1", "P2", "P3", "P4")] == ["unknown", "unknown",
                                                                                               "flagged", "unknown"]
+    assert r.loc[("P1", "external_composite"), "evidence"].endswith(
+        "not rated clear: forest area unknown, so the forest half is the rulebook's estimate")
     assert r.loc[("P3", "external_composite"), "evidence"] == (
         "score 0.71 (fc+la): forest 3/7 (rulebook, area unknown) + land 5/5 (NH-160, Bhoomi Rashi)")
     p4 = r.loc[("P4", "external_composite"), "evidence"]
     assert p4 == ("score 0.93 (fc_only): forest 6.5/7 (rulebook, 50 ha); land unknown (no land data for non-road "
                   "projects), so the score is the forest half alone and is not rated")
+
+
+def test_external_composite_clear_needs_both_halves_known_and_unflagged():
+    known = {"fc_area_known": True, "fc_area_ha": 2.0, "fc_worst_complexity": 2, "fc_expected_complexity": 2.0}
+    r = checklist(fc_p1=known)                                           # 2/7 + 1/5 -> 0.24, both known
+    assert r.loc[("P1", "forest_clearance"), "state"] == "unknown" and r.loc[("P1", "external_composite"),
+                                                                             "state"] == "clear"
+    # land flagged at 3/5 with forest known: 0.44 is below the cut but never clear
+    r = checklist(fc_p1=known, land_p1={"la_state": "flagged", "la_complexity_max": 3})
+    assert r.loc[("P1", "land_acquisition"), "state"] == "flagged"
+    assert r.loc[("P1", "external_composite"), "state"] == "unknown"
+    assert r.loc[("P1", "external_composite"), "evidence"].endswith("not rated clear: the land row is flagged")

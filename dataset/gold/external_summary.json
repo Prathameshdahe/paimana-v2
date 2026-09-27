@@ -856,7 +856,7 @@
     }
   },
   "external_composite": {
-    "rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= 0.6 with fc+la. Informational, not a model feature.",
+    "rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= 0.6 with fc+la; clear below it only with forest hectares known (or a clearance reported done) and neither the land nor the forest row flagged, else unknown. Informational, not a model feature.",
     "by_coverage": {
       "fc+la": {
         "n_projects": 58,

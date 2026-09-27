@@ -48,13 +48,18 @@ references it and that every gold key is a real PRJ key.
   to stretches in its own state. A Multi-State road links to each state whose district its name mentions.
   Rebuilding the current Maharashtra-only data gives the same linked projects and values as before.
 - **Composite with coverage** (`external_composite`, written to gold/external_composite.parquet):
-  - Forest part: fc = expected rulebook complexity / 7. This is always known.
+  - Forest part: fc = the rulebook's expected complexity / 7. It always has a value, but it is measured only when
+    the forest hectares are known. Without them it is the median over the scenarios of every area band (3/7 for a
+    linear project), which is an estimate, not a measurement.
   - Land part: la = linked land complexity / 5. This is known only when the project is linked to land data.
   - With both parts, the score is the v0 formula, 0.5 x fc + 0.5 x la, and coverage is `fc+la`.
   - Without land data, the score is the forest part alone and coverage is `fc_only`. Missing land is never
     treated as 0.
   - The composite shows as a 13th, informational row in the risk profile. That row is flagged at a score of 0.6
-    or more with `fc+la`, clear below 0.6, and unknown with `fc_only`. It also appears in external_summary.json.
+    or more with `fc+la`, and unknown with `fc_only`. Below 0.6 it is clear only when the forest hectares are
+    known (or the clearance is reported done) and neither the land nor the forest row is flagged. Otherwise it
+    is unknown, so the composite never reads clear while a half is an estimate or flagged. It also appears in
+    external_summary.json.
   - It is not a model feature, because its inputs already are.
 
 ## The guide's open gaps
@@ -85,13 +90,15 @@ references it and that every gold key is a real PRJ key.
   | Their NH is not in their state's table | 7 |
 
 - **Scores with `fc+la`.** Scores run from 0.21 to 0.71, with a median of 0.61. 31 projects are flagged at 0.6 or
-  more and 27 are clear.
+  more. None is clear: all 58 have unknown forest hectares, so the other 27 are unknown. 23 of them have a clear
+  land row, and 4 have a flagged land row (land 3/5, score 0.51), such as PRJ-003297 on NH-61.
 - **Scores with `fc_only`.** The median is 0.43, and these projects are not rated. 128 of them would score 0.6 or
   more on forest alone (mostly non-linear mining, expected 6.5/7), but without land data the score is not a
   combined one.
 - **The forest part barely varies.** It is 3/7 for 93% of current projects, because forest hectares are rarely
   known. So among `fc+la` projects the composite mostly ranks by land, and flagged in practice means land
-  complexity of 4 or more.
+  complexity of 4 or more. The land row flags at 3 or more, so the land row, not the composite, is the one to
+  read for land.
 - **Open events in the current portfolio.** 35 forest events and 46 land events.
 
 ## What we deliberately did not do
