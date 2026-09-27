@@ -60,8 +60,9 @@ BAND_METHOD = (
     "it is a scenario range, not a statistical interval. Completion band: anticipated completion plus the 5th, "
     "50th and 95th percentile of predicted slip over the next 2 quarters (LightGBM quantile models), to the month.")
 AGENCY_METHOD = (
-    "Schedule bias = (latest anticipated completion, or completion) - sanction over (first printed scheduled "
-    "completion - sanction), minus 1; cost bias = latest anticipated cost / first original cost - 1; only projects "
+    "Schedule bias = (latest anticipated completion, or for a finished project its actual completion, read to the "
+    "quarter of its completion report) - sanction over (first printed scheduled completion - sanction), minus 1; "
+    "cost bias = latest anticipated cost / first original cost - 1; only projects "
     "with a known planned duration. Median, IQR and a bootstrap 90% CI of the median per canonical agency (printed "
     "names merged, gold/agency_map.csv). With n < 10 the shown median is shrunk toward the sector median with weight "
     "n / (n + 10) (raw kept); agencies with n < 5 are hidden. Trend = median schedule bias of projects sanctioned in "

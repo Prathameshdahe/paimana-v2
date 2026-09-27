@@ -18,8 +18,10 @@ Anything else keeps its normalised form, and build_map() then merges it into a l
 rapidfuzz token_set_ratio >= FUZZY_MIN and the words that differ on both sides are a spelling variant of each other
 (so 'WATER RESOURCES MP' and 'WATER RESOURCES PB' stay two agencies).
 
-Matrix, per project (current and finished, observations up to asof): schedule bias = (latest anticipated completion,
-or the completion report period) - sanction, over (first printed scheduled completion - sanction), minus 1; cost
+Matrix, per project (current and finished, observations up to asof): schedule bias = (end - sanction) over (first
+printed scheduled completion - sanction), minus 1. The end is the latest anticipated completion of a current project;
+of a finished one it is the actual completion: the last printed date (on the completion row often the actual date)
+clipped to between its last ongoing report and the end of its completion-report quarter, else that quarter. Cost
 bias = latest anticipated cost / first original cost - 1. Only projects with a known planned duration count. Per
 canonical agency: n, median, IQR and a bootstrap 90% CI of the median for both; for n < SHRINK_N the medians are
 shrunk toward the sector median with weight n / (n + SHRINK_K) (raw kept); hidden when n < HIDE_N. Capital under
@@ -215,7 +217,14 @@ def project_biases(obs: pd.DataFrame, master: pd.DataFrame, amap: pd.DataFrame, 
                       "anticipated": g["anticipated_completion"].last(), "original_cost": g["original_cost_cr"].first(),
                       "anticipated_cost": g["anticipated_cost_cr"].last()})
     mm = master.set_index("project_key")
-    p["anticipated"] = p["anticipated"].fillna(mm["completed_period"].reindex(p.index))
+    # a finished project ended after its last ongoing report and within its completion-report quarter: the last
+    # printed date (on the completion row often the actual date) clipped to that window, else that quarter
+    done = mm["completed_period"].reindex(p.index)
+    done = done.where(done <= pd.Timestamp(asof))
+    ongoing = o[~o["is_completed"].fillna(False).astype(bool)].groupby("project_key")["period"].max().reindex(p.index)
+    a, end = p["anticipated"], done + pd.DateOffset(months=2)
+    a = a.mask(done.notna() & (a < ongoing), ongoing)          # NaT compares False: unbounded on that side
+    p["anticipated"] = a.mask(a > end, end).fillna(done)
     planned = months(p["scheduled"]) - months(p["sanction_date"])
     p["schedule_bias"] = (months(p["anticipated"]) - months(p["sanction_date"])) / planned.where(planned > 0) - 1
     p["cost_bias"] = p["anticipated_cost"] / p["original_cost"].where(p["original_cost"] > 0) - 1

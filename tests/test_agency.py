@@ -89,3 +89,25 @@ def test_matrix_hides_small_agencies_and_shrinks_toward_the_sector():
     assert m.loc["D", "n_projects"] == 0 and m.loc["D", "hidden"] and m.loc["D", "capital_cr"] == 7.0
     # trend: C has 12 projects sanctioned yearly 2010-2021; the last 3 years of data are 2018-2021 (4 recent)
     assert m.loc["C", "n_recent"] == 4 and m.loc["C", "trend"] == 0.0 and np.isnan(m.loc["A", "trend"])
+
+
+def test_finished_projects_count_to_their_actual_completion():
+    T = pd.Timestamp
+    rows = []
+    # L: printed 2012-06 then kept reporting ongoing to 2014-01, completion report 2014-04 -> ended 2014-01
+    for per in ("2011-01-01", "2012-01-01", "2013-01-01", "2014-01-01"):
+        rows.append(("L", per, "2012-06-01", False))
+    rows.append(("L", "2014-04-01", None, True))
+    # E: the completion row prints the actual date 2011-11 -> kept
+    rows += [("E", "2011-07-01", "2012-01-01", False), ("E", "2011-10-01", "2011-11-01", True)]
+    rows.append(("C", "2012-01-01", "2013-01-01", False))                 # current: latest anticipated
+    obs = pd.DataFrame([{"project_key": k, "period": T(p), "sanction_date": T("2010-01-01"),
+                         "scheduled_completion": T("2012-01-01"), "anticipated_completion": T(a) if a else pd.NaT,
+                         "original_cost_cr": 100.0, "anticipated_cost_cr": 110.0, "is_completed": c}
+                        for k, p, a, c in rows])
+    master = pd.DataFrame({"project_key": ["L", "E", "C"], "agency": "A", "sector": "Roads", "ministry": "M",
+                           "completed_period": [T("2014-04-01"), T("2011-10-01"), pd.NaT]})
+    amap = pd.DataFrame({"raw": ["A"], "canonical": ["A"]})
+    b = agency.project_biases(obs, master, amap, "2026-07-01").set_index("project_key")["schedule_bias"]
+    assert b["L"] == pytest.approx(48 / 24 - 1) and b["E"] == pytest.approx(22 / 24 - 1)
+    assert b["C"] == pytest.approx(36 / 24 - 1)

@@ -10,9 +10,13 @@ Outputs  gold/bottlenecks.parquet (one row per cluster), gold/bottleneck_members
 
 Members are the open report events of current projects, plus linked news signals of severity >= SEVERITY_MIN with a
 taxonomy category (a signal takes the authority of the project's open event of that category, else 'unspecified').
+An open event whose own evidence reports the clearance got, obtained or granted and names no hold-up (CLEARED, HOLD) is
+left out: the report remark says the issue is over even where the event tagger kept it open.
 They are grouped by (category, authority, state); a group becomes a bottleneck when it holds >= MIN_PROJECTS distinct
 projects. Where most of a (category, state) group's projects name no authority, a coarser rollup over every authority
-is added too (level 'state'), unless it holds exactly the projects of its 'unspecified' cluster.
+is added too (level 'state'), unless it holds exactly the projects of its 'unspecified' cluster. A state in PLACELESS
+('Multi-State', 'PAN India', 'unknown') is not a place: its projects cluster only on a shared named authority, and it
+gets no rollup.
 The headline states what the data supports, 'Blocking N projects worth Rs X Cr': the projects that would be affected
 while the issue stays open. It is a grouping of shared open issues, not a causal claim about resolving it.
 """
@@ -33,10 +37,13 @@ GOLD = ROOT / "dataset" / "gold"
 DB = ROOT / "database" / "paimana.db"
 MIN_PROJECTS, SEVERITY_MIN, N_EVIDENCE = 3, 2, 3
 UNSPECIFIED = "unspecified"
+PLACELESS = {"Multi-State", "PAN India", "unknown"}
+CLEARED = r"\b(?:clearance|permission|approval|NOC|FC|EC)\b[^.;]{0,80}?\b(?:got|obtained|granted|received|accorded)\b"
+HOLD = r"\b(?:but|await\w*|pending|not|yet|hold|delay\w*|hamper\w*|balance)\b"
 WATCH = ("Critical", "High")
 NOTE = ("Projects that would be affected while this issue stays open: they share an open issue of this category and "
-        "place in their report remarks or linked news. This is a grouping, not a causal claim about what resolving "
-        "it would change.")
+        "place (for multi-state projects, of this named authority) in their report remarks or linked news. This is "
+        "a grouping, not a causal claim about what resolving it would change.")
 CUR_COLS = ["project_key", "project_name", "state", "tier", "p_any_2q", "months_p50", "anticipated_cost_cr"]
 COLS = ["bottleneck_id", "level", "category", "authority", "state", "n_projects", "member_keys", "capital_exposed_cr",
         "mean_p_any_2q", "mean_months_p50", "n_critical_high", "earliest_first_seen", "last_seen", "n_signals",
@@ -62,6 +69,8 @@ def members(events: pd.DataFrame, cur: pd.DataFrame, signals: pd.DataFrame) -> p
     """Member rows (project_key, category, authority, state, kind, first_seen, last_seen, evidence, source_doc_id,
     source_page, url): open events and qualifying signals of current projects, the state from the portfolio."""
     ev = events[events["status"].eq("open") & events["project_key"].isin(cur["project_key"])]
+    txt = ev["evidence"].fillna("")
+    ev = ev[~(txt.str.contains(CLEARED, case=False, regex=True) & ~txt.str.contains(HOLD, case=False, regex=True))]
     ev = ev.assign(kind="event", authority=ev["authority"].fillna(UNSPECIFIED), url=None)
     sig = signals[signals["project_key"].isin(cur["project_key"])]
     if len(sig):
@@ -106,6 +115,8 @@ def cluster(m: pd.DataFrame, cur: pd.DataFrame, min_projects=MIN_PROJECTS) -> tu
     rows, parts = [], []
     fine = {}
     for key, g in m.groupby(["category", "authority", "state"], sort=True):
+        if key[2] in PLACELESS and key[1] == UNSPECIFIED:
+            continue
         if g["project_key"].nunique() >= min_projects:
             rows.append(_describe("authority", key, g, cur))
             parts.append(g.assign(bottleneck_id=rows[-1]["bottleneck_id"]))
@@ -114,6 +125,8 @@ def cluster(m: pd.DataFrame, cur: pd.DataFrame, min_projects=MIN_PROJECTS) -> tu
     for (category, state), g in m.groupby(["category", "state"], sort=True):
         keys = set(g["project_key"])
         unspecified = set(g.loc[g["authority"].eq(UNSPECIFIED), "project_key"])
+        if state in PLACELESS:
+            continue
         if len(keys) >= min_projects and len(unspecified) * 2 >= len(keys) and keys != fine.get((category, state)):
             rows.append(_describe("state", (category, None, state), g, cur))
             parts.append(g.assign(bottleneck_id=rows[-1]["bottleneck_id"]))

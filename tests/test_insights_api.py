@@ -127,9 +127,12 @@ def test_models_page_has_registry_calibration_shap_and_honest_live_accuracy(clie
 
 def test_validator_accepts_payload_numbers_and_their_formats():
     facts = {"p": 0.8712, "months": 6.34, "cost_cr": 12345.6, "asof": "2026-07-01", "pct": 18.0,
-             "evidence": "NH-161: 1,699 parcels, notifications over 5 years"}
+             "evidence": "NH-161: 1,699 parcels, notifications over 5 years", "name": "Four Laning of NH-161",
+             "fc": "FC got on 28.10.2021"}
     for text in ("P = 0.87, or 87%; 87.1% if you like.", "Slip 6.3 months (6 months).", "Rs 12,345.6 Cr, Rs 12,346 Cr",
-                 "As of 2026-07-01, in 2026.", "Cost variation 18%, or 0.18.", "1,699 parcels on NH-161 over 5 years."):
+                 "As of 2026-07-01, in 2026.", "Cost variation 18%, or 0.18.", "1,699 parcels on NH-161 over 5 years.",
+                 "Rs.12,346 Cr, INR12,346 crore", "As of July 2026 (1 Jul 2026, 01/07/2026, Jul-2026, 07/2026).",
+                 "Four Laning of NH-161: one of the drivers is at 87 per cent.", "FC got on 28.10.2021."):
         ok, reasons, n = brief.validate(text, facts)
         assert ok and n > 0, (text, reasons)
 
@@ -137,7 +140,15 @@ def test_validator_accepts_payload_numbers_and_their_formats():
 def test_validator_rejects_invented_numbers():
     facts = {"p": 0.8712, "months": 6.34, "cost_cr": 12345.6, "asof": "2026-07-01"}
     for text, bad in (("P = 0.91.", "0.91"), ("Slip 9 months.", "9"), ("Rs 13,000 Cr.", "13,000"),
-                      ("Due 2026-09-01.", "2026-09-01"), ("Over 7 quarters.", "7"), ("A 45% chance.", "45%")):
+                      ("Due 2026-09-01.", "2026-09-01"), ("Over 7 quarters.", "7"), ("A 45% chance.", "45%"),
+                      # after a letter or a lone period, a bare decimal, digits after letters
+                      ("Cost Rs.999 Cr.", "999"), ("Cost Rs999 Cr.", "999"), ("Cost INR999 crore.", "999"),
+                      ("Probability .99 of slipping.", ".99"), ("The p99 slip.", "99"), ("0.87,0.91", "0.91"),
+                      # words, month-name and dotted dates, a fraction marked as a percent, truncation
+                      ("A seventy-one percent chance.", "seventy"), ("About three years late.", "three"),
+                      ("Due March 2026.", "March 2026"), ("Due Dec-2026.", "Dec-2026"), ("Due 09/2026.", "09/2026"),
+                      ("Done on 28.10.2099.", "28.10.2099"), ("P is 0.8 per cent.", "0.8 per cent"),
+                      ("P = 0.8.", "0.8"), ("Rs 12,345 Cr.", "12,345")):
         ok, reasons, _ = brief.validate(text, facts)
         assert not ok and any(bad in r for r in reasons), (text, reasons)
     assert not brief.validate("   ", facts)[0]

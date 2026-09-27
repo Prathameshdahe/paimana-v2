@@ -83,3 +83,18 @@ def test_signals_add_members_and_evidence_from_the_database(tmp_path):
     assert b[["level", "n_projects", "n_signals"]].values.tolist() == [["state", 3, 2]]
     assert b.iloc[0]["last_seen"] == T("2026-08-04")
     assert mem.loc[mem["kind"].eq("signal"), "authority"].tolist() == ["State Govt", "unspecified"]
+
+
+def test_multi_state_needs_a_named_authority_and_cleared_events_are_left_out():
+    cur = pd.DataFrame([{"project_key": k, "project_name": k, "state": "Multi-State", "tier": "Low", "p_any_2q": .2,
+                         "months_p50": 1.0, "anticipated_cost_cr": 10.0} for k in ("M1", "M2", "M3", "M4")])
+    ev = pd.DataFrame([event(k, category="forest_env") for k in ("M1", "M2", "M3")])
+    b, _ = bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)
+    assert b.empty                                   # no shared place, no shared authority, no rollup
+    ev = pd.DataFrame([event(k, category="forest_env", authority="MoEFCC") for k in ("M1", "M2", "M3", "M4")])
+    ev.loc[3, "evidence"] = "Forest clearance got on 28.10.2021 and work started"
+    b, mem = bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)
+    assert b[["authority", "state", "n_projects"]].values.tolist() == [["MoEFCC", "Multi-State", 3]]
+    assert "M4" not in set(mem["project_key"])
+    ev.loc[3, "evidence"] = "Forest clearance obtained but land not yet handed over"   # a hold-up: still open
+    assert bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)[0].iloc[0]["n_projects"] == 4

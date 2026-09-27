@@ -1,15 +1,15 @@
 {
   "as_of_date": "2026-07-01",
   "min_projects": 3,
-  "n_bottlenecks": 8,
+  "n_bottlenecks": 7,
   "n_rollups": 5,
-  "n_projects": 42,
-  "capital_exposed_cr": 69676.5,
+  "n_projects": 39,
+  "capital_exposed_cr": 50818.1,
   "by_category": {
-    "forest_env": 5,
+    "forest_env": 4,
     "land": 8
   },
   "signals_used": 27,
   "signals_source": "database/paimana.db",
-  "note": "Projects that would be affected while this issue stays open: they share an open issue of this category and place in their report remarks or linked news. This is a grouping, not a causal claim about what resolving it would change."
+  "note": "Projects that would be affected while this issue stays open: they share an open issue of this category and place (for multi-state projects, of this named authority) in their report remarks or linked news. This is a grouping, not a causal claim about what resolving it would change."
 }
