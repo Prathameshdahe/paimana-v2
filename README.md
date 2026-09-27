@@ -161,6 +161,15 @@ with the state heat and, for each linked project, the first report after the
 news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn both
 loops off; the tests do.
 
+### Access by role
+
+The sign-in page picks a role: public (no sign-in needed), agency official (one
+canonical agency), ministry official (one ministry) or IPMD analyst. Every page
+and API answer is cut to that role's projects, and the public gets a simple
+project page without model internals. The role goes to the backend in
+`X-Paimana-*` headers that it trusts: a prototype, not authentication. The
+role-by-page table is in `docs/ACCESS_CONTROL.md`.
+
 ## Rebuilding data and the model
 
 The outputs are already in the repo, so you only need this if the raw data or the
@@ -243,3 +252,6 @@ elapsed and recorded delay.
 - Forecast overrun in crore reads Rs 0 for many projects because `cost_revised`
   is often missing in the source.
 - The JSON store in `database/` has no locking, so one user at a time.
+- There is no authentication. The role and its scope come from request headers
+  the backend trusts (`docs/ACCESS_CONTROL.md`), so they separate views and do
+  not protect data.
