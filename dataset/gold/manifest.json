@@ -1,8 +1,8 @@
 {
-  "gold_version": "3bafb1f033a6",
+  "gold_version": "c83ab1ac1810",
   "silver_version": "0d8abdcfc7cf",
-  "run_id": "RUN-20260927-124209",
-  "built_at": "2026-09-27T12:42:09+00:00",
+  "run_id": "RUN-20260927-133045",
+  "built_at": "2026-09-27T13:30:45+00:00",
   "latest_period": "2026-07-01",
   "horizons_quarters": [
     2,
@@ -50,6 +50,37 @@
       "months_since_last_obs",
       "dq_score",
       "period_type"
+    ],
+    "external": [
+      "ext_open_land",
+      "ext_open_forest_env",
+      "ext_open_litigation",
+      "ext_open_contractor",
+      "ext_open_funding",
+      "ext_open_utility_shifting",
+      "ext_open_inter_agency",
+      "ext_open_law_order",
+      "ext_open_weather",
+      "ext_open_total",
+      "ext_ever_land",
+      "ext_ever_forest_env",
+      "ext_ever_litigation",
+      "ext_ever_contractor",
+      "ext_ever_funding",
+      "ext_ever_utility_shifting",
+      "ext_ever_inter_agency",
+      "ext_ever_law_order",
+      "ext_ever_weather",
+      "ext_months_since_first_land",
+      "ext_months_since_first_forest_env",
+      "ext_remark_quarters",
+      "fc_expected_complexity",
+      "fc_worst_complexity",
+      "fc_max_authority_level",
+      "la_linked",
+      "la_complexity_max_by_t",
+      "la_parcels_by_t",
+      "la_notif_span_by_t"
     ]
   },
   "categorical": [
@@ -97,7 +128,8 @@
       500,
       1000,
       5000
-    ]
+    ],
+    "external_open_last_q": 2
   },
   "rows": {
     "features": 73167,

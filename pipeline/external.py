@@ -7,7 +7,8 @@ Run from repo root after the silver build:  python -m pipeline.run external
 Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver/observations.parquet,
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
          raw/external/land_acquisition_maharashtra.csv
-Outputs  gold/project_events.parquet, gold/external_fc.parquet, gold/external_land.parquet
+Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/external_fc.parquet,
+         gold/external_land.parquet, gold/external_land_pairs.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -18,12 +19,15 @@ all report it done ('EC received on ...'), and the project is not completed.
 
 Remarks come from typed_rows (every accepted clean report row), not observations (the quarter's last remark):
 it finds every observations mention plus 6% more key-quarter-category mentions and 16% more events, and the
-first mention keeps its own document and page.
+first mention keeps its own document and page. project_mentions keeps the per-quarter timeline (every
+remark-observed quarter and the categories it mentions) so gold can tell what was open at any earlier t.
 
 Forest clearance: each project gets a profile (linear or not, mining, violation, forest hectares from its
 events) and is matched to the Parivesh scenarios it can fall under. The form (A-H) is never known, so every
 form counts; with no hectares every area band counts. Survey rows apply to survey projects and defence
 exemptions to defence projects only; the public-utility-in-LWE exemption (<= 0.1 ha of amenities) never.
+fc_prior_* repeat the match from sector and name alone (no remark hectares or violation): the same at every t,
+so gold can use them as features without reading later remarks.
 
 Land acquisition: road projects in Maharashtra (or Multi-State naming a Maharashtra district) are linked to the
 Bhoomi Rashi NH stretches of the NH number in their name, on (NH, district) first, then NH alone. Everything else
@@ -38,9 +42,9 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pipeline.gold import GOLD  # noqa: E402
 from pipeline.silver import ROOT, SILVER, quarter  # noqa: E402
 
+GOLD = ROOT / "dataset" / "gold"          # not imported from pipeline.gold, which imports this module
 EXTERNAL = ROOT / "dataset" / "raw" / "external"
 
 # category -> subtype -> regex (case-insensitive; (?-i:...) marks the case-sensitive acronyms).
@@ -266,6 +270,15 @@ def mentions(rows):
     return seen, m.drop(columns=["free", "remarks"])
 
 
+def quarter_mentions(seen, m):
+    """One row per (key, remark-observed quarter, category mentioned); category is null for a quarter whose free
+    text mentions none. resolved: every mention of the category in that quarter reports it done."""
+    qm = m.groupby(["project_key", "period", "category"], as_index=False)["resolved"].all()
+    out = seen.merge(qm, on=["project_key", "period"], how="left")
+    out["resolved"] = out["resolved"].astype("boolean")
+    return out.sort_values(["project_key", "period", "category"], kind="mergesort", ignore_index=True)
+
+
 def events(seen, m, master):
     """Mentions -> one row per (project_key, category, run of consecutive remark-observed quarters)."""
     seen = seen.sort_values(["project_key", "period"], ignore_index=True)
@@ -342,6 +355,7 @@ GATES = {"psc_required": "PSC", "rec_required": "REC", "fac_required": "FAC",
 FC_COLS = ["project_key", "fc_shape", "fc_mining", "fc_violation", "fc_area_ha", "fc_area_known",
            "fc_expected_complexity", "fc_worst_complexity", "fc_min_authority_level", "fc_max_authority_level",
            "fc_likely_authority", "fc_gates", "fc_candidate_scenarios", "fc_mentioned", "fc_pending", "fc_evidence"]
+FC_PRIOR = ["fc_expected_complexity", "fc_worst_complexity", "fc_max_authority_level"]
 
 
 def shape(sector, name):
@@ -459,6 +473,7 @@ DISTRICT_ALIAS = {"AURANGABAD": ["CHHATRAPATI SAMBHAJINAGAR", "SAMBHAJINAGAR"], 
 LA_COLS = ["project_key", "la_linked", "la_match_method", "la_state", "la_nh", "la_districts", "la_stretches",
            "la_parcels", "la_area_ha", "la_complexity_max", "la_notif_span_days_max", "la_first_notif", "la_last_notif",
            "la_evidence"]
+LA_PAIR_COLS = ["stretch_id", "num_parcels", "acquisition_complexity_score", "first_notif_date", "last_notif_date"]
 
 
 def nh_id(s):
@@ -585,6 +600,7 @@ def main(out=GOLD, silver=SILVER):
     ev = events(seen, m, master)
     out.mkdir(parents=True, exist_ok=True)
     ev.to_parquet(out / "project_events.parquet", index=False)
+    quarter_mentions(seen, m).to_parquet(out / "project_mentions.parquet", index=False)
     print(f"project_events: {len(ev)} events from {len(m)} mentions over {ev['project_key'].nunique()} projects, "
           f"{time.time() - t0:.1f}s")
     ev_cur = ev[ev["project_key"].isin(cur)]
@@ -596,7 +612,11 @@ def main(out=GOLD, silver=SILVER):
             ["project_key", "category", "subtype", "first_seen", "last_seen", "n_mentions", "status", "authority",
              "evidence"]].to_string(index=False))
 
-    fc = forest_clearance(master, ev, pd.read_csv(EXTERNAL / "parivesh_fc_scenarios.csv"))
+    scen = pd.read_csv(EXTERNAL / "parivesh_fc_scenarios.csv")
+    fc = forest_clearance(master, ev, scen)
+    # the prior uses sector and name only (no remark hectares or violations), so it is the same at every t
+    prior = forest_clearance(master, ev.iloc[:0], scen)[["project_key", *FC_PRIOR]]
+    fc = fc.merge(prior.rename(columns={c: c.replace("fc_", "fc_prior_") for c in FC_PRIOR}), on="project_key")
     fc.to_parquet(out / "external_fc.parquet", index=False)
     fc_cur = fc[fc["project_key"].isin(cur)]
     print(f"external_fc: {len(fc)} projects, {int(fc['fc_area_known'].sum())} with forest hectares, "
@@ -607,8 +627,11 @@ def main(out=GOLD, silver=SILVER):
 
     st = stretches(pd.read_csv(EXTERNAL / "land_acquisition_maharashtra.csv"))
     by_nh, by_nh_district = land_tables(st)
-    land, _ = link_land(master, st)
+    land, pairs = link_land(master, st)
     land.to_parquet(out / "external_land.parquet", index=False)
+    pairs = pairs.drop_duplicates(["project_key", "stretch_id"]).merge(st[LA_PAIR_COLS], on="stretch_id")
+    pairs.sort_values(["project_key", "stretch_id"], ignore_index=True).to_parquet(
+        out / "external_land_pairs.parquet", index=False)
     lc = land[land["project_key"].isin(cur)]
     print(f"external_land: {len(st)} stretches on {len(by_nh)} NH ids ({len(by_nh_district)} NH x district); "
           f"{int(land['la_linked'].sum())} projects linked, {int(lc['la_linked'].sum())} of {len(lc)} current ones")
