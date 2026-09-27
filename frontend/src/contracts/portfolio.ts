@@ -158,12 +158,39 @@ export interface FeedItem {
   projects: FeedProject[]
 }
 
+/** stateHeat: signals of severity >= 2 in the last 90 days per state of their linked projects (not filtered) */
 export interface SignalFeed {
   total: number
   page: number
   size: number
   items: FeedItem[]
   stateHeat: Array<{ state: string | null; n: number }>
+}
+
+export interface CountRow {
+  /** category 'none' = uncategorised; severity rows carry the number */
+  name: string | number | null
+  n: number
+}
+
+/** GET /api/radar/summary: counts over signals published in the last windowDays; lead time over every linked signal */
+export interface RadarSummary {
+  windowDays: number
+  since: string
+  nSignalsTotal: number
+  nWindow: number
+  nLinked: number
+  nUnlinked: number
+  byCategory: CountRow[]
+  bySeverity: CountRow[]
+  bySource: CountRow[]
+  nProjectsScouted: number
+  leadTime: {
+    nLinkedPairs: number
+    nWithLaterChange: number
+    medianLeadDays: number | null
+    basis: string
+  }
 }
 
 /* gold/external_summary.json: the nested blocks below keep the file's own snake_case keys */

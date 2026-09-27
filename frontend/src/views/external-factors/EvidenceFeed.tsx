@@ -10,7 +10,7 @@ import type { FeedItem } from '@/contracts/portfolio'
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN') : 'date unknown')
 
-function SignalCard({ s }: { s: FeedItem }) {
+export function SignalCard({ s }: { s: FeedItem }) {
   return (
     <div className="bg-surface-panel px-4 py-3 space-y-1.5 min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-fg-dimmed">
@@ -49,7 +49,7 @@ function SignalCard({ s }: { s: FeedItem }) {
               {p.linkScore !== null && ` · link ${p.linkScore.toFixed(2)} (${p.method ?? 'match'})`}
               {' · '}
               {p.cufChangePeriod
-                ? `report of ${formatDate(p.cufChangePeriod)} then moved the date or cost (${p.leadDays} days later)`
+                ? `news ${day(s.publishedAt)} vs CUF change ${formatDate(p.cufChangePeriod)}: ${p.leadDays} days gap`
                 : 'no later report has changed the date or cost yet'}
             </div>
           </div>
@@ -73,6 +73,10 @@ export function EvidenceFeed() {
       titleRight={
         <span className="font-mono text-[11px] text-fg-dimmed">
           {lastRun?.finishedAt ? `news scout last ran ${formatDateTime(lastRun.finishedAt)}` : 'news scout has not run yet'}
+          {' · '}
+          <Link to="/radar" className="text-accent hover:underline">
+            filter and map it on the Radar →
+          </Link>
         </span>
       }
     >

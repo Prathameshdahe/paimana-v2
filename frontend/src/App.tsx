@@ -16,6 +16,7 @@ const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ de
 const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ default: m.ApprovalInbox })))
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
 const Bottlenecks = lazy(() => import('@/views/Bottlenecks').then(m => ({ default: m.Bottlenecks })))
+const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar })))
 
 export default function App() {
   const location = useLocation()
@@ -57,6 +58,9 @@ export default function App() {
 
               {/* Agency Performance Matrix (guide §6.3) */}
               <Route path="/agencies" element={<RequireRole><Agencies /></RequireRole>} />
+
+              {/* External Evidence Radar (guide §6.2) */}
+              <Route path="/radar" element={<RequireRole><Radar /></RequireRole>} />
 
               {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) */}
               <Route path="/audit" element={<RequireRole><AuditSuite /></RequireRole>} />

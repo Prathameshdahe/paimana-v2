@@ -7,33 +7,10 @@ import { formatINRShort, orDash } from '@/lib/formatters'
 import { Card } from '@/components/ui/Card'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import type { GroupStat } from '@/contracts/portfolio'
+import { GEO_URL, MAP_CENTER, OFF_MAP, normStateKey } from './indiaGeo'
 
-const GEO_URL = '/india-states-simplified.geojson'
-
-const MAP_CENTER: [number, number] = [83, 21]
 const MIN_ZOOM = 1
 const MAX_ZOOM = 6
-
-/**
- * One key for both spellings: our data uses modern names ("Jammu & Kashmir",
- * "Odisha"), the boundary file pre-2011 GADM ones ("Jammu and Kashmir",
- * "Orissa"). The file predates Telangana and Ladakh, so those two (and the
- * non-geographic Multi-State / PAN India / Offshore buckets) are listed under
- * the map instead of drawn on it.
- */
-function normStateKey(name: string): string {
-  const n = name.trim().toLowerCase().replace(/&/g, 'and').replace(/\s+islands$/, '')
-  const alias: Record<string, string> = {
-    orissa: 'odisha',
-    uttaranchal: 'uttarakhand',
-    'dadra and nagar haveli': 'dadra and nagar haveli and daman and diu',
-    'daman and diu': 'dadra and nagar haveli and daman and diu',
-  }
-  return alias[n] ?? n
-}
-
-/** data values the boundary file has no polygon for */
-const OFF_MAP = new Set(['multi-state', 'pan india', 'offshore', 'telangana', 'ladakh'])
 
 /** at-risk = Critical + High; the fill is its share of the largest state count */
 function atRisk(s: GroupStat | undefined): number {

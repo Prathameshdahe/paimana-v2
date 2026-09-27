@@ -17,6 +17,7 @@ import type {
   LiveStatus,
   Meta,
   Portfolio,
+  RadarSummary,
   SignalFeed,
 } from '@/contracts/portfolio'
 import type {
@@ -187,7 +188,8 @@ export function useLiveStatus() {
   return useQuery({
     queryKey: ['live', 'status'],
     queryFn: () => apiGet<LiveStatus>('/api/live/status'),
-    refetchInterval: 30_000,
+    // every 5 s while a job runs, so its progress and end show without a reload
+    refetchInterval: (q) => (q.state.data?.scout.running || q.state.data?.watch.running ? 5_000 : 30_000),
   })
 }
 
@@ -200,10 +202,35 @@ export function useWatchNow() {
   })
 }
 
-export function useSignalFeed(page: number, size = 20) {
+export type FeedFilters = {
+  category?: string
+  state?: string
+  /** at least */
+  severity?: number
+  linked?: boolean
+}
+
+export function useSignalFeed(page: number, size = 20, filters: FeedFilters = {}) {
   return useQuery({
-    queryKey: ['signals', 'feed', page, size],
-    queryFn: () => apiGet<SignalFeed>('/api/signals/feed', { page, size }),
+    queryKey: ['signals', 'feed', page, size, filters],
+    queryFn: () => apiGet<SignalFeed>('/api/signals/feed', { page, size, ...filters }),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** under ['signals'], so the alert stream refreshes it with the feed */
+export function useRadarSummary() {
+  return useQuery({
+    queryKey: ['signals', 'radar-summary'],
+    queryFn: () => apiGet<RadarSummary>('/api/radar/summary'),
+  })
+}
+
+/** Starts a scout batch in the background; its progress shows in the live status (scout.running). */
+export function useScoutNow() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (role: Role) => apiPost<JobStarted>('/api/jobs/scout', undefined, { role }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['live'] }),
   })
 }
