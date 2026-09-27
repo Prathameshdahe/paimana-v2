@@ -5,8 +5,9 @@ remarks and the Parivesh forest-clearance path, per project.
 Run from repo root after the silver build:  python -m pipeline.run external
 
 Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver/observations.parquet,
-         silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv
-Outputs  gold/project_events.parquet, gold/external_fc.parquet
+         silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
+         raw/external/land_acquisition_maharashtra.csv
+Outputs  gold/project_events.parquet, gold/external_fc.parquet, gold/external_land.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -23,6 +24,10 @@ Forest clearance: each project gets a profile (linear or not, mining, violation,
 events) and is matched to the Parivesh scenarios it can fall under. The form (A-H) is never known, so every
 form counts; with no hectares every area band counts. Survey rows apply to survey projects and defence
 exemptions to defence projects only; the public-utility-in-LWE exemption (<= 0.1 ha of amenities) never.
+
+Land acquisition: road projects in Maharashtra (or Multi-State naming a Maharashtra district) are linked to the
+Bhoomi Rashi NH stretches of the NH number in their name, on (NH, district) first, then NH alone. Everything else
+is 'unknown', never 'clear'. land_at() is the point-in-time view: only stretches first notified by t.
 """
 import re
 import sys
@@ -43,21 +48,23 @@ EXTERNAL = ROOT / "dataset" / "raw" / "external"
 TAXONOMY = {
     "land": {
         "acquisition": r"\bland\s*(?:acq|aq|acu)\w*|\b(?:acq|aq)\w*sition\s+of\s+(?:\w+\s+){0,2}land|(?-i:\bLA\b)",
-        "notification": r"\b3\s*\(?[ADG]\)?\s*(?:notification|notified|gazette)|notifi\w*\s+(?:u/s|under\s+sec\w*)\s*3\s*\(?[ADG]\b"
-                        r"|(?-i:\bCBA\b)",
+        "notification": (r"\b3\s*\(?[ADG]\)?\s*(?:notification|notified|gazette)"
+                         r"|notifi\w*\s+(?:u/s|under\s+sec\w*)\s*3\s*\(?[ADG]\b|(?-i:\bCBA\b)"),
         "compensation": r"\bcompensation\b|\bawards?\s+(?:for|of)\s+land",
-        "possession": r"\bpossession\b|(?:handing|hand|handed)\s+over\s+of\s+(?:\w+\s+){0,2}land"
-                      r"|(?:non[\s-]*availability|allot\w*|transfer)\s+of\s+(?:\w+\s+){0,2}land"
-                      r"|land\s+(?:issue|problem|dispute|hurdle|record|not\s+(?:yet\s+)?(?:available|acquired|handed))",
+        "possession": (r"\bpossession\b|(?:handing|hand|handed)\s+over\s+of\s+(?:\w+\s+){0,2}land"
+                       r"|(?:non[\s-]*availability|allot\w*|transfer)\s+of\s+(?:\w+\s+){0,2}land"
+                       r"|land\s+(?:issue|problem|dispute|hurdle|record"
+                       r"|not\s+(?:yet\s+)?(?:available|acquired|handed))"),
         "encroachment": r"encroach\w*",
         "rr": r"(?-i:\bR\s*&\s*R\b)|rehabilit\w*\s+(?:&|and)\s+resettle\w*|\bresettle\w*|(?-i:\bPA[FP]s?\b)",
         "row": r"(?-i:\bRO[Ww]\b)|\bright\s+of\s+way\b",
     },
     "forest_env": {
-        "forest_clearance": r"(?<!non-)(?<!non )\bforest\w*|afforest\w*|(?-i:\bFC\b)|stage[\s-]*(?:I{1,2}|1|2)\b\s*(?:forest\s+)?(?:clearance|FC)",
+        "forest_clearance": (r"(?<!non-)(?<!non )\bforest\w*|afforest\w*|(?-i:\bFC\b)"
+                             r"|stage[\s-]*(?:I{1,2}|1|2)\b\s*(?:forest\s+)?(?:clearance|FC)"),
         "wildlife": r"wild\s*life|sanctuary|national\s+park|tiger\s+reserve|eco[\s-]*sensitive|elephant\s+corridor",
-        "environment_clearance": r"environment\w*\s+(?:clearance|approval|permission)|(?-i:\bEC\b)|consent\s+to\s+(?:establish|operate)"
-                                 r"|pollution\s+control",
+        "environment_clearance": (r"environment\w*\s+(?:clearance|approval|permission)|(?-i:\bEC\b)"
+                                  r"|consent\s+to\s+(?:establish|operate)|pollution\s+control"),
         "ngt": r"(?-i:\bNGT\b)|green\s+tribunal",
         "moefcc": r"\bmoe\s*f\w*|ministry\s+of\s+environment",
         "crz": r"(?-i:\bCRZ\b)|coastal\s+regulation|mangrove\w*",
@@ -68,52 +75,64 @@ TAXONOMY = {
         "arbitration": r"arbitra\w*|(?-i:\bDRB\b)|\bconciliation",
         "stay": r"\bstay\s+(?:order|on|by|granted|vacated)|\bstayed\b",
         "writ": r"\bwrit\b|(?-i:\bPIL\b)|sub[\s-]*judice",
-        "case": r"(?:court|legal)\s+case|case\s+(?:filed|pending|in\s+(?:the\s+)?(?:hon\w*\s+)?(?:court|high))|filed\s+(?:a\s+)?case",
+        "case": (r"(?:court|legal)\s+case|case\s+(?:filed|pending|in\s+(?:the\s+)?(?:hon\w*\s+)?(?:court|high))"
+                 r"|filed\s+(?:a\s+)?case"),
         "dispute": r"legal\s+(?:dispute|issue|hurdle|matter)|litigat\w*|disput\w*",
     },
     "contractor": {
         "termination": r"terminat\w*|foreclos\w*|rescind\w*",
         "retender": r"\bre[\s-]*tender\w*|\bre[\s-]*award\w*|\bre[\s-]*bid\w*",
         "insolvency": r"insolven\w*|(?-i:\bNCLT\b)|(?-i:\bCIRP\b)|liquidat\w*|bankrupt\w*",
-        "performance": r"contractor.{0,40}\b(?:slow|poor|delay|fail|not|non|default|abandon|stopp|left|lack|inadequate|financial)"
-                       r"|\b(?:slow|poor|delay|fail|non|default|inadequate|lack)\w*.{0,40}\bcontractors?\b"
-                       r"|(?:poor|inadequate|lack\s+of|non)[\s-]*(?:mobili[sz]ation|deployment)\s+of\s+(?:resources|manpower)",
+        "performance": (r"contractor.{0,40}\b(?:slow|poor|delay|fail|not|non|default|abandon|stopp|left|lack|inadequate"
+                        r"|financial)|\b(?:slow|poor|delay|fail|non|default|inadequate|lack)\w*.{0,40}\bcontractors?\b"
+                        r"|(?:poor|inadequate|lack\s+of|non)[\s-]*(?:mobili[sz]ation|deployment)\s+of\s+(?:resources"
+                        r"|manpower)"),
     },
     "funding": {
-        "fund_constraint": r"\bfunds?\s+(?:constraint|crunch|shortage|problem|issue|not\s+(?:yet\s+)?(?:released|available))"
-                           r"|(?:paucity|shortage|non[\s-]*availability|availability|lack|want|inadequa\w*|constraints?|"
-                           r"non[\s-]*release|release)\s+of\s+(?:\w+\s+)?funds?\b|financial\s+(?:constraint|crunch|problem|difficult)\w*",
+        "fund_constraint": (r"\bfunds?\s+(?:constraint|crunch|shortage|problem|issue"
+                            r"|not\s+(?:yet\s+)?(?:released|available))"
+                            r"|(?:paucity|shortage|non[\s-]*availability|availability|lack|want|inadequa\w*"
+                            r"|constraints?|non[\s-]*release|release)\s+of\s+(?:\w+\s+)?funds?\b"
+                            r"|financial\s+(?:constraint|crunch|problem|difficult)\w*"),
         "budget": r"budget\w*\s+(?:constraint|allocation|cut|shortage)\w*|(?:inadequate|insufficient|low)\s+budget",
         "financial_closure": r"financial\s+closure",
-        "payment": r"payments?\s+(?:pending|due|delay\w*|not\s+released)|(?:pending|delay\w*\s+in|non[\s-]*)\s*payments?",
+        "payment": (r"payments?\s+(?:pending|due|delay\w*|not\s+released)"
+                    r"|(?:pending|delay\w*\s+in|non[\s-]*)\s*payments?"),
     },
     "utility_shifting": {
-        "utility": r"utilit\w*\s+shift\w*|shift\w*\s+(?:of\s+)?(?:\w+\s+){0,2}utilit\w*|utilit\w*\s+(?:relocation|diversion)",
-        "lines": r"(?:shifting|diversion|relocation|crossing)\s+of\s+(?:\w+\s+){0,3}(?:lines?|pipe\s*lines?|cables?|poles?|towers?|mains)\b"
-                 r"|(?:electric\w*|power|HT|LT|overhead|transmission|EHV)\s+lines?\s+(?:shift|cross|divers)\w*"
-                 r"|pipe\s*lines?\s+crossing",
+        "utility": (r"utilit\w*\s+shift\w*|shift\w*\s+(?:of\s+)?(?:\w+\s+){0,2}utilit\w*"
+                    r"|utilit\w*\s+(?:relocation|diversion)"),
+        "lines": (r"(?:shifting|diversion|relocation|crossing)\s+of\s+(?:\w+\s+){0,3}(?:lines?|pipe\s*lines?|cables?"
+                  r"|poles?|towers?|mains)\b|(?:electric\w*|power|HT|LT|overhead|transmission|EHV)\s+lines?\s+(?:shift"
+                  r"|cross|divers)\w*|pipe\s*lines?\s+crossing"),
     },
     "inter_agency": {
-        "railway_approval": r"\b(?:railways?|rly\.?)\s+(?:board\s+)?(?:approval|clearance|permission|nod|NOC)"
-                            r"|(?:approval|clearance|permission|NOC)\s+(?:\w+\s+){0,3}(?:from|by|of)\s+(?:the\s+)?(?:railways?|rly)\b"
-                            r"|(?-i:\bR[OU]Bs?\b).{0,40}(?:approv|GAD|railway|rly|clearance|permission)",
+        "railway_approval": (r"\b(?:railways?|rly\.?)\s+(?:board\s+)?(?:approval|clearance|permission|nod|NOC)"
+                             r"|(?:approval|clearance|permission|NOC)\s+(?:\w+\s+){0,3}(?:from|by|of)\s+(?:the\s+)?"
+                             r"(?:railways?|rly)\b"
+                             r"|(?-i:\bR[OU]Bs?\b).{0,40}(?:approv|GAD|railway|rly|clearance|permission)"),
         "gad": r"(?-i:\bGADs?\b)|general\s+arrangement\s+drawing",
         "noc": r"(?-i:\bNOCs?\b)|no[\s-]+objection",
-        "state_approval": r"(?:state|central)\s+gov\w*\.?\s+(?:approval|clearance|permission|sanction|nod|consent)"
-                          r"|(?:approval|clearance|permission|nod|consent)\s+(?:\w+\s+){0,3}(?:from|of|by)\s+(?:the\s+)?(?:state|concerned)\s+gov",
-        "other_approval": r"statutory\s+(?:clearance|approval)s?|local\s+(?:body|authority)\s+(?:approval|permission|clearance)s?"
-                          r"|defence\s+(?:clearance|approval|NOC|permission)|(?:clearance|approval|permission)s?\s+(?:\w+\s+){0,3}awaited",
+        "state_approval": (r"(?:state|central)\s+gov\w*\.?\s+(?:approval|clearance|permission|sanction|nod|consent)"
+                           r"|(?:approval|clearance|permission|nod|consent)\s+(?:\w+\s+){0,3}(?:from|of|by)\s+"
+                           r"(?:the\s+)?(?:state|concerned)\s+gov"),
+        "other_approval": (r"statutory\s+(?:clearance|approval)s?|local\s+(?:body|authority)\s+(?:approval|permission"
+                           r"|clearance)s?|defence\s+(?:clearance|approval|NOC|permission)"
+                           r"|(?:clearance|approval|permission)s?\s+(?:\w+\s+){0,3}awaited"),
     },
     "law_order": {
         "law_order": r"law\s*(?:&|and)\s*order|security\s+(?:problem|issue|concern|situation)|\bunrest\b|curfew",
         "lwe": r"naxal\w*|maoist\w*|(?-i:\bLWE\b)|left\s+wing\s+extrem\w*|insurgen\w*|militan\w*|terror\w*",
-        "agitation": r"agitation\w*|agitat(?:ed|ing)\b|protest\w*|\bbandh\w*|blockade|dharna|gherao\w*|(?:labou?r|workers?|truckers?|transport\w*|general)\s+strikes?",
-        "local_resistance": r"(?:local|public|villagers?)\s+(?:\w+\s+)?(?:resistance|opposition|objection|obstruct\w*|hindrance|resist\w*)"
-                            r"|obstruct\w*\s+(?:by|from)\s+(?:the\s+)?(?:local|villager)|villagers?\s+(?:obstruct|object|resist|oppos|stop)\w*",
+        "agitation": (r"agitation\w*|agitat(?:ed|ing)\b|protest\w*|\bbandh\w*|blockade|dharna|gherao\w*"
+                      r"|(?:labou?r|workers?|truckers?|transport\w*|general)\s+strikes?"),
+        "local_resistance": (r"(?:local|public|villagers?)\s+(?:\w+\s+)?(?:resistance|opposition|objection|obstruct\w*"
+                             r"|hindrance|resist\w*)|obstruct\w*\s+(?:by|from)\s+(?:the\s+)?(?:local|villager)"
+                             r"|villagers?\s+(?:obstruct|object|resist|oppos|stop)\w*"),
     },
     "weather": {
         "monsoon": r"monsoon\w*|\brain(?!\s*water)\w*|cloud\s*burst",
-        "flood": r"flood(?!\s+protection)\w*|landslide\w*|land\s+slide\w*|cyclon\w*|earthquake|snow\w*|inclement|extreme\s+weather|heat\s*wave",
+        "flood": (r"flood(?!\s+protection)\w*|landslide\w*|land\s+slide\w*|cyclon\w*|earthquake|snow\w*|inclement"
+                  r"|extreme\s+weather|heat\s*wave"),
         "covid": r"covid\w*|corona\w*|pandemic|lock\s*down",
         "force_majeure": r"force\s+majeure",
     },
@@ -135,9 +154,11 @@ AUTHORITY = {
 BOILERPLATE = (r"milestones achieved/total:\s*\d+/\d+|start:\s*\d{4}-\d{2}|doc reported (?:last|this) month:\s*[\d-]+"
                r"|delay w\.r\.t\. revised schedule(?:\s*\(r\d*\))?:\s*-?\d+\s*months|completed during(?: qtr\.)?[^;.]*"
                r"|cost_overrun_wrt_revised_cr:\s*-?[\d.]+|delay_wrt_revised_months:\s*-?\d+(?:\s*\(schedule r\d+\))?"
-               r"|implementation mode:[^;]*|ppp_mode:[^;]*|anticipated doc (?:reported )?in the previous quarter:\s*[\d-]+"
+               r"|implementation mode:[^;]*|ppp_mode:[^;]*"
+               r"|anticipated doc (?:reported )?in the previous quarter:\s*[\d-]+"
                r"|list dated as on[^.;]*|status:\s*completed|also in this report's list of completed projects"
-               r"|no project card printed in this report[^;]*|listed under 'projects completed/dropped during the month'[^;]*"
+               r"|no project card printed in this report[^;]*"
+               r"|listed under 'projects completed/dropped during the month'[^;]*"
                r"|status not printed per project|physical progress for the month of \w+ is [\d.]+\s*%"
                r"|this project was approved on \w+ \d+ with capital investment of rs\.? [\d.,]+ crores?"
                r"(?: with schedule completion date \w+ \d+)?|under progress(?: \(p\))?|work in progress")
@@ -145,20 +166,20 @@ SENTENCE = r"\s*(?:[;•\n\r]|\.\s+(?=[A-Z(])|\s-\s*(?=[A-Z])|(?:^|(?<=\s))\(?(?
 FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha|hect\w*)\.?\s*(?:of\s+)?(?:\w+\s+){0,2}(?<!non )forest"
              r"|forest\s+land\s*(?:of|:|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)"
              r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)")
-VIOLATION = (r"violat\w*|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC|environment\w*\s+clearance"
-             r"|clearance)|post[\s-]*facto")
+VIOLATION = (r"violat\w*|post[\s-]*facto|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC"
+             r"|environment\w*\s+clearance|clearance)")
 # a mention that reports the matter done ('EC received on 31.07.23') and names no hold-up is resolved
 DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed|achieved|approved|done|removed|resolved|vacated"
         r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available)\b")
 BLOCKED = (r"\b(?:await\w*|pending|delay\w*|yet\s+to|not|non|no|hold|held\s+up|stopp\w*|stalled|hamper\w*|affect\w*"
-           r"|problems?|issues?|constraints?|balance|slow|obstruct\w*|disput\w*|ban|banned|under\s+process|in\s+progress"
-           r"|expected|anticipated|likely|shortly)\b")
+           r"|problems?|issues?|constraints?|balance|slow|obstruct\w*|disput\w*|ban|banned|under\s+process"
+           r"|in\s+progress|expected|anticipated|likely|shortly)\b")
 MIN_FREE_WORDS = 3        # a report has free text when this many 3+ letter words survive the template strip
 OPEN_LAST_Q = 2           # an event is open when seen in one of the project's last 2 remark-observed quarters
 SNIPPET = 200
 EVENT_COLS = ["project_key", "category", "event_no", "first_seen", "last_seen", "n_quarters", "n_mentions", "status",
-              "resolved", "subtype", "authority", "forest_area_ha", "violation", "evidence", "source_doc_id", "source_page", "state", "sector",
-              "remarks_last_seen"]
+              "resolved", "subtype", "authority", "forest_area_ha", "violation", "evidence", "source_doc_id",
+              "source_page", "state", "sector", "remarks_last_seen"]
 
 
 def category_regex(cat):
@@ -272,8 +293,8 @@ def events(seen, m, master):
     best = q[q["subtype"].eq(ev["subtype"].reindex(pd.MultiIndex.from_frame(q[key])).to_numpy())]
     best = best.assign(_short=best["_len"].lt(12)).sort_values(key + ["_short", "_len"], kind="mergesort")
     best = best.drop_duplicates(key).set_index(key)
-    ev["evidence"] = pd.Series([snippet(s, c) for s, c in zip(best["sentence"], best.index.get_level_values("category"))],
-                               index=best.index)
+    cats = best.index.get_level_values("category")
+    ev["evidence"] = pd.Series([snippet(s, c) for s, c in zip(best["sentence"], cats)], index=best.index)
     ev = ev.reset_index().merge(last, on="project_key")
     ev = ev.merge(master[["project_key", "state", "sector", "completed_period"]], on="project_key", how="left")
     ev["remarks_last_seen"] = ev["project_key"].map(seen.groupby("project_key")["period"].max())
@@ -286,10 +307,12 @@ def events(seen, m, master):
 LINEAR_SECTORS = {"Roads & Highways", "Railways"}
 # name keywords; a linear keyword wins over a non-linear one, the sector decides when neither is there
 LINEAR_NAME = (r"pipe\s*lines?|superlines?|city\s+gas|gas\s+distribution|(?-i:\bCGD\b)|transmission|\btr\.?\s+system"
-               r"|\bsys(?:tem)?\.?\s+associated|(?:system|grid|regional)\s+streng\w*|\bgrid\b|evacuation|\d\s*kv\b|\bckm\b"
+               r"|\bsys(?:tem)?\.?\s+associated|(?:system|grid|regional)\s+streng\w*|\bgrid\b|evacuation|\d\s*kv\b"
+               r"|\bckm\b"
                r"|(?-i:\bLILO\b)|\bhvdc\b|canal|optical\s+fib|(?-i:\bOFC\b)|bharat\s*net|highway|expressway|flyover"
                r"|rural\s+roads?|roads?\s+(?:and|&)\s+bridges?|road\s+connectivity"
-               r"|(?:new|broad\s+gauge|3rd|4\s*th|third|fourth|tie)\s+(?:\w+\s+){0,2}lines?\b|doubling|tripling|quadrupling"
+               r"|(?:new|broad\s+gauge|3rd|4\s*th|third|fourth|tie)\s+(?:\w+\s+){0,2}lines?\b"
+               r"|doubling|tripling|quadrupling"
                r"|gauge\s+conversion|\(GC\)|rail(?:way)?\s+(?:line|link|connectivity)|metro|(?-i:\bRRTS\b)|corridor")
 NON_LINEAR_NAME = (r"workshop|factory|coach|wagon|\bshed\b|depot|station\s+(?:re)?develop|building|hospital|campus"
                    r"|refinery|plant|terminal|airport|jetty|berth|\bport\b|\bdam\b|hydro|(?-i:\bHEP\b)")
@@ -314,7 +337,8 @@ CATEGORY = {
     "Govt entity except Encroachment/Dereservation/Violation/Mining/OFC/GA":
         lambda p: not p["mining"] and not p["violation"] and not p["ofc"],
 }
-GATES = {"psc_required": "PSC", "rec_required": "REC", "fac_required": "FAC", "site_inspection_required": "site inspection"}
+GATES = {"psc_required": "PSC", "rec_required": "REC", "fac_required": "FAC",
+         "site_inspection_required": "site inspection"}
 FC_COLS = ["project_key", "fc_shape", "fc_mining", "fc_violation", "fc_area_ha", "fc_area_known",
            "fc_expected_complexity", "fc_worst_complexity", "fc_min_authority_level", "fc_max_authority_level",
            "fc_likely_authority", "fc_gates", "fc_candidate_scenarios", "fc_mentioned", "fc_pending", "fc_evidence"]
@@ -393,7 +417,8 @@ def fc_summary(match, p):
             "fc_max_authority_level": int(match["authority_level"].max()),
             "fc_likely_authority": w["approving_authority"], "fc_gates": gates,
             "fc_candidate_scenarios": ";".join(match["scenario_id"]),
-            "fc_evidence": f"{head}, {area}: up to {w['approving_authority']} with {gates} (scenario {w['scenario_id']})"}
+            "fc_evidence": f"{head}, {area}: up to {w['approving_authority']} with {gates} "
+                           f"(scenario {w['scenario_id']})"}
 
 
 def forest_clearance(master, ev, scen):
@@ -420,6 +445,128 @@ def forest_clearance(master, ev, scen):
     out["fc_pending"] = out["project_key"].isin(fe_ev.loc[fe_ev["status"].eq("open"), "project_key"])
     out = out.rename(columns={"mining": "fc_mining", "violation": "fc_violation", "area_ha": "fc_area_ha"})
     return out[FC_COLS]
+
+
+# NH number in a project name: 'NH-161A', 'NH 161', 'NH161', 'National Highway 161', 'NH No. 161', 'NH-17 & 48';
+# 'OLD NH-6' is dropped and a 'NEW NH-148' replaces the rest. A number followed by '.5' or 'km' is a chainage.
+_NH_NO = r"(\d{1,3}(?:-?[A-Z]{1,2}|\s[A-Z])?)\b(?![.,]\d)"   # '161A', '548-DD', '548 D'; not 'NH-66 CH-227'
+NH_TEXT = (r"(?:\b(OLD|NEW|ERSTWHILE)\s*)?(?:\bNH|\bN\.H\.|\bNATIONAL\s+HIGHWAY)\s*(?:NO\.?|NUMBER)?\s*[-:.]?\s*"
+           + _NH_NO + r"(?:\s*(?:&|AND|/)\s*" + _NH_NO + r"(?!\s*K\.?M))?")
+NE_TEXT = r"\b(NE)[-\s]?(\d{1,2})\b"   # national expressways, 'NE-4'
+LA_FLAG = 3               # a linked project is flagged at acquisition complexity >= 3 of 5, else clear
+DISTRICT_ALIAS = {"AURANGABAD": ["CHHATRAPATI SAMBHAJINAGAR", "SAMBHAJINAGAR"], "AHMEDNAGAR": ["AHILYANAGAR"],
+                  "RAIGAD": ["RAIGARH"], "GONDIA": ["GONDIYA"], "BULDHANA": ["BULDANA"], "NASHIK": ["NASIK"]}
+LA_COLS = ["project_key", "la_linked", "la_match_method", "la_state", "la_nh", "la_districts", "la_stretches",
+           "la_parcels", "la_area_ha", "la_complexity_max", "la_notif_span_days_max", "la_first_notif", "la_last_notif",
+           "la_evidence"]
+
+
+def nh_id(s):
+    """LA highway names -> NH id: '161 (New)' -> '161', '160 Ext.' -> '160', 'NH53' -> '53', '353 C' -> '353C';
+    null when there is no number ('Greenfield Expressway', 'No Yet to be Assigned')."""
+    s = s.str.upper().str.replace(r"\(NEW\)|\bNEW\b|\bEXT\b\.?|^NH", "", regex=True)
+    s = s.str.replace(r"[\s.\-]", "", regex=True)
+    return s.where(s.str.fullmatch(r"(?:NE)?\d{1,3}[A-Z]{0,3}|NE[IVX]+")).astype("str")
+
+
+def joined(v):
+    return ";".join(sorted(set(v)))
+
+
+def nh_from_text(s):
+    """NH ids named in each text (Series index -> sorted ;-joined ids, null when none)."""
+    up = s.fillna("").str.upper()
+    m, ne = up.str.extractall(NH_TEXT), up.str.extractall(NE_TEXT)
+    cols = ["tag", "nh"]
+    ids = pd.concat([m[[0, 1]].set_axis(cols, axis=1), m[[0, 2]].set_axis(cols, axis=1),
+                     pd.DataFrame({"tag": pd.NA, "nh": ne[0] + ne[1]}, index=ne.index)])
+    ids = ids[ids["nh"].notna()].reset_index(level=1, drop=True)
+    new = ids["tag"].eq("NEW").groupby(level=0).transform("any")
+    ids = ids[(ids["tag"].eq("NEW") | ~new) & ~ids["tag"].isin(["OLD", "ERSTWHILE"])]
+    ids = ids["nh"].str.replace(r"[\s-]", "", regex=True).str.lstrip("0")
+    return ids.groupby(level=0).agg(joined).reindex(s.index)
+
+
+def stretches(la):
+    """LA rows -> one row per stretch with its NH id, parsed dates and upper-case district list."""
+    d = la.assign(stretch_id=np.arange(len(la)), nh=nh_id(la["highway_name"]),
+                  districts=la["districts_touched"].str.upper().str.split("|"),
+                  first_notif_date=pd.to_datetime(la["first_notif_date"]),
+                  last_notif_date=pd.to_datetime(la["last_notif_date"]))
+    return d[d["nh"].notna()].reset_index(drop=True)
+
+
+def aggregate(rows, by):
+    """Stretch rows (a stretch may repeat, e.g. once per district) -> per group: stretches, parcels, area,
+    max complexity, max notification span, first and last notification, districts."""
+    rows = rows.drop_duplicates(by + ["stretch_id"])
+    g = rows.groupby(by)
+    return g.agg(stretches=("stretch_id", "nunique"), parcels=("num_parcels", "sum"), area_ha=("total_area_ha", "sum"),
+                 complexity_max=("acquisition_complexity_score", "max"), notif_span_days_max=("notif_span_days", "max"),
+                 first_notif=("first_notif_date", "min"), last_notif=("last_notif_date", "max"),
+                 districts=("districts", lambda v: ";".join(sorted({x for ds in v for x in ds})))).reset_index()
+
+
+def land_tables(st):
+    """Per NH id and per (NH id, district)."""
+    return aggregate(st, ["nh"]), aggregate(st.assign(district=st["districts"]).explode("district"), ["nh", "district"])
+
+
+def districts_in(names, st):
+    """Maharashtra districts (and their alias names) each project name mentions, as (index, district) pairs."""
+    names = names.fillna("").str.upper()
+    out = []
+    for dist in sorted({x for ds in st["districts"] for x in ds}):
+        words = [w.strip() for w in re.split(r"[()]", dist) if w.strip()] + DISTRICT_ALIAS.get(dist, [])
+        hit = names.str.contains(r"\b(?:" + "|".join(map(re.escape, words)) + r")\b", regex=True)
+        out.append(pd.DataFrame({"idx": names.index[hit], "district": dist}))
+    return pd.concat(out, ignore_index=True)
+
+
+def link_land(master, st):
+    """Maharashtra road projects -> the LA stretches of the NH they name: (NH, district) in the name first, then the
+    NH alone. Returns one row per project_key and the (project_key, nh, stretch_id, la_match_method) pairs."""
+    road = master["sector"].eq("Roads & Highways")
+    dist = districts_in(master["project_name"], st)
+    # ponytail: a district name shared with another state (Aurangabad, Bihar) makes a Multi-State road a candidate;
+    # it links only if its NH is in the Maharashtra table too. Needs a location field to do better.
+    mh = master["state"].eq("Maharashtra") | (master["state"].eq("Multi-State") & master.index.isin(dist["idx"]))
+    nh = nh_from_text(master["project_name"].fillna("") + " " + master["codes_seen"].fillna(""))
+    cand = master.loc[road & mh, ["project_key"]].assign(nh=nh[road & mh].str.split(";")).explode("nh").dropna()
+    named = dist.assign(project_key=master["project_key"].to_numpy()[dist["idx"]])[["project_key", "district"]]
+    ex = st.explode("districts").rename(columns={"districts": "district"})[["nh", "district", "stretch_id"]]
+    by_d = cand.merge(named, on="project_key").merge(ex, on=["nh", "district"]).assign(la_match_method="nh_district")
+    rest = cand[~cand["project_key"].isin(by_d["project_key"])]
+    by_n = rest.merge(st[["nh", "stretch_id"]], on="nh").assign(la_match_method="nh_only")
+    pairs = pd.concat([by_d, by_n], ignore_index=True)[["project_key", "nh", "stretch_id", "la_match_method"]]
+    agg = aggregate(pairs.merge(st.drop(columns="nh"), on="stretch_id"), ["project_key"])
+    pg = pairs.groupby("project_key")
+    agg["la_nh"] = agg["project_key"].map(pg["nh"].agg(joined)).astype("str")
+    agg["la_match_method"] = agg["project_key"].map(pg["la_match_method"].first())
+    out = master[["project_key"]].merge(agg, on="project_key", how="left")
+    out["la_linked"] = out["stretches"].notna()
+    reason = np.select([~road, ~mh, nh.isna()], ["not_road", "outside_maharashtra", "no_nh_in_name"], "nh_not_in_table")
+    out["la_match_method"] = out["la_match_method"].fillna(pd.Series(reason, index=out.index))
+    flag = np.where(out["complexity_max"] >= LA_FLAG, "flagged", "clear")
+    out["la_state"] = np.where(out["la_linked"], flag, "unknown")
+    out = out.rename(columns={c: f"la_{c}" for c in ["stretches", "parcels", "area_ha", "complexity_max",
+                                                    "notif_span_days_max", "first_notif", "last_notif", "districts"]})
+    for c in ["la_stretches", "la_parcels", "la_complexity_max", "la_notif_span_days_max"]:
+        out[c] = out[c].astype("Int64")
+    where = out["project_key"].map(by_d.groupby("project_key")["district"].agg(joined)).astype("str")
+    where = (" (" + where.str.title().str.replace(";", ", ") + ")").fillna("")
+    years = ((out["la_last_notif"] - out["la_first_notif"]).dt.days / 365.25).round(1).astype("str")
+    parcels = out["la_parcels"].map(lambda v: f"{int(v):,}", na_action="ignore")
+    out["la_evidence"] = ("NH-" + out["la_nh"].str.replace(";", ", NH-") + where + ": " + parcels + " parcels over "
+                          + years + " years of notifications, complexity " + out["la_complexity_max"].astype("str")
+                          + "/5").where(out["la_linked"])
+    return out[LA_COLS], pairs
+
+
+def land_at(pairs, st, t):
+    """Point-in-time land features per linked project at period t: only stretches first notified by t count."""
+    rows = pairs.merge(st[st["first_notif_date"] <= t].drop(columns="nh"), on="stretch_id")
+    return aggregate(rows, ["project_key"])[["project_key", "stretches", "parcels", "complexity_max"]]
 
 
 def current_keys(obs, master):
@@ -457,7 +604,21 @@ def main(out=GOLD, silver=SILVER):
           f"(mentioned {int(fc_cur['fc_mentioned'].sum())}, pending {int(fc_cur['fc_pending'].sum())}):")
     print(fc_cur.groupby(["fc_shape", "fc_mining", "fc_area_known", "fc_expected_complexity", "fc_worst_complexity",
                           "fc_likely_authority"]).size().rename("projects").to_string())
-    return ev, fc
+
+    st = stretches(pd.read_csv(EXTERNAL / "land_acquisition_maharashtra.csv"))
+    by_nh, by_nh_district = land_tables(st)
+    land, _ = link_land(master, st)
+    land.to_parquet(out / "external_land.parquet", index=False)
+    lc = land[land["project_key"].isin(cur)]
+    print(f"external_land: {len(st)} stretches on {len(by_nh)} NH ids ({len(by_nh_district)} NH x district); "
+          f"{int(land['la_linked'].sum())} projects linked, {int(lc['la_linked'].sum())} of {len(lc)} current ones")
+    print(pd.crosstab(lc["la_match_method"], lc["la_state"], margins=True).to_string())
+    with pd.option_context("display.width", 250, "display.max_colwidth", 120):
+        show = lc[lc["la_linked"]].merge(master[["project_key", "project_name"]], on="project_key")
+        show["project_name"] = show["project_name"].str[:70]
+        print(show.sample(min(10, len(show)), random_state=0)[
+            ["project_key", "la_match_method", "la_state", "project_name", "la_evidence"]].to_string(index=False))
+    return ev, fc, land
 
 
 if __name__ == "__main__":
