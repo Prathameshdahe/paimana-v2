@@ -20,6 +20,7 @@ interface TriageTableProps {
 }
 
 const TIER_BUTTONS: Array<TierFilter | 'ALL'> = ['ALL', ...TIERS, 'untiered']
+const FLAG_CHIPS: Array<Flag | 'ANY'> = ['ANY', ...(Object.keys(FLAG_LABEL) as Flag[])]
 const TIER_BUTTON_ON: Record<TierFilter | 'ALL', string> = {
   ALL: 'bg-fg-base',
   Critical: 'bg-critical',
@@ -106,15 +107,6 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
             {states.map((s) => <option key={s} value={s}>{s}</option>)}
             {query.state && !states.includes(query.state) && <option value={query.state}>{query.state}</option>}
           </select>
-
-          <select
-            value={query.flag ?? ''}
-            onChange={(e) => onChange({ flag: (e.target.value || undefined) as Flag | undefined })}
-            className={selectCls}
-          >
-            <option value="">ANY FLAG</option>
-            {(Object.keys(FLAG_LABEL) as Flag[]).map((f) => <option key={f} value={f}>{FLAG_LABEL[f]}</option>)}
-          </select>
         </div>
       }
     >
@@ -130,6 +122,34 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
             onChange={(e) => setText(e.target.value)}
             className="w-full bg-transparent text-sm font-sans font-medium text-fg-base placeholder:text-fg-dimmed focus:outline-none"
           />
+        </div>
+
+        {/* Flag chips: a flagged risk-profile dimension, or early notice */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          <span className="font-sans text-[11px] font-semibold uppercase tracking-wider text-fg-dimmed mr-1">Flag</span>
+          {FLAG_CHIPS.map((f) => {
+            const on = (query.flag ?? 'ANY') === f
+            return (
+              <button
+                key={f}
+                aria-pressed={on}
+                onClick={() => onChange({ flag: f === 'ANY' ? undefined : f })}
+                title={f === 'early_notice' ? 'flagged external factor while the CUF numbers show no slip yet' : undefined}
+                className={cn(
+                  'border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition-colors',
+                  on
+                    ? f === 'early_notice'
+                      ? 'border-critical bg-critical text-white'
+                      : f === 'ANY'
+                        ? 'border-fg-base bg-fg-base text-fg-inverse'
+                        : 'border-warning bg-warning text-white'
+                    : 'border-border-default text-fg-dimmed hover:text-fg-base hover:border-border-strong'
+                )}
+              >
+                {f === 'ANY' ? 'any' : FLAG_LABEL[f]}
+              </button>
+            )
+          })}
         </div>
       </div>
 

@@ -9,6 +9,7 @@ import { RequireRole } from '@/lib/auth/RequireRole'
 const Home = lazy(() => import('@/views/Home').then(m => ({ default: m.Home })))
 const CommandCenter = lazy(() => import('@/views/CommandCenter').then(m => ({ default: m.CommandCenter })))
 const ProjectStudio = lazy(() => import('@/views/ProjectStudio').then(m => ({ default: m.ProjectStudio })))
+const ExternalFactors = lazy(() => import('@/views/ExternalFactors').then(m => ({ default: m.ExternalFactors })))
 const AuditSuite = lazy(() => import('@/views/AuditSuite').then(m => ({ default: m.AuditSuite })))
 const Login = lazy(() => import('@/views/Login').then(m => ({ default: m.Login })))
 const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ default: m.WorkerConsole })))
@@ -45,7 +46,8 @@ export default function App() {
               {/* Route 2: Project Deep-Dive Studio (DIAGNOSE) */}
               <Route path="/projects/:key" element={<RequireRole><ProjectStudio /></RequireRole>} />
 
-              {/* The what-if sandbox is gone; external factors replace it (page built next) */}
+              {/* Route 3: External Factors — land, forest, litigation, contractor; replaces the what-if sandbox */}
+              <Route path="/external" element={<RequireRole><ExternalFactors /></RequireRole>} />
               <Route path="/sandbox" element={<Navigate to="/external" replace />} />
 
               {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) */}

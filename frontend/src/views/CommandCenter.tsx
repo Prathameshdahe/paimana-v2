@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useProjects, type ProjectQuery } from '@/lib/queries'
+import { FLAG_LABEL } from '@/lib/riskPalette'
+import type { Flag } from '@/contracts/project'
 import { KPIRibbon } from './command-center/KPIRibbon'
 import { PortfolioUrgencyMatrix } from './command-center/PortfolioUrgencyMatrix'
 import { TriageTable } from './command-center/TriageTable'
@@ -10,20 +12,24 @@ const PAGE_SIZE = 25
 
 export function CommandCenter() {
   const [searchParams, setSearchParams] = useSearchParams()
-  // ?state= comes from the India map click-through; read once, then dropped from the URL
-  const [query, setQuery] = useState<ProjectQuery>(() => ({
-    sort: 'risk',
-    order: 'desc',
-    page: 1,
-    size: PAGE_SIZE,
-    state: searchParams.get('state') ?? undefined,
-  }))
+  // ?state= (India map) and ?flag= (External Factors) are read once, then dropped from the URL
+  const [query, setQuery] = useState<ProjectQuery>(() => {
+    const flag = searchParams.get('flag')
+    return {
+      sort: 'risk',
+      order: 'desc',
+      page: 1,
+      size: PAGE_SIZE,
+      state: searchParams.get('state') ?? undefined,
+      flag: flag && Object.keys(FLAG_LABEL).includes(flag) ? (flag as Flag) : undefined,
+    }
+  })
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
   const projects = useProjects(query)
 
   useEffect(() => {
-    if (searchParams.has('state')) {
-      setSearchParams((prev) => { prev.delete('state'); return prev }, { replace: true })
+    if (searchParams.has('state') || searchParams.has('flag')) {
+      setSearchParams((prev) => { prev.delete('state'); prev.delete('flag'); return prev }, { replace: true })
     }
   }, [searchParams, setSearchParams])
 

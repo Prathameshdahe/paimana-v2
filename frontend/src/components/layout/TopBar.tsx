@@ -48,7 +48,7 @@ export function TopBar() {
               title={`latest report: ${m.latestReportDoc ?? 'unknown'}`}
             >
               <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">asof</span>
-              <span className="font-mono tabular-nums">{formatDate(m.asof)}</span>
+              <span className="font-mono tabular-nums whitespace-nowrap">{formatDate(m.asof)}</span>
               <span className="text-border-strong">·</span>
               <span className="font-mono tabular-nums">{m.nCurrent.toLocaleString()}</span>
               <span className="hidden xl:inline font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
@@ -73,15 +73,17 @@ export function TopBar() {
 
           {role ? (
             <div className="flex items-center gap-2 font-mono text-[11px]">
-              <span className="text-fg-muted">
+              {/* name and role only from xl; below it they are the button's tooltip, so the nav fits 1024px */}
+              <span className="hidden xl:inline whitespace-nowrap text-fg-muted">
                 {displayName} <span className="text-fg-dimmed">· {ROLE_LABELS[role]}</span>
               </span>
               <button
+                title={`${displayName} · ${ROLE_LABELS[role]}`}
                 onClick={() => {
                   clearRole()
                   navigate('/login')
                 }}
-                className="text-fg-dimmed underline-offset-2 hover:text-fg-base hover:underline"
+                className="whitespace-nowrap text-fg-dimmed underline-offset-2 hover:text-fg-base hover:underline"
               >
                 Switch role
               </button>

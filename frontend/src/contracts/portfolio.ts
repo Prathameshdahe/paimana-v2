@@ -96,16 +96,92 @@ export interface AlertPage {
   items: Alert[]
 }
 
-/** gold/external_summary.json; the nested blocks keep the file's own snake_case keys. */
+/* gold/external_summary.json: the nested blocks below keep the file's own snake_case keys */
+
+export type ExternalFactorKey =
+  | 'land'
+  | 'forest_clearance'
+  | 'litigation'
+  | 'contractor'
+  | 'utility_shifting'
+  | 'inter_agency'
+
+export interface ExternalProject {
+  project_key: string
+  project_name: string | null
+  sector: string | null
+  state: string | null
+  anticipated_cost_cr: number | null
+  tier: string | null
+  p_any_2q: number | null
+  slip_to_date_months: number | null
+  /** "factor: evidence" lines from the risk profile */
+  evidence: string[]
+}
+
+export interface ExternalFactor {
+  n_flagged: number
+  capital_exposed_cr: number
+  top: ExternalProject[]
+}
+
+export interface EarlyNotice {
+  /** broad rule: slip to date <= 0 or tier Low/Medium */
+  n_projects: number
+  capital_exposed_cr: number
+  by_factor: Partial<Record<ExternalFactorKey, number>>
+  n_flagged_any: number
+  capital_flagged_any_cr: number
+  /** strict rule: slip to date <= 0 */
+  no_slip_to_date: { n_projects: number; capital_exposed_cr: number }
+  top: ExternalProject[]
+}
+
+/** notice backtest: past rows with no slip to date; slip = completion pushed >= 3 months by t + 4 quarters */
+export interface Lift {
+  n_with: number
+  slip_rate_with: number | null
+  n_without: number
+  slip_rate_without: number | null
+  lift: number | null
+}
+
+export interface NoticeLift extends Lift {
+  projects_with: number
+  /** Mantel-Haenszel lift within sector x year */
+  lift_within_sector_year: number | null
+  by_sector: Record<string, Lift>
+}
+
+export interface CompositeDistribution {
+  n_projects: number
+  n_score_ge_high: number
+  mean: number
+  min: number
+  '25%': number
+  '50%': number
+  '75%': number
+  max: number
+}
+
 export interface ExternalSummary {
   asOfDate: string
   nProjects: number
   modelVersion: string
   rule: string
-  factors: Record<string, unknown>
-  earlyNotice: Record<string, unknown>
-  noticeBacktest: Record<string, unknown>
-  externalComposite: Record<string, unknown>
-  coverage: Record<string, unknown>
+  factors: Partial<Record<ExternalFactorKey, ExternalFactor>>
+  earlyNotice: EarlyNotice
+  noticeBacktest: Partial<Record<'land_or_forest' | 'land' | 'forest_env', NoticeLift>>
+  externalComposite: {
+    rule: string
+    by_coverage: Partial<Record<'fc+la' | 'fc_only', CompositeDistribution>>
+  }
+  coverage: {
+    n_current: number
+    land_linked: number
+    forest_area_known: number
+    composite_fc_la: number
+    composite_fc_only: number
+  }
   caveats: string[]
 }

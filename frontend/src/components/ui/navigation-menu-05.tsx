@@ -1,4 +1,4 @@
-import { Home, Terminal, ClipboardCheck, ListChecks, Inbox } from "lucide-react";
+import { Home, Terminal, Layers, ClipboardCheck, ListChecks, Inbox } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/formatters";
 import { useRole, type Role } from "@/lib/auth/RoleContext";
@@ -12,6 +12,7 @@ import {
 const navigationMenuItems = [
   { title: "HOME", href: "/", icon: Home, end: true, roles: undefined as Role[] | undefined },
   { title: "COMMAND", href: "/command", icon: Terminal, end: false, roles: undefined },
+  { title: "EXTERNAL FACTORS", href: "/external", icon: Layers, end: false, roles: undefined },
   { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, roles: undefined },
   {
     title: "WORKERS",
@@ -38,7 +39,7 @@ export function NavigationMenuWithActiveItem() {
 
   return (
     <NavigationMenu>
-      <NavigationMenuList className="space-x-8">
+      <NavigationMenuList className="space-x-4 xl:space-x-8">
         {visibleItems.map((item) => {
           // Determine if active based on current location and whether it requires exact match (end)
           const isActive = item.end
@@ -62,7 +63,8 @@ export function NavigationMenuWithActiveItem() {
                 )}
               >
                 <NavLink to={item.href} end={item.end} className="flex flex-row items-center gap-2">
-                  <item.icon className="h-4 w-4 shrink-0 opacity-70" />
+                  {/* icons only from xl: six labels plus the role fit a 1024px window without them */}
+                  <item.icon className="hidden xl:block h-4 w-4 shrink-0 opacity-70" />
                   {item.title}
                 </NavLink>
               </NavigationMenuLink>
