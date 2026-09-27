@@ -37,6 +37,7 @@ GOLD = ROOT / "dataset" / "gold"
 HORIZONS = (2, 4)
 AGENCY_H = 2              # agency rates come from the 2-quarter labels (more realised outcomes, sooner)
 SHRINK_K = 10             # pseudo-counts pulling agency rates toward the sector rate
+RECENT_Q = 4              # the recent-window agency and sector slip rates count labels realised in the last 4 quarters
 COST_STEP = 1.05          # anticipated cost up >= 5% is a cost revision
 DATE_STEP = 3             # anticipated completion pushed >= 3 months is a schedule slip
 STAGNANT_PP = 0.5         # |progress velocity| below this (pp per quarter) counts as stagnant
@@ -63,7 +64,8 @@ FEATURE_GROUPS = {
     "dynamics": ["progress_velocity_2q", "progress_velocity_4q", "spend_velocity_2q", "acceleration",
                  "stagnation_quarters", "velocity_vs_sector_median"],
     "context": ["expected_progress_scurve", "scurve_deviation", "sector_actual_target_ratio", "sector_yoy_growth",
-                "sector_trend_4q", "agency_slip_rate", "agency_cost_optimism", "agency_n", "sector", "state"],
+                "sector_trend_4q", "agency_slip_rate", "agency_cost_optimism", "agency_n", "agency_slip_4q",
+                "sector_slip_4q", "sector", "state"],
     "freshness": ["obs_count_in_quarter", "months_since_last_obs", "dq_score", "period_type"],
     "external": [f"ext_open_{c}" for c in EXT_CATS] + ["ext_open_total", "ext_open_age_q"]
                 + [f"ext_ever_{c}" for c in EXT_CATS]
@@ -229,15 +231,27 @@ def realised(lab, d, by):
 def agency_context(d):
     """Point-in-time agency rates from the AGENCY_H labels realised at or before each row's period:
     schedule-slip rate and mean cost change % (clipped to -50..100), shrunk toward the sector rate
-    (else the all-project rate) with SHRINK_K pseudo-counts. Returns a frame aligned with d."""
+    (else the all-project rate) with SHRINK_K pseudo-counts. agency_slip_4q and sector_slip_4q are the schedule-slip
+    rates of the labels realised in the last RECENT_Q quarters, (t - RECENT_Q, t]: the same cumulative sums at t minus
+    those at t - RECENT_Q, the agency's shrunk toward its sector's recent rate and the sector's toward the all-project
+    recent rate (null when no label was realised in the window). The all-time rate lags an agency's drift (NHAI's
+    flash-era rate is about 0.76 against an all-time 0.47). Returns a frame aligned with d."""
     lab = build_labels(d, AGENCY_H)
     lab = lab.merge(d[PK + ["agency", "sector"]], on=PK, how="left", validate="1:1").assign(
         slip=lambda x: x["y_date_push"].astype("float64"),
         cost=lambda x: x["y_cost_pct"].clip(-50, 100), _all=0)
-    rows = d[["period", "agency", "sector"]].assign(_all=0)
-    a = realised(lab[lab["agency"].notna()], rows.fillna({"agency": ""}), "agency")
-    s = realised(lab, rows, "sector")
-    t = realised(lab, rows, "_all")
+    rows = d[["period", "agency", "sector"]].assign(_all=0).fillna({"agency": ""})
+    back = rows.assign(period=rows["period"] - pd.DateOffset(months=3 * RECENT_Q))
+    by_lab = {"agency": lab[lab["agency"].notna()], "sector": lab, "_all": lab}
+    a, s, t = (realised(by_lab[by], rows, by) for by in by_lab)
+
+    def recent(now, by):
+        """Slip sum and count of the labels realised in (t - RECENT_Q, t]: the sums at t minus those at t - RECENT_Q."""
+        then = realised(by_lab[by], back, by)
+        return now["s_sum"].fillna(0) - then["s_sum"].fillna(0), now["s_n"].fillna(0) - then["s_n"].fillna(0)
+
+    (a4, an), (s4, sn), (t4, tn) = recent(a, "agency"), recent(s, "sector"), recent(t, "_all")
+    sector_4q = (s4 + SHRINK_K * t4 / tn.where(tn > 0)) / (sn + SHRINK_K)
     prior_slip = (s["s_sum"] / s["s_n"]).fillna(t["s_sum"] / t["s_n"])
     prior_cost = (s["c_sum"] / s["c_n"]).fillna(t["c_sum"] / t["c_n"])
     a0 = a[["n", "s_n", "s_sum", "c_n", "c_sum"]].fillna(0)
@@ -246,6 +260,7 @@ def agency_context(d):
         "n_cost": a0["c_n"], "cost_pct_raw": a["c_sum"] / a["c_n"], "last_outcome_period": a["target_period"],
         "agency_slip_rate": (a0["s_sum"] + SHRINK_K * prior_slip) / (a0["s_n"] + SHRINK_K),
         "agency_cost_optimism": (a0["c_sum"] + SHRINK_K * prior_cost) / (a0["c_n"] + SHRINK_K),
+        "agency_slip_4q": (a4 + SHRINK_K * sector_4q) / (an + SHRINK_K), "sector_slip_4q": sector_4q,
     }, index=d.index)
 
 
@@ -370,7 +385,8 @@ def build_features(obs, cutoff=None, sectors=None, external=None):
     d["scurve_deviation"] = prog - d["expected_progress_scurve"]
     ctx = sectors[["sector", "period", *SECTOR_CONTEXT]].rename(columns=SECTOR_CONTEXT)
     d = d.merge(ctx, on=["sector", "period"], how="left", validate="m:1")
-    d = pd.concat([d, agency_context(d)[["agency_slip_rate", "agency_cost_optimism", "agency_n"]]], axis=1)
+    d = pd.concat([d, agency_context(d)[["agency_slip_rate", "agency_cost_optimism", "agency_n", "agency_slip_4q",
+                                         "sector_slip_4q"]]], axis=1)
     d = pd.concat([d, external_features(d, external)], axis=1)
     d["rule_score"] = rule_score(d)
 
@@ -451,8 +467,8 @@ def main(silver=SILVER, out=GOLD):
         "categorical": CATEGORICAL,
         "baselines": BASELINE,
         "meta": META,
-        "params": {"agency_label_horizon": AGENCY_H, "shrink_k": SHRINK_K, "cost_step": COST_STEP,
-                   "date_step_months": DATE_STEP, "stagnant_pp_per_quarter": STAGNANT_PP,
+        "params": {"agency_label_horizon": AGENCY_H, "shrink_k": SHRINK_K, "recent_q": RECENT_Q,
+                   "cost_step": COST_STEP, "date_step_months": DATE_STEP, "stagnant_pp_per_quarter": STAGNANT_PP,
                    "scurve_bins": SCURVE_BINS, "scurve_min_rows": SCURVE_MIN_ROWS,
                    "cost_bands_cr": COST_BANDS[:-1], "external_open_last_q": OPEN_LAST_Q,
                    "external_open_max_age_q": OPEN_MAX_AGE_Q},

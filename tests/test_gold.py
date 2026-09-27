@@ -213,6 +213,33 @@ def test_agency_n_matches_brute_force():
     assert f.loc[f["agency"].isna(), "agency_n"].eq(0).all()
 
 
+def test_recent_slip_rates_match_brute_force_and_ignore_later_outcomes():
+    full = panel(60)
+    f = build(full)
+    lab = gold.build_labels(gold.base(full), gold.AGENCY_H).merge(f[["project_key", "period", "agency", "sector"]],
+                                                                  on=["project_key", "period"])
+    lab = lab[lab["y_date_push"].notna()]
+    k = gold.SHRINK_K
+    for _, r in f.sample(40, random_state=0).iterrows():
+        win = lab[(lab["target_period"] <= r["period"])
+                  & (lab["target_period"] > r["period"] - pd.DateOffset(months=3 * gold.RECENT_Q))]
+        if win.empty:
+            assert pd.isna(r["sector_slip_4q"]) and pd.isna(r["agency_slip_4q"])
+            continue
+        sec, ag = win[win["sector"] == r["sector"]], win[win["agency"] == r["agency"]]
+        want_sec = (sec["y_date_push"].sum() + k * win["y_date_push"].mean()) / (len(sec) + k)
+        want_ag = (ag["y_date_push"].sum() + k * want_sec) / (len(ag) + k)
+        assert r["sector_slip_4q"] == pytest.approx(want_sec) and r["agency_slip_4q"] == pytest.approx(want_ag)
+    # every label realised after t changes: the rates at t do not
+    flip = full.assign(anticipated_completion=full["anticipated_completion"] + pd.DateOffset(months=9))
+    t = QUARTERS[12]
+    keep = full["period"] <= t
+    g = build(pd.concat([full[keep], flip[~keep]], ignore_index=True))
+    cols = ["agency_slip_4q", "sector_slip_4q"]
+    pd.testing.assert_frame_equal(at(g, t)[cols], at(f, t)[cols])
+    assert {"agency_slip_4q", "sector_slip_4q"} <= set(gold.FEATURE_GROUPS["context"])
+
+
 def test_external_open_at_t_follows_the_last_two_remark_quarters():
     k = "PRJ-000001"
     d = obs_rows(k, [(q, 100.0, "2020-01", False) for q in range(7)])
