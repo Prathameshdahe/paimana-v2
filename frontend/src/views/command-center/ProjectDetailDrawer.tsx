@@ -1,19 +1,24 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { DualForecastPanel } from '@/views/project-studio/DualForecastPanel'
-import { SCurveChart } from '@/views/project-studio/SCurveChart'
-
+import { PredictionPanel } from '@/views/project-studio/PredictionPanel'
+import { ShapWaterfall } from '@/views/project-studio/ShapWaterfall'
+import { ProvenanceLine } from '@/views/project-studio/ProjectIdentityStrip'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/formatters'
-import type { Project } from '@/contracts/project'
+import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { useProject } from '@/lib/queries'
 
 interface ProjectDetailDrawerProps {
-  project: Project | null
-  isOpen: boolean
+  /** null: closed */
+  projectKey: string | null
   onClose: () => void
 }
 
-export function ProjectDetailDrawer({ project, isOpen, onClose }: ProjectDetailDrawerProps) {
+/** Slide-over with one project's prediction and drivers, from /api/projects/{key}. */
+export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawerProps) {
+  const { data: detail, error, isLoading } = useProject(projectKey)
+  const isOpen = projectKey !== null
+
   // ESC key listener to dismiss drawer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,7 +34,9 @@ export function ProjectDetailDrawer({ project, isOpen, onClose }: ProjectDetailD
     }
   }, [isOpen, onClose])
 
-  if (!isOpen || !project) return null
+  if (!isOpen) return null
+
+  const m = detail?.master
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -46,40 +53,28 @@ export function ProjectDetailDrawer({ project, isOpen, onClose }: ProjectDetailD
         className="relative z-50 flex h-full w-full max-w-[85vw] flex-col border-l border-border-default bg-surface-base shadow-2xl"
         role="dialog"
         aria-modal="true"
-        aria-label={`Project diagnostics for ${project.code}`}
+        aria-label={`Project diagnostics for ${projectKey}`}
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between border-b border-border-default bg-surface-panel px-5 py-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold text-fg-base">
-                {project.code}
-              </span>
-              <span
-                className={cn(
-                  'border px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider',
-                  project.riskTier === 'CRITICAL'
-                    ? 'border-critical/30 bg-critical/10 text-critical'
-                    : project.riskTier === 'WARNING'
-                    ? 'border-warning/30 bg-warning/10 text-warning'
-                    : 'border-stable/30 bg-stable/10 text-stable'
-                )}
-              >
-                [{project.riskTier.slice(0, 4)}] {project.compositeRiskScore}/100
-              </span>
-              <span className="font-mono text-[10px] text-fg-dimmed">
-                {project.sector} · {project.agency} · {project.state}
-              </span>
+              <span className="font-mono text-sm font-bold text-fg-base">{projectKey}</span>
+              {detail && <Badge tier={detail.scores ? detail.scores.tier : undefined} />}
+              {m && (
+                <span className="font-mono text-[10px] text-fg-dimmed truncate">
+                  {m.sector ?? 'sector unknown'} · {m.agency ?? 'agency unknown'} · {m.state ?? 'state unknown'}
+                </span>
+              )}
             </div>
-            <h2 className="mt-0.5 truncate font-sans text-xs text-fg-muted font-medium">
-              {project.name}
-            </h2>
+            <h2 className="truncate font-sans text-xs text-fg-muted font-medium">{m?.projectName ?? ''}</h2>
+            {detail && <ProvenanceLine detail={detail} />}
           </div>
 
           <div className="ml-4 flex items-center gap-2">
-            <Link to={`/projects/${project.id}`} onClick={onClose}>
+            <Link to={`/projects/${projectKey}`} onClick={onClose}>
               <Button variant="ghost" size="sm" className="font-mono text-[10px]">
-                FULL STUDIO ↗
+                FULL PAGE ↗
               </Button>
             </Link>
             <button
@@ -92,22 +87,24 @@ export function ProjectDetailDrawer({ project, isOpen, onClose }: ProjectDetailD
           </div>
         </div>
 
-        {/* Diagnostic Studio Body - Bento Grid */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 bg-surface-panel/30">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            
-            {/* Top Left: Main Metric Chart (S-Curve) */}
-            <div className="col-span-1 lg:col-span-2">
-              <SCurveChart data={project.sCurve} />
+          {error ? (
+            <ApiErrorNote error={error} />
+          ) : isLoading || !detail ? (
+            <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
+              fetching project...
             </div>
-
-            {/* Top Right: Quick Metrics (Cost/Schedule/Disparity) */}
-            <div className="col-span-1 flex flex-col h-full">
-              <DualForecastPanel project={project} />
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="lg:col-span-2">
+                <PredictionPanel detail={detail} />
+              </div>
+              <div className="lg:col-span-3">
+                <ShapWaterfall drivers={detail.scores?.shapTop5 ?? []} />
+              </div>
             </div>
-
-
-          </div>
+          )}
         </div>
       </aside>
     </div>

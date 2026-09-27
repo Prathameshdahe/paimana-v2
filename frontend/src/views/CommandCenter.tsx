@@ -1,29 +1,35 @@
-import { useState } from 'react'
-import { useProjects } from '@/mocks'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useProjects, type ProjectQuery } from '@/lib/queries'
 import { KPIRibbon } from './command-center/KPIRibbon'
 import { PortfolioUrgencyMatrix } from './command-center/PortfolioUrgencyMatrix'
 import { TriageTable } from './command-center/TriageTable'
 import { ProjectDetailDrawer } from './command-center/ProjectDetailDrawer'
-import type { Project } from '@/contracts/project'
+
+const PAGE_SIZE = 25
 
 export function CommandCenter() {
-  const { data: projects = [], isLoading } = useProjects()
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [drawerProject, setDrawerProject] = useState<Project | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // ?state= comes from the India map click-through; read once, then dropped from the URL
+  const [query, setQuery] = useState<ProjectQuery>(() => ({
+    sort: 'risk',
+    order: 'desc',
+    page: 1,
+    size: PAGE_SIZE,
+    state: searchParams.get('state') ?? undefined,
+  }))
+  const [drawerKey, setDrawerKey] = useState<string | null>(null)
+  const projects = useProjects(query)
 
-  const handleSelectFromMatrix = (projectId: string) => {
-    setSelectedProjectId(projectId)
-  }
+  useEffect(() => {
+    if (searchParams.has('state')) {
+      setSearchParams((prev) => { prev.delete('state'); return prev }, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
-  const handleOpenDetail = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId) ?? null
-    setSelectedProjectId(projectId)
-    setDrawerProject(project)
-  }
-
-  const handleCloseDrawer = () => {
-    setDrawerProject(null)
-  }
+  // any filter or sort change goes back to page 1; a page change keeps the rest
+  const changeQuery = (patch: Partial<ProjectQuery>) =>
+    setQuery((q) => ({ ...q, ...patch, page: patch.page ?? 1 }))
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
@@ -35,37 +41,33 @@ export function CommandCenter() {
           </h1>
         </div>
         <div className="font-mono text-[11px] text-fg-muted uppercase tracking-widest flex items-center gap-2">
-          telemetry pipeline <span className="text-stable font-bold">operational</span>
+          telemetry pipeline{' '}
+          {projects.error ? (
+            <span className="text-critical font-bold">unreachable</span>
+          ) : (
+            <span className="text-stable font-bold">operational</span>
+          )}
         </div>
       </div>
 
       <div className="h-px bg-border-subtle" />
 
-      {isLoading ? (
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
-          loading telemetry stream...
-        </div>
-      ) : (
-        <>
-          <KPIRibbon />
-          <PortfolioUrgencyMatrix
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={handleSelectFromMatrix}
-          />
-          <TriageTable
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={setSelectedProjectId}
-            onOpenDetail={handleOpenDetail}
-          />
-          <ProjectDetailDrawer
-            project={drawerProject}
-            isOpen={drawerProject !== null}
-            onClose={handleCloseDrawer}
-          />
-        </>
-      )}
+      <KPIRibbon />
+      <PortfolioUrgencyMatrix
+        page={projects.data}
+        selectedKey={drawerKey}
+        onOpenDetail={setDrawerKey}
+      />
+      <TriageTable
+        query={query}
+        onChange={changeQuery}
+        page={projects.data}
+        error={projects.error}
+        isFetching={projects.isFetching}
+        selectedKey={drawerKey}
+        onOpenDetail={setDrawerKey}
+      />
+      <ProjectDetailDrawer projectKey={drawerKey} onClose={() => setDrawerKey(null)} />
     </div>
   )
 }

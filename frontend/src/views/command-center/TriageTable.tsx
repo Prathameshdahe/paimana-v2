@@ -1,188 +1,120 @@
-import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { MonoFigure } from '@/components/ui/MonoFigure'
-import { Search } from 'lucide-react'
-import { formatINR, formatPct, formatRunwayDays, cn } from '@/lib/formatters'
-import type { Project, RiskTier, Sector } from '@/contracts/project'
+import { Badge } from '@/components/ui/Badge'
+import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { usePortfolio, type ProjectQuery } from '@/lib/queries'
+import { FLAG_LABEL, TIER_SENTIMENT, TIERS, tierKey } from '@/lib/riskPalette'
+import { formatDate, formatINR, formatPct, formatProb, orDash, cn } from '@/lib/formatters'
+import type { Flag, ProjectPage, ProjectSort, TierFilter } from '@/contracts/project'
 
 interface TriageTableProps {
-  projects: Project[]
-  selectedProjectId?: string | null
-  onSelectProject?: (projectId: string) => void
-  onOpenDetail?: (projectId: string) => void
+  query: ProjectQuery
+  onChange: (patch: Partial<ProjectQuery>) => void
+  page: ProjectPage | undefined
+  error: unknown
+  isFetching: boolean
+  selectedKey?: string | null
+  onOpenDetail: (key: string) => void
 }
 
-type SortField = 'compositeRiskScore' | 'actionableRunwayDays' | 'overrunForecastCr' | 'disparityDeltaPct'
+const TIER_BUTTONS: Array<TierFilter | 'ALL'> = ['ALL', ...TIERS, 'untiered']
+const TIER_BUTTON_ON: Record<TierFilter | 'ALL', string> = {
+  ALL: 'bg-fg-base',
+  Critical: 'bg-critical',
+  High: 'bg-warning',
+  Medium: 'bg-accent',
+  Low: 'bg-stable',
+  untiered: 'bg-fg-dimmed',
+}
+
+const selectCls =
+  'bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none max-w-[180px]'
 
 /**
- * TriageTable — high-density 32px-row operational queue.
- * Bloomberg-style tabular layout. Zero icons in table body.
- * Sort indicators: plain ▲/▼ in monospace header.
+ * TriageTable — high-density operational queue over /api/projects.
+ * Server-paginated: filters, search and sort go to the backend; the browser
+ * only ever holds one page. Bloomberg-style tabular layout.
  */
-export function TriageTable({
-  projects,
-  selectedProjectId,
-  onSelectProject,
-  onOpenDetail,
-}: TriageTableProps) {
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [search, setSearch] = useState('')
-  const [selectedTier, setSelectedTier] = useState<RiskTier | 'ALL'>('ALL')
-  const [selectedSector, setSelectedSector] = useState<Sector | 'ALL'>('ALL')
-  const [selectedState, setSelectedState] = useState<string>(searchParams.get('state') ?? 'ALL')
-  const [selectedType, setSelectedType] = useState<string>('ALL')
-  const [sortField, setSortField] = useState<SortField>('compositeRiskScore')
-  const [sortAsc, setSortAsc] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 20
+export function TriageTable({ query, onChange, page, error, isFetching, selectedKey, onOpenDetail }: TriageTableProps) {
+  const { data: portfolio } = usePortfolio()
+  const [text, setText] = useState(query.q ?? '')
 
-  // Auto-reveal and scroll selected project into view
+  // debounce the search box into the query
   useEffect(() => {
-    if (!selectedProjectId) return undefined
+    const t = setTimeout(() => {
+      const q = text.trim() || undefined
+      if (q !== query.q) onChange({ q })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [text, query.q, onChange])
 
-    const match = projects.find((p) => p.id === selectedProjectId)
-    if (match) {
-      if (selectedTier !== 'ALL' && match.riskTier !== selectedTier) {
-        setSelectedTier('ALL')
-      }
-      if (selectedSector !== 'ALL' && match.sector !== selectedSector) {
-        setSelectedSector('ALL')
-      }
-    }
-    const timer = setTimeout(() => {
-      const el = document.getElementById(`triage-row-${selectedProjectId}`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }
-    }, 60)
-    return () => clearTimeout(timer)
-  }, [selectedProjectId, projects, selectedTier, selectedSector])
+  const sectors = (portfolio?.bySector ?? []).map((s) => s.name).filter((n): n is string => !!n).sort()
+  const states = (portfolio?.byState ?? []).map((s) => s.name).filter((n): n is string => !!n).sort()
+  const total = page?.total ?? 0
+  const size = query.size ?? 25
+  const pageNo = query.page ?? 1
+  const totalPages = Math.max(1, Math.ceil(total / size))
 
-  const sectors = useMemo(() => {
-    const set = new Set<Sector>()
-    projects.forEach((p) => set.add(p.sector))
-    return Array.from(set).sort()
-  }, [projects])
-
-  const states = useMemo(() => {
-    const set = new Set<string>()
-    projects.forEach((p) => set.add(p.state))
-    return Array.from(set).sort()
-  }, [projects])
-
-  const types = useMemo(() => {
-    const set = new Set<string>()
-    projects.forEach((p) => p.projectType && set.add(p.projectType))
-    return Array.from(set).sort()
-  }, [projects])
-
-  // one-time consume of ?state= from the India map click-through
-  useEffect(() => {
-    const s = searchParams.get('state')
-    if (s) {
-      setSelectedState(s)
-      setSearchParams((prev) => { prev.delete('state'); return prev }, { replace: true })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const filtered = useMemo(() => {
-    return projects
-      .filter((p) => {
-        if (selectedTier !== 'ALL' && p.riskTier !== selectedTier) return false
-        if (selectedSector !== 'ALL' && p.sector !== selectedSector) return false
-        if (selectedState !== 'ALL' && p.state !== selectedState) return false
-        if (selectedType !== 'ALL' && p.projectType !== selectedType) return false
-        if (search.trim() !== '') {
-          const q = search.toLowerCase()
-          return (
-            p.name.toLowerCase().includes(q) ||
-            p.code.toLowerCase().includes(q) ||
-            p.agency.toLowerCase().includes(q) ||
-            p.state.toLowerCase().includes(q) ||
-            p.ministry.toLowerCase().includes(q)
-          )
-        }
-        return true
-      })
-      .sort((a, b) => {
-        const va = a[sortField], vb = b[sortField]
-        return sortAsc ? va - vb : vb - va
-      })
-  }, [projects, selectedTier, selectedSector, selectedState, selectedType, search, sortField, sortAsc])
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, selectedTier, selectedSector, selectedState, selectedType, sortField, sortAsc])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return filtered.slice(start, start + pageSize)
-  }, [filtered, currentPage])
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) setSortAsc(!sortAsc)
-    else { setSortField(field); setSortAsc(false) }
+  const handleSort = (sort: ProjectSort) => {
+    if (query.sort === sort) onChange({ order: query.order === 'asc' ? 'desc' : 'asc' })
+    else onChange({ sort, order: sort === 'name' ? 'asc' : 'desc' })
   }
-
-  const sortIcon = (field: SortField) =>
-    sortField === field ? (sortAsc ? ' ▲' : ' ▼') : ''
+  const sortIcon = (sort: ProjectSort) => (query.sort === sort ? (query.order === 'asc' ? ' ▲' : ' ▼') : '')
 
   return (
     <Card
-      title={`Triage Register · ${filtered.length}/${projects.length}`}
+      title={`Triage Register · ${total.toLocaleString()}${isFetching ? ' · loading' : ''}`}
       titleRight={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {/* Tier filters */}
-          {(['ALL', 'CRITICAL', 'WARNING', 'NORMAL'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setSelectedTier(t)}
-              className={cn(
-                'font-sans text-[11px] font-bold tracking-wider px-2.5 py-1 rounded-sm transition-all uppercase',
-                selectedTier === t
-                  ? t === 'CRITICAL' ? 'text-white bg-critical shadow-sm'
-                    : t === 'WARNING' ? 'text-white bg-warning shadow-sm'
-                    : t === 'NORMAL' ? 'text-white bg-stable shadow-sm'
-                    : 'text-white bg-fg-base shadow-sm'
-                  : 'text-fg-dimmed hover:text-fg-base bg-surface-elevated/50 hover:bg-surface-elevated'
-              )}
-            >
-              {t}
-            </button>
-          ))}
+          {TIER_BUTTONS.map((t) => {
+            const on = (query.tier ?? 'ALL') === t
+            return (
+              <button
+                key={t}
+                onClick={() => onChange({ tier: t === 'ALL' ? undefined : t })}
+                className={cn(
+                  'font-sans text-[11px] font-bold tracking-wider px-2.5 py-1 rounded-sm transition-all uppercase',
+                  on
+                    ? `text-white shadow-sm ${TIER_BUTTON_ON[t]}`
+                    : 'text-fg-dimmed hover:text-fg-base bg-surface-elevated/50 hover:bg-surface-elevated'
+                )}
+                title={t === 'untiered' ? 'no anticipated completion date in the reports — schedule not scored' : undefined}
+              >
+                {t === 'untiered' ? 'no date' : t}
+              </button>
+            )
+          })}
 
           <select
-            value={selectedSector}
-            onChange={(e) => setSelectedSector(e.target.value as Sector | 'ALL')}
-            className="bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none"
+            value={query.sector ?? ''}
+            onChange={(e) => onChange({ sector: e.target.value || undefined })}
+            className={selectCls}
           >
-            <option value="ALL">ALL SECTORS</option>
+            <option value="">ALL SECTORS</option>
             {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
 
           <select
-            value={selectedState}
-            onChange={(e) => setSelectedState(e.target.value)}
-            className="bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none"
+            value={query.state ?? ''}
+            onChange={(e) => onChange({ state: e.target.value || undefined })}
+            className={selectCls}
           >
-            <option value="ALL">ALL STATES</option>
+            <option value="">ALL STATES</option>
             {states.map((s) => <option key={s} value={s}>{s}</option>)}
+            {query.state && !states.includes(query.state) && <option value={query.state}>{query.state}</option>}
           </select>
 
-          {types.length > 0 && (
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none"
-            >
-              <option value="ALL">ALL TYPES</option>
-              {types.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-            </select>
-          )}
+          <select
+            value={query.flag ?? ''}
+            onChange={(e) => onChange({ flag: (e.target.value || undefined) as Flag | undefined })}
+            className={selectCls}
+          >
+            <option value="">ANY FLAG</option>
+            {(Object.keys(FLAG_LABEL) as Flag[]).map((f) => <option key={f} value={f}>{FLAG_LABEL[f]}</option>)}
+          </select>
         </div>
       }
     >
@@ -192,165 +124,172 @@ export function TriageTable({
           <Search className="w-4 h-4 text-fg-dimmed" />
           <input
             type="text"
-            placeholder="Search by project code, name, agency, or state..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by project name or PRJ key..."
+            value={text}
+            maxLength={100}
+            onChange={(e) => setText(e.target.value)}
             className="w-full bg-transparent text-sm font-sans font-medium text-fg-base placeholder:text-fg-dimmed focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left font-mono text-[13px]">
-          <thead>
-            <tr className="border-b border-border-default text-fg-dimmed font-sans text-xs uppercase tracking-wider">
-              <th className="py-3 px-5 font-semibold w-[260px]">PROJECT</th>
-              <th className="py-3 px-5 font-semibold">AGENCY</th>
-              <th
-                className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right"
-                onClick={() => handleSort('compositeRiskScore')}
-              >
-                RISK{sortIcon('compositeRiskScore')}
-              </th>
-              <th
-                className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right"
-                onClick={() => handleSort('actionableRunwayDays')}
-              >
-                RUNWAY{sortIcon('actionableRunwayDays')}
-              </th>
-              <th
-                className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right"
-                onClick={() => handleSort('overrunForecastCr')}
-              >
-                OVERRUN{sortIcon('overrunForecastCr')}
-              </th>
-              <th
-                className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right"
-                onClick={() => handleSort('disparityDeltaPct')}
-              >
-                BUDGET/WORK GAP{sortIcon('disparityDeltaPct')}
-              </th>
-              <th className="py-3 px-5 font-semibold text-right">SLIPPAGE RATE</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedData.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="py-6 text-center text-fg-dimmed text-xs">
-                  No projects match filter criteria.
-                </td>
+      {error ? (
+        <ApiErrorNote error={error} />
+      ) : (
+        <div className={cn('overflow-x-auto transition-opacity', isFetching && 'opacity-60')}>
+          <table className="w-full border-collapse text-left font-mono text-[13px]">
+            <thead>
+              <tr className="border-b border-border-default text-fg-dimmed font-sans text-xs uppercase tracking-wider">
+                <th className="py-3 px-5 font-semibold w-[300px] cursor-pointer hover:text-fg-muted" onClick={() => handleSort('name')}>
+                  PROJECT{sortIcon('name')}
+                </th>
+                <th className="py-3 px-5 font-semibold">AGENCY</th>
+                <th className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right" onClick={() => handleSort('risk')}>
+                  P(SLIP, 2Q){sortIcon('risk')}
+                </th>
+                <th className="py-3 px-5 font-semibold text-right">EXP. SLIP</th>
+                <th className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right" onClick={() => handleSort('slip')}>
+                  SLIP SO FAR{sortIcon('slip')}
+                </th>
+                <th className="py-3 px-5 font-semibold cursor-pointer hover:text-fg-muted text-right" onClick={() => handleSort('cost')}>
+                  COST{sortIcon('cost')}
+                </th>
+                <th className="py-3 px-5 font-semibold text-right">PROGRESS</th>
+                <th className="py-3 px-5 font-semibold">FLAGS</th>
               </tr>
-            ) : (
-              paginatedData.map((p) => {
-                const isSelected = p.id === selectedProjectId
-
-                return (
-                  <tr
-                    key={p.id}
-                    id={`triage-row-${p.id}`}
-                    onClick={() => {
-                      if (onSelectProject) onSelectProject(p.id)
-                      if (onOpenDetail) onOpenDetail(p.id)
-                      else navigate(`/projects/${p.id}`)
-                    }}
-                    className={cn(
-                      'border-b transition-all h-14 cursor-pointer',
-                      isSelected
-                        ? 'bg-accent/15 border-l-4 border-l-accent border-b-border-default shadow-sm'
-                        : 'border-border-subtle/60 hover:bg-surface-elevated/50'
-                    )}
-                  >
-                    {/* Project */}
-                    <td className="py-3 px-5">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          'text-[12px]',
-                          p.riskTier === 'CRITICAL' ? 'text-critical' :
-                          p.riskTier === 'WARNING' ? 'text-warning' : 'text-stable'
-                        )}>
-                          [{p.riskTier}]
-                        </span>
-                        <span className="text-fg-base font-sans truncate max-w-[200px] text-sm font-semibold">{p.name}</span>
-                      </div>
-                      <div className="text-[12px] font-sans text-fg-dimmed pl-[44px] mt-1 font-medium">
-                        <span className="font-mono">{p.code}</span> · {p.sector}
-                      </div>
-                    </td>
-
-                    {/* Agency */}
-                    <td className="py-3 px-5 font-sans text-fg-muted truncate max-w-[180px]">
-                      <span className="text-[13px] font-semibold">{p.agency}</span>
-                      <div className="text-[12px] font-medium text-fg-dimmed mt-1">{p.state}</div>
-                    </td>
-
-                    {/* Risk Score */}
-                    <td className="py-3 px-5 text-right">
-                      <MonoFigure
-                        size="base"
-                        sentiment={
-                          p.riskTier === 'CRITICAL' ? 'critical' :
-                          p.riskTier === 'WARNING' ? 'warning' : 'stable'
-                        }
-                      >
-                        {p.compositeRiskScore}
-                      </MonoFigure>
-                    </td>
-
-                  {/* Runway */}
-                  <td className="py-3 px-5 text-right">
-                    <span className={cn(
-                      'font-mono text-[13px]',
-                      p.actionableRunwayDays <= 30 ? 'text-critical font-semibold' : 'text-fg-base'
-                    )}>
-                      {formatRunwayDays(p.actionableRunwayDays)}
-                    </span>
-                  </td>
-
-                  {/* Overrun */}
-                  <td className="py-3 px-5 text-right text-critical font-medium tabular-nums font-mono">
-                    {p.overrunForecastCr > 0 ? '+' : ''}{formatINR(p.overrunForecastCr)}
-                  </td>
-
-                  {/* Disparity */}
-                  <td className="py-3 px-5 text-right font-medium font-mono tabular-nums">
-                    <span className={cn(
-                      p.disparityDeltaPct > 15 ? 'text-critical' :
-                      p.disparityDeltaPct > 5 ? 'text-warning' : 'text-stable'
-                    )}>
-                      {p.disparityDeltaPct > 0 ? '+' : ''}{formatPct(p.disparityDeltaPct)}
-                    </span>
-                  </td>
-
-                  {/* Float Velocity */}
-                  <td className="py-3 px-5 text-right text-fg-muted">
-                    {formatPct(p.floatDepletionVelocity)}/mo
+            </thead>
+            <tbody>
+              {!page ? (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-fg-dimmed text-xs">loading...</td>
+                </tr>
+              ) : page.items.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-fg-dimmed text-xs">
+                    No projects match filter criteria.
                   </td>
                 </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                page.items.map((p) => {
+                  const t = tierKey(p.tier)
+                  return (
+                    <tr
+                      key={p.key}
+                      onClick={() => onOpenDetail(p.key)}
+                      className={cn(
+                        'border-b transition-all h-14 cursor-pointer',
+                        p.key === selectedKey
+                          ? 'bg-accent/15 border-l-4 border-l-accent border-b-border-default shadow-sm'
+                          : 'border-border-subtle/60 hover:bg-surface-elevated/50'
+                      )}
+                    >
+                      {/* Project */}
+                      <td className="py-3 px-5">
+                        <div className="flex items-center gap-2">
+                          <Badge tier={p.tier} className="w-[64px] shrink-0 text-[11px]" />
+                          <span className="text-fg-base font-sans truncate max-w-[240px] text-sm font-semibold" title={p.name ?? undefined}>
+                            {p.name ?? p.key}
+                          </span>
+                        </div>
+                        <div className="text-[12px] font-sans text-fg-dimmed pl-[72px] mt-1 font-medium">
+                          <span className="font-mono">{p.key}</span> · {p.sector ?? 'sector unknown'}
+                          {p.override && <span className="text-warning"> · stagnation override</span>}
+                        </div>
+                      </td>
+
+                      {/* Agency */}
+                      <td className="py-3 px-5 font-sans text-fg-muted truncate max-w-[180px]">
+                        <span className="text-[13px] font-semibold">{p.agency ?? '—'}</span>
+                        <div className="text-[12px] font-medium text-fg-dimmed mt-1">{p.state ?? '—'}</div>
+                      </td>
+
+                      {/* P(any, 2q) */}
+                      <td className="py-3 px-5 text-right">
+                        {p.pAny2q === null ? (
+                          <span className="text-[11px] text-fg-dimmed" title="no anticipated completion date — schedule not scored">
+                            not scored
+                          </span>
+                        ) : (
+                          <>
+                            <MonoFigure size="base" sentiment={TIER_SENTIMENT[t]}>
+                              {formatProb(p.pAny2q)}
+                            </MonoFigure>
+                            <div className="text-[11px] text-fg-dimmed mt-1" title="P(date push, 2q) · P(cost revision, 2q)">
+                              date {orDash(p.pDatePush2q, formatProb)} · cost {orDash(p.pCostRev2q, formatProb)}
+                            </div>
+                          </>
+                        )}
+                      </td>
+
+                      {/* Expected slip next 2q */}
+                      <td className="py-3 px-5 text-right text-fg-base" title="predicted slip over the next 2 quarters, p50 (p95)">
+                        {orDash(p.monthsP50, (v) => `${v.toFixed(0)}mo`)}
+                        <span className="text-fg-dimmed text-[11px]"> {orDash(p.monthsP95, (v) => `(${v.toFixed(0)})`)}</span>
+                      </td>
+
+                      {/* Slip to date */}
+                      <td className="py-3 px-5 text-right">
+                        <span className={cn((p.slipToDateMonths ?? 0) > 12 ? 'text-critical font-semibold' : 'text-fg-base')}>
+                          {orDash(p.slipToDateMonths, (v) => `${v.toFixed(0)}mo`)}
+                        </span>
+                        <div className="text-[11px] text-fg-dimmed mt-1">
+                          {p.anticipatedCompletion ? `due ${formatDate(p.anticipatedCompletion)}` : 'no date'}
+                        </div>
+                      </td>
+
+                      {/* Cost */}
+                      <td className="py-3 px-5 text-right tabular-nums">
+                        <span className="text-fg-base">{orDash(p.anticipatedCostCr, formatINR)}</span>
+                        <div className="text-[11px] text-fg-dimmed mt-1">spent {orDash(p.expenditureCr, formatINR)}</div>
+                      </td>
+
+                      {/* Progress */}
+                      <td className="py-3 px-5 text-right text-fg-muted">
+                        {orDash(p.physicalProgressPct, (v) => formatPct(v, 0))}
+                      </td>
+
+                      {/* Flags */}
+                      <td className="py-3 px-5">
+                        <div className="flex flex-wrap gap-1 max-w-[160px]">
+                          {p.flags.map((f) => (
+                            <span
+                              key={f}
+                              className={cn(
+                                'border px-1 py-0.5 text-[10px] uppercase tracking-wider',
+                                f === 'early_notice' ? 'border-critical/40 text-critical' : 'border-warning/40 text-warning'
+                              )}
+                            >
+                              {FLAG_LABEL[f]}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination Footer */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-border-default px-5 py-3 bg-surface-panel/50">
           <div className="font-sans text-[11px] text-fg-dimmed font-semibold tracking-wider">
-            PAGE <span className="text-fg-base">{currentPage}</span> OF <span className="text-fg-base">{totalPages}</span>
+            PAGE <span className="text-fg-base">{pageNo}</span> OF <span className="text-fg-base">{totalPages}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={pageNo <= 1}
+              onClick={() => onChange({ page: pageNo - 1 })}
               className="px-3 py-1.5 bg-surface-input text-[11px] font-sans font-bold uppercase text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
             >
               Prev
             </button>
             <button
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={pageNo >= totalPages}
+              onClick={() => onChange({ page: pageNo + 1 })}
               className="px-3 py-1.5 bg-surface-input text-[11px] font-sans font-bold uppercase text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
             >
               Next

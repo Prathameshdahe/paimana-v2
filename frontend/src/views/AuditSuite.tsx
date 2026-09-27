@@ -1,10 +1,11 @@
-import { useBenchmarkData, useCUFAuditData } from '@/mocks'
+import { MOCK_BENCHMARK_ROWS, MOCK_CUF_AUDIT_ROWS } from '@/mocks/audit'
 import { BenchmarkMatrix } from './audit-suite/BenchmarkMatrix'
 import { CUFAuditTable } from './audit-suite/CUFAuditTable'
 
+// ponytail: still the hand-copied v1 numbers in mocks/audit.ts; the Models page will read /api/models
 export function AuditSuite() {
-  const { data: benchmarks = [] } = useBenchmarkData()
-  const { data: cufAudit = [] } = useCUFAuditData()
+  const benchmarks = MOCK_BENCHMARK_ROWS
+  const cufAudit = MOCK_CUF_AUDIT_ROWS
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">

@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { usePortfolioSummary } from '@/mocks'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
 import { useRole } from '@/lib/auth/RoleContext'
+import { useMeta, usePortfolio } from '@/lib/queries'
+import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
+import { formatDate } from '@/lib/formatters'
 
 const ROLE_LABELS: Record<string, string> = {
   ipmd_analyst: 'IPMD Analyst',
@@ -16,7 +18,10 @@ const ROLE_LABELS: Record<string, string> = {
  * Zero decorative icons. Information-first.
  */
 export function TopBar() {
-  const { data: s } = usePortfolioSummary()
+  const meta = useMeta()
+  const { data: p } = usePortfolio()
+  const m = meta.data
+  const tierN = (t: string) => p?.tiers.find((x) => x.tier === t)?.n ?? 0
   const { role, displayName, clearRole } = useRole()
   const navigate = useNavigate()
 
@@ -35,12 +40,27 @@ export function TopBar() {
           </a>
         </div>
 
-        {/* Center: Live Portfolio Metrics — monospace ticker */}
-        {s && (
-          <div className="hidden lg:flex items-center gap-4 font-sans text-[12px] text-fg-muted">
-            <span className="bg-surface-elevated text-fg-base px-2.5 py-1 rounded-sm border border-border-default font-semibold flex items-center gap-1.5 shadow-sm">
-              <span className="font-mono tabular-nums">{s.totalProjects.toLocaleString()}</span>
+        {/* Center: Live Portfolio Metrics — monospace ticker (data version + tier counts) */}
+        {m && (
+          <div className="hidden lg:flex items-center gap-3 font-sans text-[12px] text-fg-muted">
+            <span
+              className="bg-surface-elevated text-fg-base px-2.5 py-1 rounded-sm border border-border-default font-semibold flex items-center gap-1.5 shadow-sm"
+              title={`latest report: ${m.latestReportDoc ?? 'unknown'}`}
+            >
+              <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">asof</span>
+              <span className="font-mono tabular-nums">{formatDate(m.asof)}</span>
+              <span className="text-border-strong">·</span>
+              <span className="font-mono tabular-nums">{m.nCurrent.toLocaleString()}</span>
               <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
+            </span>
+            {p && (
+              <span className="font-mono text-[11px] tabular-nums">
+                <span className="text-critical font-semibold">{tierN('Critical')}</span> crit ·{' '}
+                <span className="text-warning font-semibold">{tierN('High')}</span> high
+              </span>
+            )}
+            <span className="font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
+              {m.modelVersion}
             </span>
           </div>
         )}
@@ -76,6 +96,12 @@ export function TopBar() {
           )}
         </nav>
       </div>
+
+      {isOffline(meta.error) && (
+        <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center font-mono text-[11px] text-critical">
+          backend not reachable at {API_BASE} — start uvicorn: <code>{START_BACKEND}</code>
+        </div>
+      )}
     </header>
   )
 }

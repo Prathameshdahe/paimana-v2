@@ -1,4 +1,4 @@
-import { Home, Terminal, Box, ClipboardCheck, ListChecks, Inbox } from "lucide-react";
+import { Home, Terminal, ClipboardCheck, ListChecks, Inbox } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/formatters";
 import { useRole, type Role } from "@/lib/auth/RoleContext";
@@ -12,7 +12,6 @@ import {
 const navigationMenuItems = [
   { title: "HOME", href: "/", icon: Home, end: true, roles: undefined as Role[] | undefined },
   { title: "COMMAND", href: "/command", icon: Terminal, end: false, roles: undefined },
-  { title: "SANDBOX", href: "/sandbox", icon: Box, end: false, roles: undefined },
   { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, roles: undefined },
   {
     title: "WORKERS",

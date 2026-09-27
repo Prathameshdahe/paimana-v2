@@ -1,15 +1,16 @@
 import React from 'react'
 import { cn } from '@/lib/formatters'
-import type { RiskTier } from '@/contracts/project'
+import { TIER_SENTIMENT, TIER_SHORT, tierKey } from '@/lib/riskPalette'
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'critical' | 'warning' | 'stable' | 'accent' | 'muted'
-  tier?: RiskTier
+  /** a project tier; null means untiered (no completion date) */
+  tier?: string | null
 }
 
 /**
  * Minimal monospace status pip — NOT a colorful pill.
- * Format: [CRIT] [WARN] [STBL] — tight, functional, zero decoration.
+ * Format: [CRIT] [HIGH] [MED] [LOW] — tight, functional, zero decoration.
  */
 export function Badge({
   variant = 'muted',
@@ -18,10 +19,8 @@ export function Badge({
   children,
   ...props
 }: BadgeProps) {
-  let resolvedVariant = variant
-  if (tier === 'CRITICAL') resolvedVariant = 'critical'
-  if (tier === 'WARNING') resolvedVariant = 'warning'
-  if (tier === 'NORMAL') resolvedVariant = 'stable'
+  const t = tier === undefined ? null : tierKey(tier)
+  const resolvedVariant = t ? TIER_SENTIMENT[t] : variant
 
   const variantClasses = {
     critical: 'text-critical',
@@ -42,13 +41,13 @@ export function Badge({
   return (
     <span
       className={cn(
-        'font-mono text-[10px] tracking-widest leading-none uppercase',
+        'font-mono text-[10px] tracking-widest leading-none uppercase whitespace-nowrap',
         variantClasses[resolvedVariant],
         className
       )}
       {...props}
     >
-      {children ?? `[${labels[resolvedVariant]}]`}
+      {children ?? `[${t ? TIER_SHORT[t] : labels[resolvedVariant]}]`}
     </span>
   )
 }

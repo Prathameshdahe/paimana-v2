@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Bot, Send, Sparkles, X } from 'lucide-react'
-import { askQuestion } from '@/lib/queryEngine'
-import { cn } from '@/lib/formatters'
+import { apiGet, isOffline, START_BACKEND } from '@/lib/api'
+import { usePortfolio, type ProjectQuery } from '@/lib/queries'
+import { cn, formatINRShort, formatProb, orDash } from '@/lib/formatters'
+import type { ProjectPage, Tier } from '@/contracts/project'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -10,22 +12,36 @@ interface Message {
 }
 
 const STARTERS = [
-  'critical railway projects',
-  'projects in Maharashtra over 50% overrun',
-  'how many warning projects',
-  'top 5 power projects by risk',
+  'critical road projects',
+  'power projects in Maharashtra',
+  'how many high projects',
+  'Haridwar bypass',
 ]
 
+const TIER_WORDS: Record<string, Tier> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
+const stem = (w: string) => w.replace(/s$/, '')
+
 /**
- * Floating project-intelligence Q&A widget. Answers against the real
- * dataset via queryEngine.ts (local rule-based, no LLM yet — see that
- * file's header for the Ollama swap point).
+ * Turns a question into /api/projects filters: a tier word, a sector (any of
+ * its words, plural-insensitive) and a state (full name) from the portfolio's
+ * own names; with none of those the whole text is a name/key search (q=).
  */
+function parseQuestion(text: string, sectors: string[], states: string[]): ProjectQuery {
+  const lower = text.toLowerCase()
+  const words = new Set((lower.match(/[a-z]+/g) ?? []).map(stem))
+  const tierWord = Object.keys(TIER_WORDS).find((w) => words.has(w))
+  const sector = sectors.find((s) => (s.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => words.has(stem(w))))
+  const state = states.find((s) => lower.includes(s.toLowerCase()))
+  const tier = tierWord ? TIER_WORDS[tierWord] : undefined
+  if (!tier && !sector && !state) return { q: text.slice(0, 100) }
+  return { tier, sector, state }
+}
+
 export function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', text: 'Ask me about projects — sector, state, risk tier, overrun %, or delay months.' },
+    { role: 'assistant', text: 'Ask about open projects by tier, sector or state, or search a project name.' },
   ])
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -33,12 +49,39 @@ export function ChatWidget() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, open])
 
-  function submit(text: string) {
+  const { data: portfolio } = usePortfolio()
+
+  async function answer(q: string): Promise<string> {
+    const names = (rows: { name: string | null }[] | undefined) =>
+      (rows ?? []).map((r) => r.name).filter((n): n is string => !!n)
+    const query = parseQuestion(q, names(portfolio?.bySector), names(portfolio?.byState))
+    const topN = Number(q.match(/top\s*(\d+)/i)?.[1] ?? 8)
+    const scope = [query.tier, query.sector, query.state && `in ${query.state}`, query.q && `matching "${query.q}"`]
+      .filter(Boolean)
+      .join(' ')
+    try {
+      const page = await apiGet<ProjectPage>('/api/projects', { ...query, sort: 'risk', size: Math.min(topN, 20) })
+      if (/\bhow many\b|\bcount\b|\bnumber of\b/i.test(q)) return `${page.total} ${scope} open project(s).`
+      if (page.total === 0) return `No open ${scope} projects in the current portfolio.`
+      const lines = page.items.map(
+        (p) =>
+          `${p.key} — ${p.name ?? ''} (${p.state ?? 'state unknown'}) — ${p.tier ?? 'no completion date'}, ` +
+          `P(slip, 2q) ${orDash(p.pAny2q, formatProb)}, ${orDash(p.anticipatedCostCr, formatINRShort)}`
+      )
+      const more = page.total > page.items.length ? ` (top ${page.items.length} of ${page.total} by P(slip, 2q))` : ''
+      return `${page.total} ${scope} project(s)${more}:\n${lines.join('\n')}`
+    } catch (e) {
+      return isOffline(e) ? `The backend is not reachable. Start it with: ${START_BACKEND}` : `Search failed: ${String(e)}`
+    }
+  }
+
+  async function submit(text: string) {
     const q = text.trim()
     if (!q) return
-    const result = askQuestion(q)
-    setMessages((m) => [...m, { role: 'user', text: q }, { role: 'assistant', text: result.answer }])
     setInput('')
+    setMessages((m) => [...m, { role: 'user', text: q }])
+    const reply = await answer(q)
+    setMessages((m) => [...m, { role: 'assistant', text: reply }])
   }
 
   return (
@@ -62,7 +105,7 @@ export function ChatWidget() {
                 <div className="text-xs font-semibold uppercase tracking-widest text-fg-base">
                   Project Intelligence
                 </div>
-                <div className="text-[10px] text-fg-dimmed">Rule-based · answers from live data</div>
+                <div className="text-[10px] text-fg-dimmed">Keyword search · /api/projects</div>
               </div>
               <button
                 onClick={() => setOpen(false)}

@@ -1,33 +1,111 @@
 /**
  * src/contracts/portfolio.ts
  *
- * Portfolio-level aggregate summary type.
- * Powers the Persistent Top Bar ticker and Macro KPI Ribbon.
- * All figures must remain consistent with PROJECT_CONTEXT.md baseline.
+ * Portfolio-level shapes as served by the FastAPI backend (backend/schemas.py;
+ * keys are camelCase): data version, aggregates, alerts, external rollup.
  */
+import type { TierFilter } from './project'
 
-export interface PortfolioSummary {
-  /** Total monitored projects — authoritative: 1,981 */
-  totalProjects: number
-  /** Total projects flagged as CRITICAL risk tier */
-  criticalCount: number
-  /** Total projects flagged as WARNING risk tier */
-  warningCount: number
-  /** Total projects at NORMAL risk tier */
-  normalCount: number
-  /** Original sanctioned cost of entire portfolio (₹ Cr) — authoritative: 3,713,000 */
-  originalPortfolioCostCr: number
-  /** Revised anticipated cost of entire portfolio (₹ Cr) — authoritative: 4,278,000 */
-  revisedPortfolioCostCr: number
-  /** Cumulative expenditure to date across portfolio (₹ Cr) — authoritative: 2,036,000 */
-  cumulativeExpenditureCr: number
-  /** Documented capital escalation (₹ Cr) — authoritative: 565,000 */
-  cumulativeOverrunCr: number
-  /**
-   * Data snapshot label for the reporting cycle.
-   * Displayed in the top bar: "Apr 2026 Snapshot"
-   */
-  reportingCycle: string
-  /** Average Physical-Financial disparity across the monitored portfolio (%) */
-  avgDisparityDeltaPct: number
+export interface Meta {
+  asof: string
+  modelVersion: string
+  goldVersion: string
+  silverVersion: string
+  nCurrent: number
+  nUntiered: number
+  latestReportPeriod: string | null
+  latestReportDoc: string | null
+  models: Record<string, string>
+  caveats: string[]
+}
+
+export interface Kpis {
+  nProjects: number
+  originalCostCr: number | null
+  anticipatedCostCr: number | null
+  expenditureCr: number | null
+  overrunCr: number | null
+  overrunPct: number | null
+  avgProgressPct: number | null
+}
+
+export interface TierCount {
+  tier: TierFilter
+  n: number
+  capitalCr: number
+}
+
+export interface GroupStat {
+  name: string | null
+  n: number
+  capitalCr: number | null
+  nCritical: number
+  nHigh: number
+}
+
+export interface TopProject {
+  key: string
+  name: string | null
+  sector: string | null
+  state: string | null
+  tier: string | null
+  pAny2q: number | null
+  anticipatedCostCr: number | null
+}
+
+export interface Portfolio {
+  asof: string
+  filters: Record<string, string | null>
+  kpis: Kpis
+  tiers: TierCount[]
+  byState: GroupStat[]
+  bySector: GroupStat[]
+  byMinistry: GroupStat[]
+  top: TopProject[]
+}
+
+export type AlertKind =
+  | 'tier_up'
+  | 'tier_down'
+  | 'new_project'
+  | 'slip_realised'
+  | 'signal'
+  | 'early_notice'
+  | 'pipeline_error'
+
+export interface Alert {
+  id: number
+  createdAt: string
+  /** null only for a pipeline_error alert */
+  projectKey: string | null
+  kind: AlertKind
+  severity: number
+  title: string | null
+  detail: string | null
+  asof: string | null
+  modelVersion: string | null
+  source: string | null
+  ackedBy: string | null
+  ackedAt: string | null
+}
+
+export interface AlertPage {
+  total: number
+  page: number
+  size: number
+  items: Alert[]
+}
+
+/** gold/external_summary.json; the nested blocks keep the file's own snake_case keys. */
+export interface ExternalSummary {
+  asOfDate: string
+  nProjects: number
+  modelVersion: string
+  rule: string
+  factors: Record<string, unknown>
+  earlyNotice: Record<string, unknown>
+  noticeBacktest: Record<string, unknown>
+  externalComposite: Record<string, unknown>
+  coverage: Record<string, unknown>
+  caveats: string[]
 }

@@ -156,6 +156,21 @@ export function formatPctDelta(value: number, decimals = 1): string {
   return `${sign}${formatPct(value, decimals)}`
 }
 
+// ── Probabilities and missing values ─────────────────────────────────────────
+
+/**
+ * Formats a model probability (0–1) as a percentage.
+ * Example: formatProb(0.9505) → "95%"
+ */
+export function formatProb(p: number, decimals = 0): string {
+  return formatPct(p * 100, decimals)
+}
+
+/** Formats v with f, or "—" when the value is missing (null is shown as unknown, never as 0). */
+export function orDash<T>(v: T | null | undefined, f: (v: T) => string): string {
+  return v === null || v === undefined ? '—' : f(v)
+}
+
 // ── Risk Score ────────────────────────────────────────────────────────────────
 
 /**

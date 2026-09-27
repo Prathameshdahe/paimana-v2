@@ -150,13 +150,10 @@ training code changes.
 python pipeline/extract_pdf_context.py    # PDFs -> dataset/silver/pdf_sector_state_fix.csv
 python pipeline/clean_sector_state.py     # raw CSVs -> dataset/silver/*_clean.csv
 python ml/train.py                        # -> dataset/gold/*.csv and model/*
-
-python pipeline/build_real_projects.py    # -> frontend/src/mocks/real_projects.json
-python pipeline/build_state_dots.py       # -> frontend/src/data/state-dots.json
 ```
 
-The backend keeps `real_projects.json` in memory, so restart it after
-regenerating that file. The Audit Suite numbers are hardcoded in
+The frontend has no bundled project data; every view reads the backend API.
+The Audit Suite numbers are still hardcoded in
 `frontend/src/mocks/audit.ts` (benchmark rows and `BENCHMARK_NOTES` from
 `model/metrics.json`, CUF info-gain percentages from
 `model/shap_test_sanity.json`), so update them by hand after retraining.
