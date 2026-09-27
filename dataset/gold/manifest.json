@@ -1,8 +1,8 @@
 {
-  "gold_version": "e1535e8506a6",
+  "gold_version": "2676494d0207",
   "silver_version": "0d8abdcfc7cf",
-  "run_id": "RUN-20260927-215116",
-  "built_at": "2026-09-27T21:51:16+00:00",
+  "run_id": "RUN-20260927-222559",
+  "built_at": "2026-09-27T22:25:59+00:00",
   "latest_period": "2026-07-01",
   "horizons_quarters": [
     2,
@@ -63,7 +63,6 @@
       "ext_open_law_order",
       "ext_open_weather",
       "ext_open_total",
-      "ext_open_age_q",
       "ext_ever_land",
       "ext_ever_forest_env",
       "ext_ever_litigation",

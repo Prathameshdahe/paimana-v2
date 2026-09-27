@@ -1,7 +1,7 @@
 {
   "as_of_date": "2026-07-01",
   "n_projects": 1763,
-  "model_version": "lgbm-any2q-20260927-221217",
+  "model_version": "lgbm-any2q-20260927-222602",
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
@@ -15,7 +15,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 3466.6,
           "tier": "Medium",
-          "p_any_2q": 0.905,
+          "p_any_2q": 0.878,
           "slip_to_date_months": 69.0,
           "evidence": [
             "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -28,7 +28,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 2108.4,
           "tier": "High",
-          "p_any_2q": 0.938,
+          "p_any_2q": 0.934,
           "slip_to_date_months": 24.0,
           "evidence": [
             "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -41,7 +41,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 2020.6,
           "tier": "Medium",
-          "p_any_2q": 0.866,
+          "p_any_2q": 0.855,
           "slip_to_date_months": 72.0,
           "evidence": [
             "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -54,7 +54,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1910.4,
           "tier": "Medium",
-          "p_any_2q": 0.881,
+          "p_any_2q": 0.833,
           "slip_to_date_months": 20.0,
           "evidence": [
             "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -67,7 +67,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1798.0,
           "tier": "Medium",
-          "p_any_2q": 0.862,
+          "p_any_2q": 0.839,
           "slip_to_date_months": 20.0,
           "evidence": [
             "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -80,7 +80,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1443.1,
           "tier": "Medium",
-          "p_any_2q": 0.836,
+          "p_any_2q": 0.85,
           "slip_to_date_months": 76.0,
           "evidence": [
             "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -93,7 +93,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1435.5,
           "tier": "Medium",
-          "p_any_2q": 0.865,
+          "p_any_2q": 0.829,
           "slip_to_date_months": 25.0,
           "evidence": [
             "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -106,7 +106,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1432.8,
           "tier": "Medium",
-          "p_any_2q": 0.739,
+          "p_any_2q": 0.721,
           "slip_to_date_months": 41.0,
           "evidence": [
             "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
@@ -118,8 +118,8 @@
           "sector": "Roads & Highways",
           "state": "Maharashtra",
           "anticipated_cost_cr": 1297.5,
-          "tier": "Critical",
-          "p_any_2q": 0.952,
+          "tier": "High",
+          "p_any_2q": 0.924,
           "slip_to_date_months": 39.0,
           "evidence": [
             "land: NH-965G: 4,288 parcels over 6.7 years of notifications, complexity 5/5; not mentioned in report remarks up to Apr 2023"
@@ -132,7 +132,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1142.6,
           "tier": "Medium",
-          "p_any_2q": 0.878,
+          "p_any_2q": 0.857,
           "slip_to_date_months": 70.0,
           "evidence": [
             "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -151,7 +151,7 @@
           "state": "Maharashtra",
           "anticipated_cost_cr": 1880.6,
           "tier": "Low",
-          "p_any_2q": 0.63,
+          "p_any_2q": 0.499,
           "slip_to_date_months": 0.0,
           "evidence": [
             "forest_clearance: high clearance complexity expected: linear, 71.722 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired during the month'"
@@ -181,10 +181,10 @@
     }
   },
   "early_notice": {
-    "n_projects": 30,
-    "capital_exposed_cr": 25145.3,
+    "n_projects": 32,
+    "capital_exposed_cr": 25814.2,
     "by_factor": {
-      "land": 29,
+      "land": 31,
       "forest_clearance": 1,
       "litigation": 0,
       "contractor": 0,
@@ -205,7 +205,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 3466.6,
         "tier": "Medium",
-        "p_any_2q": 0.905,
+        "p_any_2q": 0.878,
         "slip_to_date_months": 69.0,
         "evidence": [
           "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -218,7 +218,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 2020.6,
         "tier": "Medium",
-        "p_any_2q": 0.866,
+        "p_any_2q": 0.855,
         "slip_to_date_months": 72.0,
         "evidence": [
           "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -231,7 +231,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1910.4,
         "tier": "Medium",
-        "p_any_2q": 0.881,
+        "p_any_2q": 0.833,
         "slip_to_date_months": 20.0,
         "evidence": [
           "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -244,7 +244,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1880.6,
         "tier": "Low",
-        "p_any_2q": 0.63,
+        "p_any_2q": 0.499,
         "slip_to_date_months": 0.0,
         "evidence": [
           "forest_clearance: high clearance complexity expected: linear, 71.722 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired during the month'"
@@ -257,7 +257,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1798.0,
         "tier": "Medium",
-        "p_any_2q": 0.862,
+        "p_any_2q": 0.839,
         "slip_to_date_months": 20.0,
         "evidence": [
           "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -270,7 +270,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1443.1,
         "tier": "Medium",
-        "p_any_2q": 0.836,
+        "p_any_2q": 0.85,
         "slip_to_date_months": 76.0,
         "evidence": [
           "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -283,7 +283,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1435.5,
         "tier": "Medium",
-        "p_any_2q": 0.865,
+        "p_any_2q": 0.829,
         "slip_to_date_months": 25.0,
         "evidence": [
           "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -296,7 +296,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1432.8,
         "tier": "Medium",
-        "p_any_2q": 0.739,
+        "p_any_2q": 0.721,
         "slip_to_date_months": 41.0,
         "evidence": [
           "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
@@ -309,7 +309,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1142.6,
         "tier": "Medium",
-        "p_any_2q": 0.878,
+        "p_any_2q": 0.857,
         "slip_to_date_months": 70.0,
         "evidence": [
           "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -322,7 +322,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1039.0,
         "tier": "Low",
-        "p_any_2q": 0.073,
+        "p_any_2q": 0.052,
         "slip_to_date_months": 0.0,
         "evidence": [
           "land: NH-48 (Kolhapur): 857 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -335,7 +335,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 718.8,
         "tier": "Low",
-        "p_any_2q": 0.237,
+        "p_any_2q": 0.208,
         "slip_to_date_months": 7.0,
         "evidence": [
           "land: NH-848: 584 parcels over 3.5 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -348,7 +348,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 631.8,
         "tier": "Low",
-        "p_any_2q": 0.159,
+        "p_any_2q": 0.103,
         "slip_to_date_months": 0.0,
         "evidence": [
           "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -361,7 +361,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 617.9,
         "tier": "Low",
-        "p_any_2q": 0.288,
+        "p_any_2q": 0.253,
         "slip_to_date_months": 0.0,
         "evidence": [
           "land: NH-160 (Ahmednagar): 566 parcels over 4.7 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -374,10 +374,23 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 533.8,
         "tier": "Medium",
-        "p_any_2q": 0.897,
+        "p_any_2q": 0.877,
         "slip_to_date_months": -6.0,
         "evidence": [
           "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004218",
+        "project_name": "Balance works of 4L Panvel Indapur section of NH66 old NH17 from km 42.300 kasu to km 84.600 Indapur",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 472.1,
+        "tier": "Medium",
+        "p_any_2q": 0.89,
+        "slip_to_date_months": 27.0,
+        "evidence": [
+          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       },
       {
@@ -387,7 +400,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 468.9,
         "tier": "Medium",
-        "p_any_2q": 0.883,
+        "p_any_2q": 0.819,
         "slip_to_date_months": 33.0,
         "evidence": [
           "land: NH-53: 518 parcels over 4.6 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -400,7 +413,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 425.5,
         "tier": "Medium",
-        "p_any_2q": 0.897,
+        "p_any_2q": 0.873,
         "slip_to_date_months": 55.0,
         "evidence": [
           "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
@@ -413,7 +426,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 406.5,
         "tier": "Medium",
-        "p_any_2q": 0.893,
+        "p_any_2q": 0.829,
         "slip_to_date_months": 83.0,
         "evidence": [
           "land: NH-61: 293 parcels over 7.4 years of notifications, complexity 3/5; no free-text remarks in any report"
@@ -426,7 +439,7 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 400.0,
         "tier": "Low",
-        "p_any_2q": 0.401,
+        "p_any_2q": 0.346,
         "slip_to_date_months": 6.0,
         "evidence": [
           "land: NH-965: 6,776 parcels over 6.7 years of notifications, complexity 4/5; no free-text remarks in any report"
@@ -439,23 +452,10 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 388.8,
         "tier": "Low",
-        "p_any_2q": 0.287,
+        "p_any_2q": 0.226,
         "slip_to_date_months": 0.0,
         "evidence": [
           "land: NH-48: 867 parcels over 5.1 years of notifications, complexity 5/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-006209",
-        "project_name": "Capacity Augmentation in the stretch of Pimpri Sado Vadape section of NH848 Km. 460900 to Km. 537000 by Construction of Slip/Service Road on either side at various locations total length 25.140 Km LHSRHS, Flyover 2 x 25m at Borivali Junction Km. 528550 & LVUP 1 x 15m at Sherekarpada Km. 528800",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 372.0,
-        "tier": "Low",
-        "p_any_2q": 0.093,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: NH-848: 584 parcels over 3.5 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       }
     ]
@@ -663,7 +663,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 1297.5,
-        "tier": "Critical",
+        "tier": "High",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
