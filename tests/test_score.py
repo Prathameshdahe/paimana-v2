@@ -55,3 +55,9 @@ def test_unscored_rows_get_no_tier_and_do_not_shift_ranks():
     t = score.tiers(p, np.ones(25, bool))
     assert t.tier[20:].isna().all() and t.tier_rank_pct[20:].isna().all() and not t.stagnation_override[20:].any()
     assert t.tier_by_rank[:20].value_counts().to_dict() == {"Critical": 1, "High": 3, "Medium": 6, "Low": 10}
+
+
+def test_stagnation_override_skips_nearly_finished_projects():
+    cur = pd.DataFrame({"stagnation_quarters": [3, 3, 3, 1, 3], "elapsed_ratio": [0.9, 0.9, 0.9, 0.9, 0.1],
+                        "physical_progress_pct": [40.0, 97.0, None, 40.0, 40.0]})
+    assert score.stagnant(cur).tolist() == [True, False, True, False, False]

@@ -49,9 +49,11 @@ LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
 ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]),
-            ("+context", ["state", "dynamics", "context"]), ("+freshness", ["state", "dynamics", "context", "freshness"])]
+            ("+context", ["state", "dynamics", "context"]), ("+freshness", ["state", "dynamics", "context", "freshness"]),
+            ("+external", ["state", "dynamics", "context", "freshness", "external"])]
 ABLATION_MODEL = {"state": "lgbm_state", "+dynamics": "lgbm_state_dyn", "+context": "lgbm_state_dyn_ctx",
-                  "+freshness": "lightgbm"}
+                  "+freshness": "lgbm_state_dyn_ctx_fresh", "+external": "lightgbm"}
+ABLATION_GAINS = ["pr_auc", "precision_50", "recall_100"]     # each step minus the step before
 MAIN = ["naive", "rule", "logreg", "lightgbm"]
 WINDOW_RULE = ("A quarter is reliable for a target when every field its label compares (needs) is >= reliable_min "
                "complete in silver/coverage.parquet. A cutoff c is usable when c and c + h are reliable and c has "
@@ -298,8 +300,8 @@ def run(run_dir):
                 for step, gs in ABLATION:
                     r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
                     r.update(step=step, groups="+".join(gs), n_features=len(step_cols[ABLATION_MODEL[step]]),
-                             pr_auc_gain=np.nan if prev is None else r["pr_auc"] - prev)
-                    prev = r["pr_auc"]
+                             **{f"{m}_gain": np.nan if prev is None else r[m] - prev[m] for m in ABLATION_GAINS})
+                    prev = r
                     abl.append(r)
                 for name in MAIN:
                     q = p[p.model == name]

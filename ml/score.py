@@ -12,7 +12,7 @@ At asof (default: the latest period) the current projects are those in the lates
 asof that are not completed. Each target's champion type from the registry is refitted on every label row realised
 by asof (t + h <= asof) and scores them; LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
 the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
-by rank of p_any_2q, not by threshold; the stagnation override lifts a project one tier.
+by rank of p_any_2q, not by threshold; the stagnation override lifts a project one tier (not at >= 95% progress).
 A score whose model never saw one of the row's null features in training is left null (see unseen_missing): today
 that is the date-based scores of projects with no anticipated completion date (no_completion_date). A project
 without p_any_2q gets no tier.
@@ -38,6 +38,7 @@ ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
 TIERS = ["Critical", "High", "Medium", "Low"]
 TIER_TOP = [0.05, 0.20, 0.50, 1.0]      # cumulative rank share at the bottom of each tier
 STAGNANT_Q, STAGNANT_ELAPSED = 2, 0.3
+NEAR_DONE_PCT = 95          # a project this far along is finishing, not stagnating: no override
 SHAP_K = 5
 SHORT = {"lightgbm": "lgbm", "logreg": "logreg"}
 LOG_KEY = ["project_key", "asof", "model_version"]
@@ -60,6 +61,13 @@ def tiers(p, stagnant):
     name = lambda i: np.where(scored, names[i], None)
     return pd.DataFrame({"tier_rank_pct": rank_pct, "tier_by_rank": name(by_rank), "tier": name(by_rank - lifted),
                          "stagnation_override": lifted})
+
+
+def stagnant(cur):
+    """Stagnation override rule: no progress for STAGNANT_Q+ quarters at >= STAGNANT_ELAPSED elapsed, and progress
+    below NEAR_DONE_PCT (null progress does not block it)."""
+    return ((cur.stagnation_quarters >= STAGNANT_Q) & (cur.elapsed_ratio >= STAGNANT_ELAPSED)
+            & ~(cur.physical_progress_pct >= NEAR_DONE_PCT)).to_numpy()
 
 
 def unseen_missing(train, X, cols):
@@ -142,8 +150,7 @@ def main(asof=None):
             out[f"{name}_{s}"] = q[:, i]
         print(f"  {name}: quantile LightGBM on {len(d)} rows")
 
-    stagnant = (cur.stagnation_quarters >= STAGNANT_Q) & (cur.elapsed_ratio >= STAGNANT_ELAPSED)
-    out = pd.concat([out, tiers(out.p_any_2q, stagnant)], axis=1)
+    out = pd.concat([out, tiers(out.p_any_2q, stagnant(cur))], axis=1)
     out["no_completion_date"] = cur.months_to_anticipated_completion.isna()
     m = fitted["p_any_2q"]
     # ponytail: SHAP only for a LightGBM champion; a logistic champion leaves the column null
