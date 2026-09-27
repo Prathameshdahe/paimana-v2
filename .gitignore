@@ -35,3 +35,7 @@ dataset/clean/projects/project_summaries.csv
 dataset/clean/projects/projects_monthly.csv
 dataset/clean/projects/projects_quarterly.csv
 mlruns/
+
+# Silver reproducible outputs (run pipeline.run silver to regenerate)
+dataset/silver/typed_rows.parquet
+dataset/silver/identity/resolved_rows.parquet

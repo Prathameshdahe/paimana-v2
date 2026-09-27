@@ -1,0 +1,67 @@
+{
+  "silver_version": "0d8abdcfc7cf",
+  "run_id": "RUN-20260927-112842",
+  "built_at": "2026-09-27T11:28:43+00:00",
+  "inputs": {
+    "dataset/clean/projects/projects_monthly.csv": "1af343e081a7847d0aa33de8940f0ff0ad54d19ede696f031914255c7c118259",
+    "dataset/clean/projects/projects_quarterly.csv": "4283cdc2caeed295c491688fcb3b20a2938d22aa8044a16ad04b302d6739687c",
+    "dataset/clean/projects/project_master.csv": "333e86467f0a1638aaedacf9fefd69f526bae943c243a9003f2305eb77865627",
+    "dataset/clean/portal/portal_projects.csv": "db86df2018c80964f4ff34e1b3dfd673d285267eb073cc5bd6ee4984b00f7b00",
+    "dataset/clean/reference/sector_map.csv": "f748b4338bf62754a7d85bff521b33b34d92424288e17ab01686d85cb3d80ee6",
+    "dataset/clean/performance/performance_sector_monthly.csv": "a04a6b001e4fee2d732b01fa02746f5c385fada4827f797341bf8d132825b6a9",
+    "dataset/silver/identity/resolved_rows.parquet": "c929222fcf56511dc2b94eb2146d9ab4b6a1be7c0403a040f2aed076aec5fd7a"
+  },
+  "rows": {
+    "typed_rows": 167280,
+    "observations": 73167,
+    "observations_review": 4454,
+    "project_master": 6251,
+    "sector_context": 276,
+    "coverage": 74
+  },
+  "quarantine": {
+    "progress_out_of_range": 0,
+    "negative_money": 6,
+    "expenditure_gt_3x_cost": 217,
+    "completion_before_sanction": 150,
+    "placeholder_date": 71,
+    "duplicate_key_period": 407
+  },
+  "identity": {
+    "keys": 6253,
+    "entities": 8429,
+    "entity_status": {
+      "accepted": 7887,
+      "review": 542
+    },
+    "status": {
+      "accepted": 154884,
+      "review": 12396
+    },
+    "review_share": 0.0741,
+    "keys_in_panel": 6250
+  },
+  "latest_period": "2026-07-01",
+  "latest_paimana_flash_report": "2026-07",
+  "n_current_projects": 1800,
+  "portal_rows_in_panel": 0,
+  "checks": {
+    "unique_observations": {
+      "observations": 73167,
+      "duplicate_key_period": 0
+    },
+    "keys_exist": {
+      "known_keys": 6253,
+      "missing": 0
+    },
+    "no_merged_keys": {
+      "merged_keys": 0,
+      "in_use": 0
+    },
+    "portal_one_to_one": {
+      "portal_rows": 1775,
+      "accepted": 1767,
+      "review": 8
+    }
+  }
+}

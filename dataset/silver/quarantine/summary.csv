@@ -1,0 +1,7 @@
+rule,rows,keys
+progress_out_of_range,0,0
+negative_money,6,6
+expenditure_gt_3x_cost,217,61
+completion_before_sanction,150,25
+placeholder_date,71,4
+duplicate_key_period,407,25

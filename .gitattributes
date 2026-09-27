@@ -1,0 +1,2 @@
+# LightGBM model text must keep the bytes LightGBM wrote: CRLF conversion on checkout breaks loading
+model/**/*.txt -text
