@@ -67,3 +67,27 @@ def test_topk_shares_tied_slots():
     y, p = np.array([1, 0, 1, 0]), np.array([0.9, 0.5, 0.5, 0.5])
     assert backtest.topk(y, p, 2) == 1 + 1 / 3
     assert backtest.ece(np.array([0, 1] * 5), np.full(10, 0.5)) == 0
+
+
+def test_flash_block_takes_every_cutoff_with_enough_rows():
+    periods = pd.date_range("2024-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
+    cov = pd.DataFrame({"period": periods, "anticipated_completion": 0.9, "anticipated_cost_cr": 1.0})
+    cov.loc[cov.period >= backtest.FLASH_FROM, "anticipated_completion"] = 0.6    # flash prints no anticipated date
+    t = [p for p in periods if p + pd.DateOffset(months=6) <= periods[-1]]
+    d = pd.DataFrame({"period": np.repeat(t, [50 if p == pd.Timestamp("2025-10-01") else 150 for p in t])})
+    w = backtest.windows(cov, d, "y_date_push", 2)
+    assert w["test"] == ["2024-10-01"] and "2025-07-01" not in w["validation"]
+    assert w["flash"] == ["2025-07-01", "2026-01-01"]                          # 2025-10 has < MIN_ROWS rows
+    assert w["rows_per_cutoff"]["2026-01-01"] == 150
+
+
+def test_not_yet_due_slice():
+    d = labelled(2)
+    d["months_to_anticipated_completion"] = np.tile([3.0, 12.0, np.nan], len(d))[:len(d)]
+    assert backtest.not_yet_due(d.iloc[:3]).tolist() == [False, True, False]  # due by t + 2q, after it, unknown
+    cutoffs = Q[5:8]
+    preds, folds, _ = backtest.backtest(d, "y", cutoffs, {"logreg": (backtest.fit_logreg, ["x"], [])})
+    s = backtest.pooled(preds, folds, 2).iloc[0]
+    rows = d[d.period.isin(cutoffs) & (d.months_to_anticipated_completion > 6)]
+    assert s.nyd_n == len(rows) and s.nyd_base_rate == rows.y.mean()
+    assert 0 < s.nyd_pr_auc <= 1 and 0 <= s.nyd_precision_50 <= 1

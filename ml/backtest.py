@@ -13,6 +13,14 @@ compares are >= 80% complete, and a cutoff c is usable when c and c + h are both
 The newest usable cutoff is the test fold; the N_VAL usable cutoffs before it that sit in the newest reliable block
 are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
 label was known by c) and predict the rows at t = c. Completed projects are left out: there is nothing to warn about.
+
+The validation block is quarterly-report (QPISR) era: anticipated vs anticipated dates, and 0% remarks or progress at
+some folds. Live scoring and the test fold are the flash-report era (revised vs revised, a higher slip rate), where
+val rankings have flipped. So a second block, flash, holds every cutoff from FLASH_FROM with >= MIN_ROWS labelled rows
+(these fail the coverage rule: flash reports print no anticipated fields). For the 2-quarter targets it includes the
+test cutoff, so there the test fold is no longer independent of promotion. Every pooled row also reports the
+not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
+early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
 """
 import json
 import time
@@ -40,6 +48,7 @@ RELIABLE = 0.8      # field completeness that makes a quarter reliable
 N_VAL = 6           # validation cutoffs
 N_TEST = 1          # newest usable cutoffs held out as test
 MIN_ROWS = 100      # a cutoff needs this many labelled rows
+FLASH_FROM = pd.Timestamp("2025-07-01")     # first flash-report quarter (the serving format)
 KS = (50, 100)
 ECE_BINS = 10
 PK = ["project_key", "period"]
@@ -60,7 +69,9 @@ WINDOW_RULE = ("A quarter is reliable for a target when every field its label co
                f">= {MIN_ROWS} labelled rows. test = the newest {N_TEST} usable cutoff(s). validation = the last "
                f"{N_VAL} usable cutoffs before test inside the newest reliable block that still has usable cutoffs. "
                "Each fold trains on every label row with target_period <= cutoff (outcome known by the cutoff, any "
-               "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded.")
+               "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded. "
+               f"flash = every cutoff from {FLASH_FROM.date()} with >= {MIN_ROWS} labelled rows (reliability not "
+               "required), scored the same way as a second validation block.")
 
 
 def qindex(s):
@@ -108,14 +119,15 @@ def windows(coverage, d, y, h):
     last = qindex([rest[-1]])[0]
     block = next(b for b in blocks(rel) if b[0] <= last <= b[1])
     val = [c for c in rest if qindex([c])[0] >= block[0]][-N_VAL:]
+    flash = [c for c in n.index if c >= FLASH_FROM and n[c] >= MIN_ROWS]
     iso = lambda p: pd.Timestamp(p).date().isoformat()
     return {
         "target": y, "horizon": h, "needs": NEEDS[y], "reliable_min": RELIABLE,
         "reliable_blocks": [[iso(date_of[a]), iso(date_of[b])] for a, b in blocks(rel)],
         "usable_cutoffs": [iso(c) for c in usable],
         "validation_block": [iso(date_of[block[0]]), iso(date_of[block[1]])],
-        "validation": [iso(c) for c in val], "test": [iso(c) for c in test],
-        "rows_per_cutoff": {iso(c): int(n[c]) for c in val + test},
+        "validation": [iso(c) for c in val], "test": [iso(c) for c in test], "flash": [iso(c) for c in flash],
+        "rows_per_cutoff": {iso(c): int(n[c]) for c in sorted(set(val + test + flash))},
         "train_rule": f"label rows with target_period (t + {h}q) <= cutoff",
     }
 
@@ -206,6 +218,14 @@ def score(y, p):
     return r
 
 
+def not_yet_due(d):
+    """Rows whose anticipated completion is after the outcome quarter t + h (a null date is not in the slice)."""
+    if "months_to_anticipated_completion" not in d:
+        return np.zeros(len(d), bool)
+    h_months = (d.target_period.dt.year - d.period.dt.year) * 12 + d.target_period.dt.month - d.period.dt.month
+    return (d.months_to_anticipated_completion > h_months).to_numpy()
+
+
 def backtest(d, y, cutoffs, models):
     """Rolling origin. models = {name: (fit_fn, cols, cats)}. At each cutoff c every model is fitted on rows with
     target_period <= c and scores the rows at period == c. Returns (predictions, folds, fitted models)."""
@@ -217,7 +237,7 @@ def backtest(d, y, cutoffs, models):
             p = predict(te)
             fitted[c, name] = m
             preds.append(pd.DataFrame({"cutoff": c, "model": name, "project_key": te.project_key.to_numpy(),
-                                       "y": te[y].to_numpy(), "p": p}))
+                                       "y": te[y].to_numpy(), "p": p, "not_yet_due": not_yet_due(te)}))
             folds.append({"cutoff": c, "model": name, "n_train": len(tr), "max_train_target": tr.target_period.max(),
                           **score(te[y], p)})
     return pd.concat(preds, ignore_index=True), pd.DataFrame(folds), fitted
@@ -239,9 +259,20 @@ def lead_times(preds, h, k=100):
     return out
 
 
+def slice_metrics(d, prefix="nyd_"):
+    """PR-AUC and precision@50 (each fold's own top 50) of the rows of one model's predictions d."""
+    both = len(d) and 0 < d.y.mean() < 1
+    folds = [(g.y.to_numpy(float), g.p.to_numpy(float)) for _, g in d.groupby("cutoff")]
+    slots = sum(min(50, len(y)) for y, _ in folds)
+    return {f"{prefix}n": len(d), f"{prefix}base_rate": float(d.y.mean()) if len(d) else np.nan,
+            f"{prefix}pr_auc": float(average_precision_score(d.y, d.p)) if both else np.nan,
+            f"{prefix}precision_50": sum(topk(y, p, 50) for y, p in folds) / slots if slots else np.nan}
+
+
 def pooled(preds, folds, h):
     """Pooled metrics per model: PR-AUC, ROC-AUC, Brier and ECE on all fold rows together; Recall@k and
-    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k."""
+    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k; nyd_* the
+    same on the not-yet-due slice."""
     lead = lead_times(preds, h)
     rows = []
     for name, d in preds.groupby("model", sort=False):
@@ -252,7 +283,7 @@ def pooled(preds, folds, h):
             r[f"recall_{k}"] = r[f"hits_{k}"] / max(f.n_pos.sum(), 1)
         r["precision_50"] = r["hits_50"] / np.minimum(50, f.n).sum()
         rows.append({"model": name, "n_folds": len(f), **r, "pr_auc_fold_mean": f.pr_auc.mean(),
-                     "lead_time_q": lead[name]})
+                     "lead_time_q": lead[name], **slice_metrics(d[d.not_yet_due.astype(bool)])})
     return pd.DataFrame(rows)
 
 
@@ -284,10 +315,13 @@ def run(run_dir):
         d = frame(feats, labels[h], y)
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
-        val, test = pd.to_datetime(w["validation"]), pd.to_datetime(w["test"])
+        val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
         pv, fv, fitted = backtest(d, y, val, {**main, **ablation})
         pt, ft, _ = backtest(d, y, test, main)
-        for split, p, f in [("val", pv, fv), ("test", pt, ft)]:
+        splits = [("val", pv, fv), ("test", pt, ft)]
+        if len(flash):
+            splits.append(("flash", *backtest(d, y, flash, main)[:2]))
+        for split, p, f in splits:
             f = f.assign(target=y, horizon=h, split=split)
             all_folds.append(f)
             s = pooled(p, f, h).assign(target=y, horizon=h, split=split)
@@ -313,7 +347,8 @@ def run(run_dir):
                 shap.append(pd.DataFrame({"target": y, "horizon": h, "feature": cols,
                                           "group": [group_of[c] for c in cols], "mean_abs_shap": mean_abs})
                             .sort_values("mean_abs_shap", ascending=False))
-        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']}  {time.time() - t0:.0f}s")
+        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']}  "
+              f"{time.time() - t0:.0f}s")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     lead = ["target", "horizon"]

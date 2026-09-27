@@ -5,10 +5,11 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 One train run backtests every target (ml/backtest.py), refits logistic regression and LightGBM on every realised
 label, saves them into the run folder and registers one entry per (model, target, horizon). Promotion: a challenger
-replaces the champion of its (target, horizon) only when both were scored on the same validation folds of the same
-gold version, its pooled PR-AUC is higher and its ECE is at most the champion's + ECE_SLACK. When the folds differ,
-only a fresh entry of the champion's own model type may take over (the same model re-scored on the new folds).
-Every decision and its reason is recorded in registry.json.
+replaces the champion of its (target, horizon) only when both were scored on the same validation and flash folds of
+the same gold version, its pooled PR-AUC is not lower on either block (validation, flash) and higher on at least one
+by NOISE_SDS seed standard deviations, and its validation ECE is at most the champion's + ECE_SLACK. When the folds
+differ, only a fresh entry of the champion's own model type may take over (the same model re-scored on the new
+folds). Every decision and its reason is recorded in registry.json.
 """
 import json
 import sys
@@ -25,6 +26,12 @@ from ml import backtest  # noqa: E402
 
 REGISTRY = backtest.ROOT / "model" / "registry.json"
 ECE_SLACK = 0.02
+# sd of pooled validation PR-AUC over 5 LightGBM seeds of the unchanged champion (research audit 2026-09-27 on
+# ML-20260927-174106's features and folds; seed 0 was the luckiest of the 5). A single-seed gain inside NOISE_SDS of
+# these is noise. Re-measure when the features or folds change a lot.
+SEED_SD = {"y_any_h2": 0.0038, "y_date_push_h2": 0.0025, "y_cost_rev_h2": 0.0022, "y_any_h4": 0.0011}
+NOISE_SDS = 2
+BLOCKS = {"val": ("pooled", "folds"), "flash": ("flash", "flash_folds")}    # block -> (pooled key, folds key)
 CANDIDATES = {"logreg": backtest.fit_logreg, "lightgbm": backtest.fit_lgbm}   # logistic is the first-run incumbent
 
 
@@ -49,7 +56,14 @@ def jsonable(o):
 
 
 def fold_ids(entry):
-    return [f["cutoff"] for f in entry["metrics"]["folds"]]
+    return {b: [f["cutoff"] for f in entry["metrics"].get(folds) or []] for b, (_, folds) in BLOCKS.items()}
+
+
+def pr_auc_gains(new, old):
+    """block -> challenger minus champion pooled PR-AUC, for the blocks both have a value on."""
+    get = lambda e, k: (e["metrics"].get(k) or {}).get("pr_auc")
+    return {b: get(new, k) - get(old, k) for b, (k, _) in BLOCKS.items()
+            if get(new, k) is not None and get(old, k) is not None}
 
 
 def promote(reg, entry):
@@ -66,11 +80,17 @@ def promote(reg, entry):
                "folds or gold_version differ from the champion's; not comparable, champion kept")
     else:
         old = cur["metrics"]["pooled"]
-        better, calibrated = new["pr_auc"] > old["pr_auc"], new["ece"] <= old["ece"] + ECE_SLACK
-        ok = better and calibrated
-        why = (f"pooled PR-AUC {new['pr_auc']:.4f} vs champion {old['pr_auc']:.4f} "
-               f"({'higher' if better else 'not higher'}); ECE {new['ece']:.4f} vs {old['ece']:.4f} + {ECE_SLACK} "
-               f"({'ok' if calibrated else 'too high'})")
+        margin = NOISE_SDS * SEED_SD.get(key, 0.0)
+        gains = pr_auc_gains(entry, cur)
+        not_worse = all(g >= 0 for g in gains.values())
+        better = any(g >= margin for g in gains.values())
+        calibrated = new["ece"] <= old["ece"] + ECE_SLACK
+        ok = not_worse and better and calibrated
+        why = (f"pooled PR-AUC {new['pr_auc']:.4f} vs champion {old['pr_auc']:.4f}; PR-AUC gain "
+               + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
+               + f" ({'not lower on any block' if not_worse else 'lower on a block'}, "
+               f"{'clears' if better else 'no block clears'} the noise margin {margin:.4f}); "
+               f"ECE {new['ece']:.4f} vs {old['ece']:.4f} + {ECE_SLACK} ({'ok' if calibrated else 'too high'})")
     decision = {"at": entry["created_at"], "target": entry["target"], "horizon": entry["horizon"],
                 "challenger": entry["entry_id"], "champion_before": cur_id,
                 "decision": "promoted" if ok else "rejected", "reason": why}
@@ -94,7 +114,8 @@ def main():
               "final_fit": "all label rows (every realised outcome), completed projects excluded",
               "targets": [f"{y}_h{h}" for y, h in backtest.TARGETS], "features": cols, "categorical": cats,
               "feature_groups": res["groups"], "gold_version": man["gold_version"],
-              "silver_version": man["silver_version"], "ece_slack": ECE_SLACK}
+              "silver_version": man["silver_version"], "ece_slack": ECE_SLACK,
+              "promotion": {"seed_sd": SEED_SD, "noise_sds": NOISE_SDS, "flash_from": backtest.FLASH_FROM}}
     (run_dir / "params.json").write_text(json.dumps(jsonable(params), indent=2), encoding="utf-8")
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
                                                       "calibration.csv", "shap_summary.csv", "windows.json",
@@ -111,13 +132,15 @@ def main():
             else:
                 model_file = f"logreg_{key}.joblib"
                 joblib.dump(m, run_dir / model_file)
+            flash = res["metrics"].get((key, "flash", name), {})
             entry = {"entry_id": f"{run_id}/{name}/{key}", "run_id": run_id, "model": name, "target": y,
                      "horizon": h, "gold_version": man["gold_version"], "silver_version": man["silver_version"],
                      "params": params[name], "feature_list": cols, "categorical": cats,
                      "metrics": {"pooled": res["metrics"][key, "val", name]["pooled"],
                                  "folds": res["metrics"][key, "val", name]["folds"],
-                                 "test": res["metrics"][key, "test", name]["pooled"]},
-                     "windows": {k: res["windows"][key][k] for k in ["validation", "test"]},
+                                 "test": res["metrics"][key, "test", name]["pooled"],
+                                 "flash": flash.get("pooled"), "flash_folds": flash.get("folds", [])},
+                     "windows": {k: res["windows"][key][k] for k in ["validation", "test", "flash"]},
                      "artifacts": {"model": f"model/runs/{run_id}/{model_file}", **shared},
                      "n_final_fit": len(d), "created_at": created}
             entry = jsonable(entry)
