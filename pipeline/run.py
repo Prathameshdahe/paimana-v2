@@ -30,7 +30,7 @@ def main(argv=None):
     sub.add_parser("gold", help="point-in-time features, horizon labels and the gold manifest")
     sub.add_parser("train", help="rolling-origin backtest, model refit and file registry")
     sub.add_parser("score", help="predictions, intervals, SHAP and rank tiers for the current portfolio")
-    sub.add_parser("profile", help="12-row risk checklist per current project and the early-notice summary")
+    sub.add_parser("profile", help="12 checks + external composite per current project, early-notice summary")
     sub.add_parser("all", help="silver, external, gold, train, score and profile")
     args = ap.parse_args(argv)
     steps = ALL if args.step == "all" else [args.step]

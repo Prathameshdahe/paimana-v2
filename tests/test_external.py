@@ -325,3 +325,37 @@ def test_link_land_needs_the_state_of_the_stretch():
                                           "nh_not_in_table"]
     assert r.la_state.tolist() == ["clear", "unknown", "unknown", "clear", "unknown"]
     assert r.loc["G1", "la_parcels"] == 300 and r.loc["G1", "la_evidence"].startswith("NH-48 (Surat): 300 parcels")
+
+
+MOCK = X.EXTERNAL / "mock"      # SYNTHETIC fixtures (mock/README.md): formula checks only, never model inputs
+
+
+def test_composite_matches_the_teammates_v0_formula():
+    m = pd.read_csv(MOCK / "external_factor_mock_v0.csv")
+    raw = 0.5 * m["fc_complexity_score"] / 7 + 0.5 * m["la_complexity_score"] / 5
+    assert (raw - m["external_factor_composite_score"]).abs().max() < 0.001
+    # our composite on the mock rows with land known equals the mock score; without land the mock counts land as 0
+    fc = pd.DataFrame({"project_key": m["project_id"], "fc_expected_complexity": m["fc_complexity_score"].astype(float),
+                       "fc_area_ha": float("nan"), "fc_violation": m["fc_violation_flag"].eq(1)})
+    land = pd.DataFrame({"project_key": m["project_id"], "la_linked": m["la_required"].eq(1),
+                         "la_complexity_max": m["la_complexity_score"].astype("Int64"), "la_nh": "1"})
+    c = X.external_composite(fc, land)
+    both = m["la_required"].eq(1)
+    assert (c["external_factor_score"] - m["external_factor_composite_score"])[both].abs().max() < 0.001
+    assert c["coverage"][both].eq("fc+la").all() and c["coverage"][~both].eq("fc_only").all()
+
+
+def test_composite_coverage_never_counts_unknown_land_as_zero():
+    fc = pd.DataFrame({"project_key": ["A", "B", "C"], "fc_expected_complexity": [3.0, 3.0, 7.0],
+                       "fc_area_ha": [float("nan"), 12.5, float("nan")], "fc_violation": [False, False, True]})
+    land = pd.DataFrame({"project_key": ["A", "B", "C"], "la_linked": [True, False, False],
+                         "la_complexity_max": pd.array([4, None, None], dtype="Int64"),
+                         "la_nh": ["161;161A", None, None]})
+    c = X.external_composite(fc, land).set_index("project_key")
+    assert c["coverage"].tolist() == ["fc+la", "fc_only", "fc_only"]
+    assert c["external_factor_score"].round(4).tolist() == [round(0.5 * 3 / 7 + 0.5 * 4 / 5, 4), round(3 / 7, 4), 1.0]
+    assert c["la_component"].isna().tolist() == [False, True, True]
+    assert c.loc["A", "ext_score_evidence"] == ("forest 3/7 (rulebook, area unknown) + land 4/5 (NH-161, NH-161A, "
+                                                "Bhoomi Rashi)")
+    assert c.loc["B", "ext_score_evidence"] == "forest 3/7 (rulebook, 12.5 ha); land unknown"
+    assert c.loc["C", "ext_score_evidence"] == "forest 7/7 (rulebook, area unknown, violation); land unknown"

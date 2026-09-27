@@ -37,11 +37,14 @@ def checklist():
     mentions = pd.DataFrame({"project_key": ["P1", "P3"], "period": T("2023-04-01"), "category": [None, "land"],
                              "resolved": pd.array([pd.NA, False], dtype="boolean")})
     fc = pd.DataFrame({"project_key": keys, "fc_shape": ["Linear", "Linear", "Non-Linear", "Linear"],
-                       "fc_worst_complexity": 7, "fc_expected_complexity": 3.0,
-                       "fc_area_known": [False, False, False, True], "fc_violation": False,
+                       "fc_worst_complexity": 7, "fc_expected_complexity": [3.0, 3.0, 3.0, 6.5],
+                       "fc_area_known": [False, False, False, True], "fc_area_ha": [np.nan] * 3 + [50.0],
+                       "fc_violation": False,
                        "fc_evidence": "linear, area unknown: up to MoEFCC"})
     land = pd.DataFrame({"project_key": keys, "la_state": ["clear", "unknown", "clear", "unknown"],
-                         "la_linked": [True, False, True, False],
+                         "la_linked": [True, False, True, False], "la_complexity_max": pd.array([1, None, 5, None],
+                                                                                         dtype="Int64"),
+                         "la_nh": ["161", None, "160", None],
                          "la_evidence": ["NH-161: 50 parcels, complexity 1/5", None,
                                          "NH-160: 9 parcels, complexity 0/5", None],
                          "la_match_method": ["nh_only", "no_land_data_for_state", "nh_district", "not_road"]})
@@ -53,9 +56,9 @@ def checklist():
     return rows.set_index(["project_key", "dimension"])
 
 
-def test_every_project_gets_twelve_rows_with_valid_states():
+def test_every_project_gets_thirteen_rows_with_valid_states():
     r = checklist()
-    assert r.groupby(level=0).size().eq(12).all()
+    assert r.groupby(level=0).size().eq(13).all()
     assert set(r["state"]) <= {"flagged", "clear", "unknown"}
     assert list(r.loc["P1"].index) == R.DIMENSIONS
 
@@ -104,3 +107,15 @@ def test_mh_ratio_removes_a_stratum_confound():
     assert R.mh_ratio(y, flag, strata) == pytest.approx(1.0)
     flag2 = [True] * 20 + [False] * 20                                  # flag only in stratum a: no comparison
     assert R.mh_ratio(y, flag2, strata) is None
+
+
+def test_external_composite_row_is_rated_only_with_land():
+    r = checklist()
+    # P1: forest 3/7 + land 1/5 -> 0.31 clear; P3: 3/7 + 5/5 -> 0.71 flagged; P2, P4: no land -> unknown
+    assert [r.loc[(k, "external_composite"), "state"] for k in ("P1", "P2", "P3", "P4")] == ["clear", "unknown",
+                                                                                              "flagged", "unknown"]
+    assert r.loc[("P3", "external_composite"), "evidence"] == (
+        "score 0.71 (fc+la): forest 3/7 (rulebook, area unknown) + land 5/5 (NH-160, Bhoomi Rashi)")
+    p4 = r.loc[("P4", "external_composite"), "evidence"]
+    assert p4 == ("score 0.93 (fc_only): forest 6.5/7 (rulebook, 50 ha); land unknown (no land data for non-road "
+                  "projects), so the score is the forest half alone and is not rated")

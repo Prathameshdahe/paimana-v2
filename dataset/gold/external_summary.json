@@ -854,5 +854,272 @@
         }
       }
     }
+  },
+  "external_composite": {
+    "rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= 0.6 with fc+la. Informational, not a model feature.",
+    "by_coverage": {
+      "fc+la": {
+        "n_projects": 58,
+        "n_score_ge_high": 31,
+        "mean": 0.5091,
+        "min": 0.2143,
+        "25%": 0.3393,
+        "50%": 0.6143,
+        "75%": 0.6143,
+        "max": 0.7143
+      },
+      "fc_only": {
+        "n_projects": 1705,
+        "n_score_ge_high": 128,
+        "mean": 0.4655,
+        "min": 0.4286,
+        "25%": 0.4286,
+        "50%": 0.4286,
+        "75%": 0.4286,
+        "max": 0.9286
+      }
+    },
+    "top_fc_la": [
+      {
+        "project_key": "PRJ-005971",
+        "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 3466.6,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-361, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004050",
+        "project_name": "4L of Ratnagiri - Kolhapur section of NH-166 from km 0.000 to km 19.769 and km 31.000 to km 67.140 Pkg I",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 2108.4,
+        "tier": "High",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-166, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004439",
+        "project_name": "4L of Ratnagiri - Kolhapur section from km 112.340 to km 145.300 of NH-166 PkgIII",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1910.4,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-166, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004438",
+        "project_name": "4L of Ratnagiri - Kolhapur section from km 67.140 to km 112.340 of NH-166 Pkg II",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1798.0,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-166, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004098",
+        "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1435.5,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004057",
+        "project_name": "4L of Baramati to Indapur Pkg-II from km. 41.400 to km. 84.550 of NH-965G Saint Tukaram Marg",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1297.5,
+        "tier": "Critical",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-965G, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-006213",
+        "project_name": "Construction of 6 Lane Elevated corridor from KM 612582 to KM 617540 including construction of Service Roads in Kolhapur City on NH -48 in the State of Maharashtra on EPC mode under NHO",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1039.0,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005767",
+        "project_name": "Satara Km 725.000 to Pune Km 865.350 of NH - 4 New NH - 48 in Maharashtra",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 425.5,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005934",
+        "project_name": "Upgradation & rehabilitation of Service Roads on both sides in urban areas of Pune City on PuneSatara section of NH48",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 388.8,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-006214",
+        "project_name": "Construction of a 6-Lane Elevated Corridor from Km 593766 to Km 596620 Including Construction of Service Roads in Kagal City on NH-48 in the State of Maharashtra on EPC Mode.",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 358.0,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004049",
+        "project_name": "6L of Kagal-Satara section from Km 658.000 to Km 725.000 of NH-48 Pkg-II",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 317.4,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005018",
+        "project_name": "Rehabilitation and Up-gradation to 2 lane with paved shoulder configuration of Mahud Sangola road NH 965 G 159400 to 161900and 162400 to 183960 Design Chainage from km. 32/300 to km. 34/800 and km. 35/800 to km. 56/860 Rigid Pavement on EPC mode in the State of Maharashtra.",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 253.8,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-965G, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005530",
+        "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 2020.6,
+        "tier": "High",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005529",
+        "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1443.1,
+        "tier": "High",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004404",
+        "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1432.8,
+        "tier": "High",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-353J, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-002382",
+        "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1142.6,
+        "tier": "Medium",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005950",
+        "project_name": "6L of Gonde Km. 439.038 to Pimpri Sado Km. 459.905 section of NH-848 Old NH-3",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 718.8,
+        "tier": "Low",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-848, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005847",
+        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaishal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra- Package-II & Package III combined- starting from existing chainage Km 341/300 to Km 394/130 and design chainage Km 340/250 at Dahiwadi Village to Km 392/950 ending at Vita Village in the State of Maharashtra on EPC Mode.",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 631.8,
+        "tier": "Low",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005994",
+        "project_name": "Up-gradation to Four Lane with Paved Shoulder configuration of the highway starting from existing km 88.400 Savali Vihir to km 163.400 start of Ahmednagar bypass Design Length 75.000 km section of NH-160 in the State of Maharashtra under Bharatmala Pariyojana on EPC Mode",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 617.9,
+        "tier": "Low",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005848",
+        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaisal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra. Package-I starting from existing chainage Km 301/430 at Phaltan Village Junction of Phaltan Baramati Road Design Chainage -301/430km & ending at existing chainage Km 341/300 Dahiwadi Village Bus Stop Design chainage Km 340466km in the S",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 533.8,
+        "tier": "Low",
+        "external_factor_score": 0.6143,
+        "fc_component": 0.4286,
+        "la_component": 0.8,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
+      }
+    ]
   }
 }

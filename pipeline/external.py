@@ -9,7 +9,7 @@ Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver
          raw/external/land_acquisition_*.csv (stretch tables, Maharashtra so far) and raw/external/bhoomi_rashi/
          (raw Bhoomi Rashi state exports, parsed by pipeline/bhoomi_rashi.py)
 Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/external_fc.parquet,
-         gold/external_land.parquet, gold/external_land_pairs.parquet
+         gold/external_land.parquet, gold/external_land_pairs.parquet, gold/external_composite.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -36,6 +36,9 @@ project: of each state whose district its name mentions) and of the NH number in
 first, then NH alone. A state with no land data (every state but Maharashtra so far) is 'unknown', never 'clear'.
 The table is one snapshot: a stretch's parcels and complexity count every notification, so gold reads them at t
 only for stretches whose last notification is by t (external_land_pairs keeps the dates).
+
+Composite (external_composite): the teammate's score 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land
+is linked, forest/7 alone ('fc_only') where it is not. Informational, not a model feature.
 """
 import re
 import sys
@@ -628,6 +631,33 @@ def link_land(master, st):
     return out[LA_COLS], pairs
 
 
+COMPOSITE_COLS = ["project_key", "fc_component", "la_component", "external_factor_score", "coverage",
+                  "ext_score_evidence"]
+
+
+def external_composite(fc, land):
+    """Per project: the guide's composite external-factor score (docs/EXTERNAL_FACTORS_GUIDE.md section 4, the
+    mock v0 formula). fc_component = expected Parivesh complexity / 7 (the rulebook applies nationwide);
+    la_component = linked land complexity / 5, null when no land data is linked. The score is 0.5 fc + 0.5 la when
+    both are known (coverage 'fc+la'), else fc_component alone ('fc_only'): unknown land never counts as 0.
+    Informational only (risk profile and summary), NOT a model feature: its inputs already are features
+    (fc_prior_*, la_*_by_t), so adding it would count them twice."""
+    d = fc[["project_key", "fc_expected_complexity", "fc_area_ha", "fc_violation"]].merge(
+        land[["project_key", "la_linked", "la_complexity_max", "la_nh"]], on="project_key", how="left")
+    both = d["la_linked"].fillna(False).astype(bool)
+    d["fc_component"] = d["fc_expected_complexity"] / 7
+    d["la_component"] = (d["la_complexity_max"].astype("float64") / 5).where(both)
+    d["external_factor_score"] = (0.5 * d["fc_component"] + 0.5 * d["la_component"]).where(both, d["fc_component"])
+    d["coverage"] = np.where(both, "fc+la", "fc_only")
+    area = d["fc_area_ha"].map(lambda v: f"{v:g} ha", na_action="ignore").fillna("area unknown")
+    forest = ("forest " + d["fc_expected_complexity"].map(lambda v: f"{v:g}", na_action="ignore").fillna("?")
+              + "/7 (rulebook, " + area + np.where(d["fc_violation"].fillna(False), ", violation", "") + ")")
+    land_part = (" + land " + d["la_complexity_max"].astype("str") + "/5 (NH-" + d["la_nh"].str.replace(";", ", NH-")
+                 + ", Bhoomi Rashi)")
+    d["ext_score_evidence"] = forest + land_part.where(both, "; land unknown")
+    return d[COMPOSITE_COLS]
+
+
 def current_keys(obs, master):
     """The scored portfolio: keys in the latest report that are not completed at the latest period."""
     last = obs[obs["period"].eq(obs["period"].max())]
@@ -686,6 +716,12 @@ def main(out=GOLD, silver=SILVER):
         show["project_name"] = show["project_name"].str[:70]
         print(show.sample(min(10, len(show)), random_state=0)[
             ["project_key", "la_match_method", "la_state", "project_name", "la_evidence"]].to_string(index=False))
+
+    comp = external_composite(fc, land)
+    comp.to_parquet(out / "external_composite.parquet", index=False)
+    cc = comp[comp["project_key"].isin(cur)]
+    print("external_composite: current portfolio by coverage (score = 0.5 fc/7 + 0.5 la/5, fc/7 alone without land):")
+    print(cc.groupby("coverage")["external_factor_score"].describe().round(3).to_string())
     return ev, fc, land
 
 

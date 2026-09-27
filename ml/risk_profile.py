@@ -5,17 +5,24 @@ Run from repo root after score:  python -m pipeline.run profile
 
 Inputs   gold/predictions_latest.json (and the predictions file it names), gold/features.parquet,
          gold/labels_h4.parquet, gold/project_events.parquet, gold/project_mentions.parquet,
-         gold/external_fc.parquet, gold/external_land.parquet, gold/agency_stats.parquet,
+         gold/external_fc.parquet, gold/external_land.parquet (and the composite built from the two, as in
+         gold/external_composite.parquet), gold/agency_stats.parquet,
          silver/observations.parquet, silver/sector_context.parquet
 Outputs  gold/risk_profile_<asof YYYY-MM>.parquet (long: project_key, dimension, state, evidence, source,
          as_of_date), gold/external_summary.json
 
-Every current project gets twelve rows, each flagged, clear or unknown. Unknown is a real state: a search that
+Every current project gets twelve checks and a thirteenth informational row, the external composite, each
+flagged, clear or unknown. Unknown is a real state: a search that
 finds nothing (no land table for the state, no court case in the remarks) is unknown, never clear; clear needs
 positive evidence (a model score below the cut, a linked land table with low complexity, a clearance reported
 done). Event rows read the point-in-time ext_open_* features at asof, so a remark after asof never counts.
 The Parivesh rule (linear, worst complexity >= 6) flags only when forest hectares or a violation are known: with
 no hectares every area band counts and every linear project's worst case is 7, which says nothing about it.
+
+The composite row (pipeline/external.py external_composite: 0.5 forest/7 + 0.5 land/5) is rated only where land
+is linked (coverage fc+la): flagged at score >= COMPOSITE_HIGH, else clear. Without land (fc_only) it is unknown and
+says why the land half is missing. It is not a model feature and not an early-notice factor, since its inputs are
+already both.
 
 The early notice is the pitch: projects with a flagged external factor whose CUF numbers do not show a slip yet
 (slip to date <= 0 months, or tier Low/Medium). notice_backtest checks the claim on history: of the rows with no
@@ -31,12 +38,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml import backtest, score  # noqa: E402
-from pipeline import gold  # noqa: E402
+from pipeline import external, gold  # noqa: E402
 
 GOLD, SILVER, ROOT = backtest.GOLD, backtest.SILVER, backtest.ROOT
 DIMENSIONS = ["schedule_slip", "cost_escalation", "execution_stagnation", "expenditure_lag", "repeated_revisions",
               "sector_headwind", "agency_optimism", "land_acquisition", "forest_clearance", "litigation",
-              "contractor_stress", "data_staleness"]
+              "contractor_stress", "data_staleness", "external_composite"]
 HIGH_SHARE = score.TIER_TOP[1]      # a model dimension is flagged in the top 20% (Critical + High) of its score
 SPI_MIN, SPI_ELAPSED = 0.1, 0.3
 BURN_LOW, BURN_HIGH = -15, 25
@@ -45,6 +52,7 @@ SECTOR_RATIO_MIN, SECTOR_MAX_AGE_Q = 0.95, 4
 AGENCY_BIAS, AGENCY_MIN_N = 0.25, 5
 STALE_MONTHS, DQ_MIN = 3, 0.7
 FC_HIGH = 6
+COMPOSITE_HIGH = 0.6
 # summary factor -> checklist dimension, or the event category whose open event flags it
 FACTORS = {"land": "land_acquisition", "forest_clearance": "forest_clearance", "litigation": "litigation",
            "contractor": "contractor_stress", "utility_shifting": "utility_shifting", "inter_agency": "inter_agency"}
@@ -133,7 +141,8 @@ def event_info(cur, ev, cat, remarks_last):
 
 
 def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
-    """The twelve checklist rows for every project in cur, long format."""
+    """The thirteen checklist rows (twelve checks and the external composite) for every project in cur, long
+    format."""
     k, out = cur["project_key"], []
 
     def add(dim, flag, clear, evidence, source):
@@ -217,6 +226,15 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
                                              + line], line + "; " + rules), index=cur.index),
         pd.Series(np.where(opened | done, "report", "parivesh_rules"), index=cur.index))
 
+    comp = external.external_composite(fc, land).set_index("project_key").reindex(k).set_axis(cur.index)
+    both, score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
+    missing = la["la_match_method"].map(LA_REASON).fillna("not in the land linkage")
+    add("external_composite", both & (score >= COMPOSITE_HIGH), both,
+        "score " + num(score, ".2f") + " (" + comp["coverage"].fillna("n/a") + "): "
+        + comp["ext_score_evidence"].fillna("no Parivesh profile")
+        + pd.Series(np.where(both, "", " (" + missing + "), so the score is the forest half alone and is not "
+                                       "rated"), index=cur.index), "external_composite")
+
     for dim, cat in [("litigation", "litigation"), ("contractor_stress", "contractor")]:
         opened, _, line = info[cat]
         add(dim, opened, pd.Series(False, index=cur.index), line, "report")
@@ -292,6 +310,28 @@ def notice_backtest(feats, lab4, min_rows=30):
     return out
 
 
+def composite_summary(cur, comp):
+    """The external composite over cur: score distribution per coverage and the top TOP_NOTICE fc+la projects."""
+    d = cur.drop(columns=[c for c in comp if c != "project_key" and c in cur]).merge(comp, on="project_key",
+                                                                                    how="left")
+    by = {}
+    for cov, g in d.groupby("coverage"):
+        s = g["external_factor_score"]
+        by[cov] = {"n_projects": int(len(g)), "n_score_ge_high": int((s >= COMPOSITE_HIGH).sum()),
+                   **{k: round(float(v), 4) for k, v in s.describe()[["mean", "min", "25%", "50%", "75%",
+                                                                       "max"]].items()}}
+    top = d[d["coverage"].eq("fc+la")].sort_values(["external_factor_score", "anticipated_cost_cr"],
+                                                   ascending=False).head(TOP_NOTICE)
+    keep = ["project_key", "project_name", "sector", "state", "anticipated_cost_cr", "tier", "external_factor_score",
+            "fc_component", "la_component", "ext_score_evidence"]
+    top = top[keep].round({"anticipated_cost_cr": 1, "external_factor_score": 4, "fc_component": 4,
+                           "la_component": 4})
+    return {"rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage "
+                    "fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= "
+                    f"{COMPOSITE_HIGH} with fc+la. Informational, not a model feature.",
+            "by_coverage": by, "top_fc_la": json.loads(top.to_json(orient="records"))}
+
+
 def build_risk_profile(asof=None):
     """Write gold/risk_profile_<asof>.parquet and gold/external_summary.json; returns (rows, summary)."""
     t0 = time.time()
@@ -347,6 +387,7 @@ def build_risk_profile(asof=None):
                                 "capital_exposed_cr": round(float(strict["anticipated_cost_cr"].sum()), 1)},
             "top": project_card(notice.head(TOP_NOTICE), lines(list(FACTORS)))},
         "notice_backtest": notice_backtest(feats, pd.read_parquet(GOLD / "labels_h4.parquet")),
+        "external_composite": composite_summary(cur, external.external_composite(fc, land)),
     }
     (GOLD / "external_summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
 
@@ -362,6 +403,9 @@ def build_risk_profile(asof=None):
         print(f"  {r['project_key']} Rs {r['anticipated_cost_cr']:,.0f} cr {r['tier']} "
               f"slip {r['slip_to_date_months']}: "
               f"{str(r['project_name'])[:60]} | {' | '.join(r['evidence'])[:200]}")
+    ec = summary["external_composite"]["by_coverage"]
+    print("external composite: " + ", ".join(f"{c} {v['n_projects']} (median {v['50%']:.2f}, >= {COMPOSITE_HIGH}: "
+                                            f"{v['n_score_ge_high']})" for c, v in ec.items()))
     for name, r in summary["notice_backtest"].items():
         print(f"notice backtest {name}: slip by t+4q {r['slip_rate_with']} with (n {r['n_with']}, "
               f"{r['projects_with']} projects) vs {r['slip_rate_without']} without (n {r['n_without']}); lift "
