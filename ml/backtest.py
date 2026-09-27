@@ -48,8 +48,8 @@ LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_
                   n_jobs=8, verbose=-1)
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
-ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]),
-            ("+context", ["state", "dynamics", "context"]), ("+freshness", ["state", "dynamics", "context", "freshness"]),
+ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]), ("+context", ["state", "dynamics", "context"]),
+            ("+freshness", ["state", "dynamics", "context", "freshness"]),
             ("+external", ["state", "dynamics", "context", "freshness", "external"])]
 ABLATION_MODEL = {"state": "lgbm_state", "+dynamics": "lgbm_state_dyn", "+context": "lgbm_state_dyn_ctx",
                   "+freshness": "lgbm_state_dyn_ctx_fresh", "+external": "lightgbm"}
