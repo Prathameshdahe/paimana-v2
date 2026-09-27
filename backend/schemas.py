@@ -313,6 +313,85 @@ class ModelsOut(CamelModel):
     ablation: list[Record]
 
 
+# ---------- app state (SQLite, backend/db.py) ----------
+
+Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]
+AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice"]
+
+
+class Alert(CamelModel):
+    id: int
+    created_at: str
+    project_key: str
+    kind: AlertKind
+    severity: int
+    title: str | None
+    detail: str | None
+    asof: str | None
+    model_version: str | None
+    source: str | None
+    acked_by: str | None
+    acked_at: str | None
+
+
+class AlertPage(CamelModel):
+    total: int
+    page: int
+    size: int
+    items: list[Alert]
+
+
+class RoleBody(CamelModel):
+    role: Role
+
+
+class WatchRequest(CamelModel):
+    role: Role
+    project_key: str = Field(max_length=32)
+
+
+class WatchItem(CamelModel):
+    role: str
+    project_key: str
+    added_at: str | None
+    project: ProjectRow | None
+
+
+class Watchlist(CamelModel):
+    total: int
+    items: list[WatchItem]
+
+
+class JobRun(CamelModel):
+    id: int
+    job: str
+    started_at: str | None
+    finished_at: str | None
+    status: str | None
+    summary: Any = None
+
+
+class Signal(CamelModel):
+    id: int
+    url: str
+    title: str | None
+    source: str | None
+    published_at: str | None
+    fetched_at: str | None
+    summary: str | None
+    category: str | None
+    severity: int | None
+    link_score: float | None
+    method: str | None
+
+
+class ProjectSignals(CamelModel):
+    """last_scout_at None means the scout never ran: no signals is then unknown, not clear."""
+    key: str
+    last_scout_at: str | None
+    items: list[Signal]
+
+
 # ---------- worker cell persistence ----------
 
 class WorkerRun(CamelModel):

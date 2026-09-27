@@ -398,6 +398,7 @@ def early_notice(s):
     """Current early-notice projects with their flagged external evidence lines."""
     dims = "', '".join(FLAG_DIMS.values())
     return _rows(s, f"""SELECT c.project_key, c.project_name, c.tier, c.anticipated_cost_cr, c.flags,
+            c.ext_open_utility_shifting, c.ext_open_inter_agency,
             list(r.dimension || ': ' || r.evidence ORDER BY r.dimension) FILTER (WHERE r.project_key IS NOT NULL)
                 AS evidence
         FROM cur c LEFT JOIN rp r ON r.project_key = c.project_key AND r.state = 'flagged'

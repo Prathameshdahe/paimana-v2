@@ -1,25 +1,35 @@
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
 from llm import worker
 
-from . import serving, store
+from . import db, serving, store
 from .schemas import (
+    Alert,
+    AlertKind,
+    AlertPage,
     ApprovalRequest,
     DispatchDraft,
     ExternalSummary,
     Flag,
     Forecast,
+    JobRun,
     Meta,
     ModelsOut,
     Portfolio,
     ProjectDetail,
     ProjectPage,
+    ProjectSignals,
+    Role,
+    RoleBody,
     Sort,
     Tier,
     Timeline,
     TriggerResult,
+    Watchlist,
+    WatchRequest,
     WorkerRun,
 )
 
@@ -83,6 +93,49 @@ def get_models():
     return serving.models()
 
 
+# ---------- app state (SQLite) ----------
+
+@router.get("/alerts", response_model=AlertPage)
+def get_alerts(since: datetime | None = None, kind: AlertKind | None = None, acked: bool | None = None,
+               page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    return db.alerts(since and since.isoformat(), kind, acked, page, size)
+
+
+@router.post("/alerts/{alert_id}/ack", response_model=Alert)
+def post_alert_ack(alert_id: int, body: RoleBody):
+    out = db.ack(alert_id, body.role)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f"alert {alert_id} not found")
+    return out
+
+
+@router.get("/watchlist", response_model=Watchlist)
+def get_watchlist(role: Role):
+    return db.watchlist(role)
+
+
+@router.post("/watchlist", response_model=Watchlist)
+def post_watchlist(body: WatchRequest):
+    db.watch(body.role, _key(body.project_key))
+    return db.watchlist(body.role)
+
+
+@router.delete("/watchlist", response_model=Watchlist)
+def delete_watchlist(role: Role, project_key: str = Query(max_length=32)):
+    db.unwatch(role, serving.canonical(project_key) or project_key)
+    return db.watchlist(role)
+
+
+@router.get("/jobs", response_model=list[JobRun])
+def get_jobs():
+    return db.latest_jobs()
+
+
+@router.get("/projects/{key}/signals", response_model=ProjectSignals)
+def get_project_signals(key: str):
+    return db.project_signals(_key(key))
+
+
 # ---------- worker cell (JSON store) ----------
 
 @router.get("/worker-runs", response_model=list[WorkerRun])
@@ -101,9 +154,18 @@ def post_approval(body: ApprovalRequest):
     updated = store.update_dispatch_draft(body.draft_id, body.decision)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"dispatch draft {body.draft_id} not found")
+    db.audit(body.role, f"dispatch.{body.decision}", body.draft_id)
     return updated
 
 
 @router.post("/worker-runs/trigger", response_model=TriggerResult)
 def trigger_worker_cycle():
-    return worker.run_worker_cycle()
+    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    db.audit(None, "worker.trigger", "worker_cycle")  # the trigger button sends no role yet
+    try:
+        out = worker.run_worker_cycle()
+    except Exception as e:
+        db.record_job("worker_cycle", started, "error", {"error": str(e)})
+        raise
+    db.record_job("worker_cycle", started, "ok", {"dispatch_drafts": len(out["dispatch_drafts"])})
+    return out
