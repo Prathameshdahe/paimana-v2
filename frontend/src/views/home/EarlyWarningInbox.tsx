@@ -40,14 +40,14 @@ export function EarlyWarningInbox() {
       ) : (
         <div className="divide-y divide-border-subtle flex-1 overflow-y-auto">
           {visible.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-elevated">
+            <div key={p.id} className="flex items-center gap-4 px-5 py-3 hover:bg-surface-elevated">
               <Badge tier={p.riskTier} />
               <button
                 onClick={() => navigate(`/projects/${p.id}`)}
                 className="flex-1 min-w-0 text-left"
               >
-                <div className="truncate text-xs font-medium text-fg-base">{p.name}</div>
-                <div className="truncate text-[11px] font-mono text-fg-dimmed">
+                <div className="truncate text-sm font-medium text-fg-base">{p.name}</div>
+                <div className="truncate text-xs font-mono text-fg-dimmed mt-0.5">
                   {p.code} · {p.sector} · {p.state} · {p.actionableRunwayDays}d runway · {formatMonths(p.predictedDelayMonths)} delay · {formatINRShort(p.overrunForecastCr)} overrun
                 </div>
               </button>

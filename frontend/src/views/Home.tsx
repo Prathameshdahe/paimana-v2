@@ -10,7 +10,7 @@ import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
  */
 export function Home() {
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 space-y-4">
+    <div className="mx-auto w-full max-w-[1800px] px-4 md:px-8 lg:px-12 py-6 space-y-4">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold text-fg-base">PAIMANA Radar</h1>
