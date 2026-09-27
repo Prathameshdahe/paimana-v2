@@ -16,12 +16,12 @@ export function ExternalEvents({ events }: { events: EventRow[] }) {
       title={`External Events from Report Remarks · ${events.length}`}
       titleRight={
         remarksUntil && (
-          <span className="font-mono text-[11px] text-fg-dimmed">remarks read up to {formatDate(remarksUntil)}</span>
+          <span className="text-xs text-fg-dimmed">remarks read up to {formatDate(remarksUntil)}</span>
         )
       }
     >
       {events.length === 0 ? (
-        <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed">
+        <div className="px-5 py-6 text-center text-xs text-fg-dimmed">
           no land, clearance, litigation or contractor issue found in the report remarks (free text only through 2023)
         </div>
       ) : (
@@ -33,14 +33,14 @@ export function ExternalEvents({ events }: { events: EventRow[] }) {
                   <span className="text-xs font-semibold text-fg-base">{e.category.replace(/_/g, ' ')}</span>
                   <span
                     className={cn(
-                      'border px-1 py-0.5 font-mono text-[10px] uppercase tracking-wider',
+                      'border px-1 py-0.5 text-xs',
                       e.status === 'open' ? 'border-critical/40 text-critical' : 'border-border-default text-fg-dimmed'
                     )}
                   >
                     {e.status ?? 'status unknown'}
                   </span>
                 </div>
-                <div className="font-mono text-[10px] text-fg-dimmed">
+                <div className="text-xs text-fg-dimmed">
                   {e.subtype && `${e.subtype} · `}
                   {orDash(e.firstSeen, formatDate)} → {orDash(e.lastSeen, formatDate)}
                   {e.nQuarters !== null && ` · ${e.nQuarters}q`}
@@ -53,7 +53,7 @@ export function ExternalEvents({ events }: { events: EventRow[] }) {
                 <div className="text-sm text-fg-base leading-relaxed border-l-2 border-border-default pl-3">
                   &ldquo;{e.evidence ?? 'no remark text'}&rdquo;
                 </div>
-                <div className="font-mono text-[10px] text-fg-dimmed mt-1 pl-3" title={e.sourceDocId ?? undefined}>
+                <div className="text-xs text-fg-dimmed mt-1 pl-3" title={e.sourceDocId ?? undefined}>
                   {e.sourceDocId ? basename(e.sourceDocId) : 'source unknown'}
                   {e.sourcePage !== null && ` p.${e.sourcePage}`}
                 </div>
@@ -75,7 +75,7 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
       title={`Linked News · ${data?.items.length ?? 0}`}
       titleRight={
         data && (
-          <span className="font-mono text-[11px] text-fg-dimmed">
+          <span className="text-xs text-fg-dimmed">
             {scouted ? `scouted ${new Date(scouted).toLocaleDateString('en-IN')}` : 'never scouted'}
           </span>
         )
@@ -85,11 +85,11 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed">loading signals...</div>
+        <div className="px-5 py-6 text-center text-xs text-fg-dimmed">loading signals...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed space-y-1">
+        <div className="px-5 py-6 text-center text-xs text-fg-dimmed space-y-1">
           <div>no linked news yet — not the same as clear</div>
-          <div className="text-[10px]">
+          <div className="text-xs">
             {scouted ? 'the news scout found nothing it could tie to this project' : 'the news scout has not searched this project yet'}
           </div>
         </div>
@@ -100,13 +100,13 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
               <a href={s.url} target="_blank" rel="noreferrer" className="block text-xs font-medium text-fg-base hover:underline">
                 {s.title ?? s.url}
               </a>
-              <div className="font-mono text-[10px] text-fg-dimmed">
+              <div className="text-xs text-fg-dimmed">
                 {s.source ?? 'source unknown'} · {s.publishedAt ? new Date(s.publishedAt).toLocaleDateString('en-IN') : 'date unknown'}
                 {s.category && ` · ${s.category.replace(/_/g, ' ')}`}
                 {s.severity !== null && <span className={cn(s.severity >= 2 && 'text-critical')}> · severity {s.severity}</span>}
                 {s.linkScore !== null && ` · link ${s.linkScore.toFixed(2)} (${s.method ?? 'match'})`}
               </div>
-              <div className="font-mono text-[10px] text-fg-muted">
+              <div className="text-xs text-fg-muted">
                 {s.cufChangePeriod
                   ? `report of ${formatDate(s.cufChangePeriod)} then pushed the date or revised the cost (${s.leadDays} days after the article)`
                   : 'no later report has changed the date or cost yet'}

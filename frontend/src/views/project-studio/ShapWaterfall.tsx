@@ -19,20 +19,20 @@ export function ShapWaterfall({ drivers }: { drivers: ShapValue[] }) {
   const maxAbs = Math.max(...drivers.map((d) => Math.abs(d.contribution)), 0.0001)
 
   return (
-    <div className="bg-surface-panel flex flex-col border border-border-subtle rounded-sm overflow-hidden h-full">
+    <div className="bg-surface-panel flex flex-col border border-border-subtle overflow-hidden h-full rounded-xl shadow-card">
       <div className="border-b border-border-subtle px-4 py-3 flex items-center justify-between">
-        <span className="text-xs font-mono uppercase tracking-widest text-fg-muted">
+        <span className="text-xs text-fg-muted">
           Why this score · top 5 drivers
         </span>
         {sorted[0] && (
-          <span className="font-mono text-xs text-critical font-medium truncate ml-3">
+          <span className="text-xs text-critical font-medium truncate ml-3">
             primary: {featureLabel(sorted[0].feature)}
           </span>
         )}
       </div>
 
       {sorted.length === 0 ? (
-        <div className="px-4 py-6 text-center font-mono text-xs text-fg-dimmed">
+        <div className="px-4 py-6 text-center text-xs text-fg-dimmed">
           no drivers — they explain P(slip, 2q), which is not scored for this project
         </div>
       ) : (
@@ -41,7 +41,7 @@ export function ShapWaterfall({ drivers }: { drivers: ShapValue[] }) {
             const up = d.contribution > 0
             return (
               <div key={d.feature} className="flex items-center px-4 py-3 gap-4 hover:bg-surface-elevated/40 transition-colors">
-                <span className="font-mono text-[11px] text-fg-muted w-5 shrink-0">{i + 1}.</span>
+                <span className="text-xs text-fg-muted w-5 shrink-0">{i + 1}.</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs text-fg-base font-medium truncate mb-1" title={d.feature}>
                     {featureLabel(d.feature)}
@@ -64,7 +64,7 @@ export function ShapWaterfall({ drivers }: { drivers: ShapValue[] }) {
         </div>
       )}
 
-      <div className="border-t border-border-subtle px-4 py-2 font-mono text-[10px] text-fg-muted">
+      <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-muted">
         TreeSHAP on the LightGBM P(slip, 2q) model, log-odds. Red raises the probability, green lowers it.
       </div>
     </div>

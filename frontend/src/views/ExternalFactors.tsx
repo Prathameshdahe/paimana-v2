@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { MonoFigure } from '@/components/ui/MonoFigure'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { EvidenceFeed } from './external-factors/EvidenceFeed'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
@@ -51,31 +52,26 @@ export function ExternalFactors() {
   const { role } = useRole()
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2 pt-4 pb-2">
-        <div>
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">External Factors</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            Hidden factors (land acquisition, forest clearance, litigation, contractor stress, utility shifting,
-            inter-agency) that the CUF numbers only show at the next revision.
-          </p>
-        </div>
-        {data && (
-          <div className="font-mono text-[11px] text-fg-dimmed">
-            asof {formatDate(data.asOfDate)} · {data.nProjects.toLocaleString()} projects
-            {can(role, 'canSeeModelVersion') && ` · ${data.modelVersion}`}
-          </div>
-        )}
-      </div>
-
-      <div className="h-px bg-border-subtle" />
+    <Page>
+      <PageHeader
+        title="External Factors"
+        subtitle="Issues on the ground that the cost and schedule numbers show only at a later revision"
+        actions={
+          data && (
+            <span className="text-xs text-fg-dimmed">
+              as of {formatDate(data.asOfDate)} · {data.nProjects.toLocaleString()} projects
+              {can(role, 'canSeeModelVersion') && ` · ${data.modelVersion}`}
+            </span>
+          )
+        }
+      />
 
       {error ? (
         <Card>
           <ApiErrorNote error={error} />
         </Card>
       ) : isLoading || !data ? (
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
+        <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
           loading external factors...
         </div>
       ) : (
@@ -91,8 +87,8 @@ export function ExternalFactors() {
 
       {can(role, 'canSeeNews') && <EvidenceFeed />}
 
-      <p className="font-mono text-[11px] text-fg-dimmed">External-factor datasets and rulebook: Garvit</p>
-    </div>
+      <p className="text-xs text-fg-dimmed">External-factor datasets and rulebook: Garvit</p>
+    </Page>
   )
 }
 
@@ -104,11 +100,11 @@ function Stat({ label, value, sub, sentiment = 'default' }: {
 }) {
   return (
     <div className="px-4 py-3">
-      <div className="text-[10px] font-sans font-semibold uppercase tracking-widest text-fg-dimmed">{label}</div>
+      <div className="text-xs font-sans font-semibold text-fg-dimmed">{label}</div>
       <MonoFigure size="xl" sentiment={sentiment} className="block mt-1.5">
         {value}
       </MonoFigure>
-      {sub && <div className="font-mono text-[10px] text-fg-dimmed mt-1">{sub}</div>}
+      {sub && <div className="text-xs text-fg-dimmed mt-1">{sub}</div>}
     </div>
   )
 }
@@ -124,15 +120,15 @@ function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactor
         <span className="truncate text-xs font-semibold text-fg-base" title={p.project_name ?? undefined}>
           {p.project_name ?? p.project_key}
         </span>
-        <span className="ml-auto shrink-0 font-mono text-[11px] text-fg-muted tabular-nums">
+        <span className="ml-auto shrink-0 text-xs text-fg-muted tabular-nums">
           {orDash(p.anticipated_cost_cr, formatINR)}
         </span>
       </div>
-      <div className="font-mono text-[10px] text-fg-dimmed mt-0.5 pl-[68px]">
+      <div className="text-xs text-fg-dimmed mt-0.5 pl-[68px]">
         {p.project_key} · {p.state ?? 'state unknown'} · slip to date {slip(p.slip_to_date_months)}
       </div>
       {lines.map(([, text], i) => (
-        <div key={i} className="mt-1 pl-[68px] text-[11px] leading-snug text-fg-muted line-clamp-2" title={text}>
+        <div key={i} className="mt-1 pl-[68px] text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
           {text}
         </div>
       ))}
@@ -150,14 +146,14 @@ function FactorCards({ s }: { s: ExternalSummary }) {
             key={key}
             title={label}
             titleRight={
-              <span className="font-mono text-[11px] text-fg-dimmed">
+              <span className="text-xs text-fg-dimmed">
                 {f ? `${f.n_flagged} flagged` : 'not in summary'}
               </span>
             }
             className="flex flex-col"
           >
             {!f ? (
-              <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed">
+              <div className="px-5 py-6 text-center text-xs text-fg-dimmed">
                 no rollup for this factor in external_summary.json — unknown, not clear
               </div>
             ) : (
@@ -172,7 +168,7 @@ function FactorCards({ s }: { s: ExternalSummary }) {
                   />
                 </div>
                 {f.top.length === 0 ? (
-                  <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed">
+                  <div className="px-5 py-6 text-center text-xs text-fg-dimmed">
                     no current project flagged for this factor
                   </div>
                 ) : (
@@ -182,7 +178,7 @@ function FactorCards({ s }: { s: ExternalSummary }) {
                     ))}
                   </div>
                 )}
-                <div className="border-t border-border-subtle px-4 py-2 font-mono text-[10px] text-fg-dimmed flex justify-between gap-2">
+                <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-dimmed flex justify-between gap-2">
                   <span>
                     top {f.top.length} of {f.n_flagged} by capital
                   </span>
@@ -205,13 +201,13 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
   const navigate = useNavigate()
 
   if (rows.length === 0) {
-    return <div className="px-5 py-6 text-center font-mono text-xs text-fg-dimmed">no project in this list</div>
+    return <div className="px-5 py-6 text-center text-xs text-fg-dimmed">no project in this list</div>
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left font-mono text-[12px]">
+      <table className="w-full border-collapse text-left font-mono text-xs">
         <thead>
-          <tr className="border-y border-border-default text-fg-dimmed font-sans text-[11px] uppercase tracking-wider">
+          <tr className="border-y border-border-default text-fg-dimmed font-sans text-xs">
             <th className="py-2.5 px-4 font-semibold">Project</th>
             <th className="py-2.5 px-4 font-semibold">Factor</th>
             <th className="py-2.5 px-4 font-semibold">Evidence</th>
@@ -233,32 +229,32 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                   <Link
                     to={`/projects/${p.project_key}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="block truncate font-sans text-[13px] font-semibold text-fg-base hover:underline"
+                    className="block truncate font-sans text-sm font-semibold text-fg-base hover:underline"
                     title={p.project_name ?? undefined}
                   >
                     {p.project_name ?? p.project_key}
                   </Link>
-                  <div className="text-[11px] text-fg-dimmed mt-0.5">
+                  <div className="text-xs text-fg-dimmed mt-0.5">
                     {p.project_key} · {p.sector ?? 'sector unknown'} · {p.state ?? 'state unknown'}
                   </div>
                 </td>
                 <td className="py-2.5 px-4 whitespace-nowrap">
                   {lines.map(([f], i) => (
-                    <div key={i} className="text-warning uppercase text-[10px] tracking-wider leading-5">
+                    <div key={i} className="text-warning text-xs leading-5">
                       {FACTOR_LABEL[f] ?? f}
                     </div>
                   ))}
                 </td>
                 <td className="py-2.5 px-4 min-w-[320px]">
                   {lines.map(([, text], i) => (
-                    <div key={i} className="font-sans text-[12px] leading-snug text-fg-muted line-clamp-2" title={text}>
+                    <div key={i} className="font-sans text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
                       {text}
                     </div>
                   ))}
                 </td>
                 <td className="py-2.5 px-4">
                   <Badge tier={p.tier} />
-                  <div className="text-[10px] text-fg-dimmed mt-1">P(slip) {pct(p.p_any_2q)}</div>
+                  <div className="text-xs text-fg-dimmed mt-1">P(slip) {pct(p.p_any_2q)}</div>
                 </td>
                 <td className="py-2.5 px-4 text-right text-fg-base">{slip(p.slip_to_date_months)}</td>
                 <td className="py-2.5 px-4 text-right text-fg-base tabular-nums whitespace-nowrap">
@@ -281,7 +277,7 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
     <Card
       title={`Early Notice · ${en.n_projects} projects`}
       titleRight={
-        <Link to="/command?flag=early_notice" className="font-mono text-[11px] text-fg-dimmed hover:text-fg-base hover:underline">
+        <Link to="/command?flag=early_notice" className="text-xs text-fg-dimmed hover:text-fg-base hover:underline">
           all {en.n_projects} in Command Center &rarr;
         </Link>
       }
@@ -311,10 +307,10 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
           sub={`${formatINRShort(en.capital_flagged_any_cr)} capital`}
         />
         <div className="px-4 py-3">
-          <div className="text-[10px] font-sans font-semibold uppercase tracking-widest text-fg-dimmed">
+          <div className="text-xs font-sans font-semibold text-fg-dimmed">
             Early notice by factor
           </div>
-          <div className="mt-1.5 grid grid-cols-2 gap-x-3 font-mono text-[11px] text-fg-muted">
+          <div className="mt-1.5 grid grid-cols-2 gap-x-3 text-xs text-fg-muted">
             {FACTORS.map(({ key, label, short }) => (
               <span key={key} className="flex justify-between gap-2" title={label}>
                 <span className="truncate">{short}</span>
@@ -331,7 +327,7 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
             <TabsTrigger value="broad">No slip or Low/Medium · {en.top.length}</TabsTrigger>
             <TabsTrigger value="strict">Strict: no slip to date · {strictTop.length}</TabsTrigger>
           </TabsList>
-          <span className="font-mono text-[10px] text-fg-dimmed">
+          <span className="text-xs text-fg-dimmed">
             the {en.top.length} largest by anticipated cost; the strict tab filters those
           </span>
         </div>
@@ -341,7 +337,7 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
         <TabsContent value="strict" className="mt-3">
           <NoticeTable rows={strictTop} />
           {strictTop.length < en.no_slip_to_date.n_projects && (
-            <div className="px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+            <div className="px-5 py-2 text-xs text-fg-dimmed">
               {strictTop.length} of the {en.no_slip_to_date.n_projects} strict cases are among the {en.top.length} largest;
               the rest are in the Command Center early-notice list.
             </div>
@@ -424,23 +420,23 @@ function CompositePanel({ s }: { s: ExternalSummary }) {
             <div key={key} className="space-y-1.5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-xs font-semibold text-fg-base">{label}</span>
-                <span className="font-mono text-[11px] text-fg-dimmed">
+                <span className="text-xs text-fg-dimmed">
                   {d
                     ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · mean ${d.mean.toFixed(2)} · median ${d['50%'].toFixed(2)}`
                     : 'no projects'}
                 </span>
               </div>
               {d && <BoxPlot d={d} />}
-              <div className={cn('font-mono text-[10px]', key === 'fc+la' ? 'text-fg-muted' : 'text-fg-dimmed')}>{note}</div>
+              <div className={cn('text-xs', key === 'fc+la' ? 'text-fg-muted' : 'text-fg-dimmed')}>{note}</div>
             </div>
           )
         })}
-        <div className="flex justify-between font-mono text-[10px] text-fg-dimmed">
+        <div className="flex justify-between text-xs text-fg-dimmed">
           <span>0</span>
           <span>score (dashed: {COMPOSITE_HIGH})</span>
           <span>1</span>
         </div>
-        <p className="text-[11px] leading-relaxed text-fg-dimmed border-t border-border-subtle pt-3">
+        <p className="text-xs leading-relaxed text-fg-dimmed border-t border-border-subtle pt-3">
           {s.externalComposite.rule}
         </p>
       </div>

@@ -34,7 +34,7 @@ const navigationMenuItems: NavItem[] = [
 const INLINE = 4;
 
 const linkCls = cn(
-  "group relative inline-flex h-9 w-max items-center justify-center px-0.5 py-2 font-sans font-semibold text-[13px] tracking-widest transition-colors",
+  "group relative inline-flex h-9 w-max items-center justify-center px-0.5 py-2 font-sans font-semibold text-sm tracking-widest transition-colors",
   "before:absolute before:inset-x-0 before:bottom-0 before:h-[2px] before:scale-x-0 before:bg-fg-base before:transition-transform",
   "hover:text-fg-muted hover:before:scale-x-100",
   "focus:text-fg-base focus:outline-none focus:before:scale-x-100",
@@ -75,13 +75,13 @@ export function NavigationMenuWithActiveItem() {
                 className={cn(linkCls, "gap-1")}
                 aria-label="more pages"
               >
-                MORE <span aria-hidden className="text-[10px]">▾</span>
+                MORE <span aria-hidden className="text-xs">▾</span>
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
                   align="end"
                   sideOffset={6}
-                  className="z-50 min-w-[180px] border border-border-default bg-surface-panel py-1 shadow-lg"
+                  className="z-50 min-w-[180px] border border-border-default bg-surface-panel py-1 rounded-lg shadow-pop overflow-hidden"
                 >
                   {more.map((item) => (
                     <NavLink
@@ -90,7 +90,7 @@ export function NavigationMenuWithActiveItem() {
                       end={item.end}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "block px-4 py-2 font-sans text-[12px] font-semibold tracking-widest hover:bg-surface-elevated",
+                        "block px-4 py-2 font-sans text-xs font-semibold hover:bg-surface-elevated",
                         isActive(item) ? "text-fg-base border-l-2 border-fg-base" : "text-fg-dimmed"
                       )}
                     >

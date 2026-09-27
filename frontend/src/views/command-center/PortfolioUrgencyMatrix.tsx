@@ -63,7 +63,7 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
     <Card
       title={`Portfolio Urgency Matrix · this page (${points.length} of ${page?.items.length ?? 0})`}
       titleRight={
-        <div className="flex items-center gap-4 font-sans font-semibold text-[11px] text-fg-dimmed">
+        <div className="flex items-center gap-4 font-sans font-semibold text-xs text-fg-dimmed">
           {TIERS.map((t) => (
             <span key={t}>
               <span className="inline-block h-1.5 w-1.5 mr-1" style={{ background: TIER_COLOR[t] }} />
@@ -75,7 +75,7 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
     >
       <div className="h-[320px] w-full p-2">
         {points.length === 0 ? (
-          <div className="h-full flex items-center justify-center font-mono text-xs text-fg-dimmed">
+          <div className="h-full flex items-center justify-center text-xs text-fg-dimmed">
             {page ? 'no scored projects with a completion date on this page' : 'waiting for the register page...'}
           </div>
         ) : (
@@ -86,33 +86,33 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
                 type="number"
                 dataKey="x"
                 stroke="#707987"
-                fontSize={11}
+                fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
                 tickFormatter={(v: number) => `${v}mo`}
-                label={{ value: 'Months to anticipated completion (from asof) →', position: 'insideBottom', offset: -12, fontSize: 11, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
+                label={{ value: 'Months to anticipated completion (from asof) →', position: 'insideBottom', offset: -12, fontSize: 12, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
               />
               <YAxis
                 type="number"
                 dataKey="y"
                 stroke="#707987"
-                fontSize={11}
+                fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
                 domain={[0, 100]}
                 tickFormatter={(v: number) => `${v}%`}
                 width={44}
-                label={{ value: 'P(slip, 2q)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 10, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
+                label={{ value: 'P(slip, 2q)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
               />
               <ZAxis type="number" dataKey="z" range={[30, 320]} />
-              <ReferenceLine x={0} stroke="#ba1b2b" strokeDasharray="4 4" opacity={0.5} label={{ value: 'due at asof', fontSize: 10, fill: '#ba1b2b', position: 'insideTopRight' }} />
+              <ReferenceLine x={0} stroke="#ba1b2b" strokeDasharray="4 4" opacity={0.5} label={{ value: 'due at asof', fontSize: 12, fill: '#ba1b2b', position: 'insideTopRight' }} />
               <Tooltip
                 cursor={{ strokeDasharray: '3 3' }}
                 content={({ active, payload }) => {
                   const p = active ? (payload?.[0]?.payload as Point | undefined) : undefined
                   if (!p) return null
                   return (
-                    <div className="border border-border-default bg-surface-panel px-3 py-2 font-mono text-xs shadow-lg max-w-[280px]">
+                    <div className="border border-border-default bg-surface-panel px-3 py-2 text-xs max-w-[280px] rounded-lg shadow-pop overflow-hidden">
                       <div className="font-semibold text-fg-base border-b border-border-subtle pb-1 mb-1.5">
                         {p.row.key} · {p.row.tier}
                       </div>
@@ -145,7 +145,7 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
           </ResponsiveContainer>
         )}
       </div>
-      <div className="px-5 pb-2 -mt-1 text-[10px] font-mono text-fg-dimmed">
+      <div className="px-5 pb-2 -mt-1 text-xs text-fg-dimmed">
         dot size = anticipated cost · click a dot for its detail
         {notPlotted > 0 && ` · ${notPlotted} on this page not plotted (no completion date, schedule not scored)`}
       </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useMeta, useModels } from '@/lib/queries'
 import { formatDate } from '@/lib/formatters'
@@ -35,38 +36,36 @@ export function Models() {
   const otherRun = !!runId && served.length > 0 && !served.some((m) => m.startsWith(`${runId}/`))
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-mono text-sm font-medium tracking-wider text-fg-base uppercase">Models</h1>
-          <span className="font-mono text-[11px] tracking-widest text-fg-muted font-medium">VERIFY</span>
-        </div>
-        {runId && (
-          <div className="font-mono text-[11px] text-fg-dimmed">
-            run {runId}
-            {meta && ` · scores ${meta.modelVersion} · asof ${formatDate(meta.asof)} · gold ${meta.goldVersion}`}
-          </div>
-        )}
-      </div>
-
-      <div className="h-px bg-border-subtle" />
+    <Page>
+      <PageHeader
+        title="Models"
+        subtitle="How the forecasts score on past data, and how the live predictions are holding up"
+        actions={
+          runId && (
+            <span className="text-xs text-fg-dimmed">
+              run {runId}
+              {meta && ` · scores ${meta.modelVersion} · as of ${formatDate(meta.asof)} · gold ${meta.goldVersion}`}
+            </span>
+          )
+        }
+      />
 
       {error ? (
         <Card>
           <ApiErrorNote error={error} />
         </Card>
       ) : isLoading || !data ? (
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">loading backtest...</div>
+        <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">loading backtest...</div>
       ) : !runId || !target ? (
         <Card>
-          <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+          <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
             no champion run in model/registry.json yet: run python -m pipeline.run train
           </div>
         </Card>
       ) : (
         <>
           {otherRun && (
-            <div className="border border-warning/40 bg-warning/10 px-4 py-2 font-mono text-xs text-warning">
+            <div className="border border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning">
               The served scores come from {served[0]}, not from run {runId} shown here: re-run
               python -m pipeline.run score.
             </div>
@@ -97,6 +96,6 @@ export function Models() {
           />
         </>
       )}
-    </div>
+    </Page>
   )
 }

@@ -87,7 +87,7 @@ export function IndiaMap() {
             </ZoomableGroup>
           </ComposableMap>
 
-          <div className="absolute right-3 top-3 flex flex-col border border-border-default bg-surface-panel shadow">
+          <div className="absolute right-3 top-3 flex flex-col border border-border-default bg-surface-panel rounded-lg shadow-pop overflow-hidden">
             <button
               onClick={() => setZoom((z) => Math.min(MAX_ZOOM, +(z * 1.4).toFixed(2)))}
               disabled={zoom >= MAX_ZOOM}
@@ -107,7 +107,7 @@ export function IndiaMap() {
           </div>
 
           {hovered && (
-            <div className="pointer-events-none absolute left-3 top-3 border border-border-default bg-surface-panel px-3 py-2 text-[11px] font-mono shadow-lg text-fg-base">
+            <div className="pointer-events-none absolute left-3 top-3 border border-border-default bg-surface-panel px-3 py-2 text-xs text-fg-base rounded-lg shadow-pop overflow-hidden">
               <div className="font-semibold">{hoveredStat?.name ?? hovered}</div>
               {hoveredStat ? (
                 <>
@@ -128,7 +128,7 @@ export function IndiaMap() {
       )}
 
       {data && (
-      <div className="flex flex-wrap items-center gap-4 border-t border-border-subtle px-5 py-2 text-[10px] font-mono uppercase tracking-wider text-fg-dimmed">
+      <div className="flex flex-wrap items-center gap-4 border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-8" style={{ background: `linear-gradient(90deg, #e9e5dc, ${TIER_COLOR.Critical})` }} />
           fill: critical + high projects (max {maxAtRisk})
@@ -138,7 +138,7 @@ export function IndiaMap() {
       )}
 
       {offMap.length > 0 && (
-        <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+        <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
           not drawn on this map:{' '}
           {offMap.map((s, i) => (
             <span key={s.name ?? i}>
@@ -154,7 +154,7 @@ export function IndiaMap() {
       )}
 
       <div className="border-t border-border-subtle">
-        <div className="px-5 py-2 text-[10px] font-mono uppercase tracking-wider text-fg-dimmed">
+        <div className="px-5 py-2 text-xs text-fg-dimmed">
           Top states by critical count
         </div>
         <div className="divide-y divide-border-subtle">
@@ -168,7 +168,7 @@ export function IndiaMap() {
                 <span className="h-2 w-2 rounded-full shrink-0" style={{ background: fill(s, maxAtRisk) }} />
                 <span className="text-sm font-medium text-fg-base">{s.name ?? 'state unknown'}</span>
               </span>
-              <span className="font-mono text-[11px] text-fg-dimmed">
+              <span className="text-xs text-fg-dimmed">
                 {s.n} projects · <span className="text-critical font-semibold">{s.nCritical} crit</span> ·{' '}
                 <span className="text-warning font-semibold">{s.nHigh} high</span> · {orDash(s.capitalCr, formatINRShort)}
               </span>

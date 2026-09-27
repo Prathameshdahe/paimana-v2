@@ -57,7 +57,7 @@ export function AlertBell() {
       >
         <Bell className="h-4 w-4" />
         {n > 0 && (
-          <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 rounded-full bg-critical text-white font-mono text-[9px] leading-4 text-center tabular-nums">
+          <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 rounded-full bg-critical text-white font-mono text-xs leading-4 text-center tabular-nums">
             {n > 99 ? '99+' : n}
           </span>
         )}
@@ -67,14 +67,14 @@ export function AlertBell() {
           align="end"
           sideOffset={8}
           collisionPadding={16}
-          className="z-50 w-[400px] max-w-[calc(100vw-32px)] border border-border-default bg-surface-panel shadow-lg"
+          className="z-50 w-[400px] max-w-[calc(100vw-32px)] border border-border-default bg-surface-panel rounded-lg shadow-pop overflow-hidden"
         >
           <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
-            <span className="text-xs font-mono font-semibold uppercase tracking-widest text-fg-muted">
+            <span className="text-xs font-semibold text-fg-muted">
               Open alerts{latest.data ? ` · ${latest.data.total}` : ''}
             </span>
             <Popover.Close asChild>
-              <Link to="/" className="font-mono text-[11px] text-fg-dimmed hover:text-fg-base hover:underline">
+              <Link to="/" className="text-xs text-fg-dimmed hover:text-fg-base hover:underline">
                 inbox &rarr;
               </Link>
             </Popover.Close>
@@ -83,16 +83,16 @@ export function AlertBell() {
           {latest.error ? (
             <ApiErrorNote error={latest.error} className="py-4" />
           ) : !latest.data ? (
-            <div className="px-4 py-6 text-center font-mono text-xs text-fg-dimmed">loading alerts...</div>
+            <div className="px-4 py-6 text-center text-xs text-fg-dimmed">loading alerts...</div>
           ) : latest.data.items.length === 0 ? (
-            <div className="px-4 py-6 text-center font-mono text-xs text-fg-dimmed">no open alerts</div>
+            <div className="px-4 py-6 text-center text-xs text-fg-dimmed">no open alerts</div>
           ) : (
             <div className="divide-y divide-border-subtle max-h-[420px] overflow-y-auto" data-lenis-prevent>
               {latest.data.items.map((a) => (
                 <div key={a.id} className="px-4 py-2.5 space-y-1">
                   <div className="flex items-center gap-2">
-                    <Badge variant={alertVariant(a.severity)}>[{ALERT_KIND_LABEL[a.kind].toUpperCase()}]</Badge>
-                    <span className="ml-auto font-mono text-[10px] text-fg-dimmed">{formatDateTime(a.createdAt)}</span>
+                    <Badge variant={alertVariant(a.severity)}>{ALERT_KIND_LABEL[a.kind]}</Badge>
+                    <span className="ml-auto text-xs text-fg-dimmed">{formatDateTime(a.createdAt)}</span>
                   </div>
                   <div className="text-xs font-medium text-fg-base leading-snug">{a.title ?? a.kind}</div>
                   <div className="flex items-center justify-between gap-2">
@@ -100,13 +100,13 @@ export function AlertBell() {
                       <Popover.Close asChild>
                         <Link
                           to={`/projects/${a.projectKey}`}
-                          className="font-mono text-[11px] text-accent hover:underline"
+                          className="text-xs text-accent hover:underline"
                         >
                           {a.projectKey} &rarr;
                         </Link>
                       </Popover.Close>
                     ) : (
-                      <span className="font-mono text-[11px] text-fg-dimmed">no project</span>
+                      <span className="text-xs text-fg-dimmed">no project</span>
                     )}
                     {canAck && (
                       <Button
@@ -125,7 +125,7 @@ export function AlertBell() {
           )}
 
           {ack.isError && (
-            <div className="border-t border-border-subtle px-4 py-1.5 font-mono text-[10px] text-critical">
+            <div className="border-t border-border-subtle px-4 py-1.5 text-xs text-critical">
               acknowledge failed: {String(ack.error)}
             </div>
           )}

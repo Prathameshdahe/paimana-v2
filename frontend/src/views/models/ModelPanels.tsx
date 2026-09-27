@@ -16,7 +16,7 @@ import { featureLabel } from '@/lib/featureLabels'
 import { cn, formatDate, formatDateTime, formatProb, orDash } from '@/lib/formatters'
 import type { CalibrationBin, LiveAccuracy, RegistryDecision, RegistryEntry, ShapSummaryRow } from '@/contracts/audit'
 
-const AXIS_TICK = { fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }
+const AXIS_TICK = { fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }
 /** fixed per model, so a target without one model never repaints the other */
 const MODEL_COLOR: Record<string, string> = { lightgbm: '#2a78d6', logreg: '#eb6834', rule: '#1baf7a' }
 const pct = (v: number | null) => orDash(v, (x) => formatProb(x, 1))
@@ -32,7 +32,7 @@ function CalTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
   const b = payload?.[0]?.payload
   if (!active || !b) return null
   return (
-    <div className="border border-border-default bg-surface-panel px-3 py-2 font-mono text-[11px] text-fg-base shadow-lg">
+    <div className="border border-border-default bg-surface-panel px-3 py-2 text-xs text-fg-base rounded-lg shadow-pop overflow-hidden">
       <div className="font-semibold">{b.model} · bin {b.bin}</div>
       <div>predicted {pct(b.meanPred)} · observed {pct(b.obsRate)}</div>
       <div className="text-fg-dimmed">n {b.n.toLocaleString()}</div>
@@ -46,7 +46,7 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
   return (
     <Card title={`Calibration · model/runs/${runId}/calibration.csv`}>
       {models.length === 0 ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">no calibration bins for this target</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no calibration bins for this target</div>
       ) : (
         <div className="h-[320px] px-2 pt-3">
           <ResponsiveContainer width="100%" height="100%">
@@ -59,7 +59,7 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
                 ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
                 tickFormatter={(v: number) => formatProb(v)}
                 tick={AXIS_TICK}
-                label={{ value: 'predicted probability (bin mean)', position: 'insideBottom', offset: -12, fontSize: 10, fill: 'hsl(var(--color-fg-muted))' }}
+                label={{ value: 'predicted probability (bin mean)', position: 'insideBottom', offset: -12, fontSize: 12, fill: 'hsl(var(--color-fg-muted))' }}
               />
               <YAxis
                 type="number"
@@ -68,7 +68,7 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
                 ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
                 tickFormatter={(v: number) => formatProb(v)}
                 tick={AXIS_TICK}
-                label={{ value: 'observed rate', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'hsl(var(--color-fg-muted))' }}
+                label={{ value: 'observed rate', angle: -90, position: 'insideLeft', fontSize: 12, fill: 'hsl(var(--color-fg-muted))' }}
               />
               <ReferenceLine
                 segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]}
@@ -77,7 +77,7 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
                 ifOverflow="hidden"
               />
               <Tooltip content={<CalTooltip />} />
-              <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }} />
+              <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace' }} />
               {models.map((m) => (
                 <Scatter
                   key={m}
@@ -92,7 +92,7 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
           </ResponsiveContainer>
         </div>
       )}
-      <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
         dashed diagonal: perfectly calibrated. Tiers go by rank, so the probabilities are read as a ranking.
       </div>
     </Card>
@@ -105,7 +105,7 @@ export function ShapSummary({ rows, runId }: { rows: ShapSummaryRow[]; runId: st
   return (
     <Card title={`What the model leans on · any slip, 2q · ${runId}`}>
       {data.length === 0 ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">no shap_summary.csv in this run</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no shap_summary.csv in this run</div>
       ) : (
         <div className="px-2 pt-3" style={{ height: 40 + data.length * 22 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -117,14 +117,14 @@ export function ShapSummary({ rows, runId }: { rows: ShapSummaryRow[]; runId: st
                 cursor={{ fill: 'hsl(var(--color-surface-elevated))' }}
                 formatter={(v: number) => [v.toFixed(3), 'mean |SHAP| (log-odds)']}
                 labelFormatter={(l: string, p) => `${l} · group ${(p?.[0]?.payload as ShapSummaryRow | undefined)?.group ?? '?'}`}
-                contentStyle={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                contentStyle={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace' }}
               />
               <Bar dataKey="meanAbsShap" fill="#2a78d6" radius={[0, 4, 4, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
-      <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
         mean absolute TreeSHAP contribution in log-odds over the validation rows: how much a feature moves scores, not which way
       </div>
     </Card>
@@ -137,10 +137,10 @@ export function RegistryHistory({ decisions, entries }: { decisions: RegistryDec
   return (
     <Card title={`Registry history · ${decisions.length} decisions`}>
       {decisions.length === 0 ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">no decision recorded for this target</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no decision recorded for this target</div>
       ) : (
         <div className="overflow-x-auto max-h-[360px]">
-          <table className="w-full text-[12px] font-mono border-collapse">
+          <table className="w-full text-xs font-mono border-collapse">
             <thead className="sticky top-0 bg-surface-base">
               <tr className="border-b border-border-default text-fg-muted text-left">
                 <th className={th}>When</th>
@@ -168,7 +168,7 @@ export function RegistryHistory({ decisions, entries }: { decisions: RegistryDec
       )}
       {entries.length > 0 && (
         <div className="overflow-x-auto border-t border-border-subtle">
-          <table className="w-full text-[12px] font-mono border-collapse">
+          <table className="w-full text-xs font-mono border-collapse">
             <thead>
               <tr className="border-b border-border-default text-fg-muted bg-surface-base">
                 <th className={cn(th, 'text-left')}>Registered entry</th>
@@ -210,7 +210,7 @@ function horizonReport(asof: string, quarters = 2): string {
 export function LiveAccuracyCard({ live }: { live: LiveAccuracy }) {
   const stat = (label: string, value: string) => (
     <div className="bg-surface-panel px-4 py-3">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-fg-dimmed">{label}</div>
+      <div className="text-xs text-fg-dimmed">{label}</div>
       <div className="font-mono text-lg font-semibold text-fg-base tabular-nums">{value}</div>
     </div>
   )
@@ -232,7 +232,7 @@ export function LiveAccuracyCard({ live }: { live: LiveAccuracy }) {
             .
           </div>
         )}
-        <div className="font-mono text-[10px] text-fg-dimmed">{live.note}</div>
+        <div className="text-xs text-fg-dimmed">{live.note}</div>
       </div>
     </Card>
   )

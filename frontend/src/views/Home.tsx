@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { KPIRibbon } from '@/views/command-center/KPIRibbon'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
@@ -16,21 +17,16 @@ export function Home() {
   const { role } = useRole()
   const alerts = can(role, 'canSeeAlerts')
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 space-y-4">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-fg-base">PAIMANA Radar</h1>
-          <p className="text-xs font-mono text-fg-dimmed mt-1">
-            National infrastructure project monitoring — early warning & predictive decision support
-          </p>
-        </div>
-        <Link
-          to="/command"
-          className="border border-border-default px-3 py-1.5 text-xs font-mono text-fg-muted hover:text-fg-base hover:border-border-strong transition-colors"
-        >
-          Full Command Center &rarr;
-        </Link>
-      </div>
+    <Page>
+      <PageHeader
+        title="PAIMANA Radar"
+        subtitle="Early warning for central-sector infrastructure projects"
+        actions={
+          <Link to="/command" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-default bg-surface-panel px-4 text-sm font-medium text-fg-base shadow-sm transition-colors hover:bg-surface-elevated">
+            Open Command Center &rarr;
+          </Link>
+        }
+      />
 
       <KPIRibbon />
       <LiveStatus />
@@ -40,6 +36,6 @@ export function Home() {
         <IndiaMap />
         {alerts && <EarlyWarningInbox />}
       </div>
-    </div>
+    </Page>
   )
 }

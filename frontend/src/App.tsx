@@ -32,7 +32,7 @@ export default function App() {
         {/* Dynamic Route Content */}
         <main className={isLogin ? 'flex-1' : 'flex-1 pb-16'}>
           <Suspense fallback={
-            <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
+            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
               loading module...
             </div>
           }>

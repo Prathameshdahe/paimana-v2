@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { MonoFigure } from '@/components/ui/MonoFigure'
+import { Badge } from '@/components/ui/Badge'
 import { cn, formatProb, orDash } from '@/lib/formatters'
 import type { BacktestModel, BacktestRow } from '@/contracts/audit'
 
@@ -45,37 +46,37 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
   return (
     <div className="space-y-4">
       {best && floor && (
-        <div className="border border-border-subtle bg-surface-panel grid grid-cols-2 md:grid-cols-4 divide-x divide-border-subtle">
+        <div className="border border-border-subtle bg-surface-panel grid grid-cols-2 md:grid-cols-4 divide-x divide-border-subtle rounded-xl shadow-card overflow-hidden">
           <Stat label="Champion">
-            <div className="font-mono text-lg font-medium text-fg-base">{MODELS.find((m) => m.key === best.model)?.name ?? best.model}</div>
-            <div className="text-xs font-mono text-fg-muted mt-1">{head === 'test' ? 'held-out test cutoff' : 'validation folds'}</div>
+            <div className="text-lg font-semibold text-fg-base">{MODELS.find((m) => m.key === best.model)?.name ?? best.model}</div>
+            <div className="text-xs text-fg-muted mt-1">{head === 'test' ? 'held-out test cutoff' : 'validation folds'}</div>
           </Stat>
           <Stat label="PR-AUC">
             <MonoFigure size="lg" sentiment="stable">{f3(best.prAuc)}</MonoFigure>
-            <div className="text-xs font-mono text-fg-muted mt-1">naive {f3(floor.prAuc)} · base rate {pct(best.baseRate)}</div>
+            <div className="text-xs text-fg-muted mt-1">naive {f3(floor.prAuc)} · base rate {pct(best.baseRate)}</div>
           </Stat>
           <Stat label="Precision@50">
             <MonoFigure size="lg" sentiment="stable">{pct(best.precision50)}</MonoFigure>
-            <div className="text-xs font-mono text-fg-muted mt-1">
+            <div className="text-xs text-fg-muted mt-1">
               naive {pct(floor.precision50)}
               {best.precision50 !== null && floor.precision50 !== null && ` · ${pp(best.precision50 - floor.precision50)}`}
             </div>
           </Stat>
           <Stat label="Rows / positive">
             <MonoFigure size="lg" sentiment="accent">{best.n.toLocaleString()}</MonoFigure>
-            <div className="text-xs font-mono text-fg-muted mt-1">{best.nPos.toLocaleString()} {outcome} within {h}q</div>
+            <div className="text-xs text-fg-muted mt-1">{best.nPos.toLocaleString()} {outcome} within {h}q</div>
           </Stat>
         </div>
       )}
 
-      <div className="border border-border-subtle bg-surface-panel overflow-x-auto">
+      <div className="border border-border-subtle bg-surface-panel overflow-x-auto rounded-xl shadow-card">
         <div className="border-b border-border-subtle px-4 py-3">
-          <span className="text-xs font-mono uppercase tracking-widest text-fg-muted font-semibold">
+          <span className="text-xs text-fg-muted font-semibold">
             Clause (b) · ML vs statistical baselines — model/runs/{runId}/backtest_summary.csv
           </span>
         </div>
 
-        <table className="w-full text-[13px] font-mono border-collapse">
+        <table className="w-full text-sm font-mono border-collapse">
           <thead>
             <tr className="border-b border-border-default text-fg-muted">
               <th className="py-3 px-4 text-left font-medium">Model</th>
@@ -116,8 +117,8 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={cn('text-fg-base', isChamp && 'font-semibold')}>{info?.name ?? r.model}</span>
-                          {r.model === 'naive' && <span className="text-[11px] text-fg-muted">[FLOOR]</span>}
-                          {isChamp && <span className="text-[11px] font-bold text-accent tracking-wider">[CHAMPION]</span>}
+                          {r.model === 'naive' && <Badge>floor</Badge>}
+                          {isChamp && <Badge variant="accent">champion</Badge>}
                         </div>
                         {info && <div className="text-xs text-fg-muted mt-1">{info.note}</div>}
                       </td>
@@ -138,7 +139,7 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
           })}
         </table>
 
-        <div className="border-t border-border-subtle px-4 py-3 font-mono text-[11px] text-fg-muted space-y-1">
+        <div className="border-t border-border-subtle px-4 py-3 text-xs text-fg-muted space-y-1">
           <div>· Rolling origin: each cutoff trains only on labels known by that cutoff and scores the rows at it. Test is the newest usable cutoff, held out; validation is the cutoffs before it (model/runs/{runId}/windows.json).</div>
           <div>· PR-AUC starts at the base rate (a random ranking), not at 0: read it against the naive row.</div>
           <div>· Lead time: mean quarters from a project's first top-100 flag to the slip it was flagged for. With one test cutoff it is {h} quarters by construction.</div>
@@ -152,7 +153,7 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="px-5 py-4">
-      <div className="text-xs font-mono uppercase tracking-widest text-fg-muted font-semibold mb-1.5">{label}</div>
+      <div className="text-xs text-fg-muted font-semibold mb-1.5">{label}</div>
       {children}
     </div>
   )

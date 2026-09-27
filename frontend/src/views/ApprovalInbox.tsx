@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -36,22 +37,18 @@ export function ApprovalInbox() {
   })
 
   return (
-    <div className="mx-auto max-w-[1100px] px-4 py-4 space-y-4">
-      <h1 className="font-mono text-sm font-medium uppercase tracking-wider text-fg-base">
-        Approval Inbox
-      </h1>
-
-      <div className="h-px bg-border-subtle" />
+    <Page narrow>
+      <PageHeader title="Approvals" subtitle="Memos from the worker cell, addressed to your role" />
 
       {decide.isError && (
-        <p className="font-mono text-[11px] text-critical">
+        <p className="text-xs text-critical">
           Decision failed to save — is the FastAPI server running?
         </p>
       )}
 
       {isError || sorted.length === 0 ? (
         <Card>
-          <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+          <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
             {isError
               ? 'Backend not running — start the FastAPI server to see dispatch drafts.'
               : 'No memos for you yet.'}
@@ -69,12 +66,12 @@ export function ApprovalInbox() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-fg-base">{draft.projectName}</div>
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-fg-dimmed">
+                      <div className="text-xs text-fg-dimmed">
                         recommended for {draft.recommendedRecipientRole.replace('_', ' ')}
                       </div>
                     </div>
-                    <Badge variant={draft.status === 'pending' ? 'accent' : 'muted'}>
-                      [{draft.status.toUpperCase()}]
+                    <Badge variant={draft.status === 'pending' ? 'accent' : 'muted'} className="capitalize">
+                      {draft.status}
                     </Badge>
                   </div>
 
@@ -92,7 +89,7 @@ export function ApprovalInbox() {
                             target="_blank"
                             rel="noreferrer"
                             title={ev.note}
-                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 font-mono text-[10px] text-accent hover:border-accent"
+                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-accent hover:border-accent"
                           >
                             {ev.tag}
                           </a>
@@ -100,7 +97,7 @@ export function ApprovalInbox() {
                           <span
                             key={i}
                             title={ev.note}
-                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 font-mono text-[10px] text-fg-dimmed"
+                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-fg-dimmed"
                           >
                             {ev.tag}
                           </span>
@@ -135,6 +132,6 @@ export function ApprovalInbox() {
           })}
         </div>
       )}
-    </div>
+    </Page>
   )
 }

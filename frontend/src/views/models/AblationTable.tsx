@@ -38,20 +38,20 @@ export function AblationTable({ rows, runId }: AblationTableProps) {
   const r0 = rows[0]
   if (!r0) {
     return (
-      <div className="border border-border-subtle bg-surface-panel px-4 py-8 text-center font-mono text-xs text-fg-dimmed">
+      <div className="border border-border-subtle bg-surface-panel px-4 py-8 text-center text-xs text-fg-dimmed rounded-xl shadow-card overflow-hidden">
         no ablation rows for this target in model/runs/{runId}/ablation.csv
       </div>
     )
   }
 
   return (
-    <div className="border border-border-subtle bg-surface-panel overflow-x-auto">
+    <div className="border border-border-subtle bg-surface-panel overflow-x-auto rounded-xl shadow-card">
       <div className="border-b border-border-subtle px-4 py-3">
-        <span className="text-xs font-mono uppercase tracking-widest text-fg-muted font-semibold">
+        <span className="text-xs text-fg-muted font-semibold">
           Clause (c) · Feature-group ablation — model/runs/{runId}/ablation.csv
         </span>
       </div>
-      <table className="w-full text-[13px] font-mono border-collapse">
+      <table className="w-full text-sm font-mono border-collapse">
         <thead>
           <tr className="border-b border-border-default text-fg-muted bg-surface-base">
             <th className="py-3 px-4 text-left font-medium">Step · group added</th>
@@ -85,7 +85,7 @@ export function AblationTable({ rows, runId }: AblationTableProps) {
           })}
         </tbody>
       </table>
-      <div className="border-t border-border-subtle px-4 py-3 font-mono text-[11px] text-fg-muted space-y-1">
+      <div className="border-t border-border-subtle px-4 py-3 text-xs text-fg-muted space-y-1">
         <div>
           · Validation folds only ({r0.nFolds} cutoffs, {r0.n.toLocaleString()} rows, base rate {pct(r0.baseRate)}). Each
           step retrains LightGBM with one more feature group; Δ is the step minus the step before, so a small or negative

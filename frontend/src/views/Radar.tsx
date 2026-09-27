@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { SignalCard } from './external-factors/EvidenceFeed'
 import { GEO_URL, MAP_CENTER, OFF_MAP, normStateKey } from './home/indiaGeo'
@@ -14,37 +15,37 @@ import { cn, formatDateTime } from '@/lib/formatters'
 import type { RadarSummary, SignalFeed } from '@/contracts/portfolio'
 
 const selectCls =
-  'bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none max-w-[200px]'
+  'bg-surface-input border border-border-default px-2 py-0.5 text-xs font-sans font-semibold text-fg-muted focus:outline-none max-w-[200px]'
 
 function SummaryStrip({ s }: { s: RadarSummary }) {
   const severe = s.bySeverity.filter((r) => Number(r.name) >= 2).reduce((a, r) => a + r.n, 0)
   const cats = s.byCategory.filter((r) => r.name !== 'none').slice(0, 4)
   const lt = s.leadTime
   const cell = 'bg-surface-panel px-4 py-3 min-w-0'
-  const label = 'font-mono text-[10px] uppercase tracking-wider text-fg-dimmed'
+  const label = 'text-xs text-fg-dimmed'
   const value = 'font-mono text-lg font-semibold text-fg-base tabular-nums'
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-px bg-border-subtle border border-border-subtle">
       <div className={cell}>
         <div className={label}>last {s.windowDays} days</div>
         <div className={value}>{s.nWindow}</div>
-        <div className="font-mono text-[10px] text-fg-dimmed">signals of {s.nSignalsTotal} stored</div>
+        <div className="text-xs text-fg-dimmed">signals of {s.nSignalsTotal} stored</div>
       </div>
       <div className={cell}>
         <div className={label}>linked · unlinked</div>
         <div className={value}>
           {s.nLinked} · <span className="text-fg-muted">{s.nUnlinked}</span>
         </div>
-        <div className="font-mono text-[10px] text-fg-dimmed">unlinked: ambiguous or weak match</div>
+        <div className="text-xs text-fg-dimmed">unlinked: ambiguous or weak match</div>
       </div>
       <div className={cell}>
         <div className={label}>severity ≥ 2</div>
         <div className={cn(value, severe > 0 && 'text-critical')}>{severe}</div>
-        <div className="font-mono text-[10px] text-fg-dimmed">in the last {s.windowDays} days</div>
+        <div className="text-xs text-fg-dimmed">in the last {s.windowDays} days</div>
       </div>
       <div className={cell}>
         <div className={label}>categories</div>
-        <div className="font-mono text-[11px] text-fg-muted leading-snug">
+        <div className="text-xs text-fg-muted leading-snug">
           {cats.length === 0 ? 'none tagged' : cats.map((c) => `${categoryLabel(String(c.name))} ${c.n}`).join(' · ')}
         </div>
       </div>
@@ -55,7 +56,7 @@ function SummaryStrip({ s }: { s: RadarSummary }) {
       <div className={cell} title={lt.basis}>
         <div className={label}>lead time (median)</div>
         <div className={value}>{lt.medianLeadDays === null ? '—' : `${lt.medianLeadDays} d`}</div>
-        <div className="font-mono text-[10px] text-fg-dimmed">
+        <div className="text-xs text-fg-dimmed">
           {lt.nWithLaterChange} of {lt.nLinkedPairs} linked pairs saw a later CUF change
         </div>
       </div>
@@ -110,13 +111,13 @@ function HeatMap({ feed, state, onState }: { feed: SignalFeed | undefined; state
           </Geographies>
         </ComposableMap>
         {hovered && (
-          <div className="pointer-events-none absolute left-3 top-3 border border-border-default bg-surface-panel px-3 py-2 font-mono text-[11px] text-fg-base shadow-lg">
+          <div className="pointer-events-none absolute left-3 top-3 border border-border-default bg-surface-panel px-3 py-2 text-xs text-fg-base rounded-lg shadow-pop overflow-hidden">
             <div className="font-semibold">{hovered}</div>
             <div className="text-fg-muted">{hot ? `${hot.n} severe signals` : 'no severe signal linked here'}</div>
           </div>
         )}
       </div>
-      <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed space-y-1">
+      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed space-y-1">
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-8" style={{ background: `linear-gradient(90deg, #eeebe4, ${TIER_COLOR.Critical})` }} />
           fill: severity ≥ 2 signals linked to the state's projects (max {heat.length ? max : 0}) · click to filter
@@ -165,15 +166,13 @@ export function Radar() {
   const lastRun = live?.scout.lastRun
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2 pt-4 pb-2">
-        <div>
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">External Evidence Radar</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            News from Google News and PIB matched to current projects: what the CUF numbers may show only at a later revision.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 font-mono text-[11px] text-fg-dimmed">
+    <Page>
+      <PageHeader
+        title="Evidence Radar"
+        subtitle="News matched to current projects, often ahead of the next report revision"
+        info="From Google News and PIB. A news item is linked to a project only on a strong match; the rest stay unlinked."
+        actions={
+        <div className="flex items-center gap-3 text-xs text-fg-dimmed">
           <span>
             {running
               ? 'scout running now…'
@@ -187,10 +186,11 @@ export function Radar() {
             </Button>
           )}
         </div>
-      </div>
-      {scoutNow.data && <div className="font-mono text-[11px] text-fg-dimmed">{scoutNow.data.detail}</div>}
-      {scoutNow.isError && <div className="font-mono text-[11px] text-critical">scout failed to start: {String(scoutNow.error)}</div>}
-      {live?.scout.lastError && <div className="font-mono text-[11px] text-critical">scout: {live.scout.lastError}</div>}
+        }
+      />
+      {scoutNow.data && <div className="text-xs text-fg-dimmed">{scoutNow.data.detail}</div>}
+      {scoutNow.isError && <div className="text-xs text-critical">scout failed to start: {String(scoutNow.error)}</div>}
+      {live?.scout.lastError && <div className="text-xs text-critical">scout: {live.scout.lastError}</div>}
 
       {summary.error ? (
         <Card>
@@ -199,7 +199,7 @@ export function Radar() {
       ) : (
         summary.data && <SummaryStrip s={summary.data} />
       )}
-      <p className="font-mono text-[10px] text-fg-dimmed">
+      <p className="text-xs text-fg-dimmed">
         Lead time: {summary.data?.leadTime.basis ?? 'news date to the first later CUF change'}. Search results can be
         years old, so a long gap is weak evidence of an early warning.
       </p>
@@ -247,15 +247,15 @@ export function Radar() {
           {feed.error ? (
             <ApiErrorNote error={feed.error} />
           ) : !feed.data ? (
-            <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">loading signals...</div>
+            <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading signals...</div>
           ) : feed.data.items.length === 0 ? (
-            <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed space-y-1">
+            <div className="px-5 py-8 text-center text-xs text-fg-dimmed space-y-1">
               {filtered ? (
                 <div>no stored signal matches these filters — not the same as no external trouble</div>
               ) : (
                 <>
                   <div>no news evidence stored yet — not the same as no external trouble</div>
-                  <div className="text-[10px]">
+                  <div className="text-xs">
                     {lastRun ? 'the scout ran but stored nothing it could match' : 'the scout has not run on this server'}
                   </div>
                 </>
@@ -269,7 +269,7 @@ export function Radar() {
             </div>
           )}
           {pages > 1 && (
-            <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+            <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
               <span>page {page} of {pages}</span>
               <span className="flex gap-2">
                 <Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
@@ -281,6 +281,6 @@ export function Radar() {
 
         <HeatMap feed={feed.data} state={filters.state ?? null} onState={(st) => set({ state: st ?? undefined })} />
       </div>
-    </div>
+    </Page>
   )
 }

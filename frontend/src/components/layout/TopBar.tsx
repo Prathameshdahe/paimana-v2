@@ -39,7 +39,7 @@ export function TopBar() {
             <span className="font-sans text-base font-extrabold tracking-[0.2em] text-fg-base">
               PAIMANA
             </span>
-            <span className="font-sans text-[11px] font-bold tracking-widest text-fg-dimmed">
+            <span className="font-sans text-xs font-bold text-fg-dimmed">
               RADAR
             </span>
           </a>
@@ -47,25 +47,25 @@ export function TopBar() {
 
         {/* Center: Live Portfolio Metrics — monospace ticker (data version + tier counts) */}
         {m && (
-          <div className="hidden lg:flex items-center gap-3 font-sans text-[12px] text-fg-muted">
+          <div className="hidden lg:flex items-center gap-3 font-sans text-xs text-fg-muted">
             <span
               className="bg-surface-elevated text-fg-base px-2.5 py-1 rounded-sm border border-border-default font-semibold flex items-center gap-1.5 shadow-sm"
               title={`latest report: ${m.latestReportDoc ?? 'unknown'}`}
             >
-              <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">asof</span>
+              <span className="font-sans text-xs text-fg-dimmed">asof</span>
               <span className="font-mono tabular-nums whitespace-nowrap">{formatDate(m.asof)}</span>
               <span className="text-border-strong">·</span>
               <span className="font-mono tabular-nums">{(p?.kpis.nProjects ?? m.nCurrent).toLocaleString()}</span>
-              <span className="hidden xl:inline font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
+              <span className="hidden xl:inline font-sans text-xs text-fg-dimmed">projects</span>
             </span>
             {p && (
-              <span className="hidden xl:inline font-mono text-[11px] tabular-nums">
+              <span className="hidden xl:inline font-mono text-xs tabular-nums">
                 <span className="text-critical font-semibold">{tierN('Critical')}</span> crit ·{' '}
                 <span className="text-warning font-semibold">{tierN('High')}</span> high
               </span>
             )}
             {can(role, 'canSeeModelVersion') && (
-              <span className="hidden 2xl:inline font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
+              <span className="hidden 2xl:inline text-xs text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
                 {m.modelVersion}
               </span>
             )}
@@ -84,7 +84,7 @@ export function TopBar() {
             // the scope every page is cut to (backend/access.py)
             <span
               title={`viewing as ${scope}`}
-              className="hidden md:inline max-w-[220px] truncate rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 font-sans text-[12px] font-medium text-fg-base"
+              className="hidden md:inline max-w-[220px] truncate rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 font-sans text-xs font-medium text-fg-base"
             >
               <span className="text-fg-dimmed">viewing as </span>
               {scope}
@@ -92,7 +92,7 @@ export function TopBar() {
           )}
 
           {role && role !== 'public' ? (
-            <div className="flex items-center gap-2 font-mono text-[11px]">
+            <div className="flex items-center gap-2 font-mono text-xs">
               {/* the role only from 2xl, the name always in the tooltip: four nav labels, MORE, the bell and this fit 1024px */}
               <span className="hidden 2xl:inline whitespace-nowrap text-fg-muted" title={displayName}>
                 {ROLE_LABELS[role]}
@@ -111,7 +111,7 @@ export function TopBar() {
           ) : (
             <a
               href="/login"
-              className="font-mono text-[11px] text-fg-dimmed hover:text-fg-base hover:underline"
+              className="text-xs text-fg-dimmed hover:text-fg-base hover:underline"
             >
               Sign in
             </a>
@@ -120,7 +120,7 @@ export function TopBar() {
       </div>
 
       {isOffline(meta.error) && (
-        <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center font-mono text-[11px] text-critical">
+        <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center text-xs text-critical">
           backend not reachable at {API_BASE} — start uvicorn: <code>{START_BACKEND}</code>
         </div>
       )}

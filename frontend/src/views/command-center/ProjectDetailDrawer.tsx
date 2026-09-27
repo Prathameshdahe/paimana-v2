@@ -67,7 +67,7 @@ export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawer
               <span className="font-mono text-sm font-bold text-fg-base">{projectKey}</span>
               {detail && <Badge tier={detail.scores ? detail.scores.tier : undefined} />}
               {m && (
-                <span className="font-mono text-[10px] text-fg-dimmed truncate">
+                <span className="text-xs text-fg-dimmed truncate">
                   {m.sector ?? 'sector unknown'} · {m.agency ?? 'agency unknown'} · {m.state ?? 'state unknown'}
                 </span>
               )}
@@ -78,13 +78,13 @@ export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawer
 
           <div className="ml-4 flex items-center gap-2">
             <Link to={`/projects/${projectKey}`} onClick={onClose}>
-              <Button variant="ghost" size="sm" className="font-mono text-[10px]">
-                FULL PAGE ↗
+              <Button variant="secondary" size="sm">
+                Full page ↗
               </Button>
             </Link>
             <button
               onClick={onClose}
-              className="rounded-xs border border-border-subtle p-1 font-mono text-xs text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base"
+              className="rounded-xs border border-border-subtle p-1 text-xs text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base"
               aria-label="Close project drawer"
             >
               ✕
@@ -97,7 +97,7 @@ export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawer
           {error ? (
             <ApiErrorNote error={error} />
           ) : isLoading || !detail ? (
-            <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
+            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
               fetching project...
             </div>
           ) : !full ? (

@@ -93,7 +93,7 @@ function Chat() {
   }
 
   return (
-    <div data-no-print className="fixed bottom-5 right-5 z-50 font-mono">
+    <div data-no-print className="fixed bottom-5 right-5 z-50">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -110,10 +110,10 @@ function Chat() {
                 <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-surface-elevated bg-stable" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold uppercase tracking-widest text-fg-base">
+                <div className="text-xs font-semibold text-fg-base">
                   Project Intelligence
                 </div>
-                <div className="text-[10px] text-fg-dimmed">Keyword search · /api/projects</div>
+                <div className="text-xs text-fg-dimmed">Keyword search · /api/projects</div>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -125,7 +125,7 @@ function Chat() {
             </div>
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3 text-[12px]">
+            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3 text-xs">
               {messages.map((m, i) => (
                 <div
                   key={i}
@@ -152,7 +152,7 @@ function Chat() {
 
             {/* Starter prompts */}
             <div className="border-t border-border-subtle px-3 pb-2 pt-2.5">
-              <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-widest text-fg-dimmed">
+              <div className="mb-1.5 flex items-center gap-1 text-xs text-fg-dimmed">
                 <Sparkles className="size-3" />
                 Try asking
               </div>
@@ -161,7 +161,7 @@ function Chat() {
                   <button
                     key={s}
                     onClick={() => submit(s)}
-                    className="rounded-full border border-border-subtle px-2.5 py-1 text-[10px] text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base"
+                    className="rounded-full border border-border-subtle px-2.5 py-1 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base"
                   >
                     {s}
                   </button>
@@ -181,7 +181,7 @@ function Chat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about projects..."
-                className="flex-1 rounded-full border border-border-subtle bg-surface-base px-3.5 py-2 text-[12px] text-fg-base outline-none focus:border-accent"
+                className="flex-1 rounded-full border border-border-subtle bg-surface-base px-3.5 py-2 text-xs text-fg-base outline-none focus:border-accent"
               />
               <button
                 type="submit"

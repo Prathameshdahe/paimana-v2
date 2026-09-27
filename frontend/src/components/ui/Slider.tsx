@@ -92,7 +92,7 @@ export function Slider({
           aria-label={label}
         />
       </RadixSlider.Root>
-      <div className="flex justify-between text-[10px] font-mono text-fg-dimmed">
+      <div className="flex justify-between text-xs text-fg-dimmed">
         <span>{min}</span>
         <span>{max}</span>
       </div>

@@ -106,7 +106,7 @@ export function TrajectoryChart({
       variant="section"
       title={historyOnly ? 'Progress over time' : 'Trajectory & Scenarios'}
       titleRight={
-        <span className="text-fg-dimmed hidden sm:inline font-mono text-[11px]">
+        <span className="text-fg-dimmed hidden sm:inline text-xs">
           {timeline ? `${timeline.points.length} reports` : ''}
           {forecast && ` · ${forecast.scenarios.length} forecast quarters`}
         </span>
@@ -114,7 +114,7 @@ export function TrajectoryChart({
       className="h-full flex flex-col"
     >
       {rows.length === 0 ? (
-        <div className="h-[320px] flex items-center justify-center font-mono text-xs text-fg-dimmed">
+        <div className="h-[320px] flex items-center justify-center text-xs text-fg-dimmed">
           no reported progress for this project
         </div>
       ) : (
@@ -130,7 +130,7 @@ export function TrajectoryChart({
                 tickFormatter={monthLabel}
                 minTickGap={28}
                 stroke="#707987"
-                fontSize={11}
+                fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
               />
@@ -139,7 +139,7 @@ export function TrajectoryChart({
                 domain={[0, 100]}
                 tickFormatter={(v: number) => `${v}%`}
                 stroke="#0b7249"
-                fontSize={11}
+                fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
                 width={44}
@@ -149,7 +149,7 @@ export function TrajectoryChart({
                 orientation="right"
                 tickFormatter={(v: number) => `₹${Math.round(v)}Cr`}
                 stroke="#1946b8"
-                fontSize={11}
+                fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
                 width={78}
@@ -158,7 +158,7 @@ export function TrajectoryChart({
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
                   return (
-                    <div className="border border-border-default bg-surface-panel p-3 font-mono text-xs shadow-lg">
+                    <div className="border border-border-default bg-surface-panel p-3 text-xs rounded-lg shadow-pop overflow-hidden">
                       <div className="font-bold text-fg-base border-b border-border-subtle pb-1.5 mb-2">
                         {monthLabel(Number(label))}
                       </div>
@@ -181,7 +181,7 @@ export function TrajectoryChart({
                   )
                 }}
               />
-              <Legend verticalAlign="top" height={30} wrapperStyle={{ fontSize: '11px', fontFamily: 'IBM Plex Sans' }} />
+              <Legend verticalAlign="top" height={30} wrapperStyle={{ fontSize: '12px', fontFamily: 'IBM Plex Sans' }} />
 
               {c?.p05 && c.p95 && (
                 <ReferenceArea
@@ -191,15 +191,15 @@ export function TrajectoryChart({
                   fill="#9c4d04"
                   fillOpacity={0.07}
                   ifOverflow="extendDomain"
-                  label={{ value: 'completion p05–p95', position: 'insideBottom', fontSize: 10, fill: '#9c4d04' }}
+                  label={{ value: 'completion p05–p95', position: 'insideBottom', fontSize: 12, fill: '#9c4d04' }}
                 />
               )}
               {c?.anticipated && (
                 <ReferenceLine yAxisId="pct" x={ts(c.anticipated)} stroke="#707987" strokeDasharray="2 3"
-                  ifOverflow="extendDomain" label={{ value: 'reported completion', position: 'insideTopLeft', fontSize: 10, fill: '#707987' }} />
+                  ifOverflow="extendDomain" label={{ value: 'reported completion', position: 'insideTopLeft', fontSize: 12, fill: '#707987' }} />
               )}
               <ReferenceLine yAxisId="pct" x={ts(asof)} stroke="#1f2937" strokeDasharray="4 4"
-                label={{ value: 'asof', position: 'insideBottomRight', fontSize: 10, fill: '#1f2937' }} />
+                label={{ value: 'asof', position: 'insideBottomRight', fontSize: 12, fill: '#1f2937' }} />
 
               {/* scenario series only with a forecast: the public page draws the reported history alone */}
               {!historyOnly && <Area yAxisId="pct" dataKey="band" name="Scenario range" stroke="none" fill="#5b7299" fillOpacity={0.18}
@@ -221,7 +221,7 @@ export function TrajectoryChart({
         </div>
       )}
 
-      {!historyOnly && <div className="border-t border-border-subtle px-4 py-2 font-mono text-[10px] text-fg-dimmed leading-relaxed space-y-1">
+      {!historyOnly && <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-dimmed leading-relaxed space-y-1">
         {forecastError instanceof ApiError && forecastError.status === 404 ? (
           <div>no forecast — the project is not in the current scored portfolio; the history is shown alone</div>
         ) : forecastError ? (

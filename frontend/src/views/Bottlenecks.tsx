@@ -4,6 +4,7 @@ import { ResponsiveContainer, Tooltip, Treemap } from 'recharts'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useBottleneck, useBottlenecks } from '@/lib/queries'
 import { EVENT_CATEGORY, categoryLabel } from '@/lib/riskPalette'
@@ -58,12 +59,12 @@ function Cell({ x = 0, y = 0, width = 0, height = 0, bottleneckId, category = ''
         strokeWidth={on ? 3 : 2}
       />
       {width > 90 && height > 36 && (
-        <text x={x + 8} y={y + 18} fill={ink} fontSize={11} fontFamily="IBM Plex Mono, monospace" fontWeight={600}>
+        <text x={x + 8} y={y + 18} fill={ink} fontSize={12} fontFamily="IBM Plex Mono, monospace" fontWeight={600}>
           {name && name.length * 6.6 > width - 16 ? `${name.slice(0, Math.max(4, Math.floor((width - 16) / 6.6) - 1))}…` : name}
         </text>
       )}
       {width > 90 && height > 52 && (
-        <text x={x + 8} y={y + 34} fill={ink} fontSize={10} fontFamily="IBM Plex Mono, monospace">
+        <text x={x + 8} y={y + 34} fill={ink} fontSize={12} fontFamily="IBM Plex Mono, monospace">
           {nProjects} projects · {formatINRShort(capitalExposedCr ?? 0)}
         </text>
       )}
@@ -75,7 +76,7 @@ function NodeTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
   const b = payload?.[0]?.payload
   if (!active || !b?.bottleneckId) return null
   return (
-    <div className="border border-border-default bg-surface-panel px-3 py-2 font-mono text-[11px] text-fg-base shadow-lg space-y-0.5 max-w-[320px]">
+    <div className="border border-border-default bg-surface-panel px-3 py-2 text-xs text-fg-base space-y-0.5 max-w-[320px] rounded-lg shadow-pop overflow-hidden">
       <div className="font-semibold">{categoryLabel(b.category)} · {place(b)}</div>
       <div>{headline(b)}</div>
       <div className="text-fg-muted">
@@ -93,43 +94,43 @@ function Members({ id }: { id: string }) {
   const { data, error, isFetching } = useBottleneck(id, page)
   const pages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1
   if (error) return <ApiErrorNote error={error} />
-  if (!data) return <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">loading projects...</div>
+  if (!data) return <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading projects...</div>
   const b = data.bottleneck
   return (
     <>
       <div className="border-b border-border-subtle px-5 py-3 space-y-1">
         <div className="text-sm font-semibold text-fg-base">{headline(b)}</div>
-        <div className="font-mono text-[11px] text-fg-muted">{categoryLabel(b.category)} · {place(b)}</div>
-        <div className="font-mono text-[10px] text-fg-dimmed">{CAVEAT}</div>
+        <div className="text-xs text-fg-muted">{categoryLabel(b.category)} · {place(b)}</div>
+        <div className="text-xs text-fg-dimmed">{CAVEAT}</div>
       </div>
       <div className={cn('divide-y divide-border-subtle transition-opacity', isFetching && 'opacity-60')}>
         {data.members.map((m) => (
           <div key={m.key} className="px-5 py-2.5 space-y-1">
             <div className="flex items-center gap-2 min-w-0">
               <Badge tier={m.tier} />
-              <Link to={`/projects/${m.key}`} className="font-mono text-[11px] text-accent hover:underline shrink-0">
+              <Link to={`/projects/${m.key}`} className="text-xs text-accent hover:underline shrink-0">
                 {m.key}
               </Link>
               <span className="truncate text-xs text-fg-base" title={m.name ?? undefined}>{m.name ?? ''}</span>
             </div>
-            <div className="font-mono text-[10px] text-fg-dimmed">
+            <div className="text-xs text-fg-dimmed">
               P(slip, 2q) {orDash(m.pAny2q, (p) => formatProb(p))} · {orDash(m.anticipatedCostCr, formatINR)} ·{' '}
               {m.agency ?? 'agency unknown'}
             </div>
             {m.evidence.map((e, i) => (
-              <div key={i} className="border-l-2 border-border-default pl-2 text-[11px] leading-snug text-fg-muted">
-                <span className="font-mono text-[10px] text-fg-dimmed">
+              <div key={i} className="border-l-2 border-border-default pl-2 text-xs leading-snug text-fg-muted">
+                <span className="text-xs text-fg-dimmed">
                   {e.kind === 'signal' ? 'news' : 'report remark'} {orDash(e.firstSeen, formatDate)}
                   {e.lastSeen && e.lastSeen !== e.firstSeen && ` → ${formatDate(e.lastSeen)}`}:{' '}
                 </span>
                 {e.evidence ?? '(no text)'}
                 {e.url ? (
-                  <a href={e.url} target="_blank" rel="noreferrer" className="ml-1 font-mono text-[10px] text-accent hover:underline">
+                  <a href={e.url} target="_blank" rel="noreferrer" className="ml-1 text-xs text-accent hover:underline">
                     source ↗
                   </a>
                 ) : (
                   e.sourceDocId && (
-                    <span className="block font-mono text-[10px] text-fg-dimmed truncate" title={e.sourceDocId}>
+                    <span className="block text-xs text-fg-dimmed truncate" title={e.sourceDocId}>
                       {e.sourceDocId.split('/').pop()}
                       {e.sourcePage !== null && ` p.${e.sourcePage}`}
                     </span>
@@ -141,7 +142,7 @@ function Members({ id }: { id: string }) {
         ))}
       </div>
       {pages > 1 && (
-        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
           <span>page {page} of {pages}</span>
           <span className="flex gap-2">
             <Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
@@ -155,11 +156,11 @@ function Members({ id }: { id: string }) {
 
 const chip = (on: boolean) =>
   cn(
-    'border border-border-default px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider',
+    'border border-border-default px-2 py-0.5 text-xs',
     on ? 'bg-fg-base text-fg-inverse' : 'text-fg-muted hover:text-fg-base'
   )
 const selectCls =
-  'bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none max-w-[200px]'
+  'bg-surface-input border border-border-default px-2 py-0.5 text-xs font-sans font-semibold text-fg-muted focus:outline-none max-w-[200px]'
 
 /**
  * Bottleneck Intelligence (/bottlenecks, guide §6.1) over /api/bottlenecks: current projects that
@@ -187,25 +188,24 @@ export function Bottlenecks() {
   const s = data?.summary
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2 pt-4 pb-2">
-        <div>
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">Bottleneck Intelligence</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            Open issues shared by several current projects in one place: the {CAVEAT}.
-          </p>
-        </div>
-        {data && (
-          <div className="font-mono text-[11px] text-fg-dimmed">
-            asof {formatDate(data.asof)}
-            {s?.n_bottlenecks !== undefined && ` · ${s.n_bottlenecks} clusters + ${s.n_rollups} state rollups`}
-            {s?.n_projects !== undefined && ` · ${s.n_projects} projects`}
-            {s?.capital_exposed_cr !== undefined && ` · ${formatINRShort(s.capital_exposed_cr)}`}
-          </div>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        title="Bottlenecks"
+        subtitle="Open issues shared by several current projects in one place"
+        info={<>Each cluster lists the {CAVEAT}.</>}
+        actions={
+          data && (
+            <span className="text-xs text-fg-dimmed">
+              as of {formatDate(data.asof)}
+              {s?.n_bottlenecks !== undefined && ` · ${s.n_bottlenecks} clusters + ${s.n_rollups} state rollups`}
+              {s?.n_projects !== undefined && ` · ${s.n_projects} projects`}
+              {s?.capital_exposed_cr !== undefined && ` · ${formatINRShort(s.capital_exposed_cr)}`}
+            </span>
+          )
+        }
+      />
 
-      <div className="border border-warning/40 bg-warning/10 px-4 py-2 font-mono text-[11px] text-warning space-y-0.5">
+      <div className="border border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning space-y-0.5">
         <div>
           Issues come from report remarks, which are free text only through 2023; after that only linked news
           {s?.signals_used !== undefined && ` (${s.signals_used} severe items used)`} can add to a cluster
@@ -219,7 +219,7 @@ export function Bottlenecks() {
           <ApiErrorNote error={error} />
         </Card>
       ) : !data ? (
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">loading bottlenecks...</div>
+        <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">loading bottlenecks...</div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
@@ -244,14 +244,14 @@ export function Bottlenecks() {
               ))}
             </select>
             <span className="text-border-strong">│</span>
-            <span className="font-mono text-[11px] text-fg-dimmed">sort</span>
+            <span className="text-xs text-fg-dimmed">sort</span>
             <button onClick={() => setSort('capital')} className={chip(sort === 'capital')}>capital</button>
             <button onClick={() => setSort('count')} className={chip(sort === 'count')}>projects</button>
           </div>
 
           {shown.length === 0 ? (
             <Card>
-              <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+              <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
                 no cluster matches these filters — not the same as no open issues: remarks stop in 2023
               </div>
             </Card>
@@ -272,7 +272,7 @@ export function Bottlenecks() {
                       </Treemap>
                     </ResponsiveContainer>
                   </div>
-                  <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+                  <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
                     area: capital of the member projects · colour: issue category · click a block for its projects
                   </div>
                 </Card>
@@ -293,15 +293,15 @@ export function Bottlenecks() {
                             <span className="inline-block h-2.5 w-2.5" style={{ background: colorOf(b.category).color }} />
                             {headline(b)}
                           </span>
-                          <span className="font-mono text-[11px] text-fg-muted">
+                          <span className="text-xs text-fg-muted">
                             {categoryLabel(b.category)} · {place(b)}
                           </span>
                         </div>
-                        <div className="font-mono text-[10px] text-fg-dimmed mt-0.5">
+                        <div className="text-xs text-fg-dimmed mt-0.5">
                           {b.nCriticalHigh} critical/high · mean P(slip, 2q) {orDash(b.meanPAny2q, (p) => formatProb(p))} ·{' '}
                           {b.nSignals} news signals · open {orDash(b.earliestFirstSeen, formatDate)} → {orDash(b.lastSeen, formatDate)}
                         </div>
-                        {b.evidence[0] && <div className="mt-1 text-[11px] text-fg-muted line-clamp-1">{b.evidence[0]}</div>}
+                        {b.evidence[0] && <div className="mt-1 text-xs text-fg-muted line-clamp-1">{b.evidence[0]}</div>}
                       </button>
                     ))}
                   </div>
@@ -312,7 +312,7 @@ export function Bottlenecks() {
                 title="Projects that would be affected"
                 titleRight={
                   selected && (
-                    <button onClick={() => setSelected(null)} className="font-mono text-[11px] text-fg-dimmed hover:text-fg-base">
+                    <button onClick={() => setSelected(null)} className="text-xs text-fg-dimmed hover:text-fg-base">
                       close ✕
                     </button>
                   )
@@ -321,7 +321,7 @@ export function Bottlenecks() {
                 {selected ? (
                   <Members key={selected} id={selected} />
                 ) : (
-                  <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+                  <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
                     pick a cluster to list its projects and the remarks or news behind each
                   </div>
                 )}
@@ -330,6 +330,6 @@ export function Bottlenecks() {
           )}
         </>
       )}
-    </div>
+    </Page>
   )
 }

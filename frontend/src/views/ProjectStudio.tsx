@@ -12,6 +12,7 @@ import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
 import { BriefCard } from './project-studio/BriefCard'
 import { PublicSummary } from './project-studio/PublicSummary'
+import { Page } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Button } from '@/components/ui/Button'
 
@@ -32,8 +33,8 @@ export function ProjectStudio() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-[1600px] px-4 py-8">
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
+      <div className="mx-auto max-w-[1440px] px-6 py-8">
+        <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
           fetching project telemetry...
         </div>
       </div>
@@ -42,16 +43,16 @@ export function ProjectStudio() {
 
   if (error || !detail) {
     return (
-      <div className="mx-auto max-w-[1600px] px-4 py-8 text-center">
+      <div className="mx-auto max-w-[1440px] px-6 py-8 text-center">
         {isOffline(error) ? (
           <ApiErrorNote error={error} />
         ) : (
-          <div className="font-mono text-sm text-fg-muted mb-2">
+          <div className="text-sm text-fg-muted mb-2">
             project <span className="text-critical">{key}</span> not found
           </div>
         )}
         <Link to="/command">
-          <Button variant="secondary" size="sm">← COMMAND CENTER</Button>
+          <Button variant="secondary" size="sm">← Command Center</Button>
         </Link>
       </div>
     )
@@ -59,7 +60,7 @@ export function ProjectStudio() {
 
   if (!full) {
     return (
-      <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
+      <Page>
         <ProjectIdentityStrip detail={detail} showProvenance={false} />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <PublicSummary detail={detail} />
@@ -68,12 +69,12 @@ export function ProjectStudio() {
               asof={detail.provenance.asof} historyOnly />
           </div>
         </div>
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
+    <Page>
       <ProjectIdentityStrip detail={detail} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -111,6 +112,6 @@ export function ProjectStudio() {
           <ExternalEvents events={detail.external.events} />
         </div>
       </div>
-    </div>
+    </Page>
   )
 }

@@ -31,7 +31,7 @@ const TIER_BUTTON_ON: Record<TierFilter | 'ALL', string> = {
 }
 
 const selectCls =
-  'bg-surface-input border border-border-default px-2 py-0.5 text-[11px] font-sans font-semibold uppercase text-fg-muted focus:outline-none max-w-[180px]'
+  'bg-surface-input border border-border-default px-2 py-0.5 text-xs font-sans font-semibold text-fg-muted focus:outline-none max-w-[180px]'
 
 /**
  * TriageTable — high-density operational queue over /api/projects.
@@ -77,7 +77,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                 key={t}
                 onClick={() => onChange({ tier: t === 'ALL' ? undefined : t })}
                 className={cn(
-                  'font-sans text-[11px] font-bold tracking-wider px-2.5 py-1 rounded-sm transition-all uppercase',
+                  'font-sans text-xs font-bold px-2.5 py-1 rounded-sm transition-all',
                   on
                     ? `text-white shadow-sm ${TIER_BUTTON_ON[t]}`
                     : 'text-fg-dimmed hover:text-fg-base bg-surface-elevated/50 hover:bg-surface-elevated'
@@ -126,7 +126,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
 
         {/* Flag chips: a flagged risk-profile dimension, or early notice */}
         <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          <span className="font-sans text-[11px] font-semibold uppercase tracking-wider text-fg-dimmed mr-1">Flag</span>
+          <span className="font-sans text-xs font-semibold text-fg-dimmed mr-1">Flag</span>
           {FLAG_CHIPS.map((f) => {
             const on = (query.flag ?? 'ANY') === f
             return (
@@ -136,7 +136,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                 onClick={() => onChange({ flag: f === 'ANY' ? undefined : f })}
                 title={f === 'early_notice' ? 'flagged external factor while the CUF numbers show no slip yet' : undefined}
                 className={cn(
-                  'border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition-colors',
+                  'border px-2 py-0.5 text-xs transition-colors',
                   on
                     ? f === 'early_notice'
                       ? 'border-critical bg-critical text-white'
@@ -146,7 +146,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                     : 'border-border-default text-fg-dimmed hover:text-fg-base hover:border-border-strong'
                 )}
               >
-                {f === 'ANY' ? 'any' : FLAG_LABEL[f]}
+                {f === 'ANY' ? 'Any' : FLAG_LABEL[f]}
               </button>
             )
           })}
@@ -157,9 +157,9 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
         <ApiErrorNote error={error} />
       ) : (
         <div className={cn('overflow-x-auto transition-opacity', isFetching && 'opacity-60')}>
-          <table className="w-full border-collapse text-left font-mono text-[13px]">
+          <table className="w-full border-collapse text-left font-mono text-sm">
             <thead>
-              <tr className="border-b border-border-default text-fg-dimmed font-sans text-xs uppercase tracking-wider">
+              <tr className="border-b border-border-default text-fg-dimmed font-sans text-xs">
                 <th className="py-3 px-5 font-semibold w-[300px] cursor-pointer hover:text-fg-muted" onClick={() => handleSort('name')}>
                   PROJECT{sortIcon('name')}
                 </th>
@@ -206,12 +206,12 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                       {/* Project */}
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-2">
-                          <Badge tier={p.tier} className="w-[64px] shrink-0 text-[11px]" />
+                          <Badge tier={p.tier} className="w-[64px] shrink-0 text-xs" />
                           <span className="text-fg-base font-sans truncate max-w-[240px] text-sm font-semibold" title={p.name ?? undefined}>
                             {p.name ?? p.key}
                           </span>
                         </div>
-                        <div className="text-[12px] font-sans text-fg-dimmed pl-[72px] mt-1 font-medium">
+                        <div className="text-xs font-sans text-fg-dimmed pl-[72px] mt-1 font-medium">
                           <span className="font-mono">{p.key}</span> · {p.sector ?? 'sector unknown'}
                           {p.override && <span className="text-warning"> · stagnation override</span>}
                         </div>
@@ -219,14 +219,14 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
 
                       {/* Agency */}
                       <td className="py-3 px-5 font-sans text-fg-muted truncate max-w-[180px]">
-                        <span className="text-[13px] font-semibold">{p.agency ?? '—'}</span>
-                        <div className="text-[12px] font-medium text-fg-dimmed mt-1">{p.state ?? '—'}</div>
+                        <span className="text-sm font-semibold">{p.agency ?? '—'}</span>
+                        <div className="text-xs font-medium text-fg-dimmed mt-1">{p.state ?? '—'}</div>
                       </td>
 
                       {/* P(any, 2q) */}
                       <td className="py-3 px-5 text-right">
                         {p.pAny2q === null ? (
-                          <span className="text-[11px] text-fg-dimmed" title="no anticipated completion date — schedule not scored">
+                          <span className="text-xs text-fg-dimmed" title="no anticipated completion date — schedule not scored">
                             not scored
                           </span>
                         ) : (
@@ -234,7 +234,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                             <MonoFigure size="base" sentiment={TIER_SENTIMENT[t]}>
                               {formatProb(p.pAny2q)}
                             </MonoFigure>
-                            <div className="text-[11px] text-fg-dimmed mt-1" title="P(date push, 2q) · P(cost revision, 2q)">
+                            <div className="text-xs text-fg-dimmed mt-1" title="P(date push, 2q) · P(cost revision, 2q)">
                               date {orDash(p.pDatePush2q, formatProb)} · cost {orDash(p.pCostRev2q, formatProb)}
                             </div>
                           </>
@@ -244,7 +244,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                       {/* Expected slip next 2q */}
                       <td className="py-3 px-5 text-right text-fg-base" title="predicted slip over the next 2 quarters, p50 (p95)">
                         {orDash(p.monthsP50, (v) => `${v.toFixed(0)}mo`)}
-                        <span className="text-fg-dimmed text-[11px]"> {orDash(p.monthsP95, (v) => `(${v.toFixed(0)})`)}</span>
+                        <span className="text-fg-dimmed text-xs"> {orDash(p.monthsP95, (v) => `(${v.toFixed(0)})`)}</span>
                       </td>
 
                       {/* Slip to date */}
@@ -252,7 +252,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                         <span className={cn((p.slipToDateMonths ?? 0) > 12 ? 'text-critical font-semibold' : 'text-fg-base')}>
                           {orDash(p.slipToDateMonths, (v) => `${v.toFixed(0)}mo`)}
                         </span>
-                        <div className="text-[11px] text-fg-dimmed mt-1">
+                        <div className="text-xs text-fg-dimmed mt-1">
                           {p.anticipatedCompletion ? `due ${formatDate(p.anticipatedCompletion)}` : 'no date'}
                         </div>
                       </td>
@@ -260,7 +260,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                       {/* Cost */}
                       <td className="py-3 px-5 text-right tabular-nums">
                         <span className="text-fg-base">{orDash(p.anticipatedCostCr, formatINR)}</span>
-                        <div className="text-[11px] text-fg-dimmed mt-1">spent {orDash(p.expenditureCr, formatINR)}</div>
+                        <div className="text-xs text-fg-dimmed mt-1">spent {orDash(p.expenditureCr, formatINR)}</div>
                       </td>
 
                       {/* Progress */}
@@ -275,7 +275,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                             <span
                               key={f}
                               className={cn(
-                                'border px-1 py-0.5 text-[10px] uppercase tracking-wider',
+                                'border px-1 py-0.5 text-xs',
                                 f === 'early_notice' ? 'border-critical/40 text-critical' : 'border-warning/40 text-warning'
                               )}
                             >
@@ -296,21 +296,21 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
       {/* Pagination Footer */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-border-default px-5 py-3 bg-surface-panel/50">
-          <div className="font-sans text-[11px] text-fg-dimmed font-semibold tracking-wider">
+          <div className="font-sans text-xs text-fg-dimmed font-semibold">
             PAGE <span className="text-fg-base">{pageNo}</span> OF <span className="text-fg-base">{totalPages}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               disabled={pageNo <= 1}
               onClick={() => onChange({ page: pageNo - 1 })}
-              className="px-3 py-1.5 bg-surface-input text-[11px] font-sans font-bold uppercase text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
+              className="px-3 py-1.5 bg-surface-input text-xs font-sans font-bold text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
             >
               Prev
             </button>
             <button
               disabled={pageNo >= totalPages}
               onClick={() => onChange({ page: pageNo + 1 })}
-              className="px-3 py-1.5 bg-surface-input text-[11px] font-sans font-bold uppercase text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
+              className="px-3 py-1.5 bg-surface-input text-xs font-sans font-bold text-fg-base rounded border border-border-default disabled:opacity-30 disabled:cursor-not-allowed hover:not-disabled:bg-surface-elevated transition-colors shadow-sm"
             >
               Next
             </button>

@@ -14,9 +14,9 @@ export function PublicSummary({ detail }: { detail: ProjectDetail }) {
   const progress = o.physicalProgressPct ?? null
 
   return (
-    <div className="h-full space-y-5 border border-border-subtle bg-surface-panel px-5 py-4">
+    <div className="h-full space-y-5 border border-border-subtle bg-surface-panel px-5 py-4 rounded-xl shadow-card overflow-hidden">
       <div>
-        <div className="text-xs font-semibold uppercase tracking-widest text-fg-muted">Delay risk</div>
+        <div className="text-xs font-semibold text-fg-muted">Delay risk</div>
         {t === 'untiered' ? (
           <div className="mt-1 text-sm text-fg-muted">Not rated — the reports give no completion date.</div>
         ) : (
@@ -51,7 +51,7 @@ export function PublicSummary({ detail }: { detail: ProjectDetail }) {
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs font-semibold uppercase tracking-widest text-fg-muted">Top risks</div>
+        <div className="text-xs font-semibold text-fg-muted">Top risks</div>
         {detail.topRisksPlain.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-stable">
             <CheckCircle2 className="size-4 shrink-0" /> No risk flagged in the latest reports.

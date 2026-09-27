@@ -8,16 +8,16 @@
 :root {
   /* ── Surface Tokens ─────────────────────────────────────────────────────── */
   /* Soft Sand/Mist tone. Distinct from pure white for reduced eye strain. */
-  --color-surface-base:     30 15% 91%;         /* Soft beige/sand canvas  */
-  --color-surface-panel:    30 20% 97.5%;       /* Warm chalk surface (no pure white) */
-  --color-surface-input:    30 12% 87%;         /* Soft recessed wells     */
-  --color-surface-elevated: 30 15% 94%;         /* Subtle hover & raised   */
+  --color-surface-base:     30 16% 93%;         /* Soft beige/sand canvas  */
+  --color-surface-panel:    30 25% 98.5%;       /* Warm chalk surface (no pure white) */
+  --color-surface-input:    30 14% 90%;         /* Soft recessed wells     */
+  --color-surface-elevated: 30 18% 95.5%;       /* Subtle hover & raised   */
 
   /* ── Border Tokens ──────────────────────────────────────────────────────── */
   /* Balanced structural boundaries    */
-  --color-border-subtle:  30 12% 84%;          /* Soft grid hairlines     */
-  --color-border-default: 30 12% 76%;          /* Structural dividers    */
-  --color-border-strong:  30 15% 62%;          /* Interactive edges       */
+  --color-border-subtle:  30 14% 88%;          /* Soft grid hairlines     */
+  --color-border-default: 30 12% 81%;          /* Structural dividers    */
+  --color-border-strong:  30 12% 66%;          /* Interactive edges       */
 
   /* ── Semantic Status Colors (Auditor Inks) ──────────────────────────────── */
   /* Functional, restrained, high-contrast on soft chalk surfaces (AAA)        */
@@ -71,14 +71,26 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   scroll-behavior: smooth;
-  font-size: 15px;                         /* Increased base size for better readability */
+  font-size: 16px;                         /* the type scale's root (tailwind.config.ts fontSize) */
 }
 
 body {
   background-color: hsl(var(--color-surface-base));
   color: hsl(var(--color-fg-base));
   min-height: 100dvh;
-  line-height: 1.6;                        /* Looser leading for readability */
+  line-height: 1.55;
+}
+
+/* motion: page and card fade-ins (tailwind animate-page-in / animate-card-in) stop for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Telemetry figures: monospace tabular-nums — enforced globally on .mono */

@@ -12,7 +12,7 @@ function BriefError({ error }: { error: unknown }) {
     return (
       <div className="space-y-1">
         <div className="text-sm font-semibold text-warning">Local LLM not running — start LM Studio</div>
-        <div className="font-mono text-[10px] text-fg-dimmed">{error.message}</div>
+        <div className="text-xs text-fg-dimmed">{error.message}</div>
       </div>
     )
   }
@@ -24,7 +24,7 @@ function BriefError({ error }: { error: unknown }) {
           Brief rejected: it cited numbers that are not in the panel
           {body?.attempts ? ` (${body.attempts} attempts)` : ''}
         </div>
-        <ul className="list-disc pl-5 font-mono text-[11px] text-fg-muted">
+        <ul className="list-disc pl-5 text-xs text-fg-muted">
           {(body?.reasons ?? [error.message]).map((r, i) => (
             <li key={i}>{r}</li>
           ))}
@@ -33,7 +33,7 @@ function BriefError({ error }: { error: unknown }) {
     )
   }
   if (error.status === 404) {
-    return <div className="font-mono text-xs text-fg-dimmed">no brief: {error.message}</div>
+    return <div className="text-xs text-fg-dimmed">no brief: {error.message}</div>
   }
   return <ApiErrorNote error={error} />
 }
@@ -48,11 +48,11 @@ export function BriefCard({ projectKey }: { projectKey: string }) {
   const { data, error, isFetching, refetch } = useBrief(projectKey, requested)
 
   return (
-    <div className="bg-surface-panel border border-border-subtle">
+    <div className="bg-surface-panel border border-border-subtle rounded-xl shadow-card overflow-hidden">
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-        <span className="text-xs font-mono uppercase tracking-widest text-fg-muted">Brief · local LLM</span>
+        <span className="text-xs text-fg-muted">Brief · local LLM</span>
         {data ? (
-          <span className="border border-stable/40 bg-stable/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-stable">
+          <span className="rounded-full bg-stable/10 px-2.5 py-0.5 text-xs font-medium text-stable ring-1 ring-inset ring-stable/20">
             validated: every number traced to the panel
           </span>
         ) : (
@@ -67,7 +67,7 @@ export function BriefCard({ projectKey }: { projectKey: string }) {
       </div>
       <div className="px-4 py-3">
         {isFetching && !data ? (
-          <div className="font-mono text-xs text-fg-dimmed">asking the local model and checking every number it writes…</div>
+          <div className="text-xs text-fg-dimmed">asking the local model and checking every number it writes…</div>
         ) : error ? (
           <BriefError error={error} />
         ) : data ? (
@@ -75,14 +75,14 @@ export function BriefCard({ projectKey }: { projectKey: string }) {
             {data.paragraphs.map((p, i) => (
               <p key={i} className="text-sm leading-relaxed text-fg-base">{p}</p>
             ))}
-            <div className="font-mono text-[10px] text-fg-dimmed">
+            <div className="text-xs text-fg-dimmed">
               {data.nNumbersChecked ?? 0} numbers checked · {data.attempts ?? 1} attempt(s) · {data.modelVersion}
               {data.cached ? ' · cached' : ''}
               {data.generatedAt && ` · written ${formatDateTime(data.generatedAt)}`}
             </div>
           </div>
         ) : (
-          <div className="font-mono text-xs text-fg-dimmed">
+          <div className="text-xs text-fg-dimmed">
             A two-paragraph summary of this panel. Any number the model writes that is not in the panel's data rejects the brief.
           </div>
         )}

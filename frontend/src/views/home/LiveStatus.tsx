@@ -36,7 +36,7 @@ function Strip({ canRun }: { canRun: boolean }) {
   const ingest = data?.watch.lastRun
 
   return (
-    <div className="border border-border-subtle bg-surface-panel px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 font-mono text-[11px] text-fg-muted">
+    <div className="border border-border-subtle bg-surface-panel px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg-muted rounded-xl shadow-card overflow-hidden">
       <span className={cn('flex items-center gap-1.5 font-semibold tracking-widest', state.text)}>
         <span className={cn('inline-block h-2 w-2 rounded-full', state.dot)} />
         {state.label}

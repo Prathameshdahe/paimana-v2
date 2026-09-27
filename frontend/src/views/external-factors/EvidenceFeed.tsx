@@ -13,7 +13,7 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-
 export function SignalCard({ s }: { s: FeedItem }) {
   return (
     <div className="bg-surface-panel px-4 py-3 space-y-1.5 min-w-0">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-fg-dimmed">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-dimmed">
         <span className="text-fg-muted font-semibold">{s.source ?? 'source unknown'}</span>
         <span>{day(s.publishedAt)}</span>
         {s.category && (
@@ -31,12 +31,12 @@ export function SignalCard({ s }: { s: FeedItem }) {
       >
         {s.title ?? s.url}
       </a>
-      {s.summary && <div className="text-[11px] leading-snug text-fg-muted line-clamp-2">{s.summary}</div>}
+      {s.summary && <div className="text-xs leading-snug text-fg-muted line-clamp-2">{s.summary}</div>}
       {s.projects.length === 0 ? (
-        <div className="font-mono text-[10px] text-fg-dimmed">not linked: ambiguous or weak match to a project</div>
+        <div className="text-xs text-fg-dimmed">not linked: ambiguous or weak match to a project</div>
       ) : (
         s.projects.map((p) => (
-          <div key={p.key} className="border-l-2 border-border-default pl-2 font-mono text-[10px] text-fg-dimmed space-y-0.5">
+          <div key={p.key} className="border-l-2 border-border-default pl-2 text-xs text-fg-dimmed space-y-0.5">
             <div className="flex items-center gap-1.5 min-w-0">
               <Badge tier={p.tier} />
               <Link to={`/projects/${p.key}`} className="text-accent hover:underline shrink-0">
@@ -71,7 +71,7 @@ export function EvidenceFeed() {
     <Card
       title={`External Evidence · News${data ? ` · ${data.total}` : ''}`}
       titleRight={
-        <span className="font-mono text-[11px] text-fg-dimmed">
+        <span className="text-xs text-fg-dimmed">
           {lastRun?.finishedAt ? `news scout last ran ${formatDateTime(lastRun.finishedAt)}` : 'news scout has not run yet'}
           {' · '}
           <Link to="/radar" className="text-accent hover:underline">
@@ -83,11 +83,11 @@ export function EvidenceFeed() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">loading news evidence...</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading news evidence...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed space-y-1">
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed space-y-1">
           <div>no news evidence stored yet — not the same as no external trouble</div>
-          <div className="text-[10px]">
+          <div className="text-xs">
             {lastRun
               ? 'the news scout ran but found nothing it could store'
               : 'the news scout (Google News and PIB) has not run on this server: it runs every 24 hours, first 10 minutes after the backend starts, when LIVE_JOBS is on'}
@@ -107,7 +107,7 @@ export function EvidenceFeed() {
       )}
 
       {pages > 1 && (
-        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
           <span>
             page {page} of {pages}
           </span>

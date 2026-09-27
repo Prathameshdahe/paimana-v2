@@ -58,21 +58,21 @@ export const TIER_SENTIMENT = {
 
 /** list flags: a flagged risk-profile dimension, or early notice (flagged external factor, no slip in the numbers yet) */
 export const FLAG_LABEL: Record<Flag, string> = {
-  land: 'land',
-  forest: 'forest',
-  litigation: 'litigation',
-  contractor: 'contractor',
-  early_notice: 'early notice',
+  land: 'Land',
+  forest: 'Forest',
+  litigation: 'Litigation',
+  contractor: 'Contractor',
+  early_notice: 'Early notice',
 }
 
 export const ALERT_KIND_LABEL: Record<AlertKind, string> = {
-  tier_up: 'tier up',
-  tier_down: 'tier down',
-  new_project: 'new project',
-  slip_realised: 'slip realised',
-  signal: 'news signal',
-  early_notice: 'early notice',
-  pipeline_error: 'pipeline error',
+  tier_up: 'Tier up',
+  tier_down: 'Tier down',
+  new_project: 'New project',
+  slip_realised: 'Slip realised',
+  signal: 'News signal',
+  early_notice: 'Early notice',
+  pipeline_error: 'Pipeline error',
 }
 
 /** Badge variant per alert severity (3 highest) */

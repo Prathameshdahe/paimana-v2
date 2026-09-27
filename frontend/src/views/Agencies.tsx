@@ -15,6 +15,7 @@ import {
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAgencyMatrix, useAgencyProjects } from '@/lib/queries'
 import { cn, formatDate, formatINR, formatINRShort, formatProb, orDash } from '@/lib/formatters'
@@ -58,7 +59,7 @@ function AgencyTooltip({ active, payload }: { active?: boolean; payload?: Array<
   const a = payload?.[0]?.payload
   if (!active || !a) return null
   return (
-    <div className="border border-border-default bg-surface-panel px-3 py-2 font-mono text-[11px] text-fg-base shadow-lg space-y-0.5 max-w-[320px]">
+    <div className="border border-border-default bg-surface-panel px-3 py-2 text-xs text-fg-base space-y-0.5 max-w-[320px] rounded-lg shadow-pop overflow-hidden">
       <div className="font-semibold">{a.agency}</div>
       <div className="text-fg-dimmed">{a.ministry ?? 'ministry unknown'} · {a.sector ?? 'sector unknown'}</div>
       <div className="text-fg-muted">
@@ -100,7 +101,7 @@ function MatrixChart({ points, onPick }: { points: AgencyPoint[]; onPick: (a: st
     value,
     position,
     fill: 'hsl(var(--color-fg-dimmed))',
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: 'IBM Plex Mono, monospace',
   })
 
@@ -122,8 +123,8 @@ function MatrixChart({ points, onPick }: { points: AgencyPoint[]; onPick: (a: st
               domain={[x0, x1]}
               ticks={xTicks}
               tickFormatter={(v: number) => `${v}%`}
-              tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }}
-              label={{ value: 'schedule bias: median actual / planned duration − 1', position: 'insideBottom', offset: -16, fontSize: 10, fill: 'hsl(var(--color-fg-muted))' }}
+              tick={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }}
+              label={{ value: 'schedule bias: median actual / planned duration − 1', position: 'insideBottom', offset: -16, fontSize: 12, fill: 'hsl(var(--color-fg-muted))' }}
             />
             <YAxis
               type="number"
@@ -131,8 +132,8 @@ function MatrixChart({ points, onPick }: { points: AgencyPoint[]; onPick: (a: st
               domain={[y0, y1]}
               ticks={yTicks}
               tickFormatter={(v: number) => `${v}%`}
-              tick={{ fontSize: 10, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }}
-              label={{ value: 'cost bias', angle: -90, position: 'insideLeft', fontSize: 10, fill: 'hsl(var(--color-fg-muted))' }}
+              tick={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace', fill: 'hsl(var(--color-fg-dimmed))' }}
+              label={{ value: 'cost bias', angle: -90, position: 'insideLeft', fontSize: 12, fill: 'hsl(var(--color-fg-muted))' }}
             />
             <ZAxis type="number" dataKey="capitalCr" range={[30, 900]} />
             <Tooltip content={<AgencyTooltip />} cursor={{ strokeDasharray: '2 2' }} />
@@ -162,7 +163,7 @@ function MatrixChart({ points, onPick }: { points: AgencyPoint[]; onPick: (a: st
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
         {groups.map((g) => (
           <span key={g.label} className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />
@@ -180,7 +181,7 @@ function Leaderboard({ points, selected, onPick }: { points: AgencyPoint[]; sele
   const rows = [...points].sort((a, b) => (b.scheduleBias ?? -Infinity) - (a.scheduleBias ?? -Infinity))
   return (
     <div className="overflow-x-auto max-h-[520px]">
-      <table className="w-full text-[12px] font-mono border-collapse">
+      <table className="w-full text-xs font-mono border-collapse">
         <thead className="sticky top-0 bg-surface-base">
           <tr className="border-b border-border-default text-fg-muted">
             <th className="py-2 px-3 text-left font-medium">Agency</th>
@@ -223,7 +224,7 @@ function Leaderboard({ points, selected, onPick }: { points: AgencyPoint[]; sele
           ))}
         </tbody>
       </table>
-      <div className="px-3 py-2 font-mono text-[10px] text-fg-dimmed">* n &lt; 10: shown median shrunk toward the sector median; the CI is of the raw median</div>
+      <div className="px-3 py-2 text-xs text-fg-dimmed">* n &lt; 10: shown median shrunk toward the sector median; the CI is of the raw median</div>
     </div>
   )
 }
@@ -237,13 +238,13 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
     <Card
       title={agency}
       titleRight={
-        <button onClick={onClose} className="font-mono text-[11px] text-fg-dimmed hover:text-fg-base" aria-label="Close">
+        <button onClick={onClose} className="text-xs text-fg-dimmed hover:text-fg-base" aria-label="Close">
           close ✕
         </button>
       }
     >
       {point && (
-        <div className="border-b border-border-subtle px-5 py-3 font-mono text-[11px] text-fg-muted space-y-0.5">
+        <div className="border-b border-border-subtle px-5 py-3 text-xs text-fg-muted space-y-0.5">
           <div>{point.ministry ?? 'ministry unknown'} · {point.sector ?? 'sector unknown'}</div>
           <div>
             n {point.nProjects} · schedule {signedPct(point.scheduleBias)}
@@ -254,29 +255,29 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
             sector median: schedule {signedPct(point.sectorScheduleBias)} · cost {signedPct(point.sectorCostBias)}
           </div>
           {point.names && (
-            <div className="text-[10px] text-fg-dimmed truncate" title={point.names}>printed as: {point.names}</div>
+            <div className="text-xs text-fg-dimmed truncate" title={point.names}>printed as: {point.names}</div>
           )}
         </div>
       )}
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">loading projects...</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading projects...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">no current projects: its record is all completed work</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no current projects: its record is all completed work</div>
       ) : (
         <div className={cn('divide-y divide-border-subtle transition-opacity', isFetching && 'opacity-60')}>
-          <div className="px-5 py-2 font-mono text-[10px] uppercase tracking-wider text-fg-dimmed">
+          <div className="px-5 py-2 text-xs text-fg-dimmed">
             {data.total} current projects · riskiest first
           </div>
           {data.items.map((p) => (
             <Link key={p.key} to={`/projects/${p.key}`} className="block px-5 py-2 hover:bg-surface-elevated">
               <div className="flex items-center gap-2 min-w-0">
                 <Badge tier={p.tier} />
-                <span className="font-mono text-[11px] text-accent shrink-0">{p.key}</span>
+                <span className="text-xs text-accent shrink-0">{p.key}</span>
                 <span className="truncate text-xs text-fg-base" title={p.name ?? undefined}>{p.name ?? ''}</span>
               </div>
-              <div className="font-mono text-[10px] text-fg-dimmed pl-[52px]">
+              <div className="text-xs text-fg-dimmed pl-[52px]">
                 P(slip, 2q) {orDash(p.pAny2q, (x) => formatProb(x))} · {orDash(p.anticipatedCostCr, formatINR)} · {p.state ?? 'state unknown'}
               </div>
             </Link>
@@ -284,7 +285,7 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
         </div>
       )}
       {pages > 1 && (
-        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
           <span>page {page} of {pages}</span>
           <span className="flex gap-2">
             <Button size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
@@ -309,30 +310,27 @@ export function Agencies() {
   const point = data?.points.find((p) => p.agency === selected)
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2 pt-4 pb-2">
-        <div>
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">Agency Performance</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            How much longer and costlier each implementing agency's projects have run than first planned.
-          </p>
-        </div>
-        {data && (
-          <div className="font-mono text-[11px] text-fg-dimmed">
-            asof {formatDate(data.asof)} · {data.nAgencies} agencies · {data.nHidden} with n &lt; 5{' '}
-            {showSmall ? 'shown' : 'hidden'}
-          </div>
-        )}
-      </div>
+    <Page>
+      <PageHeader
+        title="Agency Performance"
+        subtitle="How much longer and costlier each agency's projects ran than first planned"
+        actions={
+          data && (
+            <span className="text-xs text-fg-dimmed">
+              as of {formatDate(data.asof)} · {data.nAgencies} agencies · {data.nHidden} with n &lt; 5{' '}
+              {showSmall ? 'shown' : 'hidden'}
+            </span>
+          )
+        }
+      />
 
-      <div className="h-px bg-border-subtle" />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <Card
           className={selected ? 'lg:col-span-2' : 'lg:col-span-3'}
           title={`Agency matrix${data ? ` · ${data.points.length}` : ''}${isFetching ? ' · loading' : ''}`}
           titleRight={
-            <div className="flex items-center gap-3 font-mono text-[11px] text-fg-muted">
+            <div className="flex items-center gap-3 text-xs text-fg-muted">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={showSmall} onChange={(e) => setShowSmall(e.target.checked)} />
                 show agencies with n &lt; 5
@@ -357,9 +355,9 @@ export function Agencies() {
           {error ? (
             <ApiErrorNote error={error} />
           ) : !data ? (
-            <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">loading agency matrix...</div>
+            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">loading agency matrix...</div>
           ) : data.points.length === 0 ? (
-            <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+            <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
               no agency has 5 or more past projects with a known planned duration
             </div>
           ) : view === 'chart' ? (
@@ -367,11 +365,11 @@ export function Agencies() {
           ) : (
             <Leaderboard points={data.points} selected={selected} onPick={setSelected} />
           )}
-          <div className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-muted">
+          <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-muted">
             Small samples are shrunk toward the sector median; this is a historical pattern, not a verdict.
           </div>
           {data && (
-            <details className="border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+            <details className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
               <summary className="cursor-pointer">method</summary>
               <p className="mt-1 leading-relaxed">{data.method}</p>
             </details>
@@ -380,6 +378,6 @@ export function Agencies() {
 
         {selected && <AgencyPanel key={selected} agency={selected} point={point} onClose={() => setSelected(null)} />}
       </div>
-    </div>
+    </Page>
   )
 }

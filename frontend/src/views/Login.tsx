@@ -62,7 +62,7 @@ function ScopePicker({ options, value, onChange, noun, plural }: {
                 <span className="block truncate text-sm font-medium text-fg-base">{o.name}</span>
                 {o.ministry && <span className="block truncate text-xs text-fg-dimmed">{o.ministry}</span>}
               </span>
-              <span className="shrink-0 rounded-full bg-surface-elevated px-2 py-0.5 font-mono text-xs tabular-nums text-fg-muted">
+              <span className="shrink-0 rounded-full bg-surface-elevated px-2 py-0.5 text-xs tabular-nums text-fg-muted">
                 {o.n}
               </span>
             </button>
@@ -142,7 +142,7 @@ export function Login() {
           PAIMANA
           <span className="ml-2 text-base font-bold tracking-widest text-fg-dimmed">RADAR</span>
         </span>
-        <span className="mt-3 font-mono text-xs uppercase tracking-widest text-fg-dimmed">
+        <span className="mt-3 text-xs text-fg-dimmed">
           Early warning &amp; predictive decision support
         </span>
       </motion.div>
@@ -180,7 +180,7 @@ export function Login() {
 
             {picker && (
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-widest text-fg-dimmed">
+                <label className="block text-xs font-semibold text-fg-dimmed">
                   Your {picker.noun}
                 </label>
                 {picker.options ? (
@@ -195,7 +195,7 @@ export function Login() {
 
             {role && (
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-widest text-fg-dimmed">
+                <label className="block text-xs font-semibold text-fg-dimmed">
                   Name <span className="font-normal normal-case tracking-normal">(optional)</span>
                 </label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="py-2 text-sm" />

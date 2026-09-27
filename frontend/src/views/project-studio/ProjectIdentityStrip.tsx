@@ -12,7 +12,7 @@ function basename(path: string): string {
 export function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
   const p = detail.provenance
   return (
-    <div className="font-mono text-[10px] text-fg-dimmed flex flex-wrap gap-x-1.5">
+    <div className="text-xs text-fg-dimmed flex flex-wrap gap-x-1.5">
       <span>asof {p.asof.slice(0, 7)}</span>·
       <span>model {p.modelVersion ?? 'not scored'}</span>·
       <span>gold {p.goldVersion}</span>·
@@ -36,7 +36,7 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
   return (
     <div className="space-y-2">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 font-mono text-[10px] text-fg-dimmed">
+      <div className="flex items-center gap-2 text-xs text-fg-dimmed">
         <Link to="/command" className="hover:text-fg-muted transition-colors">
           COMMAND
         </Link>
@@ -45,10 +45,10 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
       </div>
 
       {/* Identity bar — single horizontal strip */}
-      <div className="border border-border-subtle bg-surface-panel">
+      <div className="border border-border-subtle bg-surface-panel rounded-xl shadow-card overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-3">
           <div className="space-y-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
+            <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
               <span className="text-fg-base font-medium">{detail.key}</span>
               <Badge tier={detail.scores ? detail.scores.tier : undefined} />
               <span className="text-fg-dimmed">{m.sector ?? 'sector unknown'}</span>
@@ -57,7 +57,7 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
 
             <h1 className="text-base font-medium text-fg-base">{m.projectName ?? detail.key}</h1>
 
-            <div className="flex flex-wrap items-center gap-x-4 font-mono text-[10px] text-fg-dimmed">
+            <div className="flex flex-wrap items-center gap-x-4 text-xs text-fg-dimmed">
               <span>{m.ministry ?? 'ministry unknown'}</span>
               <span className="text-border-strong">│</span>
               <span>{m.agency ?? 'agency unknown'}</span>
@@ -75,30 +75,30 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
           </div>
 
           {/* Key figures from the latest report — inline, right-aligned */}
-          <div className="flex items-center gap-5 font-mono text-[11px] shrink-0">
+          <div className="flex items-center gap-5 font-mono text-xs shrink-0">
             <div className="text-right">
-              <div className="text-[9px] uppercase tracking-widest text-fg-dimmed">Anticipated cost</div>
+              <div className="text-xs text-fg-dimmed">Anticipated cost</div>
               <MonoFigure size="lg">{orDash(o.anticipatedCostCr, formatINR)}</MonoFigure>
-              <div className="text-[10px] text-fg-dimmed">orig {orDash(o.originalCostCr, formatINR)}</div>
+              <div className="text-xs text-fg-dimmed">orig {orDash(o.originalCostCr, formatINR)}</div>
             </div>
             <div className="w-px h-8 bg-border-subtle" />
             <div className="text-right">
-              <div className="text-[9px] uppercase tracking-widest text-fg-dimmed">Progress</div>
+              <div className="text-xs text-fg-dimmed">Progress</div>
               <MonoFigure size="lg">{orDash(o.physicalProgressPct, (v) => formatPct(v, 0))}</MonoFigure>
-              <div className="text-[10px] text-fg-dimmed">spent {orDash(o.expenditureCr, formatINR)}</div>
+              <div className="text-xs text-fg-dimmed">spent {orDash(o.expenditureCr, formatINR)}</div>
             </div>
             <div className="w-px h-8 bg-border-subtle" />
             <div className="text-right">
-              <div className="text-[9px] uppercase tracking-widest text-fg-dimmed">Completion</div>
+              <div className="text-xs text-fg-dimmed">Completion</div>
               <MonoFigure size="lg">{orDash(o.anticipatedCompletion, formatDate)}</MonoFigure>
-              <div className="text-[10px] text-fg-dimmed">scheduled {orDash(o.scheduledCompletion, formatDate)}</div>
+              <div className="text-xs text-fg-dimmed">scheduled {orDash(o.scheduledCompletion, formatDate)}</div>
             </div>
           </div>
         </div>
 
         {detail.review && (
-          <div className="border-t border-warning/30 bg-warning/5 px-4 py-1.5 font-mono text-[10px] text-warning">
-            [IDENTITY UNDER REVIEW] {detail.review.note}
+          <div className="border-t border-warning/30 bg-warning/5 px-4 py-1.5 text-xs text-warning">
+            Identity under review: {detail.review.note}
           </div>
         )}
       </div>

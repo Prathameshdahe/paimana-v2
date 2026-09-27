@@ -8,7 +8,7 @@ interface MonoFigureProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const sizeClasses = {
-  xs: 'text-[11px] leading-none',
+  xs: 'text-xs leading-none',
   sm: 'text-xs leading-none',
   base: 'text-sm leading-none',
   lg: 'text-base leading-none',

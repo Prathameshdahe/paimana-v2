@@ -10,13 +10,13 @@ export function AnaloguesTable({ forecast }: { forecast: Forecast | undefined })
   return (
     <Card title={`Analogue Projects · ${rows.length}`} className="h-full">
       <div className="px-4 py-2.5 border-b border-border-subtle text-xs text-fg-base">
-        {forecast ? forecast.analogueSummary : <span className="font-mono text-fg-dimmed">no forecast for this project</span>}
+        {forecast ? forecast.analogueSummary : <span className="text-fg-dimmed">no forecast for this project</span>}
       </div>
       {rows.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left font-mono text-[12px]">
+          <table className="w-full border-collapse text-left font-mono text-xs">
             <thead>
-              <tr className="border-b border-border-default text-fg-dimmed font-sans text-[10px] uppercase tracking-wider">
+              <tr className="border-b border-border-default text-fg-dimmed font-sans text-xs">
                 <th className="py-2 px-4 font-semibold">#</th>
                 <th className="py-2 px-4 font-semibold">Project</th>
                 <th className="py-2 px-4 font-semibold">At stage</th>
@@ -34,7 +34,7 @@ export function AnaloguesTable({ forecast }: { forecast: Forecast | undefined })
                     <Link to={`/projects/${a.analogueKey}`} className="block truncate font-sans text-fg-base hover:underline" title={a.analogueName ?? undefined}>
                       {a.analogueName ?? a.analogueKey}
                     </Link>
-                    <span className="text-[10px] text-fg-dimmed">{a.analogueKey} · {a.basis ?? ''} pool</span>
+                    <span className="text-xs text-fg-dimmed">{a.analogueKey} · {a.basis ?? ''} pool</span>
                   </td>
                   <td className="py-2 px-4 text-fg-muted">{orDash(a.analoguePeriod, formatDate)}</td>
                   <td className="py-2 px-4 text-right text-fg-muted">{orDash(a.distance, (v) => v.toFixed(2))}</td>

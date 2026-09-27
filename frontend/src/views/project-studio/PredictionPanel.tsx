@@ -29,7 +29,7 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
 
   if (!s) {
     return (
-      <div className="border border-border-subtle bg-surface-panel rounded-sm px-4 py-6 font-mono text-xs text-fg-dimmed text-center">
+      <div className="border border-border-subtle bg-surface-panel px-4 py-6 text-xs text-fg-dimmed text-center rounded-xl shadow-card overflow-hidden">
         Not in the current scored portfolio (asof {detail.provenance.asof})
         {detail.master?.lastStatus && <> — last status: {detail.master.lastStatus}</>}.
       </div>
@@ -42,25 +42,25 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
   const cost = interval(s.costPctP05, s.costPctP50, s.costPctP95, (v) => formatPct(v, 1))
 
   return (
-    <div className="border border-border-subtle bg-surface-panel h-full rounded-sm">
+    <div className="border border-border-subtle bg-surface-panel h-full rounded-xl shadow-card overflow-hidden">
       <div className="flex flex-col divide-y divide-border-subtle h-full">
         {/* Tier */}
         <div className="px-4 py-3 space-y-1.5">
-          <div className="text-xs font-mono uppercase tracking-widest text-fg-muted">AI Prediction · next 2 quarters</div>
+          <div className="text-xs text-fg-muted">AI Prediction · next 2 quarters</div>
           {untiered ? (
-            <div className="font-mono text-sm text-fg-muted border-l-2 border-border-strong pl-3 py-1">{NOT_SCORED}</div>
+            <div className="text-sm text-fg-muted border-l-2 border-border-strong pl-3 py-1">{NOT_SCORED}</div>
           ) : (
             <div className="flex items-baseline gap-3">
               <MonoFigure size="3xl" sentiment={TIER_SENTIMENT[t]}>
                 {TIER_LABEL[t]}
               </MonoFigure>
-              <span className="font-mono text-xs text-fg-muted">
+              <span className="text-xs text-fg-muted">
                 {orDash(s.tierRankPct, (v) => `top ${formatPct(v * 100, v < 0.01 ? 1 : 0)}`)} by P(slip, 2q)
               </span>
             </div>
           )}
           {s.stagnationOverride && (
-            <div className="font-mono text-[11px] text-warning">
+            <div className="text-xs text-warning">
               tier raised by the stagnation rule ({orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without
               progress; by rank alone: {s.tierByRank ?? 'untiered'})
             </div>
@@ -85,27 +85,27 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
 
         {/* Slip months */}
         <div className="px-4 py-3 space-y-1">
-          <div className="text-xs font-mono text-fg-muted">Expected slip, next 2 quarters (p50)</div>
+          <div className="text-xs text-fg-muted">Expected slip, next 2 quarters (p50)</div>
           {untiered ? (
-            <div className="font-mono text-xs text-fg-dimmed">{NOT_SCORED}</div>
+            <div className="text-xs text-fg-dimmed">{NOT_SCORED}</div>
           ) : (
             <div className="flex items-baseline gap-3">
               <MonoFigure size="2xl" sentiment="warning">{slip.mid}</MonoFigure>
-              <span className="font-mono text-xs text-fg-muted">{slip.band}</span>
+              <span className="text-xs text-fg-muted">{slip.band}</span>
             </div>
           )}
         </div>
 
         {/* Cost % */}
         <div className="px-4 py-3 space-y-1">
-          <div className="text-xs font-mono text-fg-muted">Expected cost revision, next 2 quarters (p50)</div>
+          <div className="text-xs text-fg-muted">Expected cost revision, next 2 quarters (p50)</div>
           <div className="flex items-baseline gap-3">
             <MonoFigure size="2xl" sentiment="critical">{cost.mid}</MonoFigure>
-            <span className="font-mono text-xs text-fg-muted">{cost.band}</span>
+            <span className="text-xs text-fg-muted">{cost.band}</span>
           </div>
         </div>
 
-        <div className="px-4 py-2 font-mono text-[10px] text-fg-dimmed leading-relaxed">
+        <div className="px-4 py-2 text-xs text-fg-dimmed leading-relaxed">
           Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.
           Intervals are the 5th–95th percentile of LightGBM quantile models.
         </div>

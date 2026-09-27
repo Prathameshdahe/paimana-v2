@@ -35,7 +35,7 @@ export function EarlyWarningInbox() {
     <Card
       title="Early Warning Inbox"
       titleRight={
-        <span className="text-[11px] font-mono text-fg-dimmed">{data ? `${data.total} open` : ''}</span>
+        <span className="text-xs text-fg-dimmed">{data ? `${data.total} open` : ''}</span>
       }
       className="h-full flex flex-col"
     >
@@ -49,13 +49,13 @@ export function EarlyWarningInbox() {
               setPage(1)
             }}
             className={cn(
-              'border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors',
+              'border px-2 py-0.5 text-xs transition-colors',
               kind === k
                 ? 'border-fg-base bg-fg-base text-fg-inverse'
                 : 'border-border-default text-fg-dimmed hover:text-fg-base hover:border-border-strong'
             )}
           >
-            {k ? ALERT_KIND_LABEL[k] : 'all'}
+            {k ? ALERT_KIND_LABEL[k] : 'All'}
           </button>
         ))}
       </div>
@@ -63,11 +63,11 @@ export function EarlyWarningInbox() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : isLoading || !data ? (
-        <div className="px-5 py-8 text-center text-xs font-mono text-fg-dimmed">loading alerts...</div>
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading alerts...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center text-xs font-mono text-fg-dimmed">
+        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
           {kind
-            ? `No open ${ALERT_KIND_LABEL[kind]} alerts.`
+            ? `No open ${ALERT_KIND_LABEL[kind].toLowerCase()} alerts.`
             : 'No open alerts — every alert has been acknowledged.'}
         </div>
       ) : (
@@ -75,7 +75,7 @@ export function EarlyWarningInbox() {
           {data.items.map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-elevated">
               <Badge variant={alertVariant(a.severity)} className="w-[92px] shrink-0">
-                [{(ALERT_KIND_LABEL[a.kind] ?? a.kind).toUpperCase()}]
+                {ALERT_KIND_LABEL[a.kind] ?? a.kind}
               </Badge>
               <button
                 onClick={() => a.projectKey && navigate(`/projects/${a.projectKey}`)}
@@ -83,7 +83,7 @@ export function EarlyWarningInbox() {
                 className="flex-1 min-w-0 text-left disabled:cursor-default"
               >
                 <div className="truncate text-xs font-medium text-fg-base">{a.title ?? a.kind}</div>
-                <div className="truncate text-[11px] font-mono text-fg-dimmed" title={a.detail ?? undefined}>
+                <div className="truncate text-xs text-fg-dimmed" title={a.detail ?? undefined}>
                   {a.projectKey && <>{a.projectKey} · </>}
                   {a.detail}
                   {a.asof && <> · asof {formatDate(a.asof)}</>}
@@ -107,13 +107,13 @@ export function EarlyWarningInbox() {
       )}
 
       {ack.isError && (
-        <div className="border-t border-border-subtle px-5 py-1.5 font-mono text-[10px] text-critical">
+        <div className="border-t border-border-subtle px-5 py-1.5 text-xs text-critical">
           acknowledge failed: {String(ack.error)}
         </div>
       )}
 
       {pages > 1 && (
-        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 font-mono text-[10px] text-fg-dimmed">
+        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
           <span>
             page {page} of {pages}
           </span>

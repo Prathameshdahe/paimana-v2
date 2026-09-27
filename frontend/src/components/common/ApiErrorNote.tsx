@@ -13,11 +13,11 @@ export function ApiErrorNote({ error, className }: { error: unknown; className?:
     error instanceof ApiError ? `API error ${error.status}: ${error.message}` : String(error)
 
   return (
-    <div className={cn('px-5 py-8 text-center font-mono text-xs text-fg-dimmed space-y-2', className)}>
+    <div className={cn('px-5 py-8 text-center text-xs text-fg-dimmed space-y-2', className)}>
       <div className={offline ? 'text-critical font-semibold' : 'text-fg-muted'}>
         {offline ? 'backend not reachable — start uvicorn' : message}
       </div>
-      {offline && <code className="block text-[11px] text-fg-muted">{START_BACKEND}</code>}
+      {offline && <code className="block text-xs text-fg-muted">{START_BACKEND}</code>}
       <button
         onClick={() => client.refetchQueries({ type: 'active' })}
         className="underline underline-offset-2 hover:text-fg-base"

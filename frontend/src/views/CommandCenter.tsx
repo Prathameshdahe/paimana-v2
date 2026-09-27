@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useProjects, type ProjectQuery } from '@/lib/queries'
 import { FLAG_LABEL } from '@/lib/riskPalette'
 import type { Flag } from '@/contracts/project'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { KPIRibbon } from './command-center/KPIRibbon'
 import { PortfolioUrgencyMatrix } from './command-center/PortfolioUrgencyMatrix'
 import { TriageTable } from './command-center/TriageTable'
@@ -38,25 +39,17 @@ export function CommandCenter() {
     setQuery((q) => ({ ...q, ...patch, page: patch.page ?? 1 }))
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      {/* Page header — pronounced, distinct from content */}
-      <div className="flex items-end justify-between pt-4 pb-2">
-        <div className="flex items-center gap-4">
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">
-            Executive Command Center
-          </h1>
-        </div>
-        <div className="font-mono text-[11px] text-fg-muted uppercase tracking-widest flex items-center gap-2">
-          telemetry pipeline{' '}
-          {projects.error ? (
-            <span className="text-critical font-bold">unreachable</span>
-          ) : (
-            <span className="text-stable font-bold">operational</span>
-          )}
-        </div>
-      </div>
-
-      <div className="h-px bg-border-subtle" />
+    <Page>
+      <PageHeader
+        title="Command Center"
+        subtitle="Every open project, ranked by the chance it slips in the next two quarters"
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            <span className={projects.error ? 'size-2 rounded-full bg-critical' : 'size-2 rounded-full bg-stable'} />
+            {projects.error ? 'data service unreachable' : 'data service up'}
+          </span>
+        }
+      />
 
       <KPIRibbon />
       <PortfolioUrgencyMatrix
@@ -74,6 +67,6 @@ export function CommandCenter() {
         onOpenDetail={setDrawerKey}
       />
       <ProjectDetailDrawer projectKey={drawerKey} onClose={() => setDrawerKey(null)} />
-    </div>
+    </Page>
   )
 }
