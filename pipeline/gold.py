@@ -171,14 +171,19 @@ def build_labels(obs, h):
     """Outcome h quarters after each row, from the same key's observation at exactly t + h quarters.
     Rows completed at t and rows without an observation at t + h are dropped; a target whose inputs are
     null stays null. y_any is labelled only when both flags are known: were it true whenever one known flag
-    is true, rows missing one input would be labelled only when positive and the model would learn the gap."""
-    cols = ["project_key", "anticipated_cost_cr", "anticipated_completion"]
+    is true, rows missing one input would be labelled only when positive and the model would learn the gap.
+    A value taken from a different field at t + h than at t (cost_basis / completion_basis: anticipated, revised,
+    original) is not compared either: from 2025-07 the flash reports print no anticipated cost or date, and QPISR
+    anticipated vs flash revised is a change of report format, not a revision."""
+    cols = ["project_key", "anticipated_cost_cr", "anticipated_completion", "cost_basis", "completion_basis"]
     q = qindex(obs["period"])
     now = obs.loc[~obs["is_completed"], cols + ["period"]].assign(_q=q + h)
     later = obs[cols + ["period"]].assign(_q=q).rename(columns={"period": "target_period"})
     m = now.merge(later, on=["project_key", "_q"], suffixes=("", "_h"), validate="1:1")
-    slip = months(m["anticipated_completion_h"]) - months(m["anticipated_completion"])
-    cost_pct = (m["anticipated_cost_cr_h"] / m["anticipated_cost_cr"].where(m["anticipated_cost_cr"] > 0) - 1) * 100
+    slip = (months(m["anticipated_completion_h"]) - months(m["anticipated_completion"])).where(
+        m["completion_basis"].eq(m["completion_basis_h"]))
+    cost_pct = ((m["anticipated_cost_cr_h"] / m["anticipated_cost_cr"].where(m["anticipated_cost_cr"] > 0) - 1)
+                * 100).where(m["cost_basis"].eq(m["cost_basis_h"]))
     date_push = pd.Series(slip >= DATE_STEP, dtype="boolean").mask(slip.isna())
     cost_rev = pd.Series(m["anticipated_cost_cr_h"] >= COST_STEP * m["anticipated_cost_cr"],
                          dtype="boolean").mask(cost_pct.isna())

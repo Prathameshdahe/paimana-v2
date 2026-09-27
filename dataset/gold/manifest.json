@@ -1,8 +1,8 @@
 {
-  "gold_version": "dbb544673008",
+  "gold_version": "3bafb1f033a6",
   "silver_version": "0d8abdcfc7cf",
-  "run_id": "RUN-20260927-121720",
-  "built_at": "2026-09-27T12:17:20+00:00",
+  "run_id": "RUN-20260927-124209",
+  "built_at": "2026-09-27T12:42:09+00:00",
   "latest_period": "2026-07-01",
   "horizons_quarters": [
     2,
@@ -109,42 +109,42 @@
   "labelled": {
     "h2": {
       "y_date_push": {
-        "n": 46003,
-        "pos_rate": 0.3552
+        "n": 44452,
+        "pos_rate": 0.3534
       },
       "y_cost_rev": {
-        "n": 58068,
-        "pos_rate": 0.0579
+        "n": 54311,
+        "pos_rate": 0.0522
       },
       "y_any": {
-        "n": 46003,
-        "pos_rate": 0.385
+        "n": 43130,
+        "pos_rate": 0.3831
       },
       "y_months": {
-        "n": 46003
+        "n": 44452
       },
       "y_cost_pct": {
-        "n": 58068
+        "n": 54311
       }
     },
     "h4": {
       "y_date_push": {
-        "n": 36520,
-        "pos_rate": 0.5599
+        "n": 33042,
+        "pos_rate": 0.5495
       },
       "y_cost_rev": {
-        "n": 46756,
-        "pos_rate": 0.1158
+        "n": 40767,
+        "pos_rate": 0.1048
       },
       "y_any": {
-        "n": 36520,
-        "pos_rate": 0.5955
+        "n": 31778,
+        "pos_rate": 0.5855
       },
       "y_months": {
-        "n": 36520
+        "n": 33042
       },
       "y_cost_pct": {
-        "n": 46756
+        "n": 40767
       }
     }
   },
@@ -152,19 +152,19 @@
     "h2": {
       "2005": {
         "y_date_push": {
-          "n": 702,
-          "pos_rate": 0.3063
+          "n": 701,
+          "pos_rate": 0.3067
         },
         "y_cost_rev": {
           "n": 984,
           "pos_rate": 0.0691
         },
         "y_any": {
-          "n": 702,
-          "pos_rate": 0.3476
+          "n": 701,
+          "pos_rate": 0.3481
         },
         "y_months": {
-          "n": 702
+          "n": 701
         },
         "y_cost_pct": {
           "n": 984
@@ -172,19 +172,19 @@
       },
       "2006": {
         "y_date_push": {
-          "n": 1337,
-          "pos_rate": 0.2827
+          "n": 1334,
+          "pos_rate": 0.2826
         },
         "y_cost_rev": {
           "n": 1729,
           "pos_rate": 0.0833
         },
         "y_any": {
-          "n": 1337,
+          "n": 1334,
           "pos_rate": 0.3418
         },
         "y_months": {
-          "n": 1337
+          "n": 1334
         },
         "y_cost_pct": {
           "n": 1729
@@ -192,19 +192,19 @@
       },
       "2007": {
         "y_date_push": {
-          "n": 1521,
-          "pos_rate": 0.4089
+          "n": 1513,
+          "pos_rate": 0.4098
         },
         "y_cost_rev": {
           "n": 1887,
           "pos_rate": 0.0684
         },
         "y_any": {
-          "n": 1521,
-          "pos_rate": 0.4477
+          "n": 1513,
+          "pos_rate": 0.4488
         },
         "y_months": {
-          "n": 1521
+          "n": 1513
         },
         "y_cost_pct": {
           "n": 1887
@@ -212,19 +212,19 @@
       },
       "2008": {
         "y_date_push": {
-          "n": 1569,
-          "pos_rate": 0.327
+          "n": 1550,
+          "pos_rate": 0.329
         },
         "y_cost_rev": {
           "n": 1957,
           "pos_rate": 0.0562
         },
         "y_any": {
-          "n": 1569,
-          "pos_rate": 0.355
+          "n": 1550,
+          "pos_rate": 0.3574
         },
         "y_months": {
-          "n": 1569
+          "n": 1550
         },
         "y_cost_pct": {
           "n": 1957
@@ -232,99 +232,99 @@
       },
       "2009": {
         "y_date_push": {
-          "n": 1481,
-          "pos_rate": 0.4389
+          "n": 1473,
+          "pos_rate": 0.4379
         },
         "y_cost_rev": {
-          "n": 1657,
-          "pos_rate": 0.0797
+          "n": 1656,
+          "pos_rate": 0.0791
         },
         "y_any": {
-          "n": 1481,
-          "pos_rate": 0.4916
+          "n": 1472,
+          "pos_rate": 0.4898
         },
         "y_months": {
-          "n": 1481
+          "n": 1473
         },
         "y_cost_pct": {
-          "n": 1657
+          "n": 1656
         }
       },
       "2010": {
         "y_date_push": {
-          "n": 1451,
-          "pos_rate": 0.4108
+          "n": 1426,
+          "pos_rate": 0.4137
         },
         "y_cost_rev": {
-          "n": 1655,
-          "pos_rate": 0.0725
+          "n": 1560,
+          "pos_rate": 0.0712
         },
         "y_any": {
-          "n": 1451,
-          "pos_rate": 0.4431
+          "n": 1390,
+          "pos_rate": 0.4439
         },
         "y_months": {
-          "n": 1451
+          "n": 1426
         },
         "y_cost_pct": {
-          "n": 1655
+          "n": 1560
         }
       },
       "2011": {
         "y_date_push": {
-          "n": 1576,
-          "pos_rate": 0.3293
+          "n": 1545,
+          "pos_rate": 0.3327
         },
         "y_cost_rev": {
-          "n": 1774,
-          "pos_rate": 0.0682
+          "n": 1683,
+          "pos_rate": 0.0677
         },
         "y_any": {
-          "n": 1576,
-          "pos_rate": 0.3604
+          "n": 1510,
+          "pos_rate": 0.3576
         },
         "y_months": {
-          "n": 1576
+          "n": 1545
         },
         "y_cost_pct": {
-          "n": 1774
+          "n": 1683
         }
       },
       "2012": {
         "y_date_push": {
-          "n": 1712,
-          "pos_rate": 0.3435
+          "n": 1700,
+          "pos_rate": 0.3441
         },
         "y_cost_rev": {
-          "n": 1834,
-          "pos_rate": 0.0513
+          "n": 1785,
+          "pos_rate": 0.0499
         },
         "y_any": {
-          "n": 1712,
-          "pos_rate": 0.3762
+          "n": 1686,
+          "pos_rate": 0.3737
         },
         "y_months": {
-          "n": 1712
+          "n": 1700
         },
         "y_cost_pct": {
-          "n": 1834
+          "n": 1785
         }
       },
       "2013": {
         "y_date_push": {
-          "n": 1748,
-          "pos_rate": 0.3244
+          "n": 1744,
+          "pos_rate": 0.3245
         },
         "y_cost_rev": {
           "n": 2221,
           "pos_rate": 0.0504
         },
         "y_any": {
-          "n": 1748,
-          "pos_rate": 0.3484
+          "n": 1744,
+          "pos_rate": 0.3486
         },
         "y_months": {
-          "n": 1748
+          "n": 1744
         },
         "y_cost_pct": {
           "n": 2221
@@ -332,142 +332,142 @@
       },
       "2014": {
         "y_date_push": {
-          "n": 1747,
-          "pos_rate": 0.4081
+          "n": 1719,
+          "pos_rate": 0.4124
         },
         "y_cost_rev": {
-          "n": 2592,
-          "pos_rate": 0.0795
+          "n": 2561,
+          "pos_rate": 0.0793
         },
         "y_any": {
-          "n": 1747,
-          "pos_rate": 0.443
+          "n": 1718,
+          "pos_rate": 0.4476
         },
         "y_months": {
-          "n": 1747
+          "n": 1719
         },
         "y_cost_pct": {
-          "n": 2592
+          "n": 2561
         }
       },
       "2015": {
         "y_date_push": {
-          "n": 1830,
-          "pos_rate": 0.3049
+          "n": 1815,
+          "pos_rate": 0.3063
         },
         "y_cost_rev": {
-          "n": 3041,
-          "pos_rate": 0.0335
+          "n": 3013,
+          "pos_rate": 0.0329
         },
         "y_any": {
-          "n": 1830,
-          "pos_rate": 0.3191
+          "n": 1815,
+          "pos_rate": 0.319
         },
         "y_months": {
-          "n": 1830
+          "n": 1815
         },
         "y_cost_pct": {
-          "n": 3041
+          "n": 3013
         }
       },
       "2016": {
         "y_date_push": {
-          "n": 2696,
-          "pos_rate": 0.2656
+          "n": 2663,
+          "pos_rate": 0.267
         },
         "y_cost_rev": {
-          "n": 4270,
-          "pos_rate": 0.0461
+          "n": 4141,
+          "pos_rate": 0.0464
         },
         "y_any": {
-          "n": 2696,
-          "pos_rate": 0.2852
+          "n": 2663,
+          "pos_rate": 0.2858
         },
         "y_months": {
-          "n": 2696
+          "n": 2663
         },
         "y_cost_pct": {
-          "n": 4270
+          "n": 4141
         }
       },
       "2017": {
         "y_date_push": {
-          "n": 2288,
-          "pos_rate": 0.1792
+          "n": 2235,
+          "pos_rate": 0.1803
         },
         "y_cost_rev": {
-          "n": 3572,
-          "pos_rate": 0.0412
+          "n": 3509,
+          "pos_rate": 0.041
         },
         "y_any": {
-          "n": 2288,
-          "pos_rate": 0.2111
+          "n": 2235,
+          "pos_rate": 0.2112
         },
         "y_months": {
-          "n": 2288
+          "n": 2235
         },
         "y_cost_pct": {
-          "n": 3572
+          "n": 3509
         }
       },
       "2021": {
         "y_date_push": {
-          "n": 2800,
-          "pos_rate": 0.4032
+          "n": 2679,
+          "pos_rate": 0.3949
         },
         "y_cost_rev": {
-          "n": 4812,
-          "pos_rate": 0.0644
+          "n": 4659,
+          "pos_rate": 0.065
         },
         "y_any": {
-          "n": 2800,
-          "pos_rate": 0.4339
+          "n": 2671,
+          "pos_rate": 0.4257
         },
         "y_months": {
-          "n": 2800
+          "n": 2679
         },
         "y_cost_pct": {
-          "n": 4812
+          "n": 4659
         }
       },
       "2022": {
         "y_date_push": {
-          "n": 5098,
-          "pos_rate": 0.3937
+          "n": 4929,
+          "pos_rate": 0.3968
         },
         "y_cost_rev": {
-          "n": 5945,
-          "pos_rate": 0.0496
+          "n": 5621,
+          "pos_rate": 0.0441
         },
         "y_any": {
-          "n": 5098,
-          "pos_rate": 0.4151
+          "n": 4916,
+          "pos_rate": 0.4186
         },
         "y_months": {
-          "n": 5098
+          "n": 4929
         },
         "y_cost_pct": {
-          "n": 5945
+          "n": 5621
         }
       },
       "2023": {
         "y_date_push": {
-          "n": 6114,
-          "pos_rate": 0.3556
+          "n": 6103,
+          "pos_rate": 0.3559
         },
         "y_cost_rev": {
-          "n": 6220,
-          "pos_rate": 0.0595
+          "n": 5294,
+          "pos_rate": 0.0499
         },
         "y_any": {
-          "n": 6114,
-          "pos_rate": 0.386
+          "n": 5249,
+          "pos_rate": 0.409
         },
         "y_months": {
-          "n": 6114
+          "n": 6103
         },
         "y_cost_pct": {
-          "n": 6220
+          "n": 5294
         }
       },
       "2024": {
@@ -476,38 +476,38 @@
           "pos_rate": 0.3385
         },
         "y_cost_rev": {
-          "n": 6754,
-          "pos_rate": 0.0437
+          "n": 6434,
+          "pos_rate": 0.0398
         },
         "y_any": {
-          "n": 6710,
-          "pos_rate": 0.3556
+          "n": 6399,
+          "pos_rate": 0.3526
         },
         "y_months": {
           "n": 6710
         },
         "y_cost_pct": {
-          "n": 6754
+          "n": 6434
         }
       },
       "2025": {
         "y_date_push": {
-          "n": 2293,
-          "pos_rate": 0.4727
+          "n": 1283,
+          "pos_rate": 0.484
         },
         "y_cost_rev": {
-          "n": 3511,
-          "pos_rate": 0.0963
+          "n": 1976,
+          "pos_rate": 0.0238
         },
         "y_any": {
-          "n": 2293,
-          "pos_rate": 0.5294
+          "n": 1246,
+          "pos_rate": 0.4936
         },
         "y_months": {
-          "n": 2293
+          "n": 1283
         },
         "y_cost_pct": {
-          "n": 3511
+          "n": 1976
         }
       },
       "2026": {
@@ -516,25 +516,25 @@
           "pos_rate": 0.4729
         },
         "y_cost_rev": {
-          "n": 1653,
-          "pos_rate": 0.0436
+          "n": 1641,
+          "pos_rate": 0.0439
         },
         "y_any": {
-          "n": 1330,
-          "pos_rate": 0.512
+          "n": 1318,
+          "pos_rate": 0.5144
         },
         "y_months": {
           "n": 1330
         },
         "y_cost_pct": {
-          "n": 1653
+          "n": 1641
         }
       }
     },
     "h4": {
       "2005": {
         "y_date_push": {
-          "n": 632,
+          "n": 630,
           "pos_rate": 0.4905
         },
         "y_cost_rev": {
@@ -542,11 +542,11 @@
           "pos_rate": 0.1496
         },
         "y_any": {
-          "n": 632,
-          "pos_rate": 0.5617
+          "n": 630,
+          "pos_rate": 0.5619
         },
         "y_months": {
-          "n": 632
+          "n": 630
         },
         "y_cost_pct": {
           "n": 916
@@ -554,19 +554,19 @@
       },
       "2006": {
         "y_date_push": {
-          "n": 1232,
-          "pos_rate": 0.4765
+          "n": 1228,
+          "pos_rate": 0.478
         },
         "y_cost_rev": {
           "n": 1643,
           "pos_rate": 0.1388
         },
         "y_any": {
-          "n": 1232,
-          "pos_rate": 0.5544
+          "n": 1228,
+          "pos_rate": 0.5554
         },
         "y_months": {
-          "n": 1232
+          "n": 1228
         },
         "y_cost_pct": {
           "n": 1643
@@ -574,19 +574,19 @@
       },
       "2007": {
         "y_date_push": {
-          "n": 1362,
-          "pos_rate": 0.5646
+          "n": 1352,
+          "pos_rate": 0.5666
         },
         "y_cost_rev": {
           "n": 1769,
           "pos_rate": 0.1357
         },
         "y_any": {
-          "n": 1362,
-          "pos_rate": 0.6123
+          "n": 1352,
+          "pos_rate": 0.6146
         },
         "y_months": {
-          "n": 1362
+          "n": 1352
         },
         "y_cost_pct": {
           "n": 1769
@@ -594,19 +594,19 @@
       },
       "2008": {
         "y_date_push": {
-          "n": 1186,
-          "pos_rate": 0.6273
+          "n": 1171,
+          "pos_rate": 0.6328
         },
         "y_cost_rev": {
           "n": 1455,
           "pos_rate": 0.0997
         },
         "y_any": {
-          "n": 1186,
-          "pos_rate": 0.661
+          "n": 1171,
+          "pos_rate": 0.6661
         },
         "y_months": {
-          "n": 1186
+          "n": 1171
         },
         "y_cost_pct": {
           "n": 1455
@@ -614,282 +614,282 @@
       },
       "2009": {
         "y_date_push": {
-          "n": 1041,
-          "pos_rate": 0.6369
+          "n": 1027,
+          "pos_rate": 0.6388
         },
         "y_cost_rev": {
-          "n": 1184,
-          "pos_rate": 0.152
+          "n": 1142,
+          "pos_rate": 0.155
         },
         "y_any": {
-          "n": 1041,
-          "pos_rate": 0.7003
+          "n": 1017,
+          "pos_rate": 0.7011
         },
         "y_months": {
-          "n": 1041
+          "n": 1027
         },
         "y_cost_pct": {
-          "n": 1184
+          "n": 1142
         }
       },
       "2010": {
         "y_date_push": {
-          "n": 1265,
-          "pos_rate": 0.5779
+          "n": 1237,
+          "pos_rate": 0.5853
         },
         "y_cost_rev": {
-          "n": 1518,
-          "pos_rate": 0.1271
+          "n": 1384,
+          "pos_rate": 0.1315
         },
         "y_any": {
-          "n": 1265,
-          "pos_rate": 0.619
+          "n": 1204,
+          "pos_rate": 0.6163
         },
         "y_months": {
-          "n": 1265
+          "n": 1237
         },
         "y_cost_pct": {
-          "n": 1518
+          "n": 1384
         }
       },
       "2011": {
         "y_date_push": {
-          "n": 1442,
-          "pos_rate": 0.5062
+          "n": 1408,
+          "pos_rate": 0.5142
         },
         "y_cost_rev": {
-          "n": 1656,
-          "pos_rate": 0.1165
+          "n": 1528,
+          "pos_rate": 0.1217
         },
         "y_any": {
-          "n": 1442,
-          "pos_rate": 0.5541
+          "n": 1378,
+          "pos_rate": 0.5522
         },
         "y_months": {
-          "n": 1442
+          "n": 1408
         },
         "y_cost_pct": {
-          "n": 1656
+          "n": 1528
         }
       },
       "2012": {
         "y_date_push": {
-          "n": 1613,
-          "pos_rate": 0.5282
+          "n": 1600,
+          "pos_rate": 0.53
         },
         "y_cost_rev": {
-          "n": 1751,
-          "pos_rate": 0.0925
+          "n": 1707,
+          "pos_rate": 0.0926
         },
         "y_any": {
-          "n": 1613,
-          "pos_rate": 0.5611
+          "n": 1590,
+          "pos_rate": 0.5616
         },
         "y_months": {
-          "n": 1613
+          "n": 1600
         },
         "y_cost_pct": {
-          "n": 1751
+          "n": 1707
         }
       },
       "2013": {
         "y_date_push": {
-          "n": 1604,
-          "pos_rate": 0.5318
+          "n": 1586,
+          "pos_rate": 0.5366
         },
         "y_cost_rev": {
-          "n": 2108,
-          "pos_rate": 0.0958
+          "n": 2089,
+          "pos_rate": 0.0962
         },
         "y_any": {
-          "n": 1604,
-          "pos_rate": 0.5561
+          "n": 1586,
+          "pos_rate": 0.5605
         },
         "y_months": {
-          "n": 1604
+          "n": 1586
         },
         "y_cost_pct": {
-          "n": 2108
+          "n": 2089
         }
       },
       "2014": {
         "y_date_push": {
-          "n": 1479,
-          "pos_rate": 0.5801
+          "n": 1443,
+          "pos_rate": 0.5897
         },
         "y_cost_rev": {
-          "n": 2462,
-          "pos_rate": 0.1223
+          "n": 2405,
+          "pos_rate": 0.1202
         },
         "y_any": {
-          "n": 1479,
-          "pos_rate": 0.6187
+          "n": 1442,
+          "pos_rate": 0.6262
         },
         "y_months": {
-          "n": 1479
+          "n": 1443
         },
         "y_cost_pct": {
-          "n": 2462
+          "n": 2405
         }
       },
       "2015": {
         "y_date_push": {
-          "n": 1720,
-          "pos_rate": 0.507
+          "n": 1682,
+          "pos_rate": 0.5083
         },
         "y_cost_rev": {
-          "n": 2922,
-          "pos_rate": 0.0859
+          "n": 2796,
+          "pos_rate": 0.0862
         },
         "y_any": {
-          "n": 1720,
-          "pos_rate": 0.5314
+          "n": 1682,
+          "pos_rate": 0.5321
         },
         "y_months": {
-          "n": 1720
+          "n": 1682
         },
         "y_cost_pct": {
-          "n": 2922
+          "n": 2796
         }
       },
       "2016": {
         "y_date_push": {
-          "n": 2469,
-          "pos_rate": 0.3973
+          "n": 2413,
+          "pos_rate": 0.3995
         },
         "y_cost_rev": {
-          "n": 4085,
-          "pos_rate": 0.0867
+          "n": 3979,
+          "pos_rate": 0.0865
         },
         "y_any": {
-          "n": 2469,
-          "pos_rate": 0.4261
+          "n": 2411,
+          "pos_rate": 0.426
         },
         "y_months": {
-          "n": 2469
+          "n": 2413
         },
         "y_cost_pct": {
-          "n": 4085
+          "n": 3979
         }
       },
       "2017": {
         "y_date_push": {
-          "n": 652,
-          "pos_rate": 0.2899
+          "n": 620,
+          "pos_rate": 0.2952
         },
         "y_cost_rev": {
-          "n": 1152,
-          "pos_rate": 0.072
+          "n": 1112,
+          "pos_rate": 0.0728
         },
         "y_any": {
-          "n": 652,
-          "pos_rate": 0.3359
+          "n": 620,
+          "pos_rate": 0.3387
         },
         "y_months": {
-          "n": 652
+          "n": 620
         },
         "y_cost_pct": {
-          "n": 1152
+          "n": 1112
         }
       },
       "2021": {
         "y_date_push": {
-          "n": 2566,
-          "pos_rate": 0.6216
+          "n": 2452,
+          "pos_rate": 0.6195
         },
         "y_cost_rev": {
-          "n": 4255,
-          "pos_rate": 0.1135
+          "n": 4074,
+          "pos_rate": 0.1112
         },
         "y_any": {
-          "n": 2566,
-          "pos_rate": 0.6465
+          "n": 2450,
+          "pos_rate": 0.6449
         },
         "y_months": {
-          "n": 2566
+          "n": 2452
         },
         "y_cost_pct": {
-          "n": 4255
+          "n": 4074
         }
       },
       "2022": {
         "y_date_push": {
-          "n": 4431,
-          "pos_rate": 0.6211
+          "n": 4297,
+          "pos_rate": 0.6286
         },
         "y_cost_rev": {
-          "n": 5060,
-          "pos_rate": 0.0964
+          "n": 4378,
+          "pos_rate": 0.0923
         },
         "y_any": {
-          "n": 4431,
-          "pos_rate": 0.6461
+          "n": 3922,
+          "pos_rate": 0.6698
         },
         "y_months": {
-          "n": 4431
+          "n": 4297
         },
         "y_cost_pct": {
-          "n": 5060
+          "n": 4378
         }
       },
       "2023": {
         "y_date_push": {
-          "n": 5502,
-          "pos_rate": 0.5682
+          "n": 5492,
+          "pos_rate": 0.5686
         },
         "y_cost_rev": {
-          "n": 5613,
-          "pos_rate": 0.1048
+          "n": 4988,
+          "pos_rate": 0.0994
         },
         "y_any": {
-          "n": 5502,
-          "pos_rate": 0.5921
+          "n": 4940,
+          "pos_rate": 0.6018
         },
         "y_months": {
-          "n": 5502
+          "n": 5492
         },
         "y_cost_pct": {
-          "n": 5613
+          "n": 4988
         }
       },
       "2024": {
         "y_date_push": {
-          "n": 4053,
-          "pos_rate": 0.5357
+          "n": 3067,
+          "pos_rate": 0.5152
         },
         "y_cost_rev": {
-          "n": 4485,
-          "pos_rate": 0.1313
+          "n": 2830,
+          "pos_rate": 0.0777
         },
         "y_any": {
-          "n": 4053,
-          "pos_rate": 0.5741
+          "n": 2820,
+          "pos_rate": 0.545
         },
         "y_months": {
-          "n": 4053
+          "n": 3067
         },
         "y_cost_pct": {
-          "n": 4485
+          "n": 2830
         }
       },
       "2025": {
         "y_date_push": {
-          "n": 2271,
-          "pos_rate": 0.7323
+          "n": 337,
+          "pos_rate": 0.5134
         },
         "y_cost_rev": {
-          "n": 2722,
-          "pos_rate": 0.2193
+          "n": 572,
+          "pos_rate": 0.1573
         },
         "y_any": {
-          "n": 2271,
-          "pos_rate": 0.7825
+          "n": 335,
+          "pos_rate": 0.6269
         },
         "y_months": {
-          "n": 2271
+          "n": 337
         },
         "y_cost_pct": {
-          "n": 2722
+          "n": 572
         }
       }
     }

@@ -13,6 +13,9 @@ asof that are not completed. Each target's champion type from the registry is re
 by asof (t + h <= asof) and scores them; LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
 the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
 by rank of p_any_2q, not by threshold; the stagnation override lifts a project one tier.
+A score whose model never saw one of the row's null features in training is left null (see unseen_missing): today
+that is the date-based scores of projects with no anticipated completion date (no_completion_date). A project
+without p_any_2q gets no tier.
 """
 import json
 import sys
@@ -46,14 +49,25 @@ DISPLAY = ["project_name", "sector", "state", "agency", "ministry", "anticipated
 
 def tiers(p, stagnant):
     """Rank tiers of scores p (1 = riskiest; ties broken by position) and the stagnation override, which lifts a
-    flagged project one tier, never above Critical. Returns tier_rank_pct, tier_by_rank, tier, stagnation_override."""
+    flagged project one tier, never above Critical. A null score gets no tier and is not counted in the rank shares.
+    Returns tier_rank_pct, tier_by_rank, tier, stagnation_override."""
     p = pd.Series(np.asarray(p, float))
-    rank_pct = p.rank(method="first", ascending=False).to_numpy() / len(p)
-    by_rank = np.searchsorted(TIER_TOP, rank_pct, side="left")
-    lifted = np.asarray(stagnant, bool) & (by_rank > 0)
-    names = np.array(TIERS)
-    return pd.DataFrame({"tier_rank_pct": rank_pct, "tier_by_rank": names[by_rank], "tier": names[by_rank - lifted],
+    scored = p.notna().to_numpy()
+    rank_pct = p.rank(method="first", ascending=False).to_numpy() / max(scored.sum(), 1)
+    by_rank = np.searchsorted(TIER_TOP, np.nan_to_num(rank_pct), side="left")
+    lifted = np.asarray(stagnant, bool) & (by_rank > 0) & scored
+    names = np.array(TIERS, dtype=object)
+    name = lambda i: np.where(scored, names[i], None)
+    return pd.DataFrame({"tier_rank_pct": rank_pct, "tier_by_rank": name(by_rank), "tier": name(by_rank - lifted),
                          "stagnation_override": lifted})
+
+
+def unseen_missing(train, X, cols):
+    """Rows of X with a null in a feature that is never null in train. LightGBM keeps no missing branch for such a
+    feature and reads the null as 0 (months_to_anticipated_completion = 0: deadline this month), and imputing it is
+    no better, so these rows are not scored."""
+    never = [c for c in cols if train[c].notna().all()]
+    return X[never].isna().any(axis=1).to_numpy()
 
 
 def champion(reg, y, h):
@@ -109,8 +123,9 @@ def main(asof=None):
         d = backtest.frame(feats, labels[h], y)
         d = d[d.target_period <= asof]
         fitted[col], predict = registry.CANDIDATES[e["model"]](d, e["feature_list"], e["categorical"], y)
-        out[col] = predict(cur)
-        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows")
+        skip = unseen_missing(d, cur, e["feature_list"])
+        out[col] = np.where(skip, np.nan, predict(cur))
+        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored")
 
     cols, cats = lead["feature_list"], lead["categorical"]
     Xc = backtest.lgb_X(cur, cols, cats)
@@ -122,15 +137,18 @@ def main(asof=None):
         q = np.column_stack([lgb.LGBMRegressor(**{**backtest.LGB_PARAMS, "objective": "quantile", "alpha": a})
                              .fit(X, d[y]).predict(Xc) for a in ALPHAS.values()])
         q = np.sort(q, axis=1)          # crossing quantiles are reordered, so p05 <= p50 <= p95
+        q[unseen_missing(d, cur, cols)] = np.nan
         for i, s in enumerate(ALPHAS):
             out[f"{name}_{s}"] = q[:, i]
         print(f"  {name}: quantile LightGBM on {len(d)} rows")
 
     stagnant = (cur.stagnation_quarters >= STAGNANT_Q) & (cur.elapsed_ratio >= STAGNANT_ELAPSED)
     out = pd.concat([out, tiers(out.p_any_2q, stagnant)], axis=1)
+    out["no_completion_date"] = cur.months_to_anticipated_completion.isna()
     m = fitted["p_any_2q"]
     # ponytail: SHAP only for a LightGBM champion; a logistic champion leaves the column null
     out["shap_top5_json"] = shap_top5(m.booster_, Xc) if lead["model"] == "lightgbm" else None
+    out["shap_top5_json"] = out.shap_top5_json.where(out.p_any_2q.notna(), None)
     out = pd.concat([out, cur[["stagnation_quarters", "elapsed_ratio"] + DISPLAY]], axis=1)
 
     path = GOLD / f"predictions_{mv}_{asof:%Y-%m}.parquet"
@@ -142,7 +160,8 @@ def main(asof=None):
     log = append_log(out)
 
     print(f"scored {len(out)} current projects at {asof.date()} ({mv}); tier counts:")
-    print(out.tier.value_counts().reindex(TIERS).to_string(), f"\n  stagnation overrides: {out.stagnation_override.sum()}")
+    print(out.tier.fillna("no tier").value_counts().reindex(TIERS + ["no tier"]).to_string(),
+          f"\n  stagnation overrides: {out.stagnation_override.sum()}, no completion date: {out.no_completion_date.sum()}")
     print("p_any_2q distribution:\n" + out.p_any_2q.describe(percentiles=[.05, .25, .5, .75, .95]).round(3).to_string())
     top = out.nlargest(10, "p_any_2q").assign(top_shap=lambda x: x.shap_top5_json.map(
         lambda s: json.loads(s)[0]["feature"] if s else None))

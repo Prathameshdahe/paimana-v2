@@ -38,6 +38,7 @@ def panel(n_keys=40, seed=7):
                 "expenditure_cr": spend * cost, "physical_progress_pct": None if rng.random() < 0.1 else prog,
                 "sanction_date": sanction, "scheduled_completion": sched,
                 "anticipated_completion": None if rng.random() < 0.1 else ant, "is_completed": done,
+                "cost_basis": "anticipated", "completion_basis": "anticipated",
                 "agency": ["NHAI", "Rail Vikas [RVNL]", None][k % 3], "ministry": None,
                 "sector": ["Roads & Highways", "Railways"][k % 2], "state": "Goa", "delay_months": None,
                 "obs_count_in_quarter": 1, "months_since_last_obs": 3, "dq_score": 1.0})
@@ -96,6 +97,7 @@ def obs_rows(key, rows, agency="NHAI"):
     template = panel(1).iloc[:0]
     d = pd.concat([template, d], ignore_index=True).assign(
         agency=agency, sector="Railways", period_type="quarterly", obs_count_in_quarter=1, dq_score=1.0,
+        cost_basis="anticipated", completion_basis="anticipated",
         original_cost_cr=d["anticipated_cost_cr"], physical_progress_pct=50.0)
     return d.astype(template.dtypes.to_dict())
 
@@ -113,6 +115,20 @@ def test_labels_exact_horizon_and_null_inputs():
     assert np.array_equal(rows, [[nan, 0, nan], [1, 1, 1], [nan, 1, nan], [0, 0, 0]], equal_nan=True)
     assert lab["y_months"].tolist()[1] == 5 and lab["y_cost_pct"].iloc[0] == pytest.approx(4.0)
     assert (lab["target_period"] == [QUARTERS[q] for q in (2, 3, 4, 3)]).all()
+
+
+def test_labels_null_across_a_basis_change():
+    rows = [(0, 100.0, "2020-01", False), (2, 150.0, "2020-09", False)]
+    same = gold.build_labels(obs_rows("PRJ-000001", rows), 2)
+    assert same[["y_date_push", "y_cost_rev", "y_any"]].iloc[0].tolist() == [1, 1, 1]
+    d = obs_rows("PRJ-000001", rows)
+    d.loc[1, "cost_basis"] = "revised"              # t + h prints revised cost, t printed anticipated
+    lab = gold.build_labels(d, 2).iloc[0]
+    assert pd.isna(lab["y_cost_rev"]) and pd.isna(lab["y_cost_pct"]) and pd.isna(lab["y_any"])
+    assert lab["y_date_push"] == 1 and lab["y_months"] == 8
+    d.loc[1, "completion_basis"] = "revised"
+    lab = gold.build_labels(d, 2).iloc[0]
+    assert pd.isna(lab["y_date_push"]) and pd.isna(lab["y_months"])
 
 
 def test_cutoff_bounds_feature_frame():

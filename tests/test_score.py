@@ -41,3 +41,17 @@ def test_log_append_is_idempotent(tmp_path):
     log = score.append_log(later, path)
     assert len(log) == 4 and not log.duplicated(score.LOG_KEY).any()
     pd.testing.assert_frame_equal(pd.read_parquet(path), log.reset_index(drop=True))
+
+
+def test_null_in_a_never_null_training_feature_is_not_scored():
+    # LightGBM reads such a null as 0, so a missing deadline would score like "deadline this month"
+    train = pd.DataFrame({"months_to_deadline": [1.0, 12.0, 30.0], "progress": [10.0, None, 50.0]})
+    X = pd.DataFrame({"months_to_deadline": [None, 0.0, 6.0], "progress": [20.0, None, None]})
+    assert score.unseen_missing(train, X, ["months_to_deadline", "progress"]).tolist() == [True, False, False]
+
+
+def test_unscored_rows_get_no_tier_and_do_not_shift_ranks():
+    p = np.r_[np.linspace(1, 0, 20), [np.nan] * 5]
+    t = score.tiers(p, np.ones(25, bool))
+    assert t.tier[20:].isna().all() and t.tier_rank_pct[20:].isna().all() and not t.stagnation_override[20:].any()
+    assert t.tier_by_rank[:20].value_counts().to_dict() == {"Critical": 1, "High": 3, "Medium": 6, "Low": 10}
