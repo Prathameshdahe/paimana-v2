@@ -44,3 +44,7 @@ dataset/silver/identity/resolved_rows.parquet
 # app state (SQLite), created on backend start
 database/*.db
 database/*.db-journal
+
+# report inbox: files wait here for the live watcher (backend/live/watcher.py)
+dataset/raw/inbox/*
+!dataset/raw/inbox/README.md

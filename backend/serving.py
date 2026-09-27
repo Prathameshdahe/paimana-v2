@@ -55,6 +55,7 @@ BAND_METHOD = (
 
 _lock = threading.Lock()
 _state: dict = {}
+_pinned = threading.Event()
 
 
 def _version() -> tuple:
@@ -129,9 +130,17 @@ def _load() -> dict:
     }
 
 
+def pin(on: bool) -> None:
+    """While pinned, state() keeps the loaded version even if the version files change: the report watcher pins
+    it while a pipeline run rewrites them, and leaves it pinned when a failed run left them half rewritten."""
+    _pinned.set() if on else _pinned.clear()
+
+
 def state() -> dict:
-    """The loaded data version, reloaded when a version file changes."""
+    """The loaded data version, reloaded when a version file changes (unless pinned)."""
     global _state
+    if _state and _pinned.is_set():
+        return _state
     v = _version()
     if _state.get("version") != v:
         with _lock:

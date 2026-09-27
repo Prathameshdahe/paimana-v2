@@ -316,13 +316,15 @@ class ModelsOut(CamelModel):
 # ---------- app state (SQLite, backend/db.py) ----------
 
 Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]
-AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice"]
+AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice",
+                    "pipeline_error"]
 
 
 class Alert(CamelModel):
+    """project_key is None only for a pipeline_error alert."""
     id: int
     created_at: str
-    project_key: str
+    project_key: str | None
     kind: AlertKind
     severity: int
     title: str | None
@@ -369,6 +371,21 @@ class JobRun(CamelModel):
     finished_at: str | None
     status: str | None
     summary: Any = None
+
+
+class Ingested(CamelModel):
+    """A file saved into dataset/raw/inbox/ for the watcher's next run; saved_as None when these bytes were
+    already ingested by the current pipeline version (nothing is kept)."""
+    saved_as: str | None
+    sha256: str
+    kind: str | None
+    already_ingested: bool
+
+
+class JobStarted(CamelModel):
+    started: bool
+    detail: str
+    pending: int | None = None
 
 
 class Signal(CamelModel):

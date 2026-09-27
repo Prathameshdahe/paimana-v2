@@ -15,17 +15,17 @@ from pathlib import Path
 from . import serving
 
 DEFAULT_PATH = serving.ROOT / "database" / "paimana.db"
-ALERT_KINDS = ("tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice")
+ALERT_KINDS = ("tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice", "pipeline_error")
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS sources (
-    sha256 TEXT PRIMARY KEY, filename TEXT, kind TEXT, period TEXT, rows INTEGER, ingested_at TEXT,
-    status TEXT, error TEXT);
+    sha256 TEXT NOT NULL, pipeline_version TEXT NOT NULL, filename TEXT, kind TEXT, period TEXT, rows INTEGER,
+    ingested_at TEXT, status TEXT, error TEXT, archived_as TEXT, PRIMARY KEY (sha256, pipeline_version));
 CREATE TABLE IF NOT EXISTS job_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, job TEXT NOT NULL, started_at TEXT, finished_at TEXT, status TEXT,
     summary_json TEXT);
 CREATE TABLE IF NOT EXISTS alerts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, project_key TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, project_key TEXT,
     kind TEXT NOT NULL CHECK (kind IN {ALERT_KINDS}), severity INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 3),
     title TEXT, detail TEXT, asof TEXT, model_version TEXT, source TEXT, acked_by TEXT, acked_at TEXT);
 CREATE INDEX IF NOT EXISTS alerts_created ON alerts (created_at);
@@ -67,8 +67,22 @@ def _audit(con, role, action, target, detail=None):
 def init() -> int:
     """Create the tables if missing and seed the alert feed; returns the number of alerts seeded."""
     with closing(connect()) as con:
+        _migrate(con)
         con.executescript(SCHEMA)
     return seed()
+
+
+def _migrate(con) -> None:
+    """Bring a database made before the report watcher up to SCHEMA. sources gains pipeline_version (nothing wrote
+    it before, so it is recreated); alerts gains the pipeline_error kind and project-less alerts (a CHECK and a NOT
+    NULL cannot be altered in SQLite, so the table is rebuilt with its rows)."""
+    if "pipeline_version" not in {r[1] for r in con.execute("PRAGMA table_info(sources)")}:
+        con.execute("DROP TABLE IF EXISTS sources")
+    old = con.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alerts'").fetchone()
+    if old and "pipeline_error" not in old[0]:
+        con.executescript("BEGIN; ALTER TABLE alerts RENAME TO alerts_old; DROP INDEX IF EXISTS alerts_created; "
+                          "DROP INDEX IF EXISTS alerts_project;" + SCHEMA
+                          + "INSERT INTO alerts SELECT * FROM alerts_old; DROP TABLE alerts_old; COMMIT;")
 
 
 # ---------------------------------------------------------------- alerts
@@ -100,6 +114,15 @@ def seed() -> int:
         con.execute("""INSERT INTO job_runs (job, started_at, finished_at, status, summary_json)
             VALUES ('seed_alerts', ?, ?, 'ok', ?)""",
                     [started, _now(), json.dumps({"asof": asof, "model_version": mv, "alerts": len(rows)})])
+    return len(rows)
+
+
+def add_alerts(rows: list[dict]) -> int:
+    """Insert alerts (project_key, kind, severity, title, detail, asof, model_version, source); returns the count."""
+    cols = ("project_key", "kind", "severity", "title", "detail", "asof", "model_version", "source")
+    with closing(connect()) as con, con:
+        con.executemany(f"INSERT INTO alerts (created_at, {', '.join(cols)}) VALUES (?{', ?' * len(cols)})",
+                        [[_now()] + [r.get(c) for c in cols] for r in rows])
     return len(rows)
 
 
@@ -180,6 +203,20 @@ def record_job(job: str, started_at: str, status: str, summary: dict) -> None:
     with closing(connect()) as con, con:
         con.execute("""INSERT INTO job_runs (job, started_at, finished_at, status, summary_json)
             VALUES (?, ?, ?, ?, ?)""", [job, started_at, _now(), status, json.dumps(summary, default=str)])
+
+
+def source_seen(sha256: str, pipeline_version: str) -> bool:
+    with closing(connect()) as con:
+        return con.execute("SELECT 1 FROM sources WHERE sha256 = ? AND pipeline_version = ?",
+                           [sha256, pipeline_version]).fetchone() is not None
+
+
+def record_source(row: dict) -> None:
+    """One ingested file (see backend/live/watcher.py); a re-run under the same pipeline version replaces it."""
+    cols = ("sha256", "pipeline_version", "filename", "kind", "period", "rows", "status", "error", "archived_as")
+    with closing(connect()) as con, con:
+        con.execute(f"INSERT OR REPLACE INTO sources (ingested_at, {', '.join(cols)}) VALUES (?{', ?' * len(cols)})",
+                    [_now()] + [row.get(c) for c in cols])
 
 
 def project_signals(project_key: str, limit=100) -> dict:

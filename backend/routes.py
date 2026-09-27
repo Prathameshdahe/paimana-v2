@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
 
 from llm import worker
 
 from . import db, serving, store
+from .live import watcher
 from .schemas import (
     Alert,
     AlertKind,
@@ -15,7 +16,9 @@ from .schemas import (
     ExternalSummary,
     Flag,
     Forecast,
+    Ingested,
     JobRun,
+    JobStarted,
     Meta,
     ModelsOut,
     Portfolio,
@@ -129,6 +132,28 @@ def delete_watchlist(role: Role, project_key: str = Query(max_length=32)):
 @router.get("/jobs", response_model=list[JobRun])
 def get_jobs():
     return db.latest_jobs()
+
+
+@router.post("/jobs/ingest", response_model=Ingested)
+def post_ingest(file: UploadFile, role: Role | None = None):
+    """Save a report into dataset/raw/inbox/; the watcher ingests it on its next run (or POST /api/jobs/watch)."""
+    try:
+        out = watcher.save_upload(file.filename, file.file)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    db.audit(role, "jobs.ingest", out["saved_as"] or file.filename, out["sha256"])
+    return out
+
+
+@router.post("/jobs/watch", response_model=JobStarted)
+def post_watch(background: BackgroundTasks, role: Role | None = None):
+    """Run the inbox watcher now, in the background; the result shows in /api/jobs and the alert feed."""
+    if watcher.busy():
+        return {"started": False, "detail": "a watch run is already in progress"}
+    n = len(watcher.pending())
+    db.audit(role, "jobs.watch", "inbox", f"{n} pending")
+    background.add_task(watcher.watch_once)
+    return {"started": True, "detail": f"{n} inbox file(s) to ingest", "pending": n}
 
 
 @router.get("/projects/{key}/signals", response_model=ProjectSignals)

@@ -82,3 +82,27 @@ def test_project_signals_empty_is_not_clear(client):
     s = client.get(f"/api/projects/{key}/signals").json()
     assert s == {"key": key, "lastScoutAt": None, "items": []}
     assert client.get("/api/projects/PRJ-999999/signals").status_code == 404
+
+
+def test_migrates_a_database_from_before_the_watcher(tmp_path, monkeypatch):
+    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "old.db"))
+    with closing(sqlite3.connect(db.path())) as con, con:
+        con.executescript("""
+            CREATE TABLE sources (sha256 TEXT PRIMARY KEY, filename TEXT, kind TEXT, period TEXT, rows INTEGER,
+                ingested_at TEXT, status TEXT, error TEXT);
+            CREATE TABLE alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL,
+                project_key TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('tier_up', 'early_notice')),
+                severity INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 3), title TEXT, detail TEXT, asof TEXT,
+                model_version TEXT, source TEXT, acked_by TEXT, acked_at TEXT);
+            CREATE INDEX alerts_created ON alerts (created_at);
+            CREATE INDEX alerts_project ON alerts (project_key);
+            INSERT INTO alerts (created_at, project_key, kind, severity) VALUES ('2026-01-01', 'PRJ-000001', 'tier_up', 3);
+        """)
+    assert db.init() == 0  # the feed is not empty, so nothing is seeded
+    assert db.alerts()["items"][0]["project_key"] == "PRJ-000001"
+    db.add_alerts([{"project_key": None, "kind": "pipeline_error", "severity": 3, "title": "x"}])
+    assert db.alerts(kind="pipeline_error")["total"] == 1
+    assert not db.source_seen("abc", "v1")
+    db.record_source({"sha256": "abc", "pipeline_version": "v1", "status": "ok"})
+    assert db.source_seen("abc", "v1") and not db.source_seen("abc", "v2")
+    assert db.init() == 0  # a second start changes nothing
