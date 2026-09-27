@@ -3,8 +3,8 @@ import { cn } from '@/lib/formatters'
 import { TIER_LABEL, TIER_SENTIMENT, TONE_CHIP, tierKey } from '@/lib/riskPalette'
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'critical' | 'warning' | 'stable' | 'accent' | 'muted'
-  /** a project tier; null means untiered (no completion date) */
+  variant?: 'critical' | 'warning' | 'stable' | 'accent' | 'muted' | 'watch'
+  /** a project tier; null (no score) reads as Watch */
   tier?: string | null
 }
 
@@ -14,9 +14,10 @@ const RING: Record<NonNullable<BadgeProps['variant']>, string> = {
   stable: 'ring-stable/20',
   accent: 'ring-accent/25',
   muted: 'ring-fg-dimmed/20',
+  watch: 'ring-watch/25',
 }
 
-/** Soft rounded pill. With `tier` it names the tier: Critical red, High amber, Medium blue-grey, Low green, no date grey. */
+/** Soft rounded pill. With `tier` it names the tier: Critical red, High amber, Medium blue-grey, Low green, Watch grey-violet. */
 export function Badge({ variant = 'muted', tier, className, children, ...props }: BadgeProps) {
   const t = tier === undefined ? null : tierKey(tier)
   const v = t ? TIER_SENTIMENT[t] : variant
@@ -31,7 +32,7 @@ export function Badge({ variant = 'muted', tier, className, children, ...props }
       )}
       {...props}
     >
-      {children ?? (t ? (t === 'untiered' ? 'No date' : TIER_LABEL[t]) : null)}
+      {children ?? (t ? TIER_LABEL[t] : null)}
     </span>
   )
 }

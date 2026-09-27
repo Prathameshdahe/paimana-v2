@@ -2,7 +2,7 @@
  * src/lib/riskPalette.ts
  * Single source of truth for the tier vocabulary and its colours — used by the
  * India map, the charts and the badges. Tiers go by rank (Critical/High/
- * Medium/Low); a project with no anticipated completion date is untiered.
+ * Medium/Low); a project with no anticipated completion date is in Watch (grey-violet), outside the ranking.
  */
 import {
   ArrowRightLeft, Building2, Bug, Cable, Calendar, CalendarX, CirclePlus, Clock, Gavel, HardHat, IndianRupee, LandPlot,
@@ -12,10 +12,11 @@ import {
 import type { Flag, RiskState, Tier, TierFilter } from '@/contracts/project'
 import type { AlertKind, ExternalFactorKey } from '@/contracts/portfolio'
 
+/** the rank tiers; Watch comes after them */
 export const TIERS: Tier[] = ['Critical', 'High', 'Medium', 'Low']
 
 export function tierKey(tier: string | null | undefined): TierFilter {
-  return tier === 'Critical' || tier === 'High' || tier === 'Medium' || tier === 'Low' ? tier : 'untiered'
+  return tier === 'Critical' || tier === 'High' || tier === 'Medium' || tier === 'Low' ? tier : 'Watch'
 }
 
 export const TIER_LABEL: Record<TierFilter, string> = {
@@ -23,7 +24,7 @@ export const TIER_LABEL: Record<TierFilter, string> = {
   High: 'High',
   Medium: 'Medium',
   Low: 'Low',
-  untiered: 'No completion date',
+  Watch: 'Watch',
 }
 
 export const TIER_SHORT: Record<TierFilter, string> = {
@@ -31,7 +32,7 @@ export const TIER_SHORT: Record<TierFilter, string> = {
   High: 'HIGH',
   Medium: 'MED',
   Low: 'LOW',
-  untiered: 'NO DATE',
+  Watch: 'WATCH',
 }
 
 /** bright chart/map colours */
@@ -40,7 +41,7 @@ export const TIER_COLOR: Record<TierFilter, string> = {
   High: '#ffb020',
   Medium: '#8ea3c4',
   Low: '#22c55e',
-  untiered: '#b5b0a6',
+  Watch: '#9d93bd',
 }
 
 /** text token per tier (deep variants of TIER_COLOR, readable on the sand canvas) */
@@ -49,7 +50,7 @@ export const TIER_TEXT: Record<TierFilter, string> = {
   High: 'text-warning',
   Medium: 'text-accent',
   Low: 'text-stable',
-  untiered: 'text-fg-dimmed',
+  Watch: 'text-watch',
 }
 
 /** MonoFigure/Badge sentiment per tier */
@@ -58,7 +59,7 @@ export const TIER_SENTIMENT = {
   High: 'warning',
   Medium: 'accent',
   Low: 'stable',
-  untiered: 'muted',
+  Watch: 'watch',
 } as const satisfies Record<TierFilter, string>
 
 /** soft fill + ink per sentiment: badges, icon chips */
@@ -68,6 +69,7 @@ export const TONE_CHIP = {
   stable: 'bg-stable/10 text-stable',
   accent: 'bg-accent/10 text-accent',
   muted: 'bg-fg-dimmed/10 text-fg-muted',
+  watch: 'bg-watch/10 text-watch',
 } as const
 
 /** list flags: a flagged risk-profile dimension, or early notice (flagged external factor, no slip in the numbers yet) */

@@ -49,7 +49,7 @@ SETTLE_S = 5              # a file changed this recently may still be copying in
 STEP_TIMEOUT_S = 3600
 OUTPUT_TAIL = 2000        # characters of a failing step's output kept in the error
 WATCH_TIERS = ("Critical", "High")
-TIER_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}   # untiered ranks below Low
+TIER_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}   # Watch (no completion date) ranks below Low
 _lock = threading.Lock()
 
 
@@ -144,7 +144,7 @@ def _tier(v):
 def diff_alerts(old: pd.DataFrame, new: pd.DataFrame, source: str) -> list[dict]:
     """Alerts for old -> new predictions (one row per project_key each): tier_up when a project moves up into High or
     Critical (severity 3 into Critical, else 2), tier_down when it moves down out of them (1), new_project for a key
-    scored now and not before (2 if it comes in High or Critical, else 1). Moves among Medium, Low and untiered raise
+    scored now and not before (2 if it comes in High or Critical, else 1). Moves among Medium, Low and Watch raise
     nothing; a project no longer scored (completed, dropped from the report) raises nothing either."""
     m = new.merge(old[["project_key", "tier"]], on="project_key", how="left", suffixes=("", "_old"), indicator="seen")
     out = []

@@ -91,16 +91,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /**
  * Donut of P(date push or cost revision, 2q) in the tier colour, tier inside. full: three gauges beside it;
- * the public: work done, cost and completion instead. Untiered: a grey ring and no date-based gauges.
+ * the public: work done, cost and completion instead. Watch (no completion date): a grey-violet ring and no
+ * date-based gauges.
  */
 export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: boolean }) {
   const s = detail.scores
   const t = tierKey(s?.tier ?? null)
-  const untiered = t === 'untiered'
+  const untiered = t === 'Watch'
   const p = untiered ? null : (s?.pAny2q ?? null)
   const o = detail.latest ?? {}
   const R = 52
-  const center = !s ? 'Not scored' : untiered ? 'No completion date' : TIER_LABEL[t]
+  const center = !s ? 'Not scored' : untiered ? 'Watch · no completion date' : TIER_LABEL[t]
 
   return (
     <Section
@@ -114,7 +115,7 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
           <svg viewBox="0 0 128 128" className="size-32 -rotate-90" aria-hidden="true">
             <circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} className="stroke-surface-input" />
             {p === null ? (
-              <circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} stroke={TIER_COLOR.untiered} strokeOpacity={0.5} />
+              <circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} stroke={TIER_COLOR.Watch} strokeOpacity={0.5} />
             ) : (
               <motion.circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} strokeLinecap="round" stroke={TIER_COLOR[t]}
                 initial={{ pathLength: 0 }} animate={{ pathLength: p }} transition={{ ...GROW, duration: 0.9 }} />
@@ -137,8 +138,8 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
             </div>
             {s.stagnationOverride && (
               <span className="self-center rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning"
-                title={`${orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without progress; by rank alone: ${s.tierByRank ?? 'untiered'}`}>
-                Tier raised: work has stalled
+                title={`${orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without progress; the tier stays by rank`}>
+                Work has stalled
               </span>
             )}
           </div>

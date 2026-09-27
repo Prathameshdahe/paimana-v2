@@ -92,7 +92,7 @@ def test_clear_needs_positive_evidence_and_open_events_flag():
 def test_rule_dimensions():
     r = checklist()
     s = r["state"]
-    assert s.loc[("P4", "schedule_slip")] == "unknown" and "untiered" in r.loc[("P4", "schedule_slip"), "evidence"]
+    assert s.loc[("P4", "schedule_slip")] == "unknown" and "Watch" in r.loc[("P4", "schedule_slip"), "evidence"]
     assert s.loc[("P1", "schedule_slip")] == "flagged" and s.loc[("P3", "schedule_slip")] == "clear"
     assert s.loc[("P2", "execution_stagnation")] == "flagged" and s.loc[("P4", "execution_stagnation")] == "unknown"
     # SPI 1.0 but 3 quarters without progress: the stagnation override's rule flags it, as the tier panel says

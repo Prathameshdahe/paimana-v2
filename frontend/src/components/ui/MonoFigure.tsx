@@ -4,7 +4,7 @@ import { cn } from '@/lib/formatters'
 interface MonoFigureProps extends React.HTMLAttributes<HTMLSpanElement> {
   children: React.ReactNode
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl'
-  sentiment?: 'critical' | 'warning' | 'stable' | 'accent' | 'default' | 'muted'
+  sentiment?: 'critical' | 'warning' | 'stable' | 'accent' | 'default' | 'muted' | 'watch'
 }
 
 // small figures sit in mono beside text; headline figures are sans, still tabular
@@ -25,6 +25,7 @@ const sentimentClasses = {
   accent: 'text-accent',
   default: 'text-fg-base',
   muted: 'text-fg-muted',
+  watch: 'text-watch',
 }
 
 export function MonoFigure({

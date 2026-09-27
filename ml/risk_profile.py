@@ -155,8 +155,8 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     # model dimensions: flagged in the top HIGH_SHARE of the score; unscored (no completion date) is unknown
     sector_v = cur["progress_velocity_2q"] - cur["velocity_vs_sector_median"]
     vel = "; velocity " + num(cur["progress_velocity_2q"], ".1f", "%/q") + " vs sector " + num(sector_v, ".1f", "%/q")
-    untiered = np.where(cur["no_completion_date"].fillna(False), "untiered: no anticipated completion date in the "
-                        "reports, so the date models cannot score it", "not scored")
+    untiered = np.where(cur["no_completion_date"].fillna(False), "Watch tier: no anticipated completion date in "
+                        "the reports, so the date models cannot score it", "not scored")
     for dim, col, extra in [("schedule_slip", "p_date_push_2q", vel),
                             ("cost_escalation", "p_cost_rev_2q",
                              "; cost variation so far " + num(cur["cost_variation_pct"], "+.0f", "%"))]:
@@ -167,8 +167,7 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
         add(dim, scored & (p >= cut), scored, ev.where(scored, pd.Series(untiered, index=cur.index) + extra), "model")
 
     prog, el = cur["physical_progress_pct"], cur["elapsed_ratio"]
-    # the stagnation override's rule (ml/score.py) flags it too, so the checklist never says clear next to a tier
-    # the override raised
+    # the stagnation badge's rule (ml/score.py) flags it too, so the checklist never says clear next to the badge
     stuck = pd.Series(score.stagnant(cur), index=cur.index)
     known = cur["spi"].notna() & el.notna()
     stuck_line = ("; no progress for " + num(cur["stagnation_quarters"], ".0f", " quarters")).where(stuck, "")

@@ -29,6 +29,7 @@ const config: Config = {
         critical: 'hsl(var(--color-critical) / <alpha-value>)',
         warning:  'hsl(var(--color-warning) / <alpha-value>)',
         stable:   'hsl(var(--color-stable) / <alpha-value>)',
+        watch:    'hsl(var(--color-watch) / <alpha-value>)',
         fg: {
           base:    'hsl(var(--color-fg-base) / <alpha-value>)',
           muted:   'hsl(var(--color-fg-muted) / <alpha-value>)',

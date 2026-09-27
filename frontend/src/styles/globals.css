@@ -27,6 +27,8 @@
   --color-warning:  30 95% 31%;               /* #9c4d04 — deep burnt amber/sienna */
   /* STABLE/NORMAL: On-track, positive float                                  */
   --color-stable:   158 82% 25%;              /* #0b7249 — institutional spruce    */
+  /* WATCH: no completion date, so no date-based score — kept in view, not ranked */
+  --color-watch:    258 16% 44%;              /* #685e82 — grey-violet             */
 
   /* ── Accent (Sovereign Parliamentary Blue) ──────────────────────────────── */
   /* Minimal usage — focus rings, active state indicators, telemetry metrics   */

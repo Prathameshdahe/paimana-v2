@@ -37,7 +37,7 @@ def project_rows(body):
 
 def test_meta_has_versions_and_caveats(client):
     m = client.get("/api/meta").json()
-    assert m["nCurrent"] > 0 and m["nUntiered"] >= 0
+    assert m["nCurrent"] > 0 and m["nWatch"] >= 0
     for k in ("asof", "modelVersion", "goldVersion", "silverVersion", "latestReportPeriod"):
         assert m[k]
     assert any("2023" in c for c in m["caveats"]) and any("Maharashtra" in c for c in m["caveats"])
@@ -47,7 +47,7 @@ def test_portfolio_kpis_and_tiers(client):
     p = client.get("/api/portfolio").json()
     n = p["kpis"]["nProjects"]
     assert sum(t["n"] for t in p["tiers"]) == n
-    assert [t["tier"] for t in p["tiers"]] == ["Critical", "High", "Medium", "Low", "untiered"]
+    assert [t["tier"] for t in p["tiers"]] == ["Critical", "High", "Medium", "Low", "Watch"]
     assert sum(s["n"] for s in p["byState"]) == n
     assert len(p["top"]) == 20
     probs = [t["pAny2q"] for t in p["top"]]
@@ -79,8 +79,14 @@ def test_pagination_bounds(client):
 def test_filters(client):
     crit = client.get("/api/projects", params={"tier": "Critical", "size": 100}).json()
     assert crit["total"] > 0 and all(r["tier"] == "Critical" for r in crit["items"])
-    untiered = client.get("/api/projects", params={"tier": "untiered"}).json()
-    assert untiered["total"] > 0 and all(r["tier"] is None and r["noCompletionDate"] for r in untiered["items"])
+    watch = client.get("/api/projects", params={"tier": "Watch", "size": 100}).json()
+    assert watch["total"] > 0 and all(r["tier"] == "Watch" and r["noCompletionDate"] for r in watch["items"])
+    assert client.get("/api/projects", params={"tier": "untiered"}).status_code == 422
+    from backend import serving   # the Watch list follows its order: flagged checklist rows, then P(cost revision)
+    ws = {r["k"]: r["w"] for r in serving._rows(serving.state(), "SELECT project_key AS k, watch_score AS w FROM cur "
+                                                "WHERE watch_score IS NOT NULL")}
+    assert set(ws) == {r["key"] for r in watch["items"]} or watch["total"] > 100
+    assert [ws[r["key"]] for r in watch["items"]] == sorted((ws[r["key"]] for r in watch["items"]), reverse=True)
     for flag in ("land", "forest", "early_notice"):
         page = client.get("/api/projects", params={"flag": flag, "size": 100}).json()
         assert page["total"] > 0 and all(flag in r["flags"] for r in page["items"])

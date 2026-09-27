@@ -186,14 +186,14 @@ export function PublicHome() {
               <div className="space-y-4 px-5 py-4">
                 <TierBar tiers={p.tiers} total={p.kpis.nProjects} className="h-3" />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
-                  {[...TIERS, 'untiered' as const].map((t) => {
+                  {[...TIERS, 'Watch' as const].map((t) => {
                     const n = p.tiers.find((x) => x.tier === t)?.n ?? 0
                     return (
                       <div key={t} className="flex items-start gap-2">
                         <span className="mt-1.5 size-2.5 shrink-0 rounded-full" style={{ background: TIER_COLOR[t] }} />
                         <span>
                           <span className="block text-lg font-semibold leading-tight tabular-nums text-fg-base">{n.toLocaleString()}</span>
-                          <span className="block text-xs text-fg-dimmed">{t === 'untiered' ? 'No date' : TIER_LABEL[t]}</span>
+                          <span className="block text-xs text-fg-dimmed">{TIER_LABEL[t]}</span>
                         </span>
                       </div>
                     )

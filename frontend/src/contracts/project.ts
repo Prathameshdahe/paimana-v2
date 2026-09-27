@@ -5,9 +5,9 @@
  * (backend/schemas.py; keys are camelCase). Dates are ISO strings.
  */
 
-/** Rank-based tier; a project without an anticipated completion date has no tier (null, "untiered"). */
-export type Tier = 'Critical' | 'High' | 'Medium' | 'Low'
-export type TierFilter = Tier | 'untiered'
+/** Rank-based tier; a project without an anticipated completion date is in the Watch tier (no date-based score). */
+export type Tier = 'Critical' | 'High' | 'Medium' | 'Low' | 'Watch'
+export type TierFilter = Tier
 export type Flag = 'land' | 'forest' | 'litigation' | 'contractor' | 'early_notice'
 export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name' | 'progress'
 

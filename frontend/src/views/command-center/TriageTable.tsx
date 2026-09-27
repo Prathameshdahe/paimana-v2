@@ -22,14 +22,14 @@ interface TriageTableProps {
   onOpenDetail: (key: string) => void
 }
 
-const TIER_BUTTONS: Array<TierFilter | 'ALL'> = ['ALL', ...TIERS, 'untiered']
+const TIER_BUTTONS: Array<TierFilter | 'ALL'> = ['ALL', ...TIERS, 'Watch']
 const TIER_BUTTON_ON: Record<TierFilter | 'ALL', string> = {
   ALL: 'bg-fg-base',
   Critical: 'bg-critical',
   High: 'bg-warning',
   Medium: 'bg-accent',
   Low: 'bg-stable',
-  untiered: 'bg-fg-dimmed',
+  Watch: 'bg-watch',
 }
 
 /** columns off by default; the viewer's choice is kept in this browser */
@@ -156,10 +156,10 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                   'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
                   on ? `text-white shadow-sm ${TIER_BUTTON_ON[t]}` : 'text-fg-muted hover:bg-surface-elevated hover:text-fg-base'
                 )}
-                title={t === 'untiered' ? 'no anticipated completion date in the reports — schedule not scored' : undefined}
+                title={t === 'Watch' ? 'no anticipated completion date in the reports — schedule not scored; listed by flagged checklist rows, then P(cost revision), an order no backtest has checked' : undefined}
               >
                 {t !== 'ALL' && !on && <span className="size-2 rounded-full" style={{ background: TIER_COLOR[t] }} />}
-                {t === 'ALL' ? 'All' : t === 'untiered' ? 'No date' : t}
+                {t === 'ALL' ? 'All' : t}
               </button>
             )
           })}
@@ -236,7 +236,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                         </div>
                         <div className="mt-0.5 max-w-[280px] truncate text-xs text-fg-dimmed xl:max-w-[440px]">
                           {p.key} · {p.sector ?? 'sector unknown'}
-                          {p.override && <span className="text-warning"> · stagnation override</span>}
+                          {p.override && <span className="text-warning" title="no progress for 2+ quarters; the tier is by rank"> · stalled</span>}
                         </div>
                       </td>
 

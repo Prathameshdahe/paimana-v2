@@ -12,7 +12,7 @@ export interface Meta {
   goldVersion: string
   silverVersion: string
   nCurrent: number
-  nUntiered: number
+  nWatch: number
   latestReportPeriod: string | null
   latestReportDoc: string | null
   models: Record<string, string>

@@ -41,12 +41,12 @@ export function Meter({ pct, className }: { pct: number; className: string }) {
   )
 }
 
-/** the tier mix as one segmented bar, untiered last; each segment names its count on hover */
+/** the tier mix as one segmented bar, Watch last; each segment names its count on hover */
 export function TierBar({ tiers, total, className = 'h-2' }: { tiers: TierCount[]; total: number; className?: string }) {
   const n = (t: string) => tiers.find((x) => x.tier === t)?.n ?? 0
   return (
     <div className={cn('flex gap-px overflow-hidden rounded-full bg-surface-input', className)}>
-      {[...TIERS, 'untiered' as const].map((t) => (
+      {[...TIERS, 'Watch' as const].map((t) => (
         <Tooltip key={t} content={`${TIER_LABEL[t]}: ${n(t).toLocaleString()} projects`}>
           <div style={{ width: `${(n(t) / Math.max(total, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full transition-[width] duration-700" />
         </Tooltip>
@@ -106,7 +106,9 @@ export function KPIRibbon() {
           ))}
         </div>
         <TierBar tiers={p.tiers} total={k.nProjects} className="mt-2.5 h-2" />
-        <div className="mt-1.5 text-xs text-fg-dimmed">+ {tierN('untiered').toLocaleString()} with no completion date</div>
+        <div className="mt-1.5 text-xs text-fg-dimmed">
+          + <span className="text-watch">{tierN('Watch').toLocaleString()} Watch</span>: no completion date
+        </div>
       </Tile>
 
       <Tile icon={Gauge} tone="stable" label="Spent so far" value={orDash(k.expenditureCr, formatINRShort)}>

@@ -38,6 +38,7 @@ N_EVIDENCE = 3  # evidence lines per bottleneck, as pipeline/bottlenecks.py
 TOP_FACTOR, TOP_NOTICE = 10, 20  # top lists of external_summary.json, as ml/risk_profile.py
 
 TIERS = ["Critical", "High", "Medium", "Low"]
+WATCH = "Watch"  # no anticipated completion date: no date-based score (ml/score.py)
 # list flag -> risk-profile dimension that raises it
 FLAG_DIMS = {"land": "land_acquisition", "forest": "forest_clearance", "litigation": "litigation",
              "contractor": "contractor_stress"}
@@ -56,7 +57,10 @@ CAVEATS = [
     "Land-acquisition records (Bhoomi Rashi) are linked only for Maharashtra national-highway projects; "
     "elsewhere land is unknown, not clear.",
     "Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.",
-    "Projects without an anticipated completion date have no date-based scores and no tier (untiered).",
+    "Projects without an anticipated completion date have no date-based scores; they are in the Watch tier, "
+    "listed by flagged checklist rows and then the chance of a cost revision. No backtest has checked that order.",
+    "The stagnation badge (no progress for 2+ quarters) does not change the tier: in the backtest flagged projects "
+    "slipped no more often than the rest.",
 ]
 BAND_METHOD = (
     "Progress band: each quarter the lower and upper edge are the lowest and highest of the three scenario curves "
@@ -147,7 +151,8 @@ def _load() -> dict:
             SELECT project_key, slip_to_date_months, months_since_last_obs, dq_score, cost_variation_pct,
                    ext_open_utility_shifting, ext_open_inter_agency
             FROM read_parquet('{_posix(GOLD / "features.parquet")}') WHERE period = DATE '{asof}'),
-        r AS (SELECT project_key, {flag_cols} FROM rp GROUP BY 1),
+        r AS (SELECT project_key, {flag_cols}, count(*) FILTER (WHERE state = 'flagged') AS n_flagged
+              FROM rp GROUP BY 1),
         j AS (
             SELECT p.*, o.* EXCLUDE (project_key), f.* EXCLUDE (project_key), r.* EXCLUDE (project_key)
             FROM read_parquet('{_posix(ROOT / ptr["path"])}') p
@@ -160,7 +165,9 @@ def _load() -> dict:
             FROM j)
         SELECT * EXCLUDE ({", ".join(f"f_{f}" for f in FLAG_DIMS)}),
                list_filter([{flag_list}, CASE WHEN early_notice THEN 'early_notice' END], x -> x IS NOT NULL)
-                   AS flags
+                   AS flags,
+               -- the Watch tier's order: flagged checklist rows, then P(cost revision); not validated
+               CASE WHEN tier = '{WATCH}' THEN coalesce(n_flagged, 0) + coalesce(p_cost_rev_2q, 0) END AS watch_score
         FROM e ORDER BY project_key""")
     report = con.execute("""SELECT period, source_doc_id FROM obs WHERE period = (SELECT max(period) FROM obs)
         GROUP BY ALL ORDER BY count(*) DESC LIMIT 1""").fetchone()
@@ -264,9 +271,7 @@ def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None
         if v:
             conds.append(f"{col} = ?")
             params.append(v)
-    if tier == "untiered":
-        conds.append("tier IS NULL")
-    elif tier:
+    if tier:
         conds.append("tier = ?")
         params.append(tier)
     if q:
@@ -310,10 +315,10 @@ def scopes(s):
 
 @cached
 def meta(s):
-    counts = _one(s, "SELECT count(*) AS n, count(*) FILTER (WHERE tier IS NULL) AS untiered FROM cur")
+    counts = _one(s, f"SELECT count(*) AS n, count(*) FILTER (WHERE tier = '{WATCH}') AS watch FROM cur")
     return {
         "asof": s["asof"], "model_version": s["model_version"], "gold_version": s["gold_version"],
-        "silver_version": s["silver_version"], "n_current": counts["n"], "n_untiered": counts["untiered"],
+        "silver_version": s["silver_version"], "n_current": counts["n"], "n_watch": counts["watch"],
         "latest_report_period": s["latest_report_period"], "latest_report_doc": s["latest_report_doc"],
         "models": s["pointer"].get("models", {}), "caveats": CAVEATS,
     }
@@ -330,7 +335,7 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
                 / nullif(sum(original_cost_cr) FILTER (WHERE anticipated_cost_cr IS NOT NULL), 0) AS overrun_pct,
             avg(physical_progress_pct) AS avg_progress_pct
         FROM cur{where}""", params)
-    tiers = {r["tier"]: r for r in _rows(s, f"""SELECT coalesce(tier, 'untiered') AS tier, count(*) AS n,
+    tiers = {r["tier"]: r for r in _rows(s, f"""SELECT tier, count(*) AS n,
         coalesce(sum(anticipated_cost_cr), 0) AS capital_cr FROM cur{where} GROUP BY 1""", params)}
 
     def by(col):
@@ -343,7 +348,7 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
     return {
         "asof": s["asof"], "filters": {"ministry": ministry, "sector": sector, "state": state_, "tier": tier},
         "kpis": k,
-        "tiers": [tiers.get(t, {"tier": t, "n": 0, "capital_cr": 0.0}) for t in TIERS + ["untiered"]],
+        "tiers": [tiers.get(t, {"tier": t, "n": 0, "capital_cr": 0.0}) for t in TIERS + [WATCH]],
         "by_state": by("state"), "by_sector": by("sector"), "by_ministry": by("ministry"), "top": top,
     }
 
@@ -357,7 +362,7 @@ def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag
     direction = (order or ("asc" if sort == "name" else "desc")).upper()
     total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
-        ORDER BY {SORTS[sort]} {direction} NULLS LAST, project_key LIMIT ? OFFSET ?""",
+        ORDER BY {SORTS[sort]} {direction} NULLS LAST, watch_score DESC NULLS LAST, project_key LIMIT ? OFFSET ?""",
                   params + [size, (page - 1) * size])
     return {"total": total, "page": page, "size": size, "items": items}
 

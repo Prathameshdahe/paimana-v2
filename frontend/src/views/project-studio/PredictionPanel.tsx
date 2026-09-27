@@ -22,7 +22,7 @@ function interval(p05: number | null, p50: number | null, p95: number | null, f:
 /**
  * AI prediction panel (guide §5.1): tier by rank, the four probabilities, and
  * the predicted slip and cost revision over the next 2 quarters with their
- * 5th–95th percentile interval. An untiered project has no date-based scores,
+ * 5th–95th percentile interval. A Watch project (no completion date) has no date-based scores,
  * which is said in words rather than shown as zeros.
  */
 export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
@@ -38,7 +38,7 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
   }
 
   const t = tierKey(s.tier)
-  const untiered = t === 'untiered'
+  const untiered = t === 'Watch'
   const slip = interval(s.monthsP05, s.monthsP50, s.monthsP95, (v) => `${v.toFixed(0)} mo`)
   const cost = interval(s.costPctP05, s.costPctP50, s.costPctP95, (v) => formatPct(v, 1))
 
@@ -55,7 +55,10 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
             </InfoTip>
           </div>
           {untiered ? (
-            <div className="text-sm text-fg-muted border-l-2 border-border-strong pl-3 py-1">{NOT_SCORED}</div>
+            <div className="space-y-1">
+              <MonoFigure size="3xl" sentiment="watch">{TIER_LABEL.Watch}</MonoFigure>
+              <div className="text-sm text-fg-muted border-l-2 border-border-strong pl-3 py-1">{NOT_SCORED}</div>
+            </div>
           ) : (
             <div className="flex items-baseline gap-3">
               <MonoFigure size="3xl" sentiment={TIER_SENTIMENT[t]}>
@@ -68,8 +71,8 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
           )}
           {s.stagnationOverride && (
             <div className="text-xs text-warning">
-              tier raised by the stagnation rule ({orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without
-              progress; by rank alone: {s.tierByRank ?? 'untiered'})
+              stalled: {orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without progress (a badge only; in
+              the backtest stalled projects slipped no more often, so the tier stays by rank)
             </div>
           )}
         </div>

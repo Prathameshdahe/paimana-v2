@@ -24,7 +24,7 @@ def _camel_keys(d: dict) -> dict:
 # A Parquet row passed through as it is (master, observation, forest, land):
 # its column names go out in camelCase like every other field.
 Record = Annotated[dict[str, Any], AfterValidator(_camel_keys)]
-Tier = Literal["Critical", "High", "Medium", "Low", "untiered"]
+Tier = Literal["Critical", "High", "Medium", "Low", "Watch"]
 Flag = Literal["land", "forest", "litigation", "contractor", "early_notice"]
 Sort = Literal["risk", "cost", "slip", "name", "progress"]
 
@@ -35,7 +35,7 @@ class Meta(CamelModel):
     gold_version: str
     silver_version: str
     n_current: int
-    n_untiered: int
+    n_watch: int
     latest_report_period: date | None
     latest_report_doc: str | None
     models: dict[str, str]
