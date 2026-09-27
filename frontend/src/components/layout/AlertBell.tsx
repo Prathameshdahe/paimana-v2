@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
+import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
-import { ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
+import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDateTime } from '@/lib/formatters'
 
 const SEEN_KEY = 'paimana.alertsSeenAt'
@@ -53,11 +53,11 @@ export function AlertBell() {
     <Popover.Root onOpenChange={(open) => open && markSeen()}>
       <Popover.Trigger
         aria-label={`alerts: ${n} unread`}
-        className="relative flex h-8 w-8 items-center justify-center text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <Bell className="h-4 w-4" />
         {n > 0 && (
-          <span className="absolute top-0 right-0 min-w-[16px] h-4 px-1 rounded-full bg-critical text-white font-mono text-xs leading-4 text-center tabular-nums">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-critical text-white text-xs font-semibold leading-[18px] text-center tabular-nums ring-2 ring-surface-base">
             {n > 99 ? '99+' : n}
           </span>
         )}
@@ -67,15 +67,15 @@ export function AlertBell() {
           align="end"
           sideOffset={8}
           collisionPadding={16}
-          className="z-50 w-[400px] max-w-[calc(100vw-32px)] border border-border-default bg-surface-panel rounded-lg shadow-pop overflow-hidden"
+          className="z-50 w-[400px] max-w-[calc(100vw-32px)] overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-pop"
         >
-          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
-            <span className="text-xs font-semibold text-fg-muted">
+          <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+            <span className="text-sm font-semibold text-fg-base">
               Open alerts{latest.data ? ` · ${latest.data.total}` : ''}
             </span>
             <Popover.Close asChild>
               <Link to="/" className="text-xs text-fg-dimmed hover:text-fg-base hover:underline">
-                inbox &rarr;
+                All alerts &rarr;
               </Link>
             </Popover.Close>
           </div>
@@ -89,13 +89,11 @@ export function AlertBell() {
           ) : (
             <div className="divide-y divide-border-subtle max-h-[420px] overflow-y-auto" data-lenis-prevent>
               {latest.data.items.map((a) => (
-                <div key={a.id} className="px-4 py-2.5 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={alertVariant(a.severity)}>{ALERT_KIND_LABEL[a.kind]}</Badge>
-                    <span className="ml-auto text-xs text-fg-dimmed">{formatDateTime(a.createdAt)}</span>
-                  </div>
-                  <div className="text-xs font-medium text-fg-base leading-snug">{a.title ?? a.kind}</div>
-                  <div className="flex items-center justify-between gap-2">
+                <div key={a.id} className="flex gap-3 px-4 py-3">
+                  <IconChip icon={ALERT_KIND_ICON[a.kind]} variant={alertVariant(a.severity)} title={ALERT_KIND_LABEL[a.kind]} />
+                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="text-sm font-medium text-fg-base leading-snug line-clamp-2">{a.title ?? ALERT_KIND_LABEL[a.kind]}</div>
+                  <div className="flex items-center justify-between gap-2 text-xs text-fg-dimmed">
                     {a.projectKey ? (
                       <Popover.Close asChild>
                         <Link
@@ -106,8 +104,9 @@ export function AlertBell() {
                         </Link>
                       </Popover.Close>
                     ) : (
-                      <span className="text-xs text-fg-dimmed">no project</span>
+                      <span>{formatDateTime(a.createdAt)}</span>
                     )}
+                    {a.projectKey && <span className="ml-auto">{formatDateTime(a.createdAt)}</span>}
                     {canAck && (
                       <Button
                         size="sm"
@@ -118,6 +117,7 @@ export function AlertBell() {
                         Acknowledge
                       </Button>
                     )}
+                  </div>
                   </div>
                 </div>
               ))}

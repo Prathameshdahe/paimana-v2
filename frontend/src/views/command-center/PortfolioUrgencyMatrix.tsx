@@ -61,15 +61,23 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
 
   return (
     <Card
-      title={`Portfolio Urgency Matrix · this page (${points.length} of ${page?.items.length ?? 0})`}
+      title="Urgency"
+      info={
+        <>
+          The projects on this table page: how soon each is due against its chance of slipping. Top left is due soon and
+          likely to slip. Dot size is the anticipated cost; click a dot for its detail.
+          {notPlotted > 0 && ` ${notPlotted} on this page have no completion date and are not plotted.`}
+        </>
+      }
       titleRight={
-        <div className="flex items-center gap-4 font-sans font-semibold text-xs text-fg-dimmed">
+        <div className="flex items-center gap-3 text-xs text-fg-dimmed">
           {TIERS.map((t) => (
-            <span key={t}>
-              <span className="inline-block h-1.5 w-1.5 mr-1" style={{ background: TIER_COLOR[t] }} />
-              {t.toUpperCase()}
+            <span key={t} className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full" style={{ background: TIER_COLOR[t] }} />
+              {t}
             </span>
           ))}
+          <span className="hidden sm:inline">· size = cost · {points.length} of {page?.items.length ?? 0} on this page</span>
         </div>
       }
     >
@@ -81,7 +89,7 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 16, right: 20, left: 10, bottom: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ccd1da" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border-subtle))" vertical={false} />
               <XAxis
                 type="number"
                 dataKey="x"
@@ -89,8 +97,9 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
                 fontSize={12}
                 fontFamily="IBM Plex Mono"
                 tickLine={false}
+                axisLine={false}
                 tickFormatter={(v: number) => `${v}mo`}
-                label={{ value: 'Months to anticipated completion (from asof) →', position: 'insideBottom', offset: -12, fontSize: 12, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
+                label={{ value: 'Months until due →', position: 'insideBottom', offset: -12, fontSize: 12, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
               />
               <YAxis
                 type="number"
@@ -105,14 +114,14 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
                 label={{ value: 'P(slip, 2q)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fill: '#4d5563', fontFamily: 'IBM Plex Sans' }}
               />
               <ZAxis type="number" dataKey="z" range={[30, 320]} />
-              <ReferenceLine x={0} stroke="#ba1b2b" strokeDasharray="4 4" opacity={0.5} label={{ value: 'due at asof', fontSize: 12, fill: '#ba1b2b', position: 'insideTopRight' }} />
+              <ReferenceLine x={0} stroke="#ba1b2b" strokeDasharray="4 4" opacity={0.5} label={{ value: 'due now', fontSize: 12, fill: '#ba1b2b', position: 'insideTopRight' }} />
               <Tooltip
                 cursor={{ strokeDasharray: '3 3' }}
                 content={({ active, payload }) => {
                   const p = active ? (payload?.[0]?.payload as Point | undefined) : undefined
                   if (!p) return null
                   return (
-                    <div className="border border-border-default bg-surface-panel px-3 py-2 text-xs max-w-[280px] rounded-lg shadow-pop overflow-hidden">
+                    <div className="max-w-[280px] overflow-hidden rounded-lg border border-border-default bg-surface-panel px-3 py-2 text-xs shadow-pop">
                       <div className="font-semibold text-fg-base border-b border-border-subtle pb-1 mb-1.5">
                         {p.row.key} · {p.row.tier}
                       </div>
@@ -144,10 +153,6 @@ export function PortfolioUrgencyMatrix({ page, selectedKey, onOpenDetail }: Port
             </ScatterChart>
           </ResponsiveContainer>
         )}
-      </div>
-      <div className="px-5 pb-2 -mt-1 text-xs text-fg-dimmed">
-        dot size = anticipated cost · click a dot for its detail
-        {notPlotted > 0 && ` · ${notPlotted} on this page not plotted (no completion date, schedule not scored)`}
       </div>
     </Card>
   )

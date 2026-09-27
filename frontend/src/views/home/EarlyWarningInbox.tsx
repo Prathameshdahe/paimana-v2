@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Input'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
-import { ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
-import { formatDate, formatDateTime, cn } from '@/lib/formatters'
+import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
+import { formatDate, formatDateTime } from '@/lib/formatters'
 import type { AlertKind } from '@/contracts/portfolio'
 
 const PAGE_SIZE = 30
@@ -33,39 +34,33 @@ export function EarlyWarningInbox() {
 
   return (
     <Card
-      title="Early Warning Inbox"
+      title="Early warnings"
       titleRight={
-        <span className="text-xs text-fg-dimmed">{data ? `${data.total} open` : ''}</span>
+        <span className="flex items-center gap-2">
+          {data && <span>{data.total} open</span>}
+          <Select
+            aria-label="alert kind"
+            value={kind ?? ''}
+            onChange={(e) => {
+              setKind((e.target.value || undefined) as AlertKind | undefined)
+              setPage(1)
+            }}
+          >
+            <option value="">All kinds</option>
+            {KINDS.map((k) => (
+              <option key={k} value={k}>{ALERT_KIND_LABEL[k]}</option>
+            ))}
+          </Select>
+        </span>
       }
       className="h-full flex flex-col"
     >
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-border-subtle px-5 py-2.5">
-        {([undefined, ...KINDS] as Array<AlertKind | undefined>).map((k) => (
-          <button
-            key={k ?? 'all'}
-            aria-pressed={kind === k}
-            onClick={() => {
-              setKind(k)
-              setPage(1)
-            }}
-            className={cn(
-              'border px-2 py-0.5 text-xs transition-colors',
-              kind === k
-                ? 'border-fg-base bg-fg-base text-fg-inverse'
-                : 'border-border-default text-fg-dimmed hover:text-fg-base hover:border-border-strong'
-            )}
-          >
-            {k ? ALERT_KIND_LABEL[k] : 'All'}
-          </button>
-        ))}
-      </div>
-
       {error ? (
         <ApiErrorNote error={error} />
       ) : isLoading || !data ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading alerts...</div>
+        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">loading alerts...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
+        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
           {kind
             ? `No open ${ALERT_KIND_LABEL[kind].toLowerCase()} alerts.`
             : 'No open alerts — every alert has been acknowledged.'}
@@ -73,22 +68,23 @@ export function EarlyWarningInbox() {
       ) : (
         <div className="divide-y divide-border-subtle flex-1 overflow-y-auto max-h-[760px]" data-lenis-prevent>
           {data.items.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-elevated">
-              <Badge variant={alertVariant(a.severity)} className="w-[92px] shrink-0">
-                {ALERT_KIND_LABEL[a.kind] ?? a.kind}
-              </Badge>
+            <div key={a.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-elevated">
+              <IconChip icon={ALERT_KIND_ICON[a.kind]} variant={alertVariant(a.severity)} title={ALERT_KIND_LABEL[a.kind] ?? a.kind} />
               <button
                 onClick={() => a.projectKey && navigate(`/projects/${a.projectKey}`)}
                 disabled={!a.projectKey}
                 className="flex-1 min-w-0 text-left disabled:cursor-default"
               >
-                <div className="truncate text-xs font-medium text-fg-base">{a.title ?? a.kind}</div>
-                <div className="truncate text-xs text-fg-dimmed" title={a.detail ?? undefined}>
-                  {a.projectKey && <>{a.projectKey} · </>}
-                  {a.detail}
-                  {a.asof && <> · asof {formatDate(a.asof)}</>}
+                <div className="truncate text-sm font-medium text-fg-base">{a.title ?? ALERT_KIND_LABEL[a.kind]}</div>
+                <div
+                  className="truncate text-xs text-fg-dimmed"
+                  title={[a.detail, a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
+                >
+                  {ALERT_KIND_LABEL[a.kind] ?? a.kind}
+                  {a.projectKey && <> · {a.projectKey}</>}
                   {' · '}
                   {formatDateTime(a.createdAt)}
+                  {a.detail && <> · {a.detail}</>}
                 </div>
               </button>
               {canAck && (

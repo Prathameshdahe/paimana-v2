@@ -1,116 +1,119 @@
+import type React from 'react'
+import { Gauge, IndianRupee, ShieldAlert, TrendingUp } from 'lucide-react'
 import { usePortfolio } from '@/lib/queries'
-import { MonoFigure } from '@/components/ui/MonoFigure'
+import { IconChip } from '@/components/ui/Badge'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
-import { TIERS, TIER_COLOR, TIER_TEXT } from '@/lib/riskPalette'
-import { formatINRShort, formatPct, orDash } from '@/lib/formatters'
+import { TIERS, TIER_COLOR, TIER_LABEL, TIER_TEXT } from '@/lib/riskPalette'
+import { formatINRShort, formatPct, orDash, cn } from '@/lib/formatters'
+
+const tile = 'rounded-xl border border-border-subtle bg-surface-panel p-4 shadow-card animate-card-in'
+
+function Tile({ icon, tone, label, value, children }: {
+  icon: React.ComponentType<{ className?: string }>
+  tone: 'critical' | 'accent' | 'stable' | 'warning'
+  label: string
+  value?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={tile}>
+      <div className="flex items-center gap-2.5">
+        <IconChip icon={icon} variant={tone} />
+        <span className="text-sm font-medium text-fg-muted">{label}</span>
+      </div>
+      {value !== undefined && (
+        <div className="mt-3 text-2xl font-semibold tabular-nums leading-none tracking-tight text-fg-base">{value}</div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+/** a thin rounded bar: `pct` filled */
+function Meter({ pct, className }: { pct: number; className: string }) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
+      <div className={cn('h-full rounded-full transition-[width] duration-700', className)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    </div>
+  )
+}
 
 /**
- * KPI Ribbon — inline metric strip, NOT card soup.
- * Single horizontal band with pipe-delimited macro KPIs from /api/portfolio.
- * Matches Grafana/Datadog stat-bar pattern.
+ * Four stat tiles from /api/portfolio: capital, overrun, the tier mix as one bar, and spend with
+ * physical progress. Home and Command Center share them.
  */
 export function KPIRibbon() {
   const { data: p, error, isLoading } = usePortfolio()
 
   if (error) {
     return (
-      <div className="border border-border-subtle bg-surface-panel rounded-xl shadow-card overflow-hidden">
+      <div className={tile}>
         <ApiErrorNote error={error} className="py-4" />
       </div>
     )
   }
   if (isLoading || !p) {
-    return <div className="border border-border-subtle bg-surface-panel h-[84px] rounded-xl shadow-card overflow-hidden" />
+    return (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <div key={i} className={cn(tile, 'h-[128px] animate-pulse')} />)}
+      </div>
+    )
   }
 
   const k = p.kpis
   const tierN = (t: string) => p.tiers.find((x) => x.tier === t)?.n ?? 0
-  const untiered = tierN('untiered')
   const spentPct =
     k.expenditureCr !== null && k.anticipatedCostCr ? (k.expenditureCr / k.anticipatedCostCr) * 100 : null
+  const segments = [...TIERS, 'untiered' as const]
 
   return (
-    <div className="border border-border-subtle bg-surface-panel rounded-xl shadow-card overflow-hidden">
-      <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border-subtle">
-        {/* Anticipated capital */}
-        <div className="px-4 py-3 flex flex-col items-center text-center justify-center">
-          <div className="text-xs font-sans font-semibold text-fg-dimmed mb-1">
-            Anticipated Cost
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="default">
-              {orDash(k.anticipatedCostCr, formatINRShort)}
-            </MonoFigure>
-            <div className="text-xs font-sans text-fg-muted font-semibold bg-surface-elevated border border-border-subtle px-1.5 py-0.5 rounded-sm">
-              orig <span className="font-mono tabular-nums">{orDash(k.originalCostCr, formatINRShort)}</span>
-            </div>
-          </div>
-          <div className="text-xs text-fg-dimmed mt-1">{k.nProjects.toLocaleString()} open projects</div>
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <Tile icon={IndianRupee} tone="accent" label="Anticipated cost" value={orDash(k.anticipatedCostCr, formatINRShort)}>
+        <div className="mt-2 text-xs text-fg-dimmed">
+          {k.nProjects.toLocaleString()} open projects · originally {orDash(k.originalCostCr, formatINRShort)}
         </div>
+      </Tile>
 
-        {/* Cost overrun so far */}
-        <div className="px-4 py-3 bg-critical/5 flex flex-col items-center text-center justify-center">
-          <div className="text-xs font-sans font-semibold text-critical mb-1 flex items-center justify-center gap-1.5">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-critical" />
-            Cost Overrun To Date
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="critical">
-              {orDash(k.overrunCr, formatINRShort)}
-            </MonoFigure>
-            <div className="text-xs font-sans text-critical font-semibold bg-critical/10 px-1.5 py-0.5 rounded-sm">
-              <span className="font-mono tabular-nums">{orDash(k.overrunPct, (v) => `+${formatPct(v)}`)}</span> vs original
-            </div>
-          </div>
+      <Tile icon={TrendingUp} tone="critical" label="Cost overrun so far" value={<span className="text-critical">{orDash(k.overrunCr, formatINRShort)}</span>}>
+        <div className="mt-2 text-xs text-fg-dimmed">
+          <span className="font-semibold text-critical">{orDash(k.overrunPct, (v) => `+${formatPct(v)}`)}</span> over the original cost
         </div>
+      </Tile>
 
-        {/* Tier distribution (by rank) */}
-        <div className="px-4 py-3 flex flex-col items-center text-center justify-center">
-          <div className="text-xs font-sans font-semibold text-fg-dimmed mb-1">
-            Risk Tiers · by rank
-          </div>
-          <div className="flex items-baseline justify-center gap-2.5 mt-1">
-            {TIERS.map((t) => (
-              <span key={t} className="flex items-baseline gap-1">
-                <span className={`text-lg font-mono tabular-nums font-semibold ${TIER_TEXT[t]}`}>{tierN(t)}</span>
-                <span className="text-xs font-sans text-fg-dimmed font-medium">{t.slice(0, 4)}</span>
-              </span>
-            ))}
-          </div>
+      <Tile icon={ShieldAlert} tone="warning" label="Risk tiers">
+        <div className="mt-3 flex items-baseline justify-between gap-2">
+          {TIERS.map((t) => (
+            <span key={t} className="flex flex-col">
+              <span className={cn('text-xl font-semibold tabular-nums leading-none', TIER_TEXT[t])}>{tierN(t)}</span>
+              <span className="mt-1 text-xs text-fg-dimmed">{t}</span>
+            </span>
+          ))}
+        </div>
+        <div className="mt-2.5 flex h-2 gap-px overflow-hidden rounded-full bg-surface-input">
+          {segments.map((t) => (
+            <Tooltip key={t} content={`${TIER_LABEL[t]}: ${tierN(t).toLocaleString()} projects`}>
+              <div style={{ width: `${(tierN(t) / Math.max(k.nProjects, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full" />
+            </Tooltip>
+          ))}
+        </div>
+        <div className="mt-1.5 text-xs text-fg-dimmed">+ {tierN('untiered').toLocaleString()} with no completion date</div>
+      </Tile>
 
-          {/* Proportional bar — minimal, no rounded corners */}
-          <div className="flex h-1 w-3/4 mt-2 bg-surface-input">
-            {[...TIERS, 'untiered' as const].map((t) => (
-              <div
-                key={t}
-                style={{ width: `${(tierN(t) / Math.max(k.nProjects, 1)) * 100}%`, background: TIER_COLOR[t] }}
-                className="h-full"
-              />
-            ))}
+      <Tile icon={Gauge} tone="stable" label="Spent so far" value={orDash(k.expenditureCr, formatINRShort)}>
+        <div className="mt-2.5 space-y-1.5 text-xs text-fg-dimmed">
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0">spent</span>
+            <div className="flex-1"><Meter pct={spentPct ?? 0} className="bg-accent" /></div>
+            <span className="w-9 text-right font-mono tabular-nums text-fg-muted">{orDash(spentPct, (v) => formatPct(v, 0))}</span>
           </div>
-          <div className="text-xs text-fg-dimmed mt-1">
-            + {untiered} untiered (no completion date)
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0">progress</span>
+            <div className="flex-1"><Meter pct={k.avgProgressPct ?? 0} className="bg-stable" /></div>
+            <span className="w-9 text-right font-mono tabular-nums text-fg-muted">{orDash(k.avgProgressPct, (v) => formatPct(v, 0))}</span>
           </div>
         </div>
-
-        {/* Spend and progress */}
-        <div className="px-4 py-3 flex flex-col items-center text-center justify-center">
-          <div className="text-xs font-sans font-semibold text-fg-dimmed mb-1">
-            Spent To Date
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="default">
-              {orDash(k.expenditureCr, formatINRShort)}
-            </MonoFigure>
-            <div className="text-xs font-sans text-fg-muted font-semibold bg-surface-elevated border border-border-subtle px-1.5 py-0.5 rounded-sm">
-              <span className="font-mono tabular-nums">{orDash(spentPct, (v) => formatPct(v, 0))}</span> of cost
-            </div>
-          </div>
-          <div className="text-xs text-fg-dimmed mt-1">
-            avg physical progress {orDash(k.avgProgressPct, (v) => formatPct(v, 0))}
-          </div>
-        </div>
-      </div>
+      </Tile>
     </div>
   )
 }

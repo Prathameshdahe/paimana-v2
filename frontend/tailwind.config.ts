@@ -69,9 +69,10 @@ const config: Config = {
         },
       },
       animation: {
-        // page on route change, cards on mount; off under prefers-reduced-motion (globals.css)
-        'page-in': 'fade-up 280ms cubic-bezier(0.22, 1, 0.36, 1) both',
-        'card-in': 'fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        // page on route change, cards on mount; off under prefers-reduced-motion (globals.css). Fill 'backwards', not
+        // 'both': a filling animation keeps a stacking context and would trap fixed drawers under the top bar
+        'page-in': 'fade-up 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards',
+        'card-in': 'fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards',
       },
       ringColor: {
         accent: 'hsl(var(--color-accent) / <alpha-value>)',

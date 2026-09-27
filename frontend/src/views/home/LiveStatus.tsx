@@ -1,4 +1,7 @@
+import type { ReactNode } from 'react'
+import { Download, FileSearch, Inbox, Newspaper, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { useLiveStatus, useWatchNow } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
@@ -22,24 +25,37 @@ export function LiveStatus() {
   return can(role, 'canSeeLive') ? <Strip canRun={can(role, 'canRunJobs')} /> : null
 }
 
+function Item({ icon: Icon, label, hint, children }: { icon: LucideIcon; label: string; hint?: string; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5" title={hint}>
+      <Icon className="size-3.5 text-fg-dimmed" />
+      <span className="text-fg-dimmed">{label}</span>
+      <span className="text-fg-base">{children}</span>
+    </span>
+  )
+}
+
 function Strip({ canRun }: { canRun: boolean }) {
   const { data, error } = useLiveStatus()
   const watch = useWatchNow()
 
   const state = error
-    ? { label: 'OFFLINE', text: 'text-critical', dot: 'bg-critical' }
+    ? { label: 'Offline', text: 'text-critical', dot: 'bg-critical' }
     : !data
-      ? { label: 'LIVE …', text: 'text-fg-dimmed', dot: 'bg-fg-dimmed' }
+      ? { label: 'Live …', text: 'text-fg-dimmed', dot: 'bg-fg-dimmed' }
       : data.enabled
-        ? { label: 'LIVE', text: 'text-stable', dot: 'bg-stable animate-pulse' }
-        : { label: 'LIVE JOBS OFF', text: 'text-warning', dot: 'bg-warning' }
+        ? { label: 'Live', text: 'text-stable', dot: 'bg-stable animate-pulse' }
+        : { label: 'Live jobs off', text: 'text-warning', dot: 'bg-warning' }
   const ingest = data?.watch.lastRun
 
   return (
-    <div className="border border-border-subtle bg-surface-panel px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-fg-muted rounded-xl shadow-card overflow-hidden">
-      <span className={cn('flex items-center gap-1.5 font-semibold tracking-widest', state.text)}>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border-subtle bg-surface-panel px-4 py-2.5 text-xs text-fg-muted shadow-card animate-card-in">
+      <span className={cn('flex items-center gap-1.5 rounded-full bg-surface-elevated px-2.5 py-1 font-semibold', state.text)}>
         <span className={cn('inline-block h-2 w-2 rounded-full', state.dot)} />
         {state.label}
+        {data && !data.enabled && (
+          <InfoTip label="About live jobs">The background loops are off (LIVE_JOBS=0); jobs still start from the API.</InfoTip>
+        )}
       </span>
 
       {error ? (
@@ -47,28 +63,20 @@ function Strip({ canRun }: { canRun: boolean }) {
       ) : (
         data && (
           <>
-            <span title="the watcher looks for new reports in dataset/raw/inbox/">
-              report check{' '}
-              <span className="text-fg-base">{lastAndNext(data.watch, data.watch.lastTick ?? ingest?.finishedAt)}</span>
-            </span>
-            <span>
-              last ingest{' '}
-              <span className={cn(ingest?.status === 'error' ? 'text-critical' : 'text-fg-base')}>
+            <Item icon={FileSearch} label="Report check" hint="the watcher looks for new reports in dataset/raw/inbox/">
+              {lastAndNext(data.watch, data.watch.lastTick ?? ingest?.finishedAt)}
+            </Item>
+            <Item icon={Download} label="Last ingest">
+              <span className={cn(ingest?.status === 'error' && 'text-critical')}>
                 {ingest ? `${ingest.status ?? 'unknown'} ${when(ingest.finishedAt)}` : 'none yet'}
               </span>
-            </span>
-            <span>
-              news scout{' '}
-              <span className="text-fg-base">
-                {lastAndNext(data.scout, data.scout.lastRun?.finishedAt ?? data.scout.lastTick)}
-              </span>
-            </span>
-            <span>
-              inbox <span className={cn(data.inboxPending ? 'text-warning font-semibold' : 'text-fg-base')}>{data.inboxPending}</span> pending
-            </span>
-            {!data.enabled && (
-              <span className="text-fg-dimmed">loops off (LIVE_JOBS=0); jobs still start from the API</span>
-            )}
+            </Item>
+            <Item icon={Newspaper} label="News scout">
+              {lastAndNext(data.scout, data.scout.lastRun?.finishedAt ?? data.scout.lastTick)}
+            </Item>
+            <Item icon={Inbox} label="Inbox">
+              <span className={cn(data.inboxPending ? 'text-warning font-semibold' : '')}>{data.inboxPending} pending</span>
+            </Item>
           </>
         )
       )}

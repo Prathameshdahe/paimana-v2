@@ -5,6 +5,7 @@ import { usePortfolio } from '@/lib/queries'
 import { TIER_COLOR } from '@/lib/riskPalette'
 import { formatINRShort, orDash } from '@/lib/formatters'
 import { Card } from '@/components/ui/Card'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import type { GroupStat } from '@/contracts/portfolio'
 import { GEO_URL, MAP_CENTER, OFF_MAP, normStateKey } from './indiaGeo'
@@ -48,7 +49,7 @@ export function IndiaMap() {
   const open = (s: GroupStat) => s.name && navigate(`/command?state=${encodeURIComponent(s.name)}`)
 
   return (
-    <Card title="Portfolio by State" className="relative h-full flex flex-col">
+    <Card title="Projects by state" info="Shade: critical + high projects in the state. Click a state to open its projects." className="relative h-full flex flex-col">
       {error ? (
         <ApiErrorNote error={error} />
       ) : (
@@ -128,49 +129,47 @@ export function IndiaMap() {
       )}
 
       {data && (
-      <div className="flex flex-wrap items-center gap-4 border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2 w-8" style={{ background: `linear-gradient(90deg, #e9e5dc, ${TIER_COLOR.Critical})` }} />
-          fill: critical + high projects (max {maxAtRisk})
-        </span>
-        <span className="text-fg-dimmed/70">click a state to open its register</span>
-      </div>
-      )}
-
-      {offMap.length > 0 && (
-        <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
-          not drawn on this map:{' '}
-          {offMap.map((s, i) => (
-            <span key={s.name ?? i}>
-              {i > 0 && ' · '}
-              <button onClick={() => open(s)} className="hover:text-fg-base hover:underline">
-                {s.name ?? 'state unknown'} {s.n}
-                {s.nCritical + s.nHigh > 0 && <span className="text-critical"> ({s.nCritical + s.nHigh} at risk)</span>}
-              </button>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed">
+          <span className="flex items-center gap-2">
+            <span>0</span>
+            <span className="h-2 w-16 rounded-full" style={{ background: `linear-gradient(90deg, #e9e5dc, ${TIER_COLOR.Critical})` }} />
+            <span>{maxAtRisk} critical + high</span>
+          </span>
+          {offMap.length > 0 && (
+            <span className="flex flex-wrap items-center gap-x-2">
+              <span className="flex items-center gap-1">
+                not on the map
+                <InfoTip label="About the map">The boundary file predates Telangana and Ladakh, so their projects are listed here.</InfoTip>
+              </span>
+              {offMap.map((s, i) => (
+                <button key={s.name ?? i} onClick={() => open(s)} className="rounded-full bg-surface-elevated px-2 py-0.5 hover:text-fg-base">
+                  {s.name ?? 'state unknown'} {s.n}
+                  {s.nCritical + s.nHigh > 0 && <span className="text-critical"> · {s.nCritical + s.nHigh} at risk</span>}
+                </button>
+              ))}
             </span>
-          ))}
-          <span className="text-fg-dimmed/70"> — the boundary file predates Telangana and Ladakh</span>
+          )}
         </div>
       )}
 
-      <div className="border-t border-border-subtle">
-        <div className="px-5 py-2 text-xs text-fg-dimmed">
-          Top states by critical count
-        </div>
-        <div className="divide-y divide-border-subtle">
+      <div className="border-t border-border-subtle px-5 pb-3 pt-3">
+        <div className="mb-2 text-xs font-medium text-fg-muted">Top states by critical projects</div>
+        <div className="space-y-1">
           {topStates.map((s) => (
             <button
               key={s.name ?? 'unknown'}
               onClick={() => open(s)}
-              className="flex w-full items-center justify-between px-5 py-2 text-left hover:bg-surface-elevated transition-colors"
+              className="grid w-full grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-elevated"
             >
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: fill(s, maxAtRisk) }} />
-                <span className="text-sm font-medium text-fg-base">{s.name ?? 'state unknown'}</span>
+              <span className="truncate text-sm font-medium text-fg-base">{s.name ?? 'state unknown'}</span>
+              {/* the state's open projects, critical and high as their share */}
+              <span className="flex h-2 overflow-hidden rounded-full bg-surface-input" title={`${s.n} projects: ${s.nCritical} critical, ${s.nHigh} high`}>
+                <span style={{ width: `${(s.nCritical / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.Critical }} />
+                <span style={{ width: `${(s.nHigh / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.High }} />
               </span>
-              <span className="text-xs text-fg-dimmed">
-                {s.n} projects · <span className="text-critical font-semibold">{s.nCritical} crit</span> ·{' '}
-                <span className="text-warning font-semibold">{s.nHigh} high</span> · {orDash(s.capitalCr, formatINRShort)}
+              <span className="whitespace-nowrap text-xs text-fg-dimmed">
+                <span className="font-semibold text-critical">{s.nCritical}</span> ·{' '}
+                <span className="font-semibold text-warning">{s.nHigh}</span> of {s.n} · {orDash(s.capitalCr, formatINRShort)}
               </span>
             </button>
           ))}

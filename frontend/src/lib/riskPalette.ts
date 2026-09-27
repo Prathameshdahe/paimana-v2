@@ -4,6 +4,10 @@
  * India map, the charts and the badges. Tiers go by rank (Critical/High/
  * Medium/Low); a project with no anticipated completion date is untiered.
  */
+import {
+  Bug, CalendarX, CirclePlus, HardHat, LandPlot, Newspaper, Scale, Siren, Trees, TrendingDown, TrendingUp,
+  type LucideIcon,
+} from 'lucide-react'
 import type { Flag, Tier, TierFilter } from '@/contracts/project'
 import type { AlertKind } from '@/contracts/portfolio'
 
@@ -56,6 +60,15 @@ export const TIER_SENTIMENT = {
   untiered: 'muted',
 } as const satisfies Record<TierFilter, string>
 
+/** soft fill + ink per sentiment: badges, icon chips */
+export const TONE_CHIP = {
+  critical: 'bg-critical/10 text-critical',
+  warning: 'bg-warning/10 text-warning',
+  stable: 'bg-stable/10 text-stable',
+  accent: 'bg-accent/10 text-accent',
+  muted: 'bg-fg-dimmed/10 text-fg-muted',
+} as const
+
 /** list flags: a flagged risk-profile dimension, or early notice (flagged external factor, no slip in the numbers yet) */
 export const FLAG_LABEL: Record<Flag, string> = {
   land: 'Land',
@@ -63,6 +76,15 @@ export const FLAG_LABEL: Record<Flag, string> = {
   litigation: 'Litigation',
   contractor: 'Contractor',
   early_notice: 'Early notice',
+}
+
+/** icon chip per list flag */
+export const FLAG_ICON: Record<Flag, LucideIcon> = {
+  land: LandPlot,
+  forest: Trees,
+  litigation: Scale,
+  contractor: HardHat,
+  early_notice: Siren,
 }
 
 export const ALERT_KIND_LABEL: Record<AlertKind, string> = {
@@ -73,6 +95,16 @@ export const ALERT_KIND_LABEL: Record<AlertKind, string> = {
   signal: 'News signal',
   early_notice: 'Early notice',
   pipeline_error: 'Pipeline error',
+}
+
+export const ALERT_KIND_ICON: Record<AlertKind, LucideIcon> = {
+  tier_up: TrendingUp,
+  tier_down: TrendingDown,
+  new_project: CirclePlus,
+  slip_realised: CalendarX,
+  signal: Newspaper,
+  early_notice: Siren,
+  pipeline_error: Bug,
 }
 
 /** Badge variant per alert severity (3 highest) */

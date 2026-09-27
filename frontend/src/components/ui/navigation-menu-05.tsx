@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/formatters";
 import { useRole } from "@/lib/auth/RoleContext";
 import { canOpen } from "@/lib/auth/access";
@@ -15,33 +16,29 @@ import {
 type NavItem = { title: string; href: string; end: boolean };
 
 const navigationMenuItems: NavItem[] = [
-  { title: "HOME", href: "/", end: true },
-  { title: "COMMAND", href: "/command", end: false },
-  { title: "EXTERNAL FACTORS", href: "/external", end: false },
-  { title: "BOTTLENECKS", href: "/bottlenecks", end: false },
-  { title: "AGENCIES", href: "/agencies", end: false },
-  { title: "RADAR", href: "/radar", end: false },
-  { title: "MODELS", href: "/models", end: false },
-  { title: "WORKERS", href: "/workers", end: false },
-  { title: "APPROVALS", href: "/approvals", end: false },
+  { title: "Home", href: "/", end: true },
+  { title: "Command", href: "/command", end: false },
+  { title: "External factors", href: "/external", end: false },
+  { title: "Bottlenecks", href: "/bottlenecks", end: false },
+  { title: "Agencies", href: "/agencies", end: false },
+  { title: "Radar", href: "/radar", end: false },
+  { title: "Models", href: "/models", end: false },
+  { title: "Workers", href: "/workers", end: false },
+  { title: "Approvals", href: "/approvals", end: false },
 ];
 
 /**
- * The first INLINE items sit in the bar; the rest open from MORE. Four labels, MORE, the bell and
- * the role switch fit next to the asof ticker at 1024px (measured: the bar has ~545px for links);
- * the ticker grows with the width, so the split stays the same at every size.
+ * The first INLINE items sit in the bar; the rest open from More. Five labels, More, the bell, the
+ * scope chip and the account button fit at 1024px; the data pill only joins from 1280px (TopBar).
  */
-const INLINE = 4;
+const INLINE = 5;
 
 const linkCls = cn(
-  "group relative inline-flex h-9 w-max items-center justify-center px-0.5 py-2 font-sans font-semibold text-sm tracking-widest transition-colors",
-  "before:absolute before:inset-x-0 before:bottom-0 before:h-[2px] before:scale-x-0 before:bg-fg-base before:transition-transform",
-  "hover:text-fg-muted hover:before:scale-x-100",
-  "focus:text-fg-base focus:outline-none focus:before:scale-x-100",
-  "disabled:pointer-events-none disabled:opacity-50",
-  "data-[active]:bg-transparent data-[state=open]:before:scale-x-100 data-[active]:before:scale-x-100 data-[active]:text-fg-base",
-  "text-fg-dimmed",
-  "hover:bg-transparent focus:bg-transparent active:bg-transparent"
+  "inline-flex h-8 w-max items-center justify-center rounded-lg px-2.5 text-sm font-medium transition-colors",
+  "text-fg-muted hover:bg-surface-elevated hover:text-fg-base",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+  "data-[active]:bg-surface-panel data-[active]:text-fg-base data-[active]:shadow-sm data-[active]:ring-1 data-[active]:ring-border-subtle",
+  "data-[state=open]:bg-surface-elevated"
 );
 
 export function NavigationMenuWithActiveItem() {
@@ -57,7 +54,7 @@ export function NavigationMenuWithActiveItem() {
 
   return (
     <NavigationMenu>
-      <NavigationMenuList className="space-x-3 xl:space-x-5 2xl:space-x-6">
+      <NavigationMenuList className="space-x-0.5">
         {inline.map((item) => (
           <NavigationMenuItem key={item.title}>
             <NavigationMenuLink active={isActive(item)} asChild className={linkCls}>
@@ -75,13 +72,13 @@ export function NavigationMenuWithActiveItem() {
                 className={cn(linkCls, "gap-1")}
                 aria-label="more pages"
               >
-                MORE <span aria-hidden className="text-xs">▾</span>
+                More <ChevronDown aria-hidden className="size-3.5" />
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
                   align="end"
                   sideOffset={6}
-                  className="z-50 min-w-[180px] border border-border-default bg-surface-panel py-1 rounded-lg shadow-pop overflow-hidden"
+                  className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-border-default bg-surface-panel p-1 shadow-pop"
                 >
                   {more.map((item) => (
                     <NavLink
@@ -90,8 +87,8 @@ export function NavigationMenuWithActiveItem() {
                       end={item.end}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "block px-4 py-2 font-sans text-xs font-semibold hover:bg-surface-elevated",
-                        isActive(item) ? "text-fg-base border-l-2 border-fg-base" : "text-fg-dimmed"
+                        "block rounded-lg px-3 py-2 text-sm font-medium hover:bg-surface-elevated",
+                        isActive(item) ? "bg-surface-elevated text-fg-base" : "text-fg-muted"
                       )}
                     >
                       {item.title}

@@ -1,4 +1,6 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import * as Popover from '@radix-ui/react-popover'
+import { ChevronDown, LogOut } from 'lucide-react'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
@@ -15,113 +17,111 @@ const ROLE_LABELS: Record<string, string> = {
   public: 'Public',
 }
 
+/** 'Asha Rao' -> 'AR'; no name: the role's initials */
+function initials(name: string, role: string): string {
+  const words = (name.trim() || ROLE_LABELS[role] || '?').split(/\s+/)
+  return words.slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+}
+
 /**
- * TopBar — persistent telemetry rail.
- * Inspired by Bloomberg/Grafana: dense, monospace, structural.
- * Zero decorative icons. Information-first.
+ * Persistent top bar: logo, the pages the role may open, a compact data pill, the scope the
+ * pages are cut to, the alert bell and the user menu. Model versions live on Models and the
+ * project page's provenance line, not here.
  */
 export function TopBar() {
   const meta = useMeta()
   const { data: p } = usePortfolio()
   const m = meta.data
-  const tierN = (t: string) => p?.tiers.find((x) => x.tier === t)?.n ?? 0
   const { role, displayName, ministry, agency, clearRole } = useRole()
   const scope = ministry ?? agency
   const navigate = useNavigate()
+  const signedIn = !!role && role !== 'public'
   useAlertStream()
 
   return (
-    <header data-no-print className="sticky top-0 z-40 w-full border-b border-border-default bg-surface-base/95 backdrop-blur-sm shadow-sm">
-      <div className="mx-auto flex h-14 py-2 max-w-[1600px] items-center justify-between px-4">
-        {/* Left: System Identifier */}
-        <div className="flex items-center gap-3">
-          <a href="/" className="flex items-baseline gap-1.5">
-            <span className="font-sans text-base font-extrabold tracking-[0.2em] text-fg-base">
-              PAIMANA
-            </span>
-            <span className="font-sans text-xs font-bold text-fg-dimmed">
-              RADAR
-            </span>
-          </a>
-        </div>
+    <header data-no-print className="sticky top-0 z-40 w-full border-b border-border-subtle bg-surface-base/90 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
+        <Link to="/" className="flex shrink-0 items-baseline gap-1.5">
+          <span className="text-base font-extrabold tracking-[0.18em] text-fg-base">PAIMANA</span>
+          <span className="text-xs font-semibold tracking-widest text-fg-dimmed">RADAR</span>
+        </Link>
 
-        {/* Center: Live Portfolio Metrics — monospace ticker (data version + tier counts) */}
-        {m && (
-          <div className="hidden lg:flex items-center gap-3 font-sans text-xs text-fg-muted">
+        <NavigationMenuWithActiveItem />
+
+        <div className="ml-auto flex min-w-0 items-center gap-2.5">
+          {m && (
+            // the data version and the viewer's project count (scoped portfolio)
             <span
-              className="bg-surface-elevated text-fg-base px-2.5 py-1 rounded-sm border border-border-default font-semibold flex items-center gap-1.5 shadow-sm"
+              className="hidden xl:inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-panel px-3 py-1 text-xs text-fg-muted ring-1 ring-inset ring-border-subtle"
               title={`latest report: ${m.latestReportDoc ?? 'unknown'}`}
             >
-              <span className="font-sans text-xs text-fg-dimmed">asof</span>
-              <span className="font-mono tabular-nums whitespace-nowrap">{formatDate(m.asof)}</span>
-              <span className="text-border-strong">·</span>
-              <span className="font-mono tabular-nums">{(p?.kpis.nProjects ?? m.nCurrent).toLocaleString()}</span>
-              <span className="hidden xl:inline font-sans text-xs text-fg-dimmed">projects</span>
+              <span className="size-1.5 rounded-full bg-stable" />
+              as of {formatDate(m.asof)} · {(p?.kpis.nProjects ?? m.nCurrent).toLocaleString()} projects
             </span>
-            {p && (
-              <span className="hidden xl:inline font-mono text-xs tabular-nums">
-                <span className="text-critical font-semibold">{tierN('Critical')}</span> crit ·{' '}
-                <span className="text-warning font-semibold">{tierN('High')}</span> high
-              </span>
-            )}
-            {can(role, 'canSeeModelVersion') && (
-              <span className="hidden 2xl:inline text-xs text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
-                {m.modelVersion}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Right: Navigation Segments + role identity */}
-        <nav className="flex items-center gap-3 xl:gap-4">
-          <NavigationMenuWithActiveItem />
-
-          {can(role, 'canSeeAlerts') && <AlertBell />}
-
-          <span className="text-border-strong/40">│</span>
+          )}
 
           {scope && (
             // the scope every page is cut to (backend/access.py)
             <span
               title={`viewing as ${scope}`}
-              className="hidden md:inline max-w-[220px] truncate rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 font-sans text-xs font-medium text-fg-base"
+              className="hidden md:inline-block max-w-[200px] truncate rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-fg-base ring-1 ring-inset ring-accent/25"
             >
-              <span className="text-fg-dimmed">viewing as </span>
               {scope}
             </span>
           )}
 
-          {role && role !== 'public' ? (
-            <div className="flex items-center gap-2 font-mono text-xs">
-              {/* the role only from 2xl, the name always in the tooltip: four nav labels, MORE, the bell and this fit 1024px */}
-              <span className="hidden 2xl:inline whitespace-nowrap text-fg-muted" title={displayName}>
-                {ROLE_LABELS[role]}
-              </span>
-              <button
-                title={`${displayName} · ${ROLE_LABELS[role]}`}
-                onClick={() => {
-                  clearRole()
-                  navigate('/login')
-                }}
-                className="whitespace-nowrap text-fg-dimmed underline-offset-2 hover:text-fg-base hover:underline"
+          {can(role, 'canSeeAlerts') && <AlertBell />}
+
+          {signedIn ? (
+            <Popover.Root>
+              <Popover.Trigger
+                aria-label="account"
+                className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
-                Switch role
-              </button>
-            </div>
+                <span className="flex size-8 items-center justify-center rounded-full bg-fg-base text-xs font-semibold text-fg-inverse">
+                  {initials(displayName, role)}
+                </span>
+                <ChevronDown className="size-3.5" />
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  align="end"
+                  sideOffset={8}
+                  className="z-50 w-64 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-pop"
+                >
+                  <div className="space-y-0.5 px-4 py-3">
+                    <div className="truncate text-sm font-semibold text-fg-base">{displayName || ROLE_LABELS[role]}</div>
+                    <div className="text-xs text-fg-muted">{ROLE_LABELS[role]}</div>
+                    {scope && <div className="text-xs text-fg-dimmed">{scope}</div>}
+                  </div>
+                  <Popover.Close asChild>
+                    <button
+                      onClick={() => {
+                        clearRole()
+                        navigate('/login')
+                      }}
+                      className="flex w-full items-center gap-2 border-t border-border-subtle px-4 py-2.5 text-left text-sm text-fg-muted hover:bg-surface-elevated hover:text-fg-base"
+                    >
+                      <LogOut className="size-4" /> Switch role
+                    </button>
+                  </Popover.Close>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           ) : (
-            <a
-              href="/login"
-              className="text-xs text-fg-dimmed hover:text-fg-base hover:underline"
+            <Link
+              to="/login"
+              className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85"
             >
               Sign in
-            </a>
+            </Link>
           )}
-        </nav>
+        </div>
       </div>
 
       {isOffline(meta.error) && (
         <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center text-xs text-critical">
-          backend not reachable at {API_BASE} — start uvicorn: <code>{START_BACKEND}</code>
+          backend not reachable at {API_BASE} — start uvicorn: <code className="font-mono">{START_BACKEND}</code>
         </div>
       )}
     </header>

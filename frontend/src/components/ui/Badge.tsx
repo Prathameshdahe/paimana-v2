@@ -1,6 +1,6 @@
 import React from 'react'
 import { cn } from '@/lib/formatters'
-import { TIER_LABEL, TIER_SENTIMENT, tierKey } from '@/lib/riskPalette'
+import { TIER_LABEL, TIER_SENTIMENT, TONE_CHIP, tierKey } from '@/lib/riskPalette'
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'critical' | 'warning' | 'stable' | 'accent' | 'muted'
@@ -8,12 +8,12 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   tier?: string | null
 }
 
-const VARIANT: Record<NonNullable<BadgeProps['variant']>, string> = {
-  critical: 'bg-critical/10 text-critical ring-critical/20',
-  warning: 'bg-warning/10 text-warning ring-warning/20',
-  stable: 'bg-stable/10 text-stable ring-stable/20',
-  accent: 'bg-accent/10 text-accent ring-accent/25',
-  muted: 'bg-fg-dimmed/10 text-fg-muted ring-fg-dimmed/20',
+const RING: Record<NonNullable<BadgeProps['variant']>, string> = {
+  critical: 'ring-critical/20',
+  warning: 'ring-warning/20',
+  stable: 'ring-stable/20',
+  accent: 'ring-accent/25',
+  muted: 'ring-fg-dimmed/20',
 }
 
 /** Soft rounded pill. With `tier` it names the tier: Critical red, High amber, Medium blue-grey, Low green, no date grey. */
@@ -25,12 +25,30 @@ export function Badge({ variant = 'muted', tier, className, children, ...props }
     <span
       className={cn(
         'inline-flex items-center justify-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium leading-4 whitespace-nowrap ring-1 ring-inset',
-        VARIANT[v],
+        TONE_CHIP[v],
+        RING[v],
         className
       )}
       {...props}
     >
       {children ?? (t ? (t === 'untiered' ? 'No date' : TIER_LABEL[t]) : null)}
+    </span>
+  )
+}
+
+/** A soft rounded square holding one icon, tinted by sentiment: alert kinds, flags, stat tiles. */
+export function IconChip({
+  icon: Icon,
+  variant = 'muted',
+  size = 'md',
+  className,
+  ...props
+}: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; variant?: BadgeProps['variant']; size?: 'sm' | 'md' | 'lg' } & React.HTMLAttributes<HTMLSpanElement>) {
+  const box = { sm: 'size-6 rounded-md', md: 'size-8 rounded-lg', lg: 'size-10 rounded-xl' }[size]
+  const ico = { sm: 'size-3.5', md: 'size-4', lg: 'size-5' }[size]
+  return (
+    <span className={cn('inline-flex shrink-0 items-center justify-center', box, TONE_CHIP[variant], className)} {...props}>
+      <Icon className={ico} strokeWidth={2} />
     </span>
   )
 }
