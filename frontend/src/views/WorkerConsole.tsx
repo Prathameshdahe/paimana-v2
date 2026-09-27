@@ -2,18 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import type { WorkerRun } from '@/contracts/workers'
-import { API_BASE } from '@/lib/api'
+import { apiGet, apiPost } from '@/lib/api'
 
-async function fetchWorkerRuns(): Promise<WorkerRun[]> {
-  const res = await fetch(`${API_BASE}/api/worker-runs`)
-  if (!res.ok) throw new Error(`worker-runs fetch failed: ${res.status}`)
-  return res.json()
-}
-
-async function triggerMonitoringCycle(): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/worker-runs/trigger`, { method: 'POST' })
-  if (!res.ok) throw new Error(`trigger failed: ${res.status}`)
-}
+const fetchWorkerRuns = () => apiGet<WorkerRun[]>('/api/worker-runs')
+const triggerMonitoringCycle = () => apiPost<unknown>('/api/worker-runs/trigger')
 
 export function WorkerConsole() {
   const queryClient = useQueryClient()

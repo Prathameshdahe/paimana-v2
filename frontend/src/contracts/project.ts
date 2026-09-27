@@ -135,8 +135,9 @@ export interface External {
 export interface Provenance {
   asof: string
   modelVersion: string | null
-  goldVersion: string
-  silverVersion: string
+  /** null on the public page, as are the model version and the source document */
+  goldVersion: string | null
+  silverVersion: string | null
   sourceDocId: string | null
   sourcePage: number | null
   period: string | null
@@ -158,6 +159,8 @@ export interface ProjectDetail {
   scores: Scores | null
   flags: Flag[]
   riskProfile: RiskRow[]
+  /** up to 3 flagged checklist rows in plain words (the public page's top risks) */
+  topRisksPlain: string[]
   external: External
   provenance: Provenance
   review: ReviewBadge | null

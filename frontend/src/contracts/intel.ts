@@ -44,6 +44,8 @@ export interface AgencyPoint {
   /** median schedule bias of projects sanctioned in the last 3 years minus earlier ones */
   trend: number | null
   nRecent: number
+  /** the signed-in agency official's own agency */
+  isSelf: boolean
 }
 
 export interface AgencyMatrix {

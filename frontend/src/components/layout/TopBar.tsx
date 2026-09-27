@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
 import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
 import { formatDate } from '@/lib/formatters'
@@ -24,7 +25,8 @@ export function TopBar() {
   const { data: p } = usePortfolio()
   const m = meta.data
   const tierN = (t: string) => p?.tiers.find((x) => x.tier === t)?.n ?? 0
-  const { role, displayName, clearRole } = useRole()
+  const { role, displayName, ministry, agency, clearRole } = useRole()
+  const scope = ministry ?? agency
   const navigate = useNavigate()
   useAlertStream()
 
@@ -53,7 +55,7 @@ export function TopBar() {
               <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">asof</span>
               <span className="font-mono tabular-nums whitespace-nowrap">{formatDate(m.asof)}</span>
               <span className="text-border-strong">·</span>
-              <span className="font-mono tabular-nums">{m.nCurrent.toLocaleString()}</span>
+              <span className="font-mono tabular-nums">{(p?.kpis.nProjects ?? m.nCurrent).toLocaleString()}</span>
               <span className="hidden xl:inline font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
             </span>
             {p && (
@@ -62,9 +64,11 @@ export function TopBar() {
                 <span className="text-warning font-semibold">{tierN('High')}</span> high
               </span>
             )}
-            <span className="hidden 2xl:inline font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
-              {m.modelVersion}
-            </span>
+            {can(role, 'canSeeModelVersion') && (
+              <span className="hidden 2xl:inline font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
+                {m.modelVersion}
+              </span>
+            )}
           </div>
         )}
 
@@ -72,11 +76,22 @@ export function TopBar() {
         <nav className="flex items-center gap-3 xl:gap-4">
           <NavigationMenuWithActiveItem />
 
-          <AlertBell />
+          {can(role, 'canSeeAlerts') && <AlertBell />}
 
           <span className="text-border-strong/40">│</span>
 
-          {role ? (
+          {scope && (
+            // the scope every page is cut to (backend/access.py)
+            <span
+              title={`viewing as ${scope}`}
+              className="hidden md:inline max-w-[220px] truncate rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 font-sans text-[12px] font-medium text-fg-base"
+            >
+              <span className="text-fg-dimmed">viewing as </span>
+              {scope}
+            </span>
+          )}
+
+          {role && role !== 'public' ? (
             <div className="flex items-center gap-2 font-mono text-[11px]">
               {/* the role only from 2xl, the name always in the tooltip: four nav labels, MORE, the bell and this fit 1024px */}
               <span className="hidden 2xl:inline whitespace-nowrap text-fg-muted" title={displayName}>

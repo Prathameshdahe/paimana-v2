@@ -37,61 +37,37 @@ export default function App() {
             </div>
           }>
             <Routes>
-              {/* Route 0: Landing — map + early warning inbox. Public, no role required. */}
+              {/* Who opens which page: lib/auth/access.ts (ROUTE_ROLES); the public browses without signing in */}
               <Route path="/" element={<Home />} />
-
-              {/* Prototype role picker */}
               <Route path="/login" element={<Login />} />
 
-              {/* Route 1: Executive Command Center (DETECT) */}
+              {/* Project list + search (DETECT); read-only for the public */}
               <Route path="/command" element={<RequireRole><CommandCenter /></RequireRole>} />
-
-              {/* Route 2: Project Deep-Dive Studio (DIAGNOSE) */}
+              {/* Project page (DIAGNOSE); the public gets the simple one */}
               <Route path="/projects/:key" element={<RequireRole><ProjectStudio /></RequireRole>} />
-
-              {/* Route 3: External Factors — land, forest, litigation, contractor; replaces the what-if sandbox */}
+              {/* External Factors — land, forest, litigation, contractor; replaces the what-if sandbox */}
               <Route path="/external" element={<RequireRole><ExternalFactors /></RequireRole>} />
               <Route path="/sandbox" element={<Navigate to="/external" replace />} />
 
-              {/* Bottleneck Intelligence (guide §6.1) */}
+              {/* Officials: Bottleneck Intelligence (guide §6.1), Agency Matrix (§6.3), Evidence Radar (§6.2), approvals */}
               <Route path="/bottlenecks" element={<RequireRole><Bottlenecks /></RequireRole>} />
-
-              {/* Agency Performance Matrix (guide §6.3) */}
               <Route path="/agencies" element={<RequireRole><Agencies /></RequireRole>} />
-
-              {/* External Evidence Radar (guide §6.2) */}
               <Route path="/radar" element={<RequireRole><Radar /></RequireRole>} />
+              <Route path="/approvals" element={<RequireRole><ApprovalInbox /></RequireRole>} />
 
-              {/* Route 4: Models — registry, backtest, calibration, live accuracy (PROVE); was /audit */}
+              {/* Models (PROVE): ministry + IPMD; was /audit */}
               <Route path="/models" element={<RequireRole><Models /></RequireRole>} />
               <Route path="/audit" element={<Navigate to="/models" replace />} />
 
-              {/* Route 5: Worker Console — IPMD analyst + ministry official only */}
-              <Route
-                path="/workers"
-                element={
-                  <RequireRole roles={['ipmd_analyst', 'ministry_official']}>
-                    <WorkerConsole />
-                  </RequireRole>
-                }
-              />
+              {/* Worker Console: IPMD only */}
+              <Route path="/workers" element={<RequireRole><WorkerConsole /></RequireRole>} />
 
-              {/* Route 6: Approval Inbox — everyone except public */}
-              <Route
-                path="/approvals"
-                element={
-                  <RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}>
-                    <ApprovalInbox />
-                  </RequireRole>
-                }
-              />
-
-              {/* Fallback to Command Center */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </main>
 
+        {/* shown to IPMD analysts and ministry officials only (lib/auth/access.ts canChat) */}
         {!isLogin && <ChatWidget />}
       </div>
     </TooltipProvider>

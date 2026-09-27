@@ -4,6 +4,8 @@ import { Bot, Send, Sparkles, X } from 'lucide-react'
 import { apiGet, isOffline, START_BACKEND } from '@/lib/api'
 import { usePortfolio, type ProjectQuery } from '@/lib/queries'
 import { cn, formatINRShort, formatProb, orDash } from '@/lib/formatters'
+import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import type { ProjectPage, Tier } from '@/contracts/project'
 
 interface Message {
@@ -37,7 +39,13 @@ function parseQuestion(text: string, sectors: string[], states: string[]): Proje
   return { tier, sector, state }
 }
 
+/** The project assistant, for the roles the access map gives canChat; answers stay in the viewer's scope. */
 export function ChatWidget() {
+  const { role } = useRole()
+  return can(role, 'canChat') ? <Chat /> : null
+}
+
+function Chat() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([

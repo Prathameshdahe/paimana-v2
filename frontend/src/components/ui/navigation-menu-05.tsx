@@ -2,7 +2,8 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
 import { cn } from "@/lib/formatters";
-import { useRole, type Role } from "@/lib/auth/RoleContext";
+import { useRole } from "@/lib/auth/RoleContext";
+import { canOpen } from "@/lib/auth/access";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -10,7 +11,8 @@ import {
   NavigationMenuList,
 } from "@/components/ui/navigation-menu";
 
-type NavItem = { title: string; href: string; end: boolean; roles?: Role[] };
+/** who sees which link: the route map in lib/auth/access.ts */
+type NavItem = { title: string; href: string; end: boolean };
 
 const navigationMenuItems: NavItem[] = [
   { title: "HOME", href: "/", end: true },
@@ -20,8 +22,8 @@ const navigationMenuItems: NavItem[] = [
   { title: "AGENCIES", href: "/agencies", end: false },
   { title: "RADAR", href: "/radar", end: false },
   { title: "MODELS", href: "/models", end: false },
-  { title: "WORKERS", href: "/workers", end: false, roles: ["ipmd_analyst", "ministry_official"] },
-  { title: "APPROVALS", href: "/approvals", end: false, roles: ["ipmd_analyst", "ministry_official", "agency_official"] },
+  { title: "WORKERS", href: "/workers", end: false },
+  { title: "APPROVALS", href: "/approvals", end: false },
 ];
 
 /**
@@ -46,9 +48,7 @@ export function NavigationMenuWithActiveItem() {
   const location = useLocation();
   const { role } = useRole();
   const [open, setOpen] = useState(false);
-  const visibleItems = navigationMenuItems.filter(
-    (item) => !item.roles || (role && item.roles.includes(role))
-  );
+  const visibleItems = navigationMenuItems.filter((item) => canOpen(role, item.href));
   const isActive = (item: NavItem) =>
     item.end ? location.pathname === item.href : location.pathname.startsWith(item.href) && item.href !== "/";
   const inline = visibleItems.slice(0, INLINE);

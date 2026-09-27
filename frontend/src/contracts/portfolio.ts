@@ -282,3 +282,18 @@ export interface ExternalSummary {
   }
   caveats: string[]
 }
+
+/** GET /api/scopes: the sign-in picker */
+export interface ScopeOption {
+  name: string
+  /** current projects */
+  n: number
+  /** agencies: every printed name, " | " separated */
+  names: string | null
+  ministry: string | null
+}
+
+export interface Scopes {
+  ministries: ScopeOption[]
+  agencies: ScopeOption[]
+}

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/Button'
 import { useLiveStatus, useWatchNow } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { formatDateTime, cn } from '@/lib/formatters'
 import type { LiveJob } from '@/contracts/portfolio'
 
@@ -13,10 +14,15 @@ function lastAndNext(job: LiveJob, last: string | null | undefined) {
 
 /**
  * The "Live" indicator from /api/live/status: last report check, last news
- * scout, inbox files waiting. IPMD analysts can run the inbox watcher now.
+ * scout, inbox files waiting. Officials see it, IPMD analysts can run the inbox watcher now
+ * (lib/auth/access.ts).
  */
 export function LiveStatus() {
   const { role } = useRole()
+  return can(role, 'canSeeLive') ? <Strip canRun={can(role, 'canRunJobs')} /> : null
+}
+
+function Strip({ canRun }: { canRun: boolean }) {
   const { data, error } = useLiveStatus()
   const watch = useWatchNow()
 
@@ -67,12 +73,12 @@ export function LiveStatus() {
         )
       )}
 
-      {role === 'ipmd_analyst' && (
+      {canRun && (
         <Button
           size="sm"
           className="ml-auto"
           disabled={!data || watch.isPending || data.watch.running}
-          onClick={() => watch.mutate(role)}
+          onClick={() => watch.mutate()}
         >
           {watch.isPending ? 'Checking…' : 'Check inbox now'}
         </Button>

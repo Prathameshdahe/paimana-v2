@@ -4,8 +4,9 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
-import { ACK_ROLES, useAckAlert, useAlerts } from '@/lib/queries'
+import { useAckAlert, useAlerts } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDate, formatDateTime, cn } from '@/lib/formatters'
 import type { AlertKind } from '@/contracts/portfolio'
@@ -17,8 +18,8 @@ const KINDS = Object.keys(ALERT_KIND_LABEL) as AlertKind[]
  * Action-oriented alert feed from /api/alerts (SQLite, written by the monthly
  * run, the report watcher and the news scout) — distinct from the Triage
  * Table's browse/sort/filter register. Live: /api/stream refetches it when an
- * alert is raised. Acknowledging (analysts, ministry officials) is stored
- * server-side against the signed-in role.
+ * alert is raised; only the viewer's projects (backend scope). Acknowledging
+ * (analysts, ministry officials; lib/auth/access.ts) is stored against the role.
  */
 export function EarlyWarningInbox() {
   const navigate = useNavigate()
@@ -27,7 +28,7 @@ export function EarlyWarningInbox() {
   const [kind, setKind] = useState<AlertKind | undefined>()
   const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })
   const ack = useAckAlert()
-  const canAck = !!role && ACK_ROLES.includes(role)
+  const canAck = can(role, 'canAck')
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
 
   return (
@@ -90,15 +91,16 @@ export function EarlyWarningInbox() {
                   {formatDateTime(a.createdAt)}
                 </div>
               </button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!canAck || (ack.isPending && ack.variables?.id === a.id)}
-                title={canAck ? undefined : 'sign in as an IPMD analyst or ministry official to acknowledge'}
-                onClick={() => canAck && role && ack.mutate({ id: a.id, role })}
-              >
-                Acknowledge
-              </Button>
+              {canAck && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={ack.isPending && ack.variables === a.id}
+                  onClick={() => ack.mutate(a.id)}
+                >
+                  Acknowledge
+                </Button>
+              )}
             </div>
           ))}
         </div>

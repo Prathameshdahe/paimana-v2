@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useProject } from '@/lib/queries'
+import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
+import { PublicSummary } from '@/views/project-studio/PublicSummary'
 
 interface ProjectDetailDrawerProps {
   /** null: closed */
@@ -17,6 +20,8 @@ interface ProjectDetailDrawerProps {
 /** Slide-over with one project's prediction and drivers, from /api/projects/{key}. */
 export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawerProps) {
   const { data: detail, error, isLoading } = useProject(projectKey)
+  const { role } = useRole()
+  const full = can(role, 'canSeeDrivers')
   const isOpen = projectKey !== null
 
   // ESC key listener to dismiss drawer
@@ -68,7 +73,7 @@ export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawer
               )}
             </div>
             <h2 className="truncate font-sans text-xs text-fg-muted font-medium">{m?.projectName ?? ''}</h2>
-            {detail && <ProvenanceLine detail={detail} />}
+            {detail && full && <ProvenanceLine detail={detail} />}
           </div>
 
           <div className="ml-4 flex items-center gap-2">
@@ -94,6 +99,10 @@ export function ProjectDetailDrawer({ projectKey, onClose }: ProjectDetailDrawer
           ) : isLoading || !detail ? (
             <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
               fetching project...
+            </div>
+          ) : !full ? (
+            <div className="max-w-xl">
+              <PublicSummary detail={detail} />
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">

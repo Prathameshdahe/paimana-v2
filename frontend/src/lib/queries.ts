@@ -18,6 +18,7 @@ import type {
   Meta,
   Portfolio,
   RadarSummary,
+  Scopes,
   SignalFeed,
 } from '@/contracts/portfolio'
 import type {
@@ -33,7 +34,7 @@ import type {
 } from '@/contracts/project'
 import type { ModelsOut } from '@/contracts/audit'
 import type { AgencyMatrix, BottleneckDetail, BottleneckPage } from '@/contracts/intel'
-import type { Role } from '@/lib/auth/RoleContext'
+import { useScopeKey } from '@/lib/auth/RoleContext'
 
 export type PortfolioFilters = {
   ministry?: string
@@ -62,20 +63,27 @@ export type AlertQuery = {
 
 const enc = encodeURIComponent
 
+/** Ministries and agencies to sign in as (the same for every viewer). */
+export function useScopes() {
+  return useQuery({ queryKey: ['scopes'], queryFn: () => apiGet<Scopes>('/api/scopes'), staleTime: Infinity })
+}
+
 export function useMeta() {
-  return useQuery({ queryKey: ['meta'], queryFn: () => apiGet<Meta>('/api/meta') })
+  return useQuery({ queryKey: ['meta'], queryFn: () => apiGet<Meta>('/api/meta') })  // the same for every viewer
 }
 
 export function usePortfolio(filters: PortfolioFilters = {}) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['portfolio', filters],
+    queryKey: ['portfolio', filters, scope],
     queryFn: () => apiGet<Portfolio>('/api/portfolio', filters),
   })
 }
 
 export function useProjects(query: ProjectQuery, enabled = true) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['projects', query],
+    queryKey: ['projects', query, scope],
     queryFn: () => apiGet<ProjectPage>('/api/projects', query),
     placeholderData: keepPreviousData,
     enabled,
@@ -83,16 +91,18 @@ export function useProjects(query: ProjectQuery, enabled = true) {
 }
 
 export function useProject(key: string | null) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['project', key],
+    queryKey: ['project', key, scope],
     queryFn: () => apiGet<ProjectDetail>(`/api/projects/${enc(key ?? '')}`),
     enabled: !!key,
   })
 }
 
 export function useTimeline(key: string | null) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['project', key, 'timeline'],
+    queryKey: ['project', key, 'timeline', scope],
     queryFn: () => apiGet<Timeline>(`/api/projects/${enc(key ?? '')}/timeline`),
     enabled: !!key,
   })
@@ -100,16 +110,18 @@ export function useTimeline(key: string | null) {
 
 /** 404 when the project is not in the current scored portfolio. */
 export function useForecast(key: string | null) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['project', key, 'forecast'],
+    queryKey: ['project', key, 'forecast', scope],
     queryFn: () => apiGet<Forecast>(`/api/projects/${enc(key ?? '')}/forecast`),
     enabled: !!key,
   })
 }
 
 export function useSignals(key: string | null) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['project', key, 'signals'],
+    queryKey: ['project', key, 'signals', scope],
     queryFn: () => apiGet<ProjectSignals>(`/api/projects/${enc(key ?? '')}/signals`),
     enabled: !!key,
   })
@@ -120,8 +132,9 @@ export function useSignals(key: string | null) {
  * BriefRejected body, 503 when LM Studio is not running, 404 when the project is not scored.
  */
 export function useBrief(key: string | null, requested: boolean) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['project', key, 'brief'],
+    queryKey: ['project', key, 'brief', scope],
     queryFn: () => apiGet<BriefOut>(`/api/projects/${enc(key ?? '')}/brief`),
     enabled: !!key && requested,
     staleTime: Infinity,
@@ -130,13 +143,15 @@ export function useBrief(key: string | null, requested: boolean) {
 
 /** Champion registry + the champion run's backtest and ablation tables (a few dozen rows). */
 export function useModels() {
-  return useQuery({ queryKey: ['models'], queryFn: () => apiGet<ModelsOut>('/api/models') })
+  const scope = useScopeKey()
+  return useQuery({ queryKey: ['models', scope], queryFn: () => apiGet<ModelsOut>('/api/models') })
 }
 
 /** includeHidden: also the agencies with n < 5 */
 export function useAgencyMatrix(includeHidden: boolean) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['agencies', 'matrix', includeHidden],
+    queryKey: ['agencies', 'matrix', includeHidden, scope],
     queryFn: () => apiGet<AgencyMatrix>('/api/agencies/matrix', { include_hidden: includeHidden || undefined }),
     placeholderData: keepPreviousData,
   })
@@ -144,8 +159,9 @@ export function useAgencyMatrix(includeHidden: boolean) {
 
 /** Current projects of one canonical agency, riskiest first. */
 export function useAgencyProjects(agency: string | null, page: number, size = 20) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['agencies', agency, 'projects', page, size],
+    queryKey: ['agencies', agency, 'projects', page, size, scope],
     queryFn: () => apiGet<ProjectPage>(`/api/agencies/${enc(agency ?? '')}/projects`, { page, size }),
     placeholderData: keepPreviousData,
     enabled: !!agency,
@@ -155,15 +171,17 @@ export function useAgencyProjects(agency: string | null, page: number, size = 20
 /** Every bottleneck in one page (13 today); the page filters and sorts them itself. */
 export function useBottlenecks() {
   // ponytail: one page of 100, server-side filters and paging if clusters ever pass that
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['bottlenecks'],
+    queryKey: ['bottlenecks', scope],
     queryFn: () => apiGet<BottleneckPage>('/api/bottlenecks', { size: 100 }),
   })
 }
 
 export function useBottleneck(id: string | null, page: number, size = 20) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['bottlenecks', id, page, size],
+    queryKey: ['bottlenecks', id, page, size, scope],
     queryFn: () => apiGet<BottleneckDetail>(`/api/bottlenecks/${enc(id ?? '')}`, { page, size }),
     placeholderData: keepPreviousData,
     enabled: !!id,
@@ -171,36 +189,36 @@ export function useBottleneck(id: string | null, page: number, size = 20) {
 }
 
 export function useExternalSummary() {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['external', 'summary'],
+    queryKey: ['external', 'summary', scope],
     queryFn: () => apiGet<ExternalSummary>('/api/external/summary'),
   })
 }
 
 export function useAlerts(query: AlertQuery = {}) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['alerts', query],
+    queryKey: ['alerts', query, scope],
     queryFn: () => apiGet<AlertPage>('/api/alerts', query),
     placeholderData: keepPreviousData,
     // no polling: useAlertStream refetches every alert query when /api/stream pushes one
   })
 }
 
-/** roles that may acknowledge an alert (the backend records whoever does) */
-export const ACK_ROLES: Role[] = ['ipmd_analyst', 'ministry_official']
-
+/** Acknowledged as the signed-in role (lib/api.ts headers); the backend records it. */
 export function useAckAlert() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (vars: { id: number; role: Role }) =>
-      apiPost<Alert>(`/api/alerts/${vars.id}/ack`, { role: vars.role }),
+    mutationFn: (id: number) => apiPost<Alert>(`/api/alerts/${id}/ack`),
     onSuccess: () => client.invalidateQueries({ queryKey: ['alerts'] }),
   })
 }
 
 export function useLiveStatus() {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['live', 'status'],
+    queryKey: ['live', 'status', scope],
     queryFn: () => apiGet<LiveStatus>('/api/live/status'),
     // every 5 s while a job runs, so its progress and end show without a reload
     refetchInterval: (q) => (q.state.data?.scout.running || q.state.data?.watch.running ? 5_000 : 30_000),
@@ -211,7 +229,7 @@ export function useLiveStatus() {
 export function useWatchNow() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (role: Role) => apiPost<JobStarted>('/api/jobs/watch', undefined, { role }),
+    mutationFn: () => apiPost<JobStarted>('/api/jobs/watch'),
     onSuccess: () => client.invalidateQueries({ queryKey: ['live'] }),
   })
 }
@@ -225,8 +243,9 @@ export type FeedFilters = {
 }
 
 export function useSignalFeed(page: number, size = 20, filters: FeedFilters = {}) {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['signals', 'feed', page, size, filters],
+    queryKey: ['signals', 'feed', page, size, filters, scope],
     queryFn: () => apiGet<SignalFeed>('/api/signals/feed', { page, size, ...filters }),
     placeholderData: keepPreviousData,
   })
@@ -234,8 +253,9 @@ export function useSignalFeed(page: number, size = 20, filters: FeedFilters = {}
 
 /** under ['signals'], so the alert stream refreshes it with the feed */
 export function useRadarSummary() {
+  const scope = useScopeKey()
   return useQuery({
-    queryKey: ['signals', 'radar-summary'],
+    queryKey: ['signals', 'radar-summary', scope],
     queryFn: () => apiGet<RadarSummary>('/api/radar/summary'),
   })
 }
@@ -244,7 +264,7 @@ export function useRadarSummary() {
 export function useScoutNow() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (role: Role) => apiPost<JobStarted>('/api/jobs/scout', undefined, { role }),
+    mutationFn: () => apiPost<JobStarted>('/api/jobs/scout'),
     onSuccess: () => client.invalidateQueries({ queryKey: ['live'] }),
   })
 }

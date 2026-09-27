@@ -5,8 +5,9 @@ import { Bell } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
-import { ACK_ROLES, useAckAlert, useAlerts } from '@/lib/queries'
+import { useAckAlert, useAlerts } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDateTime } from '@/lib/formatters'
 
@@ -23,7 +24,8 @@ function readSeen(): string | undefined {
 /**
  * Top-bar bell: open alerts raised since the bell was last opened (all open
  * ones before the first open), and a dropdown of the latest open alerts.
- * Refreshed by useAlertStream; analysts and ministry officials can acknowledge.
+ * Refreshed by useAlertStream; shown to officials only, and only their projects' alerts
+ * (backend scope). Analysts and ministry officials can acknowledge (lib/auth/access.ts).
  */
 export function AlertBell() {
   const { role } = useRole()
@@ -32,7 +34,7 @@ export function AlertBell() {
   const unread = useAlerts({ acked: false, since: seenAt, size: 1 })
   const ack = useAckAlert()
   const n = unread.data?.total ?? 0
-  const canAck = !!role && ACK_ROLES.includes(role)
+  const canAck = can(role, 'canAck')
 
   const markSeen = () => {
     const newest = latest.data?.items[0]?.createdAt
@@ -106,12 +108,12 @@ export function AlertBell() {
                     ) : (
                       <span className="font-mono text-[11px] text-fg-dimmed">no project</span>
                     )}
-                    {canAck && role && (
+                    {canAck && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={ack.isPending && ack.variables?.id === a.id}
-                        onClick={() => ack.mutate({ id: a.id, role })}
+                        disabled={ack.isPending && ack.variables === a.id}
+                        onClick={() => ack.mutate(a.id)}
                       >
                         Acknowledge
                       </Button>
@@ -125,11 +127,6 @@ export function AlertBell() {
           {ack.isError && (
             <div className="border-t border-border-subtle px-4 py-1.5 font-mono text-[10px] text-critical">
               acknowledge failed: {String(ack.error)}
-            </div>
-          )}
-          {!canAck && (
-            <div className="border-t border-border-subtle px-4 py-1.5 font-mono text-[10px] text-fg-dimmed">
-              sign in as an IPMD analyst or ministry official to acknowledge
             </div>
           )}
         </Popover.Content>

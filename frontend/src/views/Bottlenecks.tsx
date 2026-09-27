@@ -16,12 +16,13 @@ const OTHER_COLOR = { color: '#9a968c', ink: '#0b0b0b' }
 const colorOf = (c: string) => EVENT_CATEGORY[c] ?? OTHER_COLOR
 
 /** the one wording a bottleneck headline uses (guide §6.1) */
-const headline = (b: Bottleneck) => `Blocking ${b.nProjects} projects worth ${formatINR(b.capitalExposedCr)}`
+const headline = (b: Bottleneck) =>
+  `Blocking ${b.nProjects} project${b.nProjects === 1 ? '' : 's'} worth ${formatINR(b.capitalExposedCr)}`
 
-/** 'authority · state'; a state rollup spans every authority */
+/** 'state · authority' (state first: a narrow treemap cell cuts the end); a state rollup spans every authority */
 function place(b: Bottleneck): string {
   const who = b.level === 'state' ? 'all authorities' : !b.authority || b.authority === 'unspecified' ? 'authority not named' : b.authority
-  return `${who} · ${b.state ?? 'state unknown'}`
+  return `${b.state ?? 'state unknown'} · ${who}`
 }
 
 type Node = Bottleneck & { name: string; size: number }
@@ -81,7 +82,7 @@ function NodeTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
         {b.nCriticalHigh} critical/high · mean P(slip, 2q) {orDash(b.meanPAny2q, (p) => formatProb(p))} · {b.nSignals} news signals
       </div>
       <div className="text-fg-dimmed">
-        open in remarks {orDash(b.earliestFirstSeen, formatDate)} → {orDash(b.lastSeen, formatDate)}
+        open in remarks{b.nSignals > 0 && ' or news'} {orDash(b.earliestFirstSeen, formatDate)} → {orDash(b.lastSeen, formatDate)}
       </div>
     </div>
   )

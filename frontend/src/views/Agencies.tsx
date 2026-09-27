@@ -49,6 +49,11 @@ function axis(values: number[]): [number, number, number[]] {
   return [a, b, Array.from({ length: (b - a) / step + 1 }, (_, i) => a + i * step)]
 }
 
+/** ' 90% CI [..]', or for a shrunk median ' raw +x%, 90% CI [..]' (the CI is of the raw median) */
+function rawCi(shrunk: boolean, raw: number | null, lo: number | null, hi: number | null): string {
+  return `${shrunk ? ` raw ${signedPct(raw)},` : ''} 90% CI ${ci(lo, hi)}`
+}
+
 function AgencyTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: Plotted }> }) {
   const a = payload?.[0]?.payload
   if (!active || !a) return null
@@ -59,19 +64,20 @@ function AgencyTooltip({ active, payload }: { active?: boolean; payload?: Array<
       <div className="text-fg-muted">
         n {a.nProjects} projects · {a.nOpen} open · {formatINRShort(a.capitalCr)}
       </div>
+      {/* the CI is of the raw median: when the shown one is shrunk, the raw value goes next to its CI */}
       <div>
         schedule median <span className="font-semibold">{signedPct(a.scheduleBias)}</span>
-        <span className="text-fg-dimmed"> 90% CI {ci(a.scheduleBiasCiLo, a.scheduleBiasCiHi)}</span>
+        <span className="text-fg-dimmed">{rawCi(a.shrunk, a.scheduleBiasRaw, a.scheduleBiasCiLo, a.scheduleBiasCiHi)}</span>
       </div>
       <div>
         cost median <span className="font-semibold">{signedPct(a.costBias)}</span>
-        <span className="text-fg-dimmed"> 90% CI {ci(a.costBiasCiLo, a.costBiasCiHi)} · n {a.nCost}</span>
+        <span className="text-fg-dimmed">{rawCi(a.shrunk, a.costBiasRaw, a.costBiasCiLo, a.costBiasCiHi)} · n {a.nCost}</span>
       </div>
-      <div className="text-fg-muted">
-        {a.shrunk
-          ? `shrunk (weight ${orDash(a.shrinkWeight, (w) => w.toFixed(2))}): raw ${signedPct(a.scheduleBiasRaw)} / ${signedPct(a.costBiasRaw)}`
-          : 'not shrunk (n ≥ 10): shown = raw'}
-      </div>
+      {a.shrunk && (
+        <div className="text-fg-muted">
+          n &lt; 10: shown median shrunk toward the sector (weight {orDash(a.shrinkWeight, (w) => w.toFixed(2))})
+        </div>
+      )}
       <div className="text-fg-muted">
         trend {orDash(a.trend, (t) => `${t > 0 ? '+' : ''}${Math.round(t * 100)} pp`)} (recent n {a.nRecent})
       </div>
@@ -143,6 +149,16 @@ function MatrixChart({ points, onPick }: { points: AgencyPoint[]; onPick: (a: st
                 onClick={(d: { payload?: Plotted }) => d.payload && onPick(d.payload.agency)}
               />
             ))}
+            {/* the signed-in agency official's own agency, ringed over its bubble */}
+            <Scatter
+              name="your agency"
+              data={plotted.filter((p) => p.isSelf)}
+              fill="none"
+              stroke="hsl(var(--color-fg-base))"
+              strokeWidth={3}
+              isAnimationActive={false}
+              onClick={(d: { payload?: Plotted }) => d.payload && onPick(d.payload.agency)}
+            />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
@@ -185,7 +201,8 @@ function Leaderboard({ points, selected, onPick }: { points: AgencyPoint[]; sele
               onClick={() => onPick(a.agency)}
               className={cn(
                 'border-b border-border-subtle cursor-pointer hover:bg-surface-elevated',
-                selected === a.agency && 'bg-surface-elevated'
+                selected === a.agency && 'bg-surface-elevated',
+                a.isSelf && 'bg-accent/10 font-semibold'
               )}
             >
               <td className="py-1.5 px-3 text-fg-base max-w-[260px] truncate" title={a.ministry ?? undefined}>
@@ -229,7 +246,8 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
         <div className="border-b border-border-subtle px-5 py-3 font-mono text-[11px] text-fg-muted space-y-0.5">
           <div>{point.ministry ?? 'ministry unknown'} · {point.sector ?? 'sector unknown'}</div>
           <div>
-            n {point.nProjects} · schedule {signedPct(point.scheduleBias)} [{ci(point.scheduleBiasCiLo, point.scheduleBiasCiHi)}] · cost{' '}
+            n {point.nProjects} · schedule {signedPct(point.scheduleBias)}
+            {rawCi(point.shrunk, point.scheduleBiasRaw, point.scheduleBiasCiLo, point.scheduleBiasCiHi)} · cost{' '}
             {signedPct(point.costBias)}
           </div>
           <div className="text-fg-dimmed">

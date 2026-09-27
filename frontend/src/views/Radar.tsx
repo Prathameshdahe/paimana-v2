@@ -8,6 +8,7 @@ import { SignalCard } from './external-factors/EvidenceFeed'
 import { GEO_URL, MAP_CENTER, OFF_MAP, normStateKey } from './home/indiaGeo'
 import { useLiveStatus, usePortfolio, useRadarSummary, useScoutNow, useSignalFeed, type FeedFilters } from '@/lib/queries'
 import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { EVENT_CATEGORY, TIER_COLOR, categoryLabel } from '@/lib/riskPalette'
 import { cn, formatDateTime } from '@/lib/formatters'
 import type { RadarSummary, SignalFeed } from '@/contracts/portfolio'
@@ -180,8 +181,8 @@ export function Radar() {
                 ? `scout last ran ${formatDateTime(lastRun.finishedAt)} (${lastRun.status ?? 'unknown'})`
                 : 'scout has not run on this server'}
           </span>
-          {role === 'ipmd_analyst' && (
-            <Button size="sm" disabled={!live || running || scoutNow.isPending} onClick={() => scoutNow.mutate(role)}>
+          {can(role, 'canRunJobs') && (
+            <Button size="sm" disabled={!live || running || scoutNow.isPending} onClick={() => scoutNow.mutate()}>
               {running || scoutNow.isPending ? 'Scouting…' : 'Run scout now'}
             </Button>
           )}

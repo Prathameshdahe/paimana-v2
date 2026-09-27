@@ -1,6 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
 import { useForecast, useProject, useSignals, useTimeline } from '@/lib/queries'
 import { isOffline } from '@/lib/api'
+import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
 import { ProjectIdentityStrip } from './project-studio/ProjectIdentityStrip'
 import { PredictionPanel } from './project-studio/PredictionPanel'
 import { TrajectoryChart } from './project-studio/TrajectoryChart'
@@ -9,18 +11,24 @@ import { ShapWaterfall } from './project-studio/ShapWaterfall'
 import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
 import { BriefCard } from './project-studio/BriefCard'
+import { PublicSummary } from './project-studio/PublicSummary'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Button } from '@/components/ui/Button'
 
-/** Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief. */
+/**
+ * Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief.
+ * Without canSeeDrivers (the public) it is the simple page: summary, top risks in plain words, progress history.
+ */
 export function ProjectStudio() {
   const { key = '' } = useParams<{ key: string }>()
+  const { role } = useRole()
+  const full = can(role, 'canSeeDrivers')
   const { data: detail, isLoading, error } = useProject(key)
   // the canonical key: an old or merged key resolves to the project it now belongs to
   const k = detail?.key ?? null
   const timeline = useTimeline(k)
-  const forecast = useForecast(k)
-  const signals = useSignals(k)
+  const forecast = useForecast(full ? k : null)
+  const signals = useSignals(full ? k : null)
 
   if (isLoading) {
     return (
@@ -49,6 +57,21 @@ export function ProjectStudio() {
     )
   }
 
+  if (!full) {
+    return (
+      <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
+        <ProjectIdentityStrip detail={detail} showProvenance={false} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <PublicSummary detail={detail} />
+          <div className="lg:col-span-2">
+            <TrajectoryChart timeline={timeline.data} forecast={undefined} forecastError={timeline.error}
+              asof={detail.provenance.asof} historyOnly />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
       <ProjectIdentityStrip detail={detail} />
@@ -67,7 +90,7 @@ export function ProjectStudio() {
         </div>
 
         <div className="col-span-1 lg:col-span-3">
-          <BriefCard projectKey={detail.key} />
+          <BriefCard key={detail.key} projectKey={detail.key} />
         </div>
 
         <div className="col-span-1 lg:col-span-2">

@@ -5,6 +5,30 @@ export const START_BACKEND = 'python -m uvicorn backend.main:app --port 8000 --t
 
 export type Params = Record<string, string | number | boolean | null | undefined>
 
+/**
+ * Who is asking, sent with every request as X-Paimana-Role / -Ministry / -Agency (URI-encoded).
+ * PROTOTYPE: the backend trusts these (backend/access.py); real auth would replace this source.
+ * No role is the public. Set by lib/auth/RoleContext.
+ */
+let viewer: { role: string | null; ministry?: string; agency?: string } = { role: null }
+
+export function setViewer(v: { role: string | null; ministry?: string; agency?: string }): void {
+  viewer = { role: v.role, ministry: v.ministry, agency: v.agency }
+}
+
+function viewerHeaders(): Record<string, string> {
+  const h: Record<string, string> = {}
+  if (viewer.role) h['X-Paimana-Role'] = viewer.role
+  if (viewer.ministry) h['X-Paimana-Ministry'] = encodeURIComponent(viewer.ministry)
+  if (viewer.agency) h['X-Paimana-Agency'] = encodeURIComponent(viewer.agency)
+  return h
+}
+
+/** The same viewer as query parameters, for EventSource (it cannot send headers). */
+export function viewerParams(): Params {
+  return { role: viewer.role, ministry: viewer.ministry, agency: viewer.agency }
+}
+
 /** status 0: the request never reached the backend (not running, wrong API_BASE, CORS). */
 export class ApiError extends Error {
   status: number
@@ -21,7 +45,7 @@ export function isOffline(error: unknown): boolean {
   return error instanceof ApiError && error.status === 0
 }
 
-function url(path: string, params?: Params): string {
+export function url(path: string, params?: Params): string {
   const u = new URL(API_BASE + path, window.location.origin)
   for (const [k, v] of Object.entries(params ?? {})) {
     if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, String(v))
@@ -34,7 +58,7 @@ async function request<T>(method: string, path: string, params?: Params, body?: 
   try {
     res = await fetch(url(path, params), {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? viewerHeaders() : { ...viewerHeaders(), 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {

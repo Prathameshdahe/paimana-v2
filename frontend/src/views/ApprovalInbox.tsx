@@ -2,37 +2,28 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useRole, useScopeKey } from '@/lib/auth/RoleContext'
 import type { DispatchDraft } from '@/contracts/workers'
-import { API_BASE } from '@/lib/api'
+import { apiGet, apiPost } from '@/lib/api'
 
-async function fetchDispatchDrafts(): Promise<DispatchDraft[]> {
-  const res = await fetch(`${API_BASE}/api/dispatch`)
-  if (!res.ok) throw new Error(`dispatch fetch failed: ${res.status}`)
-  return res.json()
-}
-
-async function postApproval(draftId: string, decision: 'approved' | 'rejected', role: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/approvals`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ draftId, decision, role }),
-  })
-  if (!res.ok) throw new Error(`approval failed: ${res.status}`)
-}
-
+/**
+ * Memos from the worker cell. The backend sends only what the role may see (ported from Pranjal's
+ * frontend-dev: an agency or ministry official sees the memos addressed to their role, on their own
+ * projects; IPMD sees all) and lets only the addressee decide.
+ */
 export function ApprovalInbox() {
   const { role } = useRole()
+  const scope = useScopeKey()
   const queryClient = useQueryClient()
 
   const { data: drafts, isError } = useQuery({
-    queryKey: ['dispatch', 'drafts'],
-    queryFn: fetchDispatchDrafts,
+    queryKey: ['dispatch', 'drafts', scope],
+    queryFn: () => apiGet<DispatchDraft[]>('/api/dispatch'),
   })
 
   const decide = useMutation({
     mutationFn: (vars: { draftId: string; decision: 'approved' | 'rejected' }) =>
-      postApproval(vars.draftId, vars.decision, role ?? ''),
+      apiPost<DispatchDraft>('/api/approvals', vars),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dispatch'] })
     },
@@ -63,7 +54,7 @@ export function ApprovalInbox() {
           <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
             {isError
               ? 'Backend not running — start the FastAPI server to see dispatch drafts.'
-              : 'No dispatch drafts yet.'}
+              : 'No memos for you yet.'}
           </div>
         </Card>
       ) : (
