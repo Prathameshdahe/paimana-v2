@@ -25,7 +25,7 @@ def checklist(fc_p1=None, land_p1=None):
         "tier": ["High", "Medium", "Low", None], "no_completion_date": [False, False, False, True],
         "progress_velocity_2q": 1.0, "velocity_vs_sector_median": 0.5, "cost_variation_pct": 10.0,
         "physical_progress_pct": [50.0, 5.0, 50.0, np.nan], "elapsed_ratio": [0.5, 0.8, 0.5, 0.5],
-        "spi": [1.0, 0.06, 1.0, np.nan], "burn_gap": [0.0, 30.0, -20.0, np.nan], "expenditure_ratio": 0.5,
+        "spi": [1.0, 0.06, 1.0, np.nan], "stagnation_quarters": [0.0, 0.0, 3.0, np.nan], "burn_gap": [0.0, 30.0, -20.0, np.nan], "expenditure_ratio": 0.5,
         "revisions_so_far": [0.0, 3.0, 1.0, 0.0], "first_period": T("2020-01-01"),
         "sector": ["Roads & Highways", "Railways", "Railways", "Nothing"], "agency": ["NHAI", "NHAI", "NHAI", "Small"],
         "months_since_last_obs": [1.0, 1.0, 1.0, 6.0], "dq_score": 1.0,
@@ -95,6 +95,9 @@ def test_rule_dimensions():
     assert s.loc[("P4", "schedule_slip")] == "unknown" and "untiered" in r.loc[("P4", "schedule_slip"), "evidence"]
     assert s.loc[("P1", "schedule_slip")] == "flagged" and s.loc[("P3", "schedule_slip")] == "clear"
     assert s.loc[("P2", "execution_stagnation")] == "flagged" and s.loc[("P4", "execution_stagnation")] == "unknown"
+    # SPI 1.0 but 3 quarters without progress: the stagnation override's rule flags it, as the tier panel says
+    assert s.loc[("P1", "execution_stagnation")] == "clear" and s.loc[("P3", "execution_stagnation")] == "flagged"
+    assert r.loc[("P3", "execution_stagnation"), "evidence"].endswith("; no progress for 3 quarters")
     assert [s.loc[(k, "expenditure_lag")] for k in ("P1", "P2", "P3", "P4")] == ["clear", "flagged", "flagged",
                                                                                  "unknown"]
     assert s.loc[("P2", "repeated_revisions")] == "flagged" and s.loc[("P3", "repeated_revisions")] == "clear"

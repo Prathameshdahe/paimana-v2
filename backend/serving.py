@@ -3,16 +3,21 @@
 Each data version is loaded once into an in-memory DuckDB: `cur` holds one
 row per scored project (scores + latest observation + features + open flags),
 the other tables are the per-project Parquet files as written by the pipeline.
-The version is the mtime of predictions_latest.json, silver_manifest.json and
-external_summary.json (the profile step writes it last); when one changes the
-tables are reloaded and every cached result goes with the old version.
+The version is the mtime of external_summary.json: the profile step writes it
+last, so score and analogues rewriting their files first (predictions_latest.json
+before scenarios_/analogues_/risk_profile_<month>) never serves a half-written
+set. When it changes the tables are reloaded and every cached result goes with
+the old version; a reload that fails keeps serving the loaded version and is
+retried after RETRY_S seconds.
 """
 from __future__ import annotations
 
 import functools
 import json
+import logging
 import math
 import threading
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -25,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GOLD, SILVER, MODEL = ROOT / "dataset" / "gold", ROOT / "dataset" / "silver", ROOT / "model"
 POINTER, SILVER_MANIFEST = GOLD / "predictions_latest.json", SILVER / "silver_manifest.json"
 EXTERNAL_SUMMARY = GOLD / "external_summary.json"
-VERSION_FILES = (POINTER, SILVER_MANIFEST, EXTERNAL_SUMMARY)
+RETRY_S = 30
 
 TIERS = ["Critical", "High", "Medium", "Low"]
 # list flag -> risk-profile dimension that raises it
@@ -56,10 +61,12 @@ BAND_METHOD = (
 _lock = threading.Lock()
 _state: dict = {}
 _pinned = threading.Event()
+_failed_at = 0.0  # time.monotonic() of the last failed reload
+log = logging.getLogger(__name__)
 
 
 def _version() -> tuple:
-    return tuple(p.stat().st_mtime_ns for p in VERSION_FILES)
+    return (EXTERNAL_SUMMARY.stat().st_mtime_ns,)
 
 
 def _posix(p: Path) -> str:
@@ -127,25 +134,38 @@ def _load() -> dict:
         "silver_version": silver["silver_version"],
         "latest_report_period": report[0].date() if report else None,
         "latest_report_doc": report[1] if report else None,
+        "external_summary": json.loads(EXTERNAL_SUMMARY.read_text(encoding="utf-8")),
     }
 
 
 def pin(on: bool) -> None:
-    """While pinned, state() keeps the loaded version even if the version files change: the report watcher pins
-    it while a pipeline run rewrites them, and leaves it pinned when a failed run left them half rewritten."""
+    """While pinned, state() keeps the loaded version even if the version file changes: the report watcher pins
+    it while a pipeline run rewrites the data, and leaves it pinned when a failed run left it half rewritten."""
     _pinned.set() if on else _pinned.clear()
 
 
+def _due(v: tuple) -> bool:
+    return _state.get("version") != v and (not _state or time.monotonic() - _failed_at >= RETRY_S)
+
+
 def state() -> dict:
-    """The loaded data version, reloaded when a version file changes (unless pinned)."""
-    global _state
+    """The loaded data version, reloaded when the version file changes (unless pinned). A failed reload keeps
+    serving the loaded version and is retried after RETRY_S; with nothing loaded yet it raises."""
+    global _state, _failed_at
     if _state and _pinned.is_set():
         return _state
     v = _version()
-    if _state.get("version") != v:
+    if _due(v):
         with _lock:
-            if _state.get("version") != v:
-                _state = {**_load(), "version": v}
+            if _due(v):
+                try:
+                    _state = {**_load(), "version": v}
+                except Exception:
+                    if not _state:
+                        raise
+                    _failed_at = time.monotonic()
+                    log.exception("data reload failed; still serving asof %s (%s)", _state["asof"],
+                                  _state["model_version"])
     return _state
 
 
@@ -381,7 +401,7 @@ def forecast(s, key):
 
 @cached
 def external_summary(s):
-    summary = json.loads(EXTERNAL_SUMMARY.read_text(encoding="utf-8"))
+    summary = s["external_summary"]
     cov = _one(s, """SELECT count(*) AS n_current,
             count(*) FILTER (WHERE l.la_linked) AS land_linked,
             count(*) FILTER (WHERE f.fc_area_known) AS forest_area_known,

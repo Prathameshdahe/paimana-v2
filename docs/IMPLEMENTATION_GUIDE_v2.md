@@ -348,7 +348,7 @@ one line of evidence, the source, and the date.
 |---|---|---|
 | Schedule slip | model P(date push) >= tier threshold | "P = 0.71; velocity 0.8%/q vs sector 2.1%" |
 | Cost escalation | model P(cost rev) | "P = 0.44; cost variation already +18%" |
-| Execution stagnation | rule: SPI < 0.1 at >= 30% elapsed | "12% progress at 64% elapsed" |
+| Execution stagnation | rule: SPI < 0.1 at >= 30% elapsed, or the stagnation override's rule (no progress 2+ quarters) | "12% progress at 64% elapsed; no progress for 3 quarters" |
 | Expenditure lag | burn gap < -15 or > +25 | "spent 61%, built 38%" |
 | Repeated revisions | >= 2 revisions in history | "3 date revisions since 2021" |
 | Sector headwind | sector_context trend negative | "sector output 9% below target, 3q declining" |

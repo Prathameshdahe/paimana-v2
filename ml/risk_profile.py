@@ -167,10 +167,15 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
         add(dim, scored & (p >= cut), scored, ev.where(scored, pd.Series(untiered, index=cur.index) + extra), "model")
 
     prog, el = cur["physical_progress_pct"], cur["elapsed_ratio"]
+    # the stagnation override's rule (ml/score.py) flags it too, so the checklist never says clear next to a tier
+    # the override raised
+    stuck = pd.Series(score.stagnant(cur), index=cur.index)
     known = cur["spi"].notna() & el.notna()
-    add("execution_stagnation", known & (cur["spi"] < SPI_MIN) & (el >= SPI_ELAPSED), known,
+    stuck_line = ("; no progress for " + num(cur["stagnation_quarters"], ".0f", " quarters")).where(stuck, "")
+    add("execution_stagnation", stuck | (known & (cur["spi"] < SPI_MIN) & (el >= SPI_ELAPSED)), known,
         (num(prog, ".0f", "% progress at ") + num(el * 100, ".0f", "% elapsed") + " (SPI " + num(cur["spi"], ".2f")
-         + ")").where(known, "no progress or no sanction/scheduled dates to measure against"), "silver")
+         + ")").where(known, "no progress or no sanction/scheduled dates to measure against") + stuck_line,
+        "silver")
 
     gap = cur["burn_gap"]
     add("expenditure_lag", (gap < BURN_LOW) | (gap > BURN_HIGH), gap.notna(),
@@ -234,17 +239,17 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
         pd.Series(np.where(opened | done, "report", "parivesh_rules"), index=cur.index))
 
     comp = external.external_composite(fc, land).set_index("project_key").reindex(k).set_axis(cur.index)
-    both, score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
+    both, ext_score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
     missing = la["la_match_method"].map(LA_REASON).fillna("not in the land linkage")
     # clear needs both halves positively known and neither checklist row flagged; flagged needs only the score
-    comp_flag = both & (score >= COMPOSITE_HIGH)
+    comp_flag = both & (ext_score >= COMPOSITE_HIGH)
     comp_clear = both & fc_known & la_clear & ~land_flag
     why = np.select([comp_flag | comp_clear, ~both, land_flag, fc_flag],
                     ["", " (" + missing + "), so the score is the forest half alone and is not rated",
                      "; not rated clear: the land row is flagged", "; not rated clear: the forest row is flagged"],
                     "; not rated clear: forest area unknown, so the forest half is the rulebook's estimate")
     add("external_composite", comp_flag, comp_clear,
-        "score " + num(score, ".2f") + " (" + comp["coverage"].fillna("n/a") + "): "
+        "score " + num(ext_score, ".2f") + " (" + comp["coverage"].fillna("n/a") + "): "
         + comp["ext_score_evidence"].fillna("no Parivesh profile") + pd.Series(why, index=cur.index),
         "external_composite")
 

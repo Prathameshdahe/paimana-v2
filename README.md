@@ -54,12 +54,14 @@ One `.env` at the root is shared by the Python code and Vite (see `envDir` in
 The dashboard needs the backend; there is no bundled data. Backend, with the venv active:
 
 ```
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 ```
 
 It starts the report watcher and the news scout in the background (see Live
 tracking). `LIVE_JOBS=0` in `.env` or the shell turns both loops off; the jobs
-still start from the API.
+still start from the API. The alert stream (`/api/stream`) never ends by itself,
+so without `--timeout-graceful-shutdown` Ctrl+C and `--reload` wait forever on an
+open dashboard tab.
 
 Dashboard, in a second terminal:
 

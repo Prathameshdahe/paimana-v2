@@ -169,3 +169,20 @@ def test_cache_is_dropped_when_the_data_version_changes(monkeypatch):
     after = serving.state()
     assert after is not before and not after["cache"]
     assert serving.meta()["n_current"] == before["cache"][("meta", (), ())]["n_current"]
+
+
+def test_a_failed_reload_keeps_serving_the_loaded_version(monkeypatch):
+    # score writes predictions_latest.json before profile writes risk_profile_<month>: that window must not 500
+    from backend import serving
+    before = serving.state()
+    calls = []
+
+    def broken():
+        calls.append(1)
+        raise FileNotFoundError("risk_profile_2026-08.parquet")
+    monkeypatch.setattr(serving, "_load", broken)
+    monkeypatch.setattr(serving, "_version", lambda: ("half written",))
+    assert serving.state() is before and serving.state() is before
+    assert len(calls) == 1                                       # retried only after RETRY_S
+    monkeypatch.setattr(serving, "RETRY_S", 0)
+    assert serving.state() is before and len(calls) == 2
