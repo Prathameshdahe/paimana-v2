@@ -1,8 +1,10 @@
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -61,3 +63,15 @@ def test_stagnation_override_skips_nearly_finished_projects():
     cur = pd.DataFrame({"stagnation_quarters": [3, 3, 3, 1, 3], "elapsed_ratio": [0.9, 0.9, 0.9, 0.9, 0.1],
                         "physical_progress_pct": [40.0, 97.0, None, 40.0, 40.0]})
     assert score.stagnant(cur).tolist() == [True, False, True, False, False]
+
+
+def test_calibrator_comes_from_the_champion_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(score.backtest, "RUNS", tmp_path)
+    (tmp_path / "R1").mkdir()
+    (tmp_path / "R1" / score.backtest.PLATT_FILE).write_text(
+        json.dumps({"y_any_h2": {"lightgbm": {"a": 1.0, "b": -1.0}}}), encoding="utf-8")
+    entry = {"run_id": "R1", "target": "y_any", "horizon": 2, "model": "lightgbm"}
+    cal = score.calibrator(entry)
+    assert cal == {"a": 1.0, "b": -1.0}
+    assert score.backtest.platt_apply(cal, [0.5])[0] == pytest.approx(1 / (1 + np.e))
+    assert score.calibrator({**entry, "horizon": 4}) is None and score.calibrator({**entry, "run_id": "R0"}) is None

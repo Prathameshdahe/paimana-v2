@@ -111,7 +111,14 @@ def main():
               backtest.ONEHOT_MIN, "numeric": "median impute + missing flags + standardise"},
               "windows": {"reliable_min": backtest.RELIABLE, "n_val": backtest.N_VAL, "n_test": backtest.N_TEST,
                           "min_rows": backtest.MIN_ROWS},
-              "final_fit": "all label rows (every realised outcome), completed projects excluded",
+              "final_fit": "all label rows (every realised outcome), completed projects excluded, rows before "
+                           "train_from dropped",
+              "train_from": {f"{y}_h{h}": t for (y, h), t in backtest.TRAIN_FROM.items()},
+              "calibration": {"method": f"platt_k{backtest.PLATT_FOLDS}", "file": backtest.PLATT_FILE,
+                              "targets": sorted(f"{y}_h{h}" for y, h in backtest.CALIBRATED),
+                              "rule": "each cutoff c: Platt on the model's predictions at c - h .. c - h - "
+                                      f"{backtest.PLATT_FOLDS - 1} quarters (labels realised by c); the served "
+                                      "calibrator uses the folds realised by the latest period"},
               "targets": [f"{y}_h{h}" for y, h in backtest.TARGETS], "features": cols, "categorical": cats,
               "feature_groups": res["groups"], "gold_version": man["gold_version"],
               "silver_version": man["silver_version"], "ece_slack": ECE_SLACK,
@@ -119,7 +126,7 @@ def main():
     (run_dir / "params.json").write_text(json.dumps(jsonable(params), indent=2), encoding="utf-8")
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
                                                       "calibration.csv", "shap_summary.csv", "windows.json",
-                                                      "params.json"]}
+                                                      "params.json", backtest.PLATT_FILE]}
     reg = load()
     for (y, h), d in res["frames"].items():
         key = f"{y}_h{h}"

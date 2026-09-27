@@ -6,7 +6,7 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet
 Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summary.csv (b table), ablation.csv
-         (c table), calibration.csv, shap_summary.csv
+         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators)
 
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
@@ -21,6 +21,10 @@ val rankings have flipped. So a second block, flash, holds every cutoff from FLA
 test cutoff, so there the test fold is no longer independent of promotion. Every pooled row also reports the
 not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
 early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
+
+y_any_h4 trains on rows from 2014 only (TRAIN_FROM). The 2-quarter targets' scores go through a Platt calibrator
+(CALIBRATED) fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
+it; the summary's calibration column says which. The ablation table compares the raw LightGBM scores.
 """
 import json
 import time
@@ -49,6 +53,15 @@ N_VAL = 6           # validation cutoffs
 N_TEST = 1          # newest usable cutoffs held out as test
 MIN_ROWS = 100      # a cutoff needs this many labelled rows
 FLASH_FROM = pd.Timestamp("2025-07-01")     # first flash-report quarter (the serving format)
+# y_any_h4 trains on quarterly-era rows only: the 2005-13 monthly rows cost it about 0.025 validation PR-AUC. The
+# 2-quarter targets keep every row (dropping them lost 0.014 PR-AUC on the flash block for y_any_h2).
+TRAIN_FROM = {("y_any", 4): pd.Timestamp("2014-01-01")}
+# Platt scaling for the 2-quarter targets, fitted on each model's predictions at the PLATT_FOLDS cutoffs c - h, ...,
+# c - h - PLATT_FOLDS + 1, whose labels are all realised by c. At h = 4 those folds are 4-7 quarters old and the
+# calibration got worse, so y_any_h4 stays raw.
+CALIBRATED = {("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2)}
+PLATT_FOLDS = 4
+PLATT_FILE = "platt.json"
 KS = (50, 100)
 ECE_BINS = 10
 PK = ["project_key", "period"]
@@ -87,10 +100,11 @@ def load():
     return feats, labels, pd.read_parquet(SILVER / "coverage.parquet"), manifest
 
 
-def frame(feats, labels, y):
-    """Labelled rows for target y joined to their features at t; completed projects dropped."""
+def frame(feats, labels, y, h=None):
+    """Labelled rows for target y at horizon h joined to their features at t; completed projects and rows before
+    the target's TRAIN_FROM dropped."""
     d = labels[PK + ["target_period", y]].dropna(subset=[y]).merge(feats, on=PK, how="inner")
-    d = d[~d.is_completed.astype(bool)].copy()
+    d = d[~d.is_completed.astype(bool) & (d.period >= TRAIN_FROM.get((y, h), d.period.min()))].copy()
     d[y] = d[y].astype(int)
     return d.sort_values(PK, ignore_index=True)
 
@@ -226,6 +240,49 @@ def not_yet_due(d):
     return (d.months_to_anticipated_completion > h_months).to_numpy()
 
 
+def logit(p):
+    p = np.clip(np.asarray(p, float), 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+
+
+def platt_fit(y, p):
+    """Platt scaling p -> sigmoid(a * logit(p) + b) fitted on (y, p), or None when there are fewer than MIN_ROWS rows
+    or only one class (the scores then stay raw)."""
+    y = np.asarray(y, int)
+    if len(y) < MIN_ROWS or y.min() == y.max():
+        return None
+    m = LogisticRegression(C=1e6).fit(logit(p)[:, None], y)
+    return {"a": float(m.coef_[0, 0]), "b": float(m.intercept_[0]), "n": int(len(y)), "n_pos": int(y.sum())}
+
+
+def platt_apply(cal, p):
+    """Scores p through a platt_fit result (None or no "a": unchanged)."""
+    p = np.asarray(p, float)
+    return p if not cal or "a" not in cal else 1 / (1 + np.exp(-(cal["a"] * logit(p) + cal["b"])))
+
+
+def calibration_folds(c, h, k=PLATT_FOLDS):
+    """The k newest cutoffs whose labels are all realised by c: c - h, ..., c - h - k + 1 quarters."""
+    return [pd.Timestamp(c) - pd.DateOffset(months=3 * (h + j)) for j in range(k)]
+
+
+def calibrate(preds, pool, h):
+    """Each (cutoff, model) of preds through a Platt fit on the same model's pool predictions at the cutoff's
+    calibration folds, whose labels are realised by the cutoff (no leakage). Ranks within a fold are unchanged."""
+    out = []
+    for (c, name), g in preds.groupby(["cutoff", "model"], sort=False):
+        src = pool[(pool.model == name) & pool.cutoff.isin(calibration_folds(c, h))]
+        out.append(g.assign(p=platt_apply(platt_fit(src.y, src.p), g.p)))
+    return pd.concat(out).loc[preds.index]
+
+
+def rescore(preds, folds):
+    """folds with the metric columns recomputed from preds (after calibration)."""
+    s = pd.DataFrame([{"cutoff": c, "model": m, **score(g.y, g.p)}
+                      for (c, m), g in preds.groupby(["cutoff", "model"], sort=False)])
+    return folds[["cutoff", "model", "n_train", "max_train_target"]].merge(s, on=["cutoff", "model"], how="left")
+
+
 def backtest(d, y, cutoffs, models):
     """Rolling origin. models = {name: (fit_fn, cols, cats)}. At each cutoff c every model is fitted on rows with
     target_period <= c and scores the rows at period == c. Returns (predictions, folds, fitted models)."""
@@ -309,46 +366,64 @@ def run(run_dir):
     main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
             "lightgbm": (fit_lgbm, cols, cats)}
     ablation = {name: (fit_lgbm, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
-    wins, all_folds, summary, abl, calib, shap, frames, fold_metrics = {}, [], [], [], [], [], {}, {}
+    wins, all_folds, summary, abl, calib, shap, frames, fold_metrics, platt = {}, [], [], [], [], [], {}, {}, {}
+    latest = feats.period.max()
     for y, h in TARGETS:
         key = f"{y}_h{h}"
-        d = frame(feats, labels[h], y)
+        d = frame(feats, labels[h], y, h)
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
         val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
         pv, fv, fitted = backtest(d, y, val, {**main, **ablation})
-        pt, ft, _ = backtest(d, y, test, main)
-        splits = [("val", pv, fv), ("test", pt, ft)]
+        splits = {"val": (pv[pv.model.isin(MAIN)], fv[fv.model.isin(MAIN)]), "test": backtest(d, y, test, main)[:2]}
         if len(flash):
-            splits.append(("flash", *backtest(d, y, flash, main)[:2]))
-        for split, p, f in splits:
+            splits["flash"] = backtest(d, y, flash, main)[:2]
+        method = "none"
+        if (y, h) in CALIBRATED:
+            method = f"platt_k{PLATT_FOLDS}"
+            done = {c for p, _ in splits.values() for c in p.cutoff}
+            want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
+            extra = sorted(c for c in want - done if (d.period == c).any())
+            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, extra, main)[0]] if extra else []))
+            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # val and flash can share cutoffs
+            for split, (p, f) in splits.items():
+                cp = calibrate(p, pool, h)
+                splits[split] = (cp, rescore(cp, f))
+            # the serving calibrator: the folds realised by the latest period
+            now = pool[pool.cutoff.isin(calibration_folds(latest, h))]
+            platt[key] = {name: {**(platt_fit(g.y, g.p) or {}),
+                                 "fit_cutoffs": sorted(str(c.date()) for c in g.cutoff.unique())}
+                          for name, g in now.groupby("model")}
+        for split, (p, f) in splits.items():
             f = f.assign(target=y, horizon=h, split=split)
             all_folds.append(f)
-            s = pooled(p, f, h).assign(target=y, horizon=h, split=split)
-            summary.append(s[s.model.isin(MAIN)])
+            s = pooled(p, f, h).assign(target=y, horizon=h, split=split, calibration=method)
+            summary.append(s)
             for name in MAIN:
                 fold_metrics[key, split, name] = {"pooled": s[s.model == name].iloc[0].drop(
                     ["target", "horizon", "split", "model"]).to_dict(), "folds": f[f.model == name].to_dict("records")}
-            if split == "val":
-                prev = None
-                for step, gs in ABLATION:
-                    r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
-                    r.update(step=step, groups="+".join(gs), n_features=len(step_cols[ABLATION_MODEL[step]]),
-                             **{f"{m}_gain": np.nan if prev is None else r[m] - prev[m] for m in ABLATION_GAINS})
-                    prev = r
-                    abl.append(r)
-                for name in MAIN:
-                    q = p[p.model == name]
-                    calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
-                contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
-                                                                  pred_contrib=True)[:, :-1] for c in val]
-                mean_abs = np.abs(np.vstack(contrib)).mean(axis=0)
-                group_of = {f: g for g, fs in groups.items() for f in fs}
-                shap.append(pd.DataFrame({"target": y, "horizon": h, "feature": cols,
-                                          "group": [group_of[c] for c in cols], "mean_abs_shap": mean_abs})
-                            .sort_values("mean_abs_shap", ascending=False))
-        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']}  "
-              f"{time.time() - t0:.0f}s")
+        # the ablation compares raw LightGBM scores; the calibration table shows the served (calibrated) ones
+        all_folds.append(fv[~fv.model.isin(MAIN)].assign(target=y, horizon=h, split="val"))
+        s, prev = pooled(pv, fv, h).assign(target=y, horizon=h), None
+        for step, gs in ABLATION:
+            r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
+            r.update(step=step, groups="+".join(gs), n_features=len(step_cols[ABLATION_MODEL[step]]),
+                     **{f"{m}_gain": np.nan if prev is None else r[m] - prev[m] for m in ABLATION_GAINS})
+            prev = r
+            abl.append(r)
+        pc = splits["val"][0]
+        for name in MAIN:
+            q = pc[pc.model == name]
+            calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
+        contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
+                                                          pred_contrib=True)[:, :-1] for c in val]
+        mean_abs = np.abs(np.vstack(contrib)).mean(axis=0)
+        group_of = {f: g for g, fs in groups.items() for f in fs}
+        shap.append(pd.DataFrame({"target": y, "horizon": h, "feature": cols,
+                                  "group": [group_of[c] for c in cols], "mean_abs_shap": mean_abs})
+                    .sort_values("mean_abs_shap", ascending=False))
+        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']} "
+              f"calibration {method}  {time.time() - t0:.0f}s")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     lead = ["target", "horizon"]
@@ -365,12 +440,14 @@ def run(run_dir):
     abl.to_csv(run_dir / "ablation.csv", index=False)
     calib.to_csv(run_dir / "calibration.csv", index=False)
     pd.concat(shap, ignore_index=True).to_csv(run_dir / "shap_summary.csv", index=False)
+    (run_dir / PLATT_FILE).write_text(json.dumps({"asof": str(latest.date()), "method": f"platt_k{PLATT_FOLDS}",
+                                                  **platt}, indent=2), encoding="utf-8")
     (run_dir / "windows.json").write_text(json.dumps({
         "rule": WINDOW_RULE,
         "gold_version": manifest["gold_version"], "silver_version": manifest["silver_version"], **wins},
         indent=2), encoding="utf-8")
     return {"windows": wins, "frames": frames, "features": cols, "groups": groups, "categorical": cats,
-            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest}
+            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt}
 
 
 def main(run_id=None):

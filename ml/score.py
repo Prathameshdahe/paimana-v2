@@ -10,7 +10,9 @@ Outputs  gold/predictions_<model_version>_<asof YYYY-MM>.parquet, gold/predictio
 
 At asof (default: the latest period) the current projects are those in the latest report with a feature row at
 asof that are not completed. Each target's champion type from the registry is refitted on every label row realised
-by asof (t + h <= asof) and scores them; LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
+by asof (t + h <= asof) and scores them (y_any_h4 on rows from 2014, backtest.TRAIN_FROM); the 2-quarter scores go
+through the Platt calibrator the champion's train run stored (backtest.PLATT_FILE, fitted on the folds realised by
+that run's latest period). LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
 the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
 by rank of p_any_2q, not by threshold; the stagnation override lifts a project one tier (not at >= 95% progress).
 A score whose model never saw one of the row's null features in training is left null (see unseen_missing): today
@@ -82,6 +84,15 @@ def champion(reg, y, h):
     return next(r for r in reg["runs"] if r["entry_id"] == reg["champions"][f"{y}_h{h}"]["entry_id"])
 
 
+def calibrator(entry):
+    """The Platt parameters of entry's model and target from its run folder, or None (raw scores)."""
+    path = backtest.RUNS / entry["run_id"] / backtest.PLATT_FILE
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8")).get(f"{entry['target']}_h{entry['horizon']}", {}).get(
+        entry["model"])
+
+
 def shap_top5(booster, X, k=SHAP_K):
     """Per row, the k features with the largest |SHAP| as JSON [{feature, value, contribution}]."""
     c = booster.predict(X, pred_contrib=True)[:, :-1]
@@ -128,12 +139,14 @@ def main(asof=None):
     fitted = {}
     for col, (y, h) in PROBS.items():
         e = champion(reg, y, h)
-        d = backtest.frame(feats, labels[h], y)
+        d = backtest.frame(feats, labels[h], y, h)
         d = d[d.target_period <= asof]
         fitted[col], predict = registry.CANDIDATES[e["model"]](d, e["feature_list"], e["categorical"], y)
         skip = unseen_missing(d, cur, e["feature_list"])
-        out[col] = np.where(skip, np.nan, predict(cur))
-        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored")
+        cal = calibrator(e)
+        out[col] = np.where(skip, np.nan, backtest.platt_apply(cal, predict(cur)))
+        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored, "
+              f"calibration {'Platt a=%.3f b=%.3f' % (cal['a'], cal['b']) if cal and 'a' in cal else 'none'}")
 
     cols, cats = lead["feature_list"], lead["categorical"]
     Xc = backtest.lgb_X(cur, cols, cats)
