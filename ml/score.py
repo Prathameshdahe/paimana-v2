@@ -10,9 +10,9 @@ Outputs  gold/predictions_<model_version>_<asof YYYY-MM>.parquet, gold/predictio
 
 At asof (default: the latest period) the current projects are those in the latest report with a feature row at
 asof that are not completed. Each target's champion type from the registry is refitted on every label row realised
-by asof (t + h <= asof) and scores them (y_any_h4 on rows from 2014, backtest.TRAIN_FROM); the 2-quarter scores go
-through the Platt calibrator the champion's train run stored (backtest.PLATT_FILE, fitted on the folds realised by
-that run's latest period). LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
+by asof (t + h <= asof, from backtest.TRAIN_FROM where a target has one) and scores them; a target in
+backtest.CALIBRATED goes through the Platt calibrator the champion's train run stored (backtest.PLATT_FILE, fitted on
+the folds realised by that run's latest period). LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
 the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
 by rank of p_any_2q, not by threshold. The stagnation rule (no progress for 2+ quarters, not at >= 95% progress) is
 only a flag, stagnation_override, shown as a badge: it used to lift the tier, but flagged projects slipped at or below
@@ -147,7 +147,7 @@ def main(asof=None):
         d = d[d.target_period <= asof]
         fitted[col], predict = registry.CANDIDATES[e["model"]](d, e["feature_list"], e["categorical"], y)
         skip = unseen_missing(d, cur, e["feature_list"])
-        cal = calibrator(e)
+        cal = calibrator(e) if (y, h) in backtest.CALIBRATED else None
         out[col] = np.where(skip, np.nan, backtest.platt_apply(cal, predict(cur)))
         print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored, "
               f"calibration {'Platt a=%.3f b=%.3f' % (cal['a'], cal['b']) if cal and 'a' in cal else 'none'}")

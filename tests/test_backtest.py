@@ -93,10 +93,12 @@ def test_not_yet_due_slice():
     assert 0 < s.nyd_pr_auc <= 1 and 0 <= s.nyd_precision_50 <= 1
 
 
-def test_h4_trains_from_2014_and_h2_keeps_every_row():
+def test_train_from_cuts_only_its_own_target(monkeypatch):
     periods = pd.date_range("2012-01-01", periods=12, freq="QS").astype("datetime64[us]")
     feats = pd.DataFrame({"project_key": "PRJ-000001", "period": periods, "is_completed": False, "x": 1.0})
     labels = feats[["project_key", "period"]].assign(target_period=periods + pd.DateOffset(months=12), y_any=1)
+    assert len(backtest.frame(feats, labels, "y_any", 4)) == 12                 # no target has a start today
+    monkeypatch.setattr(backtest, "TRAIN_FROM", {("y_any", 4): pd.Timestamp("2014-01-01")})
     assert backtest.frame(feats, labels, "y_any", 4).period.min() == pd.Timestamp("2014-01-01")
     assert len(backtest.frame(feats, labels, "y_any", 2)) == len(backtest.frame(feats, labels, "y_any")) == 12
 

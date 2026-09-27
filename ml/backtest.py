@@ -22,8 +22,8 @@ test cutoff, so there the test fold is no longer independent of promotion. Every
 not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
 early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
 
-y_any_h4 trains on rows from 2014 only (TRAIN_FROM). The 2-quarter targets' scores go through a Platt calibrator
-(CALIBRATED) fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
+A target in TRAIN_FROM trains on rows from that date only (none today). A target in CALIBRATED gets a Platt
+calibrator fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
 it; the summary's calibration column says which. The ablation table compares the raw LightGBM scores.
 """
 import json
@@ -53,13 +53,16 @@ N_VAL = 6           # validation cutoffs
 N_TEST = 1          # newest usable cutoffs held out as test
 MIN_ROWS = 100      # a cutoff needs this many labelled rows
 FLASH_FROM = pd.Timestamp("2025-07-01")     # first flash-report quarter (the serving format)
-# y_any_h4 trains on quarterly-era rows only: the 2005-13 monthly rows cost it about 0.025 validation PR-AUC. The
-# 2-quarter targets keep every row (dropping them lost 0.014 PR-AUC on the flash block for y_any_h2).
-TRAIN_FROM = {("y_any", 4): pd.Timestamp("2014-01-01")}
-# Platt scaling for the 2-quarter targets, fitted on each model's predictions at the PLATT_FOLDS cutoffs c - h, ...,
-# c - h - PLATT_FOLDS + 1, whose labels are all realised by c. At h = 4 those folds are 4-7 quarters old and the
-# calibration got worse, so y_any_h4 stays raw.
-CALIBRATED = {("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2)}
+# target -> first training quarter. Empty: training y_any_h4 on t >= 2014 only gained 0.023 validation PR-AUC but
+# lost 0.024 [-0.043, -0.006] on the flash block (3 seeds, paired project bootstrap; one fold of 335 rows), and the
+# 2-quarter targets lost on flash as well (y_any_h2 -0.014), so every target keeps every row.
+TRAIN_FROM = {}
+# Platt scaling, fitted on each model's predictions at the PLATT_FOLDS cutoffs c - h, ..., c - h - PLATT_FOLDS + 1,
+# whose labels are all realised by c. Only the cost revision: for y_any_h2 and y_date_push_h2 it halved validation
+# ECE but doubled flash-block ECE (0.061 -> 0.135, 0.065 -> 0.125) and lowered flash PR-AUC (-0.004, -0.007):
+# calibrators fitted on quarterly-report folds pull scores down where the flash-era slip rate is higher. y_any_h4 got worse on
+# validation (its folds are 4-7 quarters old).
+CALIBRATED = {("y_cost_rev", 2)}
 PLATT_FOLDS = 4
 PLATT_FILE = "platt.json"
 KS = (50, 100)
