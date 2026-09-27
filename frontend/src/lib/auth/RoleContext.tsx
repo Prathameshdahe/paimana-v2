@@ -23,7 +23,7 @@ const RoleContext = createContext<RoleState | null>(null)
 
 function readStored(): { role: Role | null; displayName: string } {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return { role: null, displayName: '' }
     const parsed = JSON.parse(raw) as { role?: Role; displayName?: string }
     return { role: parsed.role ?? null, displayName: parsed.displayName ?? '' }
@@ -38,7 +38,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const setRole = useCallback((role: Role, displayName: string) => {
     setState({ role, displayName })
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ role, displayName }))
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ role, displayName }))
     } catch {
       // sandboxed preview / storage disabled — role still works for this session
     }
@@ -47,7 +47,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const clearRole = useCallback(() => {
     setState({ role: null, displayName: '' })
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      sessionStorage.removeItem(STORAGE_KEY)
     } catch {
       // sandboxed preview / storage disabled
     }

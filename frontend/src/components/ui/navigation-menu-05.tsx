@@ -10,15 +10,16 @@ import {
 } from "@/components/ui/navigation-menu";
 
 const navigationMenuItems = [
-  { title: "HOME", href: "/", icon: Home, end: true, roles: undefined as Role[] | undefined },
-  { title: "COMMAND", href: "/command", icon: Terminal, end: false, roles: undefined },
-  { title: "SANDBOX", href: "/sandbox", icon: Box, end: false, roles: undefined },
-  { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, roles: undefined },
+  { title: "HOME", href: "/", icon: Home, end: true, requiresAuth: false, roles: undefined as Role[] | undefined },
+  { title: "COMMAND", href: "/command", icon: Terminal, end: false, requiresAuth: true, roles: undefined },
+  { title: "SANDBOX", href: "/sandbox", icon: Box, end: false, requiresAuth: true, roles: undefined },
+  { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, requiresAuth: true, roles: undefined },
   {
     title: "WORKERS",
     href: "/workers",
     icon: ListChecks,
     end: false,
+    requiresAuth: true,
     roles: ["ipmd_analyst", "ministry_official"] as Role[],
   },
   {
@@ -26,6 +27,7 @@ const navigationMenuItems = [
     href: "/approvals",
     icon: Inbox,
     end: false,
+    requiresAuth: true,
     roles: ["ipmd_analyst", "ministry_official", "agency_official"] as Role[],
   },
 ];
@@ -34,7 +36,11 @@ export function NavigationMenuWithActiveItem() {
   const location = useLocation();
   const { role } = useRole();
   const visibleItems = navigationMenuItems.filter(
-    (item) => !item.roles || (role && item.roles.includes(role))
+    (item) => {
+      if (item.requiresAuth && !role) return false;
+      if (item.roles && (!role || !item.roles.includes(role))) return false;
+      return true;
+    }
   );
 
   return (

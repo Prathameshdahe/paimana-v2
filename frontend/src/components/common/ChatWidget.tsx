@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Bot, Send, Sparkles, X } from 'lucide-react'
 import { askQuestion } from '@/lib/queryEngine'
 import { cn } from '@/lib/formatters'
+import { useRole } from '@/lib/auth/RoleContext'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -22,12 +23,18 @@ const STARTERS = [
  * file's header for the Ollama swap point).
  */
 export function ChatWidget() {
+  const { role } = useRole()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', text: 'Ask me about projects — sector, state, risk tier, overrun %, or delay months.' },
   ])
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Only render for these specific roles
+  if (!role || !['ipmd_analyst', 'ministry_official'].includes(role)) {
+    return null
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -74,7 +81,11 @@ export function ChatWidget() {
             </div>
 
             {/* Messages */}
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3 text-[12px]">
+            <div 
+              ref={scrollRef} 
+              onWheel={(e) => e.stopPropagation()}
+              className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 text-[12px]"
+            >
               {messages.map((m, i) => (
                 <div
                   key={i}
