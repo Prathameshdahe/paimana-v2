@@ -274,7 +274,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                       {show('expSlip') && (
                         <td className="whitespace-nowrap px-4 py-3 text-right font-mono tabular-nums text-fg-base">
                           {orDash(p.monthsP50, (v) => `${v.toFixed(0)}mo`)}
-                          <span className="text-xs text-fg-dimmed"> {orDash(p.monthsP95, (v) => `(${v.toFixed(0)})`)}</span>
+                          {p.monthsP95 !== null && <span className="text-xs text-fg-dimmed"> ({p.monthsP95.toFixed(0)})</span>}
                         </td>
                       )}
                       {show('slip') && (

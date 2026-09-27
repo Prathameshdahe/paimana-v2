@@ -16,6 +16,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { KPIRibbon, Meter, Tile, TierBar } from '@/views/command-center/KPIRibbon'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
+import { LiveStatus } from '@/views/home/LiveStatus'
 import {
   useAgencyMatrix, useDispatchDrafts, useExternalSummary, usePortfolio, useProjects,
 } from '@/lib/queries'
@@ -318,6 +319,7 @@ export function MinistryHome({ ministry }: { ministry: string }) {
         actions={<LinkButton to="/command">Open Command Center <ArrowRight className="size-4" /></LinkButton>}
       />
       <KPIRibbon />
+      <LiveStatus />
       <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
         <ProjectList
           title="Most at risk"
@@ -507,6 +509,7 @@ export function AgencyHome({ agency }: { agency: string }) {
         <ApprovalsCard />
       </div>
       <KPIRibbon />
+      <LiveStatus />
       <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
         <ProjectList
           title="Most at risk"

@@ -238,9 +238,14 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                 className="cursor-pointer border-b border-border-subtle/70 align-top transition-colors hover:bg-surface-elevated/70"
               >
                 <td className="max-w-[280px] py-3 pl-5 pr-4">
-                  <span className="block truncate font-medium text-fg-base" title={p.project_name ?? undefined}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); panel.open(p.project_key) }}
+                    className="block max-w-full truncate text-left font-medium text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    title={p.project_name ?? undefined}
+                  >
                     {p.project_name ?? p.project_key}
-                  </span>
+                  </button>
                   <div className="mt-0.5 truncate text-xs text-fg-dimmed">
                     {p.project_key} · {p.sector ?? 'sector unknown'} · {p.state ?? 'state unknown'}
                   </div>
