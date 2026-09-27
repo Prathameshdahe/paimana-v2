@@ -272,8 +272,22 @@ PR-AUC and calibration; the decision is recorded in the registry.
 `gold/predictions_<mv>_<asof>.parquet`: probabilities, expected months and
 cost %, intervals, SHAP top-5 with values, and a risk tier. Tiers by rank, not
 by threshold: Critical = top 5%, High = next 15%, Medium = next 30%, Low =
-rest, with the rule-based stagnation override allowed to lift a project one
-tier.
+rest. The rule-based stagnation flag (no progress 2+ quarters) is a badge
+only: in the backtest flagged projects slipped at or below the base rate, and
+lifting them made every tier less precise. A project with no anticipated
+completion date has no date-based score and sits in the Watch tier, ordered
+by flagged checklist rows and then P(cost revision); that order is not
+validated.
+
+Validation and promotion (ml/backtest.py, ml/registry.py): besides the
+quarterly-era validation folds, every cutoff from 2025-07 with 100+ labelled
+rows forms a flash block (the report format live scoring uses; for the
+2-quarter targets it includes the test cutoff). A challenger is promoted only
+when its PR-AUC is not lower on either block and beats the champion on one by
+twice the measured seed sd. Each pooled metric also has a not-yet-due slice
+(anticipated completion after t + h). Only the cost revision is
+Platt-calibrated; calibrating the date targets and training h4 from 2014 both
+lost on the flash block and were reverted.
 
 ### 4. Serving
 
