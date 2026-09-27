@@ -46,7 +46,22 @@ references it and that every gold key is a real PRJ key.
 - **Multi-state land loading** (pipeline/external.py `load_land`). It reads every `land_acquisition_*.csv` and
   every export dropped into `dataset/raw/external/bhoomi_rashi/`, and drops duplicate stretches. A road links only
   to stretches in its own state. A Multi-State road links to each state whose district its name mentions.
-  Rebuilding the current Maharashtra-only data gives the same linked projects and values as before.
+  `land_acquisition_india.csv` holds the other 28 states with data (2,679 stretches, pulled from the public
+  whole-state Highway Register on 2026-09-27; Arunachal Pradesh and Nagaland return empty tables), so 29 states
+  are covered with the Maharashtra file.
+- **Km-range linking** (`link_land`). A km range in the project name ('Km 217.500 to Km 254.430', 'KM 267+500 TO
+  KM 290+000') picks the stretches of its NH whose own chainage shares more than 1 km with it (`nh_chainage`); a
+  stretch that only touches the range is a neighbour, and a stretch whose chainage the range contradicts is ruled
+  out at every step. Without a km range the link falls back to (NH, district named) and then to the NH alone. An NH
+  the name gives only as an end point ('from Junction with ... NH-54') is not the project's road. Only
+  `nh_chainage` links rate a project, flagged at complexity 4 or more (the research cut) and clear below; district
+  and NH-only links are `possible`: shown with their stretches, never flagged, and not counted in the composite.
+  See "Land link precision" below for why.
+- **The model keeps its old land input.** The all-state table and the km link added no backtest lift (2026-09
+  ablation: flash y_any_h2 -0.0057 [-0.0096, -0.0021]), so the model's `la_*_by_t` features still read
+  `gold/external_land_pairs.parquet`, built as before from the Maharashtra table with the NH/district link. It is
+  byte-identical after this change, so the gold version and the champions are unchanged. The display links are in
+  `gold/external_land_links.parquet`.
 - **Composite with coverage** (`external_composite`, written to gold/external_composite.parquet):
   - Forest part: fc = the rulebook's expected complexity / 7. It always has a value, but it is measured only when
     the forest hectares are known. Without them it is the median over the scenarios of every area band (3/7 for a
@@ -64,42 +79,66 @@ references it and that every gold key is a real PRJ key.
 
 ## The guide's open gaps
 
-- **Project to LA crosswalk.** We link on the NH number in the project name, then the district. The links are in
-  gold/external_land.parquet. 106 projects are linked, 58 of them current: 35 flagged (complexity 3 or more) and
-  23 clear. FC still has no linking key. Each project gets a rulebook profile from its sector and name, plus any
-  forest hectares or violations in its report remarks.
+- **Project to LA crosswalk.** We link on the NH number and km range in the project name, then the district,
+  then the NH alone. The links are in gold/external_land.parquet. 692 projects are rated on a km match, 412 of
+  them current: 135 flagged (complexity 4 or more) and 277 clear. 378 more (133 current) have only a possible link.
+  FC still has no linking key in the land table. Each project gets a rulebook profile from its sector and name,
+  plus any forest hectares or violations in its report remarks.
 - **Parivesh proposal tracker.** Still missing. Forest events in the report remarks cover part of it. In the
   current portfolio, 71 projects mention forest or environment clearance, 35 have an open forest event, and 20
   report forest hectares.
-- **Multi-state land data.** Drop each state's whole-state export into `dataset/raw/external/bhoomi_rashi/` (see
-  the README there) and rerun `python -m pipeline.run external`. That state's road projects then become linkable
-  with no code change.
+- **Multi-state land data.** Done for the 29 states with data (see above). To refresh a state, drop its
+  whole-state export into `dataset/raw/external/bhoomi_rashi/` (see the README there) and rerun
+  `python -m pipeline.run external`. Most states' latest Publish Date is 2025-05-09, so the register has barely
+  changed since May 2025.
 - **Compensation and possession status.** Not in Bhoomi Rashi. Report remarks tagged `compensation` and
   `possession` are the only signal.
 
+## Land link precision
+
+On 2026-09-28 we hand-checked 100 current links, drawn after the rules above were fixed on two earlier samples:
+25 `nh_chainage`, 25 `nh_district` and 50 `nh_only`. Each was judged from the project name, NH, district and km
+range against the linked stretches: correct when the stretch that sets the maximum complexity is on the project's
+own section. The table with a reason per link is `dataset/gold/land_link_check.csv`.
+
+| Method | Correct | Precision | Wilson 95% CI | Main errors | Used as |
+|---|---|---|---|---|---|
+| `nh_chainage` | 21 of 25 | 84% | 65-94% | km restarts per district, a range mixing two roads | flagged / clear |
+| `nh_district` | 16 of 25 (1 unclear) | 64% | 45-80% | districts named as the road's end points, other packages of the same road | possible |
+| `nh_only` | 16 of 50 (4 unclear) | 32% | 21-46% | the maximum over every stretch of a long NH | possible |
+
+A method under 70% is shown as possible, never flagged. So only `nh_chainage` rates a project.
+
 ## Current numbers
 
-- **Coverage.** 58 current projects are `fc+la` and 1,705 are `fc_only`.
-- **Why the rest have no land data.** Of the current projects without it:
+- **Coverage.** 412 current projects are `fc+la` and 1,351 are `fc_only`. The 412 are in 28 states (Uttar Pradesh
+  43, Karnataka 37, Maharashtra 36, Andhra Pradesh 24, Madhya Pradesh 22, Assam and Jammu & Kashmir 21 each).
+- **Why the rest have no rated land.** Of the 1,351 current projects without it:
 
   | Reason | Projects |
   |---|---|
-  | Their state has no land data | 907 |
   | Not a road project | 771 |
-  | No NH number in the name | 20 |
-  | Their NH is not in their state's table | 7 |
+  | No NH number in the name | 210 |
+  | Their NH is not in their state's table | 88 |
+  | Possible link on the NH alone | 75 |
+  | No stretch of their NH at the km range in the name | 67 |
+  | Possible link on the NH and a district | 58 |
+  | Their state has no land data | 56 |
+  | The name gives NH numbers only as end points | 26 |
 
-- **Scores with `fc+la`.** Scores run from 0.21 to 0.71, with a median of 0.61. 31 projects are flagged at 0.6 or
-  more. None is clear: all 58 have unknown forest hectares, so the other 27 are unknown. 23 of them have a clear
-  land row, and 4 have a flagged land row (land 3/5, score 0.51), such as PRJ-003297 on NH-61.
+- **Land row.** 135 current projects are flagged (complexity 4 or more on the km-matched stretches) and 277 are
+  clear. Before this change, 58 were linked (Maharashtra only), 35 of them flagged at complexity 3 or more.
+- **Scores with `fc+la`.** Scores run from 0.21 to 0.71, with a median of 0.51. 135 projects are flagged at 0.6
+  or more; in practice these are the projects with land complexity 4 or more, because the forest part barely
+  varies. None is rated clear: all have unknown forest hectares.
 - **Scores with `fc_only`.** The median is 0.43, and these projects are not rated. 128 of them would score 0.6 or
-  more on forest alone (mostly non-linear mining, expected 6.5/7), but without land data the score is not a
-  combined one.
-- **The forest part barely varies.** It is 3/7 for 93% of current projects, because forest hectares are rarely
-  known. So among `fc+la` projects the composite mostly ranks by land, and flagged in practice means land
-  complexity of 4 or more. The land row flags at 3 or more, so the land row, not the composite, is the one to
-  read for land.
-- **Open events in the current portfolio.** 35 forest events and 46 land events.
+  more on forest alone (mostly non-linear mining, expected 6.5/7).
+- **The forest part barely varies.** It is 3/7 for most current projects, because forest hectares are rarely
+  known (63 projects in all have them).
+- **Early notice.** 99 current projects (Rs 129,920 cr) have a flagged external factor while the numbers show no
+  slip yet or a Low/Medium tier, 98 of them for land; 18 have no slip to date. Before, 32 (11).
+- **Open events in the current portfolio.** The remark rule leaves 34 forest and 44 land events open, but remark
+  free text ends in 2023-Q2, so under the four-quarter expiry none of them is open at July 2026.
 
 ## What we deliberately did not do
 

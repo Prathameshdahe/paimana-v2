@@ -6,11 +6,12 @@ Run from repo root after the silver build:  python -m pipeline.run external
 
 Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver/observations.parquet,
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
-         raw/external/land_acquisition_*.csv (stretch tables, Maharashtra so far) and raw/external/bhoomi_rashi/
-         (raw Bhoomi Rashi state exports, parsed by pipeline/bhoomi_rashi.py)
+         raw/external/land_acquisition_*.csv (Bhoomi Rashi stretch tables: Maharashtra, and the other 28 states with
+         data in land_acquisition_india.csv) and raw/external/bhoomi_rashi/ (raw Bhoomi Rashi state exports, parsed by
+         pipeline/bhoomi_rashi.py)
 Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/remark_status.parquet,
-         gold/external_fc.parquet, gold/external_land.parquet, gold/external_land_pairs.parquet,
-         gold/external_composite.parquet
+         gold/external_fc.parquet, gold/external_land.parquet, gold/external_land_links.parquet (its stretches),
+         gold/external_land_pairs.parquet (the model's land input, see LA_MODEL_TABLE), gold/external_composite.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -41,10 +42,13 @@ fc_prior_* repeat the match from sector and name alone (no remark hectares or vi
 so gold can use them as features without reading later remarks.
 
 Land acquisition: road projects are linked to the Bhoomi Rashi NH stretches of their own state (a Multi-State
-project: of each state whose district its name mentions) and of the NH number in their name, on (NH, district)
-first, then NH alone. A state with no land data (every state but Maharashtra so far) is 'unknown', never 'clear'.
-The table is one snapshot: a stretch's parcels and complexity count every notification, so gold reads them at t
-only for stretches whose last notification is by t (external_land_pairs keeps the dates).
+project: of each state whose district its name mentions) and of the NH number in their name (not one it names only as
+a junction): stretches at the km range in the name first, then (NH, district), then NH alone. Only a km match rates a
+project (flagged at complexity >= LA_FLAG, else clear); the district and NH-only links fell under 70% on a
+hand-checked sample, so they are 'possible', shown and never flagged. A state with no land data is 'unknown', never
+'clear'. The table is one snapshot: a stretch's parcels and complexity count every notification, so gold reads them
+at t only for stretches whose last notification is by t (the pair tables keep the dates). The model's la_* features
+read external_land_pairs, built as before from the Maharashtra table alone: the all-state table added no backtest lift.
 
 Composite (external_composite): the teammate's score 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land
 is linked, forest/7 alone ('fc_only') where it is not. Informational, not a model feature.
@@ -840,7 +844,33 @@ NH_TEXT = (r"(?:\b(OLD|NEW|ERSTWHILE|JUNCTION\s+(?:OF|WITH)|JN\.?\s*(?:OF|WITH)?
            r"(?:\bNH|\bN\.H\.|\bNATIONAL\s+HIGHWAY)\s*(?:NO\.?|NUMBER)?\s*[-:.]?\s*"
            + _NH_NO + r"(?:\s*(?:&|AND|/)\s*" + _NH_NO + r"(?!\s*K\.?M))?(\s*(?:JUNCTION|JN)\b)?")
 NE_TEXT = r"\b(NE)[-\s]?(\d{1,2})\b"   # national expressways, 'NE-4'
-LA_FLAG = 3               # a linked project is flagged at acquisition complexity >= 3 of 5, else clear
+# an NH named as an end point a few words after the cue is not the project's road: 'from Junction with
+# Amritsar-Mehta-Tanda road NH-503A', 'to intersection with NH-44', 'connecting NH-119 and NH-58', 'starting at
+# Ch. 237000 of NH 530'. Only the display link drops them (link_land strict); the model's link reads NH_TEXT alone.
+NH_END = (r"\b(?:JUNCTION|JN\.?|INTERSECTION|CONNECTING|STARTING\s+(?:AT|FROM)|ENDING\s+AT|TERMINATING\s+AT)\s+"
+          r"(?:(?:WITH|OF|AT|FROM)\s+)?(?:[^\s,;]+\s+){0,6}?(?:NH|N\.H\.|NATIONAL\s+HIGHWAY)\s*(?:NO\.?)?\s*[-:.]?\s*"
+          + _NH_NO + r"(?:\s*(?:&|AND|/)\s*(?:NH\s*[-:.]?\s*)?" + _NH_NO + r")?")
+# km range in a project name: 'Km 217.500 to Km 254.430', 'KM 267+500 TO KM 290+000', 'Ch. 0.000 to Ch. 49.2',
+# 'km 193/0 to km 255/300', 'Km 55.00 Kuru to Km 95.400 Udaipura', 'Bakhtiyarpur Km 153.300 to Mokama Km 197.900';
+# '+' and '/' are km + metres and a 5-6 digit number is metres ('Km 82000 to Km 94030')
+_KM = r"(\d{1,6}(?:[.,+/]\s?\d{1,3})?)"
+KM_RANGE = (r"(?:\bkm|\bch|chainage)\s*\.?\s*[:.]?\s*" + _KM
+            + r"(?:\s*(?:to|-|–)\s*(?:(?:[a-z]+\.?\s+){0,2}(?:km|ch)(?![a-z])\.?\s*)?"
+            + r"|\s+(?:[a-z]+\s+){1,3}to\s+(?:km|ch)(?![a-z])\.?\s*)"
+            + _KM)
+KM_TOL = 1.0              # a stretch links on km when it shares more than this (or half the shorter span) with the range
+KM_MAX, KM_MAX_SPAN = 2000, 300   # a km range or stretch chainage past these is a misread, not used to link
+LA_FLAG = 4               # a linked project is flagged at acquisition complexity >= 4 of 5, else clear
+# link methods that rate a project flagged or clear; the others are only 'possible': shown, never flagged.
+# Hand-checked on 100 current links (gold/land_link_check.csv, 2026-09-28): nh_chainage 21/25 correct (84%, Wilson CI
+# 65-94%), nh_district 16/25 (64%, 45-80%: districts named as the road's end points, other packages of the same
+# road), nh_only 16/50 (32%, 21-46%: the max over every stretch of a long NH). A method under 70% is 'possible'.
+LA_CONFIDENT = ("nh_chainage",)
+LA_POSSIBLE_WHY = {"nh_district": "NH and a district named in the name, no km range to place it",
+                   "nh_only": "NH only, no district or km range in the name places the project on it"}
+# the model's la_* features stay on this table and the NH/district link they were backtested on: the all-state
+# table and the km-range link add no lift (2026-09 ablation), so they are evidence and display only
+LA_MODEL_TABLE = "land_acquisition_maharashtra.csv"
 DISTRICT_ALIAS = {"AURANGABAD": ["CHHATRAPATI SAMBHAJINAGAR", "SAMBHAJINAGAR"], "AHMEDNAGAR": ["AHILYANAGAR"],
                   "RAIGAD": ["RAIGARH"], "GONDIA": ["GONDIYA"], "BULDHANA": ["BULDANA"], "NASHIK": ["NASIK"]}
 LA_COLS = ["project_key", "la_linked", "la_match_method", "la_state", "la_nh", "la_districts", "la_stretches",
@@ -881,17 +911,63 @@ def nh_from_text(s):
     return ids.groupby(level=0).agg(joined).reindex(s.index)
 
 
+def nh_endpoints(s):
+    """NH ids each text names as an end point (NH_END), as sets (empty when none)."""
+    m = s.fillna("").str.upper().str.extractall(NH_END)
+    ids = pd.concat([m[0], m[1]]).dropna().str.replace(r"[\s-]", "", regex=True).str.lstrip("0")
+    ends = ids.groupby(level=0).agg(set).reindex(s.index)
+    return ends.map(lambda v: v if isinstance(v, set) else set())
+
+
+def _km(v):
+    """'217.500' -> 217.5, '217,5' -> 217.5, '267+500' / '267/500' -> 267.5 (km + metres); a plain integer is
+    returned as an int (km or metres, km_range decides)."""
+    whole, sep, frac = re.fullmatch(r"(\d+)(?:([.,+/])(\d+))?", v.replace(" ", "")).groups()
+    if sep in ("+", "/"):
+        return int(whole) + int(frac) / 1000
+    return float(f"{whole}.{frac}") if sep else int(whole)
+
+
+def _km_pair(a, b):
+    """Both ends of a km range in km, or None: plain integers are metres when one has 5+ digits or both are
+    plain with one >= 2000 ('Km 82000 to Km 94030', 'km 0000 to Km 4385'); a range over KM_MAX_SPAN km or past
+    KM_MAX is a misread ('KM 377-700', 'KM.825-KM.30')."""
+    x, y = _km(a), _km(b)
+    ints = [v for v in (x, y) if isinstance(v, int)]
+    if any(v >= 10000 for v in ints) or (len(ints) == 2 and max(ints) >= 2000):
+        x, y = (v / 1000 if isinstance(v, int) else v for v in (x, y))
+    lo, hi = sorted((float(x), float(y)))
+    return (lo, hi) if hi - lo <= KM_MAX_SPAN and hi <= KM_MAX else None
+
+
+def km_range(names):
+    """The first km range each project name gives, as km_from <= km_to; null when it gives none (or a misread)."""
+    m = names.fillna("").str.extract(KM_RANGE, flags=re.IGNORECASE)
+    r = [_km_pair(a, b) if isinstance(a, str) else None for a, b in zip(m[0], m[1])]
+    return pd.DataFrame([v or (np.nan, np.nan) for v in r], columns=["km_from", "km_to"], index=names.index)
+
+
+def sane_chainage(st):
+    """Stretches whose chainage reads as km: both ends in [0, KM_MAX] and at most KM_MAX_SPAN apart (the table has
+    metre chainages such as '10163.000 - 152520.000' and whole-state spans such as '0.000 - 517.000')."""
+    a, b = st["chainage_start_km"], st["chainage_end_km"]
+    return a.between(0, KM_MAX) & b.between(0, KM_MAX) & (a - b).abs().le(KM_MAX_SPAN)
+
+
 def state_key(s):
     """State names -> comparable keys: 'Jammu & Kashmir' and 'JAMMU AND KASHMIR' both -> 'JAMMU AND KASHMIR'."""
     return s.str.upper().str.replace("&", " AND ").str.replace(r"[^A-Z]+", " ", regex=True).str.strip()
+
+
+def read_land(path):
+    return pd.read_csv(path, dtype={"state": "str", "highway_name": "str", "chainage_raw": "str"})
 
 
 def load_land(external=EXTERNAL):
     """Every land source as one stretch table (the land_acquisition_maharashtra.csv schema): the stretch CSVs
     raw/external/land_acquisition_*.csv, then the raw Bhoomi Rashi exports in raw/external/bhoomi_rashi/ (.xls,
     .html) parsed and aggregated. A (state, highway, chainage) stretch found in more than one keeps its first copy."""
-    text = {"state": "str", "highway_name": "str", "chainage_raw": "str"}
-    parts = [pd.read_csv(p, dtype=text) for p in sorted(external.glob("land_acquisition_*.csv"))]
+    parts = [read_land(p) for p in sorted(external.glob("land_acquisition_*.csv"))]
     raw = sorted(p for p in (external / "bhoomi_rashi").glob("*") if p.suffix.lower() in (".xls", ".html", ".htm"))
     parts += [aggregate_stretches(parse_bhoomi_rashi(p)) for p in raw]
     la = pd.concat(parts, ignore_index=True)
@@ -935,11 +1011,17 @@ def districts_in(names, st):
     return pd.concat(out, ignore_index=True)
 
 
-def link_land(master, st):
-    """Road projects -> the LA stretches of their state and of the NH they name: (NH, district) in the name first,
-    then the NH alone. A project's state is its own, or for a Multi-State project each land-table state whose
-    district its name mentions; a state with no stretches leaves it unknown. Returns one row per project_key and the
-    (project_key, nh, stretch_id, la_match_method) pairs. master has a RangeIndex."""
+def link_land(master, st, strict=True):
+    """Road projects -> the LA stretches of their state and of the NH they name: stretches sharing more than KM_TOL
+    km (or half the shorter span) with the km range in the name first ('nh_chainage'), then (NH, district) in the
+    name ('nh_district'), then the NH alone ('nh_only'). An NH named only as an end point ('from Junction with ...
+    NH-54') is not the project's road. A project's state is its own, or for a Multi-State project each land-table
+    state whose district its name mentions; a state with no stretches leaves it unknown. A km range in the name rules
+    out every stretch whose own chainage it contradicts ('no_stretch_at_its_km' when none is left). Only LA_CONFIDENT
+    links rate a project: flagged at complexity >= LA_FLAG, else clear; the others are 'possible', shown but never
+    flagged, and la_linked is False for them. strict=False is the model's link: no km rule and no end-point rule.
+    Returns one row per project_key and the (project_key, nh, stretch_id, la_match_method) pairs. master has a
+    RangeIndex."""
     road = master["sector"].eq("Roads & Highways")
     dist = districts_in(master["project_name"], st)
     # ponytail: a district name shared by two states (Aurangabad: Maharashtra and Bihar) makes a Multi-State road a
@@ -948,42 +1030,88 @@ def link_land(master, st):
     multi = dist.loc[master["state"].eq("Multi-State").to_numpy()[dist["idx"]], ["idx", "state"]]
     at = pd.concat([own[own["state"].isin(set(st["state"]))], multi]).drop_duplicates()
     has_land = master.index.isin(at["idx"])
-    nh = nh_from_text(master["project_name"].fillna("") + " " + master["codes_seen"].fillna(""))
+    nh = named_nh = nh_from_text(master["project_name"].fillna("") + " " + master["codes_seen"].fillna(""))
+    if strict:
+        ends = nh_endpoints(master["project_name"])
+        nh = pd.Series([";".join(v for v in n.split(";") if v not in e) or None if isinstance(n, str) else None
+                        for n, e in zip(nh, ends)], index=nh.index, dtype="str")
     at = at[road.to_numpy()[at["idx"]] & nh.notna().to_numpy()[at["idx"]]]
-    cand = at.assign(project_key=master["project_key"].to_numpy()[at["idx"]],
-                     nh=nh.to_numpy()[at["idx"]]).drop(columns="idx")
+    cand = at.assign(project_key=master["project_key"].to_numpy()[at["idx"]], nh=nh.to_numpy()[at["idx"]])
     cand = cand.assign(nh=cand["nh"].str.split(";")).explode("nh")
+    km = km_range(master["project_name"])
+    use_km = strict and "chainage_start_km" in st
+    chain = st.loc[sane_chainage(st), ["stretch_id", "chainage_start_km", "chainage_end_km"]] if use_km else None
+    found = []
+
+    def rest():
+        done = pd.concat([f["project_key"] for f in found]) if found else pd.Series([], dtype="str")
+        return cand[~cand["project_key"].isin(done)]
+
+    def on_km(c):
+        """Per candidate (idx, stretch_id) row: 'yes' where the stretch shares more than KM_TOL km (or half the
+        shorter span) with the km range of the name ('30.05-49.15' only touching 'km 49.15 to 64.5' is a neighbour),
+        'no' where both are known and it does not, 'unknown' otherwise."""
+        if not use_km:
+            return np.full(len(c), "unknown")
+        x = c[["idx", "stretch_id"]].join(km, on="idx").merge(chain, on="stretch_id", how="left")
+        lo, hi = np.fmin(x["chainage_start_km"], x["chainage_end_km"]), np.fmax(x["chainage_start_km"],
+                                                                              x["chainage_end_km"])
+        shared = np.fmin(hi, x["km_to"]) - np.fmax(lo, x["km_from"])
+        need = np.fmin(KM_TOL, 0.5 * np.fmin(hi - lo, x["km_to"] - x["km_from"])).clip(lower=0.05)
+        return np.select([x["km_from"].isna() | lo.isna(), shared >= need], ["unknown", "yes"], "no")
+
+    by_nh = cand.merge(st[["state", "nh", "stretch_id"]], on=["state", "nh"])
+    by_nh = by_nh.assign(km=on_km(by_nh))
+    # a km range in the name that contradicts a stretch's own chainage rules the stretch out at every step
+    found.append(by_nh[by_nh["km"].eq("yes")].assign(la_match_method="nh_chainage"))
     named = dist.assign(project_key=master["project_key"].to_numpy()[dist["idx"]])[["project_key", "state",
                                                                                     "district"]]
-    ex = st.explode("districts").rename(columns={"districts": "district"})[["state", "nh", "district", "stretch_id"]]
-    by_d = cand.merge(named, on=["project_key", "state"]).merge(ex, on=["state", "nh", "district"]).assign(
-        la_match_method="nh_district")
-    rest = cand[~cand["project_key"].isin(by_d["project_key"])]
-    by_n = rest.merge(st[["state", "nh", "stretch_id"]], on=["state", "nh"]).assign(la_match_method="nh_only")
-    pairs = pd.concat([by_d, by_n], ignore_index=True)[["project_key", "nh", "stretch_id", "la_match_method"]]
+    ex = st.explode("districts").rename(columns={"districts": "district"})[["state", "district", "stretch_id"]]
+    left = by_nh[by_nh["km"].eq("unknown")]
+    by_d = left[left["project_key"].isin(rest()["project_key"])].merge(named, on=["project_key", "state"]).merge(
+        ex, on=["state", "district", "stretch_id"]).assign(la_match_method="nh_district")
+    found.append(by_d)
+    found.append(left[left["project_key"].isin(rest()["project_key"])].assign(la_match_method="nh_only"))
+    km_miss = master["project_key"].isin(by_nh["project_key"]) & ~master["project_key"].isin(
+        pd.concat([f["project_key"] for f in found]))
+    pairs = pd.concat(found, ignore_index=True)[["project_key", "nh", "stretch_id", "la_match_method"]]
     agg = aggregate(pairs.merge(st.drop(columns="nh"), on="stretch_id"), ["project_key"])
     pg = pairs.groupby("project_key")
     agg["la_nh"] = agg["project_key"].map(pg["nh"].agg(joined)).astype("str")
     agg["la_match_method"] = agg["project_key"].map(pg["la_match_method"].first())
     out = master[["project_key"]].merge(agg, on="project_key", how="left")
-    out["la_linked"] = out["stretches"].notna()
-    reason = np.select([~road, ~has_land, nh.isna()], ["not_road", "no_land_data_for_state", "no_nh_in_name"],
-                       "nh_not_in_table")
+    linked_any = out["stretches"].notna()
+    out["la_linked"] = linked_any & out["la_match_method"].isin(LA_CONFIDENT)
+    reason = np.select([~road, ~has_land, named_nh.isna(), nh.isna(), km_miss.to_numpy()],
+                       ["not_road", "no_land_data_for_state", "no_nh_in_name", "nh_only_as_end_point",
+                        "no_stretch_at_its_km"], "nh_not_in_table")
     out["la_match_method"] = out["la_match_method"].fillna(pd.Series(reason, index=out.index))
-    flag = np.where(out["complexity_max"] >= LA_FLAG, "flagged", "clear")
-    out["la_state"] = np.where(out["la_linked"], flag, "unknown")
+    out["la_state"] = np.select([out["la_linked"] & (out["complexity_max"] >= LA_FLAG), out["la_linked"], linked_any],
+                                ["flagged", "clear", "possible"], "unknown")
     out = out.rename(columns={c: f"la_{c}" for c in ["stretches", "parcels", "area_ha", "complexity_max",
                                                     "notif_span_days_max", "first_notif", "last_notif", "districts"]})
     for c in ["la_stretches", "la_parcels", "la_complexity_max", "la_notif_span_days_max"]:
         out[c] = out[c].astype("Int64")
+    km_txt = ("km " + km["km_from"].map("{:g}".format, na_action="ignore").astype("str") + "-"
+              + km["km_to"].map("{:g}".format, na_action="ignore").astype("str"))
     where = out["project_key"].map(by_d.groupby("project_key")["district"].agg(joined)).astype("str")
-    where = (" (" + where.str.title().str.replace(";", ", ") + ")").fillna("")
+    where = where.str.title().str.replace(";", ", ").where(out["la_match_method"].eq("nh_district"))
+    where = where.fillna(km_txt.where(out["la_match_method"].eq("nh_chainage")))
+    where = (" (" + where + ")").fillna("")
     years = ((out["la_last_notif"] - out["la_first_notif"]).dt.days / 365.25).round(1).astype("str")
     parcels = out["la_parcels"].map(lambda v: f"{int(v):,}", na_action="ignore")
-    out["la_evidence"] = ("NH-" + out["la_nh"].str.replace(";", ", NH-") + where + ": " + parcels + " parcels over "
-                          + years + " years of notifications, complexity " + out["la_complexity_max"].astype("str")
-                          + "/5").where(out["la_linked"])
+    why = out["la_match_method"].map(LA_POSSIBLE_WHY)
+    possible = ("possible link, " + why + ": ").where(out["la_state"].eq("possible") & why.notna(), "")
+    out["la_evidence"] = (possible + "NH-" + out["la_nh"].str.replace(";", ", NH-") + where + ": " + parcels
+                          + " parcels over " + years + " years of notifications, complexity "
+                          + out["la_complexity_max"].astype("str") + "/5").where(linked_any)
     return out[LA_COLS], pairs
+
+
+def land_pairs(pairs, st):
+    """link_land pairs -> one row per (project_key, stretch_id) with the stretch's LA_PAIR_COLS."""
+    pairs = pairs.drop_duplicates(["project_key", "stretch_id"]).merge(st[LA_PAIR_COLS], on="stretch_id")
+    return pairs.sort_values(["project_key", "stretch_id"], ignore_index=True)
 
 
 COMPOSITE_COLS = ["project_key", "fc_component", "la_component", "external_factor_score", "coverage",
@@ -1069,13 +1197,17 @@ def main(out=GOLD, silver=SILVER):
     by_nh, by_nh_district = land_tables(st)
     land, pairs = link_land(master, st)
     land.to_parquet(out / "external_land.parquet", index=False)
-    pairs = pairs.drop_duplicates(["project_key", "stretch_id"]).merge(st[LA_PAIR_COLS], on="stretch_id")
-    pairs.sort_values(["project_key", "stretch_id"], ignore_index=True).to_parquet(
+    land_pairs(pairs, st).to_parquet(out / "external_land_links.parquet", index=False)
+    # the model's input (gold la_*_by_t): the table and link its features were backtested on, see LA_MODEL_TABLE
+    st_model = stretches(read_land(EXTERNAL / LA_MODEL_TABLE))
+    land_pairs(link_land(master, st_model, strict=False)[1], st_model).to_parquet(
         out / "external_land_pairs.parquet", index=False)
     lc = land[land["project_key"].isin(cur)]
     print(f"external_land: {len(st)} stretches in {st['state'].nunique()} state(s) "
           f"({', '.join(sorted(st['state'].unique()))}) on {len(by_nh)} NH ids ({len(by_nh_district)} NH x district); "
-          f"{int(land['la_linked'].sum())} projects linked, {int(lc['la_linked'].sum())} of {len(lc)} current ones")
+          f"{int(land['la_linked'].sum())} projects linked ({int(land['la_state'].eq('possible').sum())} more "
+          f"possible), {int(lc['la_linked'].sum())} of {len(lc)} current ones "
+          f"({int(lc['la_state'].eq('possible').sum())} possible)")
     print(pd.crosstab(lc["la_match_method"], lc["la_state"], margins=True).to_string())
     with pd.option_context("display.width", 250, "display.max_colwidth", 120):
         show = lc[lc["la_linked"]].merge(master[["project_key", "project_name"]], on="project_key")

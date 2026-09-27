@@ -54,8 +54,9 @@ SCORE_COLS = ["p_date_push_2q", "p_cost_rev_2q", "p_any_2q", "p_any_4q", "months
 CAVEATS = [
     "Report remarks are free text only through 2023; later reports print templates, so the land, forest, "
     "litigation and contractor flags from remarks describe the situation up to 2023.",
-    "Land-acquisition records (Bhoomi Rashi) are linked only for Maharashtra national-highway projects; "
-    "elsewhere land is unknown, not clear.",
+    "Land-acquisition records (Bhoomi Rashi, 29 states) rate a road project only when a km range in its name places "
+    "it on the notified stretches; a link on its NH or district alone is shown as possible, never flagged, and "
+    "everything else is unknown, not clear.",
     "Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.",
     "Projects without an anticipated completion date have no date-based scores; they are in the Watch tier, "
     "listed by flagged checklist rows and then the chance of a cost revision. No backtest has checked that order.",
@@ -121,7 +122,7 @@ def _load() -> dict:
         "obs": SILVER / "observations.parquet", "master": SILVER / "project_master.parquet",
         "rp": GOLD / f"risk_profile_{ym}.parquet", "events": GOLD / "project_events.parquet",
         "fc": GOLD / "external_fc.parquet", "land": GOLD / "external_land.parquet",
-        "land_pairs": GOLD / "external_land_pairs.parquet", "composite": GOLD / "external_composite.parquet",
+        "land_pairs": GOLD / "external_land_links.parquet", "composite": GOLD / "external_composite.parquet",
         "scen": GOLD / f"scenarios_{ym}.parquet", "ana": GOLD / f"analogues_{ym}.parquet",
         "scurve": GOLD / "sector_scurve.parquet",
     }
@@ -571,6 +572,7 @@ def external_summary(s, scope=None):
     sql, params = _scope_sql(scope)
     cov = _one(s, f"""SELECT count(*) AS n_current,
             count(*) FILTER (WHERE l.la_linked) AS land_linked,
+            count(*) FILTER (WHERE l.la_state = 'possible') AS land_possible,
             count(*) FILTER (WHERE f.fc_area_known) AS forest_area_known,
             count(*) FILTER (WHERE c.coverage = 'fc+la') AS composite_fc_la,
             count(*) FILTER (WHERE c.coverage = 'fc_only') AS composite_fc_only
@@ -578,8 +580,9 @@ def external_summary(s, scope=None):
         LEFT JOIN composite c USING (project_key)
         WHERE project_key IN (SELECT project_key FROM cur WHERE {sql})""", params)
     return {**summary, "coverage": cov, "caveats": CAVEATS[:2] + [
-        f"Land is linked for {cov['land_linked']} of {cov['n_current']} current projects and forest area is known "
-        f"for {cov['forest_area_known']}; everything else is unknown, not clear."]}
+        f"Land is rated for {cov['land_linked']} of {cov['n_current']} current projects ({cov['land_possible']} more "
+        f"have a possible link, not rated) and forest area is known for {cov['forest_area_known']}; everything else "
+        "is unknown, not clear."]}
 
 
 @cached

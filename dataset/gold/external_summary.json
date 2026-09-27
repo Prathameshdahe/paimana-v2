@@ -5,9 +5,100 @@
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
-      "n_flagged": 35,
-      "capital_exposed_cr": 28153.6,
+      "n_flagged": 135,
+      "capital_exposed_cr": 164353.2,
       "top": [
+        {
+          "project_key": "PRJ-004265",
+          "project_name": "6L of Thalikulam to Kodugallur section from km 369.015 to km 397.850 of NH - 66 old NH-17",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 4302.1,
+          "tier": "Low",
+          "p_any_2q": 0.479,
+          "slip_to_date_months": 28.0,
+          "evidence": [
+            "land: NH-66 (km 369.015-397.85): 12,049 parcels over 6.2 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004264",
+          "project_name": "6L of Kappirikkad to Thalikulam section from km 335.85 to km 369.015 of NH - 66 old NH-17",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 4225.6,
+          "tier": "Low",
+          "p_any_2q": 0.474,
+          "slip_to_date_months": 29.0,
+          "evidence": [
+            "land: NH-66 (km 335.85-369.015): 8,058 parcels over 6.8 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004268",
+          "project_name": "6L of Valanchery bypass to Kappirikkad of NH 66 from km. 298500 to km 335850",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 4023.9,
+          "tier": "Low",
+          "p_any_2q": 0.606,
+          "slip_to_date_months": 25.0,
+          "evidence": [
+            "land: NH-66 (km 298.5-335.85): 4,073 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004270",
+          "project_name": "6L of Azhiyur-Vengalam from km. 189.200 to km. 230.400 of NH-66",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 3898.5,
+          "tier": "Low",
+          "p_any_2q": 0.278,
+          "slip_to_date_months": 44.0,
+          "evidence": [
+            "land: NH-66 (km 189.2-230.4): 752 parcels over 6.0 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-006077",
+          "project_name": "6L of Perole Nileshwar town to Taliparamba from Km 94.248 to Km 134.650 of NH-66",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 3867.7,
+          "tier": "Low",
+          "p_any_2q": 0.622,
+          "slip_to_date_months": 38.0,
+          "evidence": [
+            "land: NH-66 (km 94.248-134.65): 1,583 parcels over 3.7 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004262",
+          "project_name": "6L of Kodugallur to Edapppally section from km 397.750 to km 423.780 of NH - 66 old NH-17",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 3606.2,
+          "tier": "Low",
+          "p_any_2q": 0.546,
+          "slip_to_date_months": 25.0,
+          "evidence": [
+            "land: NH-66 (km 397.75-423.78): 14,654 parcels over 4.9 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004269",
+          "project_name": "6L of Taliparamba to Muzhappilangad from Km 134.650 to Km 170.6 of NH-66",
+          "sector": "Roads & Highways",
+          "state": "Kerala",
+          "anticipated_cost_cr": 3557.6,
+          "tier": "Low",
+          "p_any_2q": 0.207,
+          "slip_to_date_months": 44.0,
+          "evidence": [
+            "land: NH-66 (km 134.65-170.6): 1,049 parcels over 3.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
+          ]
+        },
         {
           "project_key": "PRJ-005971",
           "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
@@ -18,124 +109,33 @@
           "p_any_2q": 0.878,
           "slip_to_date_months": 69.0,
           "evidence": [
-            "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+            "land: NH-361 (km 187.8-244.369): 2,373 parcels over 7.1 years of notifications, complexity 5/5; no free-text remarks in any report"
           ]
         },
         {
-          "project_key": "PRJ-004050",
-          "project_name": "4L of Ratnagiri - Kolhapur section of NH-166 from km 0.000 to km 19.769 and km 31.000 to km 67.140 Pkg I",
+          "project_key": "PRJ-006177",
+          "project_name": "4L of Pathalgaon-Kunkuri-CG/JH Border section of NH-43 from Km. 00.000 to Km.104.250",
           "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 2108.4,
+          "state": "Chhattisgarh",
+          "anticipated_cost_cr": 3147.1,
+          "tier": "Low",
+          "p_any_2q": 0.069,
+          "slip_to_date_months": 0.0,
+          "evidence": [
+            "land: NH-43 (km 0-104.25): 5,927 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005966",
+          "project_name": "4L of Urga - Pathalgaon from Km. 70.200 to km. 157.745 of NH-130A",
+          "sector": "Roads & Highways",
+          "state": "Chhattisgarh",
+          "anticipated_cost_cr": 2860.4,
           "tier": "High",
-          "p_any_2q": 0.934,
-          "slip_to_date_months": 24.0,
+          "p_any_2q": 0.898,
+          "slip_to_date_months": 0.0,
           "evidence": [
-            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-005530",
-          "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 2020.6,
-          "tier": "Medium",
-          "p_any_2q": 0.855,
-          "slip_to_date_months": 72.0,
-          "evidence": [
-            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-004439",
-          "project_name": "4L of Ratnagiri - Kolhapur section from km 112.340 to km 145.300 of NH-166 PkgIII",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1910.4,
-          "tier": "Medium",
-          "p_any_2q": 0.833,
-          "slip_to_date_months": 20.0,
-          "evidence": [
-            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-004438",
-          "project_name": "4L of Ratnagiri - Kolhapur section from km 67.140 to km 112.340 of NH-166 Pkg II",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1798.0,
-          "tier": "Medium",
-          "p_any_2q": 0.839,
-          "slip_to_date_months": 20.0,
-          "evidence": [
-            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-005529",
-          "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1443.1,
-          "tier": "Medium",
-          "p_any_2q": 0.85,
-          "slip_to_date_months": 76.0,
-          "evidence": [
-            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-004098",
-          "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1435.5,
-          "tier": "Medium",
-          "p_any_2q": 0.829,
-          "slip_to_date_months": 25.0,
-          "evidence": [
-            "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
-          ]
-        },
-        {
-          "project_key": "PRJ-004404",
-          "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1432.8,
-          "tier": "Medium",
-          "p_any_2q": 0.721,
-          "slip_to_date_months": 41.0,
-          "evidence": [
-            "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
-          ]
-        },
-        {
-          "project_key": "PRJ-004057",
-          "project_name": "4L of Baramati to Indapur Pkg-II from km. 41.400 to km. 84.550 of NH-965G Saint Tukaram Marg",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1297.5,
-          "tier": "High",
-          "p_any_2q": 0.924,
-          "slip_to_date_months": 39.0,
-          "evidence": [
-            "land: NH-965G: 4,288 parcels over 6.7 years of notifications, complexity 5/5; not mentioned in report remarks up to Apr 2023"
-          ]
-        },
-        {
-          "project_key": "PRJ-002382",
-          "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 1142.6,
-          "tier": "Medium",
-          "p_any_2q": 0.857,
-          "slip_to_date_months": 70.0,
-          "evidence": [
-            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+            "land: NH-130A (km 70.2-157.745): 2,283 parcels over 4.3 years of notifications, complexity 5/5; no free-text remarks in any report"
           ]
         }
       ]
@@ -181,23 +181,114 @@
     }
   },
   "early_notice": {
-    "n_projects": 32,
-    "capital_exposed_cr": 25814.2,
+    "n_projects": 99,
+    "capital_exposed_cr": 129920.3,
     "by_factor": {
-      "land": 31,
+      "land": 98,
       "forest_clearance": 1,
       "litigation": 0,
       "contractor": 0,
       "utility_shifting": 0,
       "inter_agency": 0
     },
-    "n_flagged_any": 36,
-    "capital_flagged_any_cr": 30034.2,
+    "n_flagged_any": 136,
+    "capital_flagged_any_cr": 166233.8,
     "no_slip_to_date": {
-      "n_projects": 11,
-      "capital_exposed_cr": 6584.5
+      "n_projects": 18,
+      "capital_exposed_cr": 17812.0
     },
     "top": [
+      {
+        "project_key": "PRJ-004265",
+        "project_name": "6L of Thalikulam to Kodugallur section from km 369.015 to km 397.850 of NH - 66 old NH-17",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 4302.1,
+        "tier": "Low",
+        "p_any_2q": 0.479,
+        "slip_to_date_months": 28.0,
+        "evidence": [
+          "land: NH-66 (km 369.015-397.85): 12,049 parcels over 6.2 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004264",
+        "project_name": "6L of Kappirikkad to Thalikulam section from km 335.85 to km 369.015 of NH - 66 old NH-17",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 4225.6,
+        "tier": "Low",
+        "p_any_2q": 0.474,
+        "slip_to_date_months": 29.0,
+        "evidence": [
+          "land: NH-66 (km 335.85-369.015): 8,058 parcels over 6.8 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004268",
+        "project_name": "6L of Valanchery bypass to Kappirikkad of NH 66 from km. 298500 to km 335850",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 4023.9,
+        "tier": "Low",
+        "p_any_2q": 0.606,
+        "slip_to_date_months": 25.0,
+        "evidence": [
+          "land: NH-66 (km 298.5-335.85): 4,073 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004270",
+        "project_name": "6L of Azhiyur-Vengalam from km. 189.200 to km. 230.400 of NH-66",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 3898.5,
+        "tier": "Low",
+        "p_any_2q": 0.278,
+        "slip_to_date_months": 44.0,
+        "evidence": [
+          "land: NH-66 (km 189.2-230.4): 752 parcels over 6.0 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-006077",
+        "project_name": "6L of Perole Nileshwar town to Taliparamba from Km 94.248 to Km 134.650 of NH-66",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 3867.7,
+        "tier": "Low",
+        "p_any_2q": 0.622,
+        "slip_to_date_months": 38.0,
+        "evidence": [
+          "land: NH-66 (km 94.248-134.65): 1,583 parcels over 3.7 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004262",
+        "project_name": "6L of Kodugallur to Edapppally section from km 397.750 to km 423.780 of NH - 66 old NH-17",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 3606.2,
+        "tier": "Low",
+        "p_any_2q": 0.546,
+        "slip_to_date_months": 25.0,
+        "evidence": [
+          "land: NH-66 (km 397.75-423.78): 14,654 parcels over 4.9 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004269",
+        "project_name": "6L of Taliparamba to Muzhappilangad from Km 134.650 to Km 170.6 of NH-66",
+        "sector": "Roads & Highways",
+        "state": "Kerala",
+        "anticipated_cost_cr": 3557.6,
+        "tier": "Low",
+        "p_any_2q": 0.207,
+        "slip_to_date_months": 44.0,
+        "evidence": [
+          "land: NH-66 (km 134.65-170.6): 1,049 parcels over 3.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
+        ]
+      },
       {
         "project_key": "PRJ-005971",
         "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
@@ -208,20 +299,124 @@
         "p_any_2q": 0.878,
         "slip_to_date_months": 69.0,
         "evidence": [
-          "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+          "land: NH-361 (km 187.8-244.369): 2,373 parcels over 7.1 years of notifications, complexity 5/5; no free-text remarks in any report"
         ]
       },
       {
-        "project_key": "PRJ-005530",
-        "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
+        "project_key": "PRJ-006177",
+        "project_name": "4L of Pathalgaon-Kunkuri-CG/JH Border section of NH-43 from Km. 00.000 to Km.104.250",
         "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 2020.6,
-        "tier": "Medium",
-        "p_any_2q": 0.855,
-        "slip_to_date_months": 72.0,
+        "state": "Chhattisgarh",
+        "anticipated_cost_cr": 3147.1,
+        "tier": "Low",
+        "p_any_2q": 0.069,
+        "slip_to_date_months": 0.0,
         "evidence": [
-          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+          "land: NH-43 (km 0-104.25): 5,927 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005966",
+        "project_name": "4L of Urga - Pathalgaon from Km. 70.200 to km. 157.745 of NH-130A",
+        "sector": "Roads & Highways",
+        "state": "Chhattisgarh",
+        "anticipated_cost_cr": 2860.4,
+        "tier": "High",
+        "p_any_2q": 0.898,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-130A (km 70.2-157.745): 2,283 parcels over 4.3 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005807",
+        "project_name": "BRT Tiger Reserve Boundary Km.287.500 to Bangalore Section Km.458.420 of NH- 209 in Karnataka",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 2859.9,
+        "tier": "Medium",
+        "p_any_2q": 0.896,
+        "slip_to_date_months": 85.0,
+        "evidence": [
+          "land: NH-209 (km 287.5-458.42): 5,523 parcels over 7.7 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004296",
+        "project_name": "4L of Bettadahalli- Shivamogga section from Km.170.415 to km. 226.750 of NH-206 Tumkur- Shivamogga Pkg-IV",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 2545.1,
+        "tier": "Medium",
+        "p_any_2q": 0.688,
+        "slip_to_date_months": 41.0,
+        "evidence": [
+          "land: NH-206 (km 170.415-226.75): 3,842 parcels over 6.6 years of notifications, complexity 5/5; not mentioned in report remarks up to Apr 2023"
+        ]
+      },
+      {
+        "project_key": "PRJ-004866",
+        "project_name": "4L of Karimnagar-Warangal section from km 49.500 to km 117.820 of NH-563",
+        "sector": "Roads & Highways",
+        "state": "Telangana",
+        "anticipated_cost_cr": 2486.5,
+        "tier": "Medium",
+        "p_any_2q": 0.852,
+        "slip_to_date_months": 13.0,
+        "evidence": [
+          "land: NH-563 (km 49.5-117.82): 4,317 parcels over 6.1 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-002311",
+        "project_name": "Gaya-Hisua-Rajgir-Nalanda-Biharsharif section km0.00 to 92.935 NH-82",
+        "sector": "Roads & Highways",
+        "state": "Bihar",
+        "anticipated_cost_cr": 2138.2,
+        "tier": "Medium",
+        "p_any_2q": 0.879,
+        "slip_to_date_months": 83.0,
+        "evidence": [
+          "land: NH-82 (km 0-92.935): 6,282 parcels over 10.0 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005796",
+        "project_name": "4L of Greenfield Alignment from Km. 47.000 to Km. 89.210 of Balbhadarpur to Bela Nawda Section of NH-119D",
+        "sector": "Roads & Highways",
+        "state": "Bihar",
+        "anticipated_cost_cr": 2118.5,
+        "tier": "Low",
+        "p_any_2q": 0.228,
+        "slip_to_date_months": 24.0,
+        "evidence": [
+          "land: NH-119D (km 47-89.21): 11,591 parcels over 4.1 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-006090",
+        "project_name": "4L of Tumkur-Shimoga Pkg-II from Km 65.195 Karadi to Km 121.900 Banawara of NH-206",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 1989.9,
+        "tier": "Medium",
+        "p_any_2q": 0.895,
+        "slip_to_date_months": 62.0,
+        "evidence": [
+          "land: NH-206 (km 65.195-121.9): 3,576 parcels over 5.5 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004274",
+        "project_name": "6L Greenfield Kandili - Aluru Section of NH-130-CD Road from km 342500 to km 365033 Package-OD-8",
+        "sector": "Roads & Highways",
+        "state": "Odisha",
+        "anticipated_cost_cr": 1912.8,
+        "tier": "Medium",
+        "p_any_2q": 0.854,
+        "slip_to_date_months": 22.0,
+        "evidence": [
+          "land: NH-130CD (km 342.5-365.033): 1,286 parcels over 3.6 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       },
       {
@@ -234,7 +429,20 @@
         "p_any_2q": 0.833,
         "slip_to_date_months": 20.0,
         "evidence": [
-          "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+          "land: NH-166 (km 112.34-145.3): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004145",
+        "project_name": "4L of Palma to Gumla from km. 26.00 to km. 89.170 of NH-23",
+        "sector": "Roads & Highways",
+        "state": "Jharkhand",
+        "anticipated_cost_cr": 1895.8,
+        "tier": "Medium",
+        "p_any_2q": 0.888,
+        "slip_to_date_months": 30.0,
+        "evidence": [
+          "land: NH-23 (km 26-89.17): 4,760 parcels over 6.2 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       },
       {
@@ -248,214 +456,6 @@
         "slip_to_date_months": 0.0,
         "evidence": [
           "forest_clearance: high clearance complexity expected: linear, 71.722 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired during the month'"
-        ]
-      },
-      {
-        "project_key": "PRJ-004438",
-        "project_name": "4L of Ratnagiri - Kolhapur section from km 67.140 to km 112.340 of NH-166 Pkg II",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1798.0,
-        "tier": "Medium",
-        "p_any_2q": 0.839,
-        "slip_to_date_months": 20.0,
-        "evidence": [
-          "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005529",
-        "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1443.1,
-        "tier": "Medium",
-        "p_any_2q": 0.85,
-        "slip_to_date_months": 76.0,
-        "evidence": [
-          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-004098",
-        "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1435.5,
-        "tier": "Medium",
-        "p_any_2q": 0.829,
-        "slip_to_date_months": 25.0,
-        "evidence": [
-          "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-004404",
-        "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1432.8,
-        "tier": "Medium",
-        "p_any_2q": 0.721,
-        "slip_to_date_months": 41.0,
-        "evidence": [
-          "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
-        ]
-      },
-      {
-        "project_key": "PRJ-002382",
-        "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1142.6,
-        "tier": "Medium",
-        "p_any_2q": 0.857,
-        "slip_to_date_months": 70.0,
-        "evidence": [
-          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-006213",
-        "project_name": "Construction of 6 Lane Elevated corridor from KM 612582 to KM 617540 including construction of Service Roads in Kolhapur City on NH -48 in the State of Maharashtra on EPC mode under NHO",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1039.0,
-        "tier": "Low",
-        "p_any_2q": 0.052,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: NH-48 (Kolhapur): 857 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005950",
-        "project_name": "6L of Gonde Km. 439.038 to Pimpri Sado Km. 459.905 section of NH-848 Old NH-3",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 718.8,
-        "tier": "Low",
-        "p_any_2q": 0.208,
-        "slip_to_date_months": 7.0,
-        "evidence": [
-          "land: NH-848: 584 parcels over 3.5 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005847",
-        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaishal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra- Package-II & Package III combined- starting from existing chainage Km 341/300 to Km 394/130 and design chainage Km 340/250 at Dahiwadi Village to Km 392/950 ending at Vita Village in the State of Maharashtra on EPC Mode.",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 631.8,
-        "tier": "Low",
-        "p_any_2q": 0.103,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005994",
-        "project_name": "Up-gradation to Four Lane with Paved Shoulder configuration of the highway starting from existing km 88.400 Savali Vihir to km 163.400 start of Ahmednagar bypass Design Length 75.000 km section of NH-160 in the State of Maharashtra under Bharatmala Pariyojana on EPC Mode",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 617.9,
-        "tier": "Low",
-        "p_any_2q": 0.253,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: NH-160 (Ahmednagar): 566 parcels over 4.7 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005848",
-        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaisal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra. Package-I starting from existing chainage Km 301/430 at Phaltan Village Junction of Phaltan Baramati Road Design Chainage -301/430km & ending at existing chainage Km 341/300 Dahiwadi Village Bus Stop Design chainage Km 340466km in the S",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 533.8,
-        "tier": "Medium",
-        "p_any_2q": 0.877,
-        "slip_to_date_months": -6.0,
-        "evidence": [
-          "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-004218",
-        "project_name": "Balance works of 4L Panvel Indapur section of NH66 old NH17 from km 42.300 kasu to km 84.600 Indapur",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 472.1,
-        "tier": "Medium",
-        "p_any_2q": 0.89,
-        "slip_to_date_months": 27.0,
-        "evidence": [
-          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-004403",
-        "project_name": "4L Mitigation Measure structures on CH/MH Border to Wainganga Bridge Section of NH-6 New NH-53",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 468.9,
-        "tier": "Medium",
-        "p_any_2q": 0.819,
-        "slip_to_date_months": 33.0,
-        "evidence": [
-          "land: NH-53: 518 parcels over 4.6 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005767",
-        "project_name": "Satara Km 725.000 to Pune Km 865.350 of NH - 4 New NH - 48 in Maharashtra",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 425.5,
-        "tier": "Medium",
-        "p_any_2q": 0.873,
-        "slip_to_date_months": 55.0,
-        "evidence": [
-          "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-003297",
-        "project_name": "Nasratpur to Barasgaon section of NH-61 2L / 4L PS from Km.514/00 to 558/200",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 406.5,
-        "tier": "Medium",
-        "p_any_2q": 0.829,
-        "slip_to_date_months": 83.0,
-        "evidence": [
-          "land: NH-61: 293 parcels over 7.4 years of notifications, complexity 3/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005960",
-        "project_name": "Four laning from Dive Ghat Km. 220.900 to Hadapsar Km. 234.150 of Mohol Alandi section Pkg VI of NH-965",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 400.0,
-        "tier": "Low",
-        "p_any_2q": 0.346,
-        "slip_to_date_months": 6.0,
-        "evidence": [
-          "land: NH-965: 6,776 parcels over 6.7 years of notifications, complexity 4/5; no free-text remarks in any report"
-        ]
-      },
-      {
-        "project_key": "PRJ-005934",
-        "project_name": "Upgradation & rehabilitation of Service Roads on both sides in urban areas of Pune City on PuneSatara section of NH48",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 388.8,
-        "tier": "Low",
-        "p_any_2q": 0.226,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: NH-48: 867 parcels over 5.1 years of notifications, complexity 5/5; no free-text remarks in any report"
         ]
       }
     ]
@@ -576,19 +576,19 @@
     "rule": "score = 0.5 x forest complexity/7 + 0.5 x land complexity/5 where land is linked (coverage fc+la), forest/7 alone otherwise (fc_only, not rated); flagged at score >= 0.6 with fc+la; clear below it only with forest hectares known (or a clearance reported done) and neither the land nor the forest row flagged, else unknown. Informational, not a model feature.",
     "by_coverage": {
       "fc+la": {
-        "n_projects": 58,
-        "n_score_ge_high": 31,
-        "mean": 0.5091,
+        "n_projects": 412,
+        "n_score_ge_high": 135,
+        "mean": 0.4796,
         "min": 0.2143,
-        "25%": 0.3393,
-        "50%": 0.6143,
+        "25%": 0.4143,
+        "50%": 0.5143,
         "75%": 0.6143,
         "max": 0.7143
       },
       "fc_only": {
-        "n_projects": 1705,
+        "n_projects": 1351,
         "n_score_ge_high": 128,
-        "mean": 0.4654,
+        "mean": 0.4751,
         "min": 0.4286,
         "25%": 0.4286,
         "50%": 0.4286,
@@ -610,6 +610,54 @@
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-361, Bhoomi Rashi)"
       },
       {
+        "project_key": "PRJ-005966",
+        "project_name": "4L of Urga - Pathalgaon from Km. 70.200 to km. 157.745 of NH-130A",
+        "sector": "Roads & Highways",
+        "state": "Chhattisgarh",
+        "anticipated_cost_cr": 2860.4,
+        "tier": "High",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-130A, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005807",
+        "project_name": "BRT Tiger Reserve Boundary Km.287.500 to Bangalore Section Km.458.420 of NH- 209 in Karnataka",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 2859.9,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-209, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004296",
+        "project_name": "4L of Bettadahalli- Shivamogga section from Km.170.415 to km. 226.750 of NH-206 Tumkur- Shivamogga Pkg-IV",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 2545.1,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-206, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-005796",
+        "project_name": "4L of Greenfield Alignment from Km. 47.000 to Km. 89.210 of Balbhadarpur to Bela Nawda Section of NH-119D",
+        "sector": "Roads & Highways",
+        "state": "Bihar",
+        "anticipated_cost_cr": 2118.5,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-119D, Bhoomi Rashi)"
+      },
+      {
         "project_key": "PRJ-004050",
         "project_name": "4L of Ratnagiri - Kolhapur section of NH-166 from km 0.000 to km 19.769 and km 31.000 to km 67.140 Pkg I",
         "sector": "Roads & Highways",
@@ -620,6 +668,30 @@
         "fc_component": 0.4286,
         "la_component": 1.0,
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-166, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-006090",
+        "project_name": "4L of Tumkur-Shimoga Pkg-II from Km 65.195 Karadi to Km 121.900 Banawara of NH-206",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 1989.9,
+        "tier": "Medium",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-206, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004379",
+        "project_name": "4/6L of Gurgaon - Pataudi - Rewari from km. 0.00 to km.43.87 of NH-352W",
+        "sector": "Roads & Highways",
+        "state": "Haryana",
+        "anticipated_cost_cr": 1917.5,
+        "tier": "High",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-352W, Bhoomi Rashi)"
       },
       {
         "project_key": "PRJ-004439",
@@ -646,6 +718,30 @@
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-166, Bhoomi Rashi)"
       },
       {
+        "project_key": "PRJ-006089",
+        "project_name": "4L Tumkur-Shimoga Pkg-I from Mallasandra to Karadi village of NH-206 from Km. 12.300 to Km. 65.195",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 1692.1,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-206, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-004850",
+        "project_name": "4L Greenfield Alignment of Shivrampur to Ramnagar from Km. 55.002 to Km. 109.300 of NH 119 D Pkg-II",
+        "sector": "Roads & Highways",
+        "state": "Bihar",
+        "anticipated_cost_cr": 1546.1,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-119D, Bhoomi Rashi)"
+      },
+      {
         "project_key": "PRJ-004098",
         "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
         "sector": "Roads & Highways",
@@ -656,6 +752,18 @@
         "fc_component": 0.4286,
         "la_component": 1.0,
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+      },
+      {
+        "project_key": "PRJ-003862",
+        "project_name": "4L of Addahole Near Gundya to Bantwal Cross section Pkg-02 from Design Km 270.270 to Design km 318.55 including flyover at Kalladka Town including approaches from Km. 311.57 to Km. 313.67 of NH-75 Old NH-48",
+        "sector": "Roads & Highways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 1318.2,
+        "tier": "Low",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-75, Bhoomi Rashi)"
       },
       {
         "project_key": "PRJ-004057",
@@ -670,6 +778,18 @@
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-965G, Bhoomi Rashi)"
       },
       {
+        "project_key": "PRJ-004892",
+        "project_name": "4L of left-over works including additional structures from Kerala/Tamil Nadu border to Kanyakumari Section from Km 43.0 to Km 96.174 of NH66",
+        "sector": "Roads & Highways",
+        "state": "Tamil Nadu",
+        "anticipated_cost_cr": 1263.4,
+        "tier": "Critical",
+        "external_factor_score": 0.7143,
+        "fc_component": 0.4286,
+        "la_component": 1.0,
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-66, Bhoomi Rashi)"
+      },
+      {
         "project_key": "PRJ-006213",
         "project_name": "Construction of 6 Lane Elevated corridor from KM 612582 to KM 617540 including construction of Service Roads in Kolhapur City on NH -48 in the State of Maharashtra on EPC mode under NHO",
         "sector": "Roads & Highways",
@@ -682,160 +802,40 @@
         "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
       },
       {
-        "project_key": "PRJ-005767",
-        "project_name": "Satara Km 725.000 to Pune Km 865.350 of NH - 4 New NH - 48 in Maharashtra",
+        "project_key": "PRJ-005717",
+        "project_name": "Widening Strengthening of 2-Lane with Paved Shoulder from MyajlarJaisalmer from Design Chainage 0000 to 98350 Section of NH-11 & SundraMyajlarAmbasingh ki Dhani Road from Design Chainage 46000 to 81601, part of MunabaoTanot Road Section of NH-70 along with Strengthening/Widening of Existing Connection of NH-70 & NH-11 of length 0.914 km in the State of Rajasthan under NHO on Hybrid Annuity Mode",
         "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 425.5,
-        "tier": "Medium",
-        "external_factor_score": 0.7143,
-        "fc_component": 0.4286,
-        "la_component": 1.0,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005934",
-        "project_name": "Upgradation & rehabilitation of Service Roads on both sides in urban areas of Pune City on PuneSatara section of NH48",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 388.8,
+        "state": "Rajasthan",
+        "anticipated_cost_cr": 927.0,
         "tier": "Low",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-11, NH-70, Bhoomi Rashi)"
       },
       {
-        "project_key": "PRJ-006214",
-        "project_name": "Construction of a 6-Lane Elevated Corridor from Km 593766 to Km 596620 Including Construction of Service Roads in Kagal City on NH-48 in the State of Maharashtra on EPC Mode.",
+        "project_key": "PRJ-003071",
+        "project_name": "Widening and Up-gradation to 2- Lane with Paved Shoulder Configuration and geometric improvement from Km. 125. 000 to Km 166 Package-3 on Aizawl Tuipang Section of NH-54 in the State of Mizoram Package-3",
         "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 358.0,
-        "tier": "Low",
+        "state": "Mizoram",
+        "anticipated_cost_cr": 867.1,
+        "tier": "Medium",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-54, Bhoomi Rashi)"
       },
       {
-        "project_key": "PRJ-004049",
-        "project_name": "6L of Kagal-Satara section from Km 658.000 to Km 725.000 of NH-48 Pkg-II",
+        "project_key": "PRJ-004399",
+        "project_name": "Sanchore - Santalpur from km 99.000 - km 130.073 of NH-754K AJ-RGBS-Package-4",
         "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 317.4,
-        "tier": "High",
+        "state": "Gujarat",
+        "anticipated_cost_cr": 835.6,
+        "tier": "Medium",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-48, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005018",
-        "project_name": "Rehabilitation and Up-gradation to 2 lane with paved shoulder configuration of Mahud Sangola road NH 965 G 159400 to 161900and 162400 to 183960 Design Chainage from km. 32/300 to km. 34/800 and km. 35/800 to km. 56/860 Rigid Pavement on EPC mode in the State of Maharashtra.",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 253.8,
-        "tier": "Low",
-        "external_factor_score": 0.7143,
-        "fc_component": 0.4286,
-        "la_component": 1.0,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-965G, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005530",
-        "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 2020.6,
-        "tier": "Medium",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005529",
-        "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1443.1,
-        "tier": "Medium",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-004404",
-        "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1432.8,
-        "tier": "Medium",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-353J, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-002382",
-        "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1142.6,
-        "tier": "Medium",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-66, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005950",
-        "project_name": "6L of Gonde Km. 439.038 to Pimpri Sado Km. 459.905 section of NH-848 Old NH-3",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 718.8,
-        "tier": "Low",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-848, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005847",
-        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaishal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra- Package-II & Package III combined- starting from existing chainage Km 341/300 to Km 394/130 and design chainage Km 340/250 at Dahiwadi Village to Km 392/950 ending at Vita Village in the State of Maharashtra on EPC Mode.",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 631.8,
-        "tier": "Low",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005994",
-        "project_name": "Up-gradation to Four Lane with Paved Shoulder configuration of the highway starting from existing km 88.400 Savali Vihir to km 163.400 start of Ahmednagar bypass Design Length 75.000 km section of NH-160 in the State of Maharashtra under Bharatmala Pariyojana on EPC Mode",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 617.9,
-        "tier": "Low",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
-      },
-      {
-        "project_key": "PRJ-005848",
-        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaisal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra. Package-I starting from existing chainage Km 301/430 at Phaltan Village Junction of Phaltan Baramati Road Design Chainage -301/430km & ending at existing chainage Km 341/300 Dahiwadi Village Bus Stop Design chainage Km 340466km in the S",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 533.8,
-        "tier": "Medium",
-        "external_factor_score": 0.6143,
-        "fc_component": 0.4286,
-        "la_component": 0.8,
-        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 4/5 (NH-160, Bhoomi Rashi)"
+        "ext_score_evidence": "forest 3/7 (rulebook, area unknown) + land 5/5 (NH-754K, Bhoomi Rashi)"
       }
     ]
   }

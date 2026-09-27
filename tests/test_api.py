@@ -40,7 +40,7 @@ def test_meta_has_versions_and_caveats(client):
     assert m["nCurrent"] > 0 and m["nWatch"] >= 0
     for k in ("asof", "modelVersion", "goldVersion", "silverVersion", "latestReportPeriod"):
         assert m[k]
-    assert any("2023" in c for c in m["caveats"]) and any("Maharashtra" in c for c in m["caveats"])
+    assert any("2023" in c for c in m["caveats"]) and any("Bhoomi Rashi" in c for c in m["caveats"])
 
 
 def test_portfolio_kpis_and_tiers(client):

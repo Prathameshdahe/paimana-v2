@@ -275,7 +275,10 @@ export interface ExternalSummary {
   }
   coverage: {
     n_current: number
+    /** rated: a km match on the land register */
     land_linked: number
+    /** a link on the NH or district alone, shown but not rated */
+    land_possible: number
     forest_area_known: number
     composite_fc_la: number
     composite_fc_only: number

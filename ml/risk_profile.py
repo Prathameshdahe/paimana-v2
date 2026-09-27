@@ -63,6 +63,8 @@ EVENT_DIMENSION = {"land": "land_acquisition", "forest_env": "forest_clearance",
 LA_REASON = {"no_land_data_for_state": "no land data for this state (no Bhoomi Rashi export for it yet)",
              "not_road": "no land data for non-road projects",
              "no_nh_in_name": "no NH number in the name to link land data",
+             "nh_only_as_end_point": "its name gives NH numbers only as end points (junctions), not its own road",
+             "no_stretch_at_its_km": "no notified stretch of its NH at the km range in its name",
              "nh_not_in_table": "its NH is not in the land table of its state"}
 TOP_FACTOR, TOP_NOTICE = 10, 20
 COLS = ["project_key", "dimension", "state", "evidence", "source", "as_of_date"]
@@ -216,7 +218,7 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     la_line = la["la_evidence"].fillna(la["la_match_method"].map(LA_REASON)).fillna("not in the land linkage")
     land_flag = opened | la_flag
     add("land_acquisition", land_flag, la_clear,
-        pd.Series(np.where(opened, line + np.where(la["la_linked"].fillna(False), "; " + la_line, ""),
+        pd.Series(np.where(opened, line + np.where(la["la_evidence"].notna(), "; " + la_line, ""),
                            la_line + "; " + line), index=cur.index),
         pd.Series(np.where(opened, "report", "bhoomi_rashi"), index=cur.index))
 

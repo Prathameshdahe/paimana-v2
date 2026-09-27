@@ -371,9 +371,14 @@ def test_link_land_district_first_then_nh_and_unknown_elsewhere():
                                           "nh_district", "not_road"]
     assert r.loc["P1", "la_stretches"] == 1 and r.loc["P1", "la_parcels"] == 50         # only the Hingoli stretch
     assert r.loc["P2", "la_stretches"] == 2 and r.loc["P2", "la_complexity_max"] == 4
-    assert r.la_state.tolist() == ["clear", "flagged", "unknown", "unknown", "clear", "unknown"]
-    assert r.loc["P2", "la_evidence"] == "NH-161: 150 parcels over 3.6 years of notifications, complexity 4/5"
-    assert r.loc["P1", "la_evidence"].startswith("NH-161 (Hingoli): 50 parcels")
+    # no km range in the names: district and NH-only links are possible, never rated (gold/land_link_check.csv)
+    assert r.la_state.tolist() == ["possible", "possible", "unknown", "unknown", "possible", "unknown"]
+    assert not r["la_linked"].any()
+    assert r.loc["P2", "la_evidence"] == ("possible link, NH only, no district or km range in the name places the "
+                                          "project on it: NH-161: 150 parcels over 3.6 years of notifications, "
+                                          "complexity 4/5")
+    assert r.loc["P1", "la_evidence"].startswith("possible link, NH and a district named in the name, no km range to "
+                                                 "place it: NH-161 (Hingoli): 50 parcels")
     by_nh, by_d = X.land_tables(st)
     assert by_nh.set_index("nh").loc["161", "parcels"] == 150
     assert by_d.set_index(["nh", "district"]).loc[("161", "NANDED"), "stretches"] == 2
@@ -451,8 +456,52 @@ def test_link_land_needs_the_state_of_the_stretch():
     r = land.set_index("project_key")
     assert r.la_match_method.tolist() == ["nh_district", "nh_not_in_table", "no_land_data_for_state", "nh_district",
                                           "nh_not_in_table"]
-    assert r.la_state.tolist() == ["clear", "unknown", "unknown", "clear", "unknown"]
-    assert r.loc["G1", "la_parcels"] == 300 and r.loc["G1", "la_evidence"].startswith("NH-48 (Surat): 300 parcels")
+    assert r.la_state.tolist() == ["possible", "unknown", "unknown", "possible", "unknown"]
+    assert r.loc["G1", "la_parcels"] == 300 and "NH-48 (Surat): 300 parcels" in r.loc["G1", "la_evidence"]
+
+
+@pytest.mark.parametrize("name, want", [
+    ("4L of NH-31 from Km 217.500 to Km 254.430", (217.5, 254.43)),
+    ("WIDENING OF NH-65 FROM EXISTING KM 267+500 TO KM 290+000", (267.5, 290.0)),
+    ("NH-12 FROM EXISTING KM 193/0 TO KM 255/300", (193.0, 255.3)),
+    ("4L from Km 55.00 Kuru to Km 95.400 Udaipura on NH-75", (55.0, 95.4)),
+    ("Greenfield Alignment at Km 82000 to Helipad Km 94030", (82.0, 94.03)),
+    ("km 2915 to km 37728 of NH-44", (2.915, 37.728)),
+    ("4 Lane with PS from Des. Ch 182.300 to Des. Ch. 228.500 of NH-748A", (182.3, 228.5)),
+    ("KM 377-700 of NH-44", None),                     # a 323 km 'range' is a misread
+    ("Length 43.2 Km. of NH-146B", None),
+])
+def test_km_range_in_a_project_name(name, want):
+    r = X.km_range(pd.Series([name])).iloc[0]
+    assert (None if pd.isna(r.km_from) else (round(r.km_from, 3), round(r.km_to, 3))) == want
+
+
+def test_link_land_on_the_km_range_and_not_on_end_points():
+    la = pd.DataFrame({
+        "state": "BIHAR", "highway_name": ["31", "31", "31", "83", "30"],
+        "districts_touched": ["PATNA", "PATNA", "NALANDA", "GAYA|PATNA", "PATNA"],
+        "chainage_start_km": [0.0, 49.15, 100.0, 0.0, 0.0], "chainage_end_km": [49.15, 64.53, 150.0, 127.0, 23.5],
+        "num_parcels": [10, 20, 30, 40, 50], "total_area_ha": 1.0, "acquisition_complexity_score": [4, 2, 5, 5, 2],
+        "notif_span_days": 10, "first_notif_date": "2020-01-01", "last_notif_date": "2020-01-11"})
+    st = X.stretches(la)
+    master = pd.DataFrame({
+        "project_key": ["A", "B", "C", "D", "E"], "sector": "Roads & Highways", "state": "Bihar", "codes_seen": None,
+        "project_name": ["Four laning of NH-31 from Km 49.150 to Km 64.535 in Patna",    # only the overlapping stretch
+                         "Widening of NH-31 from Km 200 to Km 230 near Patna",           # no stretch at its km
+                         "4L Greenfield starting from NH-30 near Patna to Gaya section of NH-83",
+                         "Bypass from Junction with Patna-Gaya road NH-83 to Junction with NH-30",
+                         "Widening of NH-31 from Km 110 to Km 140"]})
+    r = X.link_land(master, st)[0].set_index("project_key")
+    assert r.la_match_method.tolist() == ["nh_chainage", "no_stretch_at_its_km", "nh_district", "nh_only_as_end_point",
+                                          "nh_chainage"]
+    assert r.la_state.tolist() == ["clear", "unknown", "possible", "unknown", "flagged"]
+    assert r.loc["A", "la_stretches"] == 1 and r.loc["A", "la_parcels"] == 20            # 0-49.15 only touches it
+    assert r.loc["A", "la_evidence"].startswith("NH-31 (km 49.15-64.535): 20 parcels")
+    assert r.loc["C", "la_nh"] == "83"                                                    # NH-30 is its start point
+    # the model's link (strict=False): no km rule, no end-point rule, as it was backtested
+    old = X.link_land(master, st, strict=False)[0].set_index("project_key")
+    assert old.la_match_method.tolist() == ["nh_district", "nh_district", "nh_district", "nh_district", "nh_only"]
+    assert old.loc["A", "la_stretches"] == 2
 
 
 MOCK = X.EXTERNAL / "mock"      # SYNTHETIC fixtures (mock/README.md): formula checks only, never model inputs

@@ -368,7 +368,8 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
   const lf = s.noticeBacktest.land_or_forest
   const n = Math.max(c.n_current, 1)
   const rows = [
-    { label: 'Land records linked', v: c.land_linked, note: 'Maharashtra national highways only' },
+    { label: 'Land rated', v: c.land_linked, note: 'km range on a Bhoomi Rashi NH stretch, 29 states' },
+    { label: 'Land: possible link', v: c.land_possible, note: 'NH or district only, not rated' },
     { label: 'Forest area known', v: c.forest_area_known },
     { label: 'Composite: forest + land', v: c.composite_fc_la },
     { label: 'Composite: forest only', v: c.composite_fc_only, note: 'land missing' },
@@ -483,7 +484,7 @@ function AboutData({ s }: { s: ExternalSummary }) {
 
   const caveats = [
     'Report remarks are free text only through 2023; later reports print templates. So "open" means open when last mentioned — the last known state, not a confirmed state today.',
-    `Land records come from Bhoomi Rashi and cover Maharashtra national-highway projects only (${of(c.land_linked)} current projects). Land in every other state is unknown, not clear.`,
+    `Land records come from the Bhoomi Rashi highway register (29 states). A road project is rated only when the km range in its name places it on notified stretches of its NH (${of(c.land_linked)} current projects; 84% right on a hand-checked sample). ${c.land_possible.toLocaleString()} more have a possible link on the NH or district alone, shown but not rated. Everything else is unknown, not clear.`,
     `Forest-clearance complexity comes from the Parivesh rulebook. Forest area is known for ${of(c.forest_area_known)} projects; for the rest the complexity is the rulebook's expected value — an estimate, not a measurement.`,
   ]
   if (lf) {
