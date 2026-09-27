@@ -5,10 +5,10 @@
  * Medium/Low); a project with no anticipated completion date is untiered.
  */
 import {
-  Bug, CalendarX, CirclePlus, HardHat, LandPlot, Newspaper, Scale, Siren, Trees, TrendingDown, TrendingUp,
-  type LucideIcon,
+  Building2, Bug, Calendar, CalendarX, CirclePlus, Clock, Gavel, HardHat, IndianRupee, LandPlot, Layers, Map as MapIcon,
+  Newspaper, Pause, Repeat, Scale, Siren, Trees, TrendingDown, TrendingUp, Wallet, type LucideIcon,
 } from 'lucide-react'
-import type { Flag, Tier, TierFilter } from '@/contracts/project'
+import type { Flag, RiskState, Tier, TierFilter } from '@/contracts/project'
 import type { AlertKind } from '@/contracts/portfolio'
 
 export const TIERS: Tier[] = ['Critical', 'High', 'Medium', 'Low']
@@ -85,6 +85,30 @@ export const FLAG_ICON: Record<Flag, LucideIcon> = {
   litigation: Scale,
   contractor: HardHat,
   early_notice: Siren,
+}
+
+/** the 13 risk-profile dimensions (ml/risk_profile.py), in checklist order: full label, tile label, icon */
+export const RISK_DIMENSION: Record<string, { label: string; short: string; icon: LucideIcon }> = {
+  schedule_slip: { label: 'Schedule slip', short: 'Schedule', icon: Calendar },
+  cost_escalation: { label: 'Cost escalation', short: 'Cost', icon: IndianRupee },
+  execution_stagnation: { label: 'Execution stagnation', short: 'Stagnation', icon: Pause },
+  expenditure_lag: { label: 'Expenditure lag', short: 'Spend lag', icon: Wallet },
+  repeated_revisions: { label: 'Repeated revisions', short: 'Revisions', icon: Repeat },
+  sector_headwind: { label: 'Sector headwind', short: 'Sector', icon: TrendingDown },
+  agency_optimism: { label: 'Agency optimism', short: 'Agency', icon: Building2 },
+  land_acquisition: { label: 'Land acquisition', short: 'Land', icon: MapIcon },
+  forest_clearance: { label: 'Environment / forest clearance', short: 'Forest', icon: Trees },
+  litigation: { label: 'Litigation', short: 'Litigation', icon: Gavel },
+  contractor_stress: { label: 'Contractor stress', short: 'Contractor', icon: HardHat },
+  data_staleness: { label: 'Data staleness', short: 'Data age', icon: Clock },
+  external_composite: { label: 'External factor score', short: 'Land + forest', icon: Layers },
+}
+
+// unknown gets its own look (dashed, grey) so it never reads as clear
+export const RISK_STATE_CHIP: Record<RiskState, string> = {
+  flagged: 'bg-critical/10 text-critical ring-1 ring-inset ring-critical/25',
+  clear: 'bg-stable/10 text-stable ring-1 ring-inset ring-stable/20',
+  unknown: 'border border-dashed border-fg-dimmed/60 text-fg-dimmed',
 }
 
 export const ALERT_KIND_LABEL: Record<AlertKind, string> = {

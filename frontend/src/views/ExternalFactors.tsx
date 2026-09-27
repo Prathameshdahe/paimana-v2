@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import { ArrowRightLeft, Cable, HardHat, Info, LandPlot, Scale, Siren, Trees, type LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge, IconChip } from '@/components/ui/Badge'
@@ -116,10 +117,11 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 /** One project from a summary top list, linking to its project page. */
 function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactorKey }) {
+  const panel = useProjectPanel()
   const lines = p.evidence.map(splitEvidence).filter(([f]) => f === factor)
 
   return (
-    <Link to={`/projects/${p.project_key}`} className="block bg-surface-panel px-5 py-3 transition-colors hover:bg-surface-elevated">
+    <button onClick={() => panel.open(p.project_key)} className="block w-full bg-surface-panel px-5 py-3 text-left transition-colors hover:bg-surface-elevated">
       <div className="flex items-start justify-between gap-3">
         <span className="truncate text-sm font-medium text-fg-base" title={p.project_name ?? undefined}>
           {p.project_name ?? p.project_key}
@@ -135,7 +137,7 @@ function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactor
           {text}
         </div>
       ))}
-    </Link>
+    </button>
   )
 }
 
@@ -220,7 +222,7 @@ function FactorBoard({ s }: { s: ExternalSummary }) {
 }
 
 function NoticeTable({ rows }: { rows: ExternalProject[] }) {
-  const navigate = useNavigate()
+  const panel = useProjectPanel()
 
   if (rows.length === 0) {
     return <div className="px-5 py-6 text-center text-sm text-fg-dimmed">no project in this list</div>
@@ -245,18 +247,13 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
             return (
               <tr
                 key={p.project_key}
-                onClick={() => navigate(`/projects/${p.project_key}`)}
+                onClick={() => panel.open(p.project_key)}
                 className="cursor-pointer border-b border-border-subtle/70 align-top transition-colors hover:bg-surface-elevated/70"
               >
                 <td className="max-w-[280px] py-3 pl-5 pr-4">
-                  <Link
-                    to={`/projects/${p.project_key}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="block truncate font-medium text-fg-base hover:underline"
-                    title={p.project_name ?? undefined}
-                  >
+                  <span className="block truncate font-medium text-fg-base" title={p.project_name ?? undefined}>
                     {p.project_name ?? p.project_key}
-                  </Link>
+                  </span>
                   <div className="mt-0.5 truncate text-xs text-fg-dimmed">
                     {p.project_key} · {p.sector ?? 'sector unknown'} · {p.state ?? 'state unknown'}
                   </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts'
 import { Building2, CalendarClock, Gauge, Newspaper, ShieldAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -119,6 +119,7 @@ function ClusterStats({ b }: { b: Bottleneck }) {
 
 function Members({ id }: { id: string }) {
   const [page, setPage] = useState(1)
+  const panel = useProjectPanel()
   const { data, error, isFetching } = useBottleneck(id, page)
   const pages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1
   if (error) return <ApiErrorNote error={error} />
@@ -138,9 +139,9 @@ function Members({ id }: { id: string }) {
           <div key={m.key} className="space-y-1.5 px-5 py-3">
             <div className="flex min-w-0 items-center gap-2">
               <Badge tier={m.tier} />
-              <Link to={`/projects/${m.key}`} className="shrink-0 text-xs text-accent hover:underline">
+              <button onClick={() => panel.open(m.key)} className="shrink-0 text-xs text-accent hover:underline">
                 {m.key}
-              </Link>
+              </button>
               <span className="truncate text-sm text-fg-base" title={m.name ?? undefined}>{m.name ?? ''}</span>
             </div>
             <div className="text-xs text-fg-dimmed">

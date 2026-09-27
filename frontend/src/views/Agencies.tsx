@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import {
   CartesianGrid,
   ReferenceArea,
@@ -271,6 +271,7 @@ function BiasCompare({ label, value, sector, note }: { label: string; value: num
 
 function AgencyPanel({ agency, point, onClose }: { agency: string; point: AgencyPoint | undefined; onClose: () => void }) {
   const [page, setPage] = useState(1)
+  const panel = useProjectPanel()
   const { data, error, isFetching } = useAgencyProjects(agency, page)
   const pages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1
 
@@ -317,7 +318,7 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
             {data.total} current projects · riskiest first
           </div>
           {data.items.map((p) => (
-            <Link key={p.key} to={`/projects/${p.key}`} className="block px-5 py-2.5 transition-colors hover:bg-surface-elevated">
+            <button key={p.key} onClick={() => panel.open(p.key)} className="block w-full px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated">
               <div className="truncate text-sm text-fg-base" title={p.name ?? undefined}>{p.name ?? p.key}</div>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-fg-dimmed">
                 <Badge tier={p.tier} />
@@ -325,7 +326,7 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
                   {p.key} · P(slip, 2q) {orDash(p.pAny2q, (x) => formatProb(x))} · {orDash(p.anticipatedCostCr, formatINR)} · {p.state ?? 'state unknown'}
                 </span>
               </div>
-            </Link>
+            </button>
           ))}
         </div>
       )}

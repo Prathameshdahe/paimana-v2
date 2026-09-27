@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import { Card } from '@/components/ui/Card'
 import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -23,7 +23,7 @@ const KINDS = Object.keys(ALERT_KIND_LABEL) as AlertKind[]
  * (analysts, ministry officials; lib/auth/access.ts) is stored against the role.
  */
 export function EarlyWarningInbox() {
-  const navigate = useNavigate()
+  const panel = useProjectPanel()
   const { role } = useRole()
   const [page, setPage] = useState(1)
   const [kind, setKind] = useState<AlertKind | undefined>()
@@ -71,7 +71,7 @@ export function EarlyWarningInbox() {
             <div key={a.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-elevated">
               <IconChip icon={ALERT_KIND_ICON[a.kind]} variant={alertVariant(a.severity)} title={ALERT_KIND_LABEL[a.kind] ?? a.kind} />
               <button
-                onClick={() => a.projectKey && navigate(`/projects/${a.projectKey}`)}
+                onClick={() => a.projectKey && panel.open(a.projectKey)}
                 disabled={!a.projectKey}
                 className="flex-1 min-w-0 text-left disabled:cursor-default"
               >

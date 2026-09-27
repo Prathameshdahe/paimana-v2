@@ -7,7 +7,7 @@ import { Page, PageHeader } from '@/components/layout/Page'
 import { KPIRibbon } from './command-center/KPIRibbon'
 import { PortfolioUrgencyMatrix } from './command-center/PortfolioUrgencyMatrix'
 import { TriageTable } from './command-center/TriageTable'
-import { ProjectDetailDrawer } from './command-center/ProjectDetailDrawer'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 
 const PAGE_SIZE = 25
 
@@ -25,7 +25,7 @@ export function CommandCenter() {
       flag: flag && Object.keys(FLAG_LABEL).includes(flag) ? (flag as Flag) : undefined,
     }
   })
-  const [drawerKey, setDrawerKey] = useState<string | null>(null)
+  const panel = useProjectPanel()
   const projects = useProjects(query)
 
   useEffect(() => {
@@ -54,8 +54,8 @@ export function CommandCenter() {
       <KPIRibbon />
       <PortfolioUrgencyMatrix
         page={projects.data}
-        selectedKey={drawerKey}
-        onOpenDetail={setDrawerKey}
+        selectedKey={panel.key}
+        onOpenDetail={panel.open}
       />
       <TriageTable
         query={query}
@@ -63,10 +63,9 @@ export function CommandCenter() {
         page={projects.data}
         error={projects.error}
         isFetching={projects.isFetching}
-        selectedKey={drawerKey}
-        onOpenDetail={setDrawerKey}
+        selectedKey={panel.key}
+        onOpenDetail={panel.open}
       />
-      <ProjectDetailDrawer projectKey={drawerKey} onClose={() => setDrawerKey(null)} />
     </Page>
   )
 }

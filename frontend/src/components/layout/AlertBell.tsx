@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell } from 'lucide-react'
 import { IconChip } from '@/components/ui/Badge'
@@ -29,6 +30,7 @@ function readSeen(): string | undefined {
  */
 export function AlertBell() {
   const { role } = useRole()
+  const panel = useProjectPanel()
   const [seenAt, setSeenAt] = useState(readSeen)
   const latest = useAlerts({ acked: false, size: 8 })
   const unread = useAlerts({ acked: false, since: seenAt, size: 1 })
@@ -96,12 +98,12 @@ export function AlertBell() {
                   <div className="flex items-center justify-between gap-2 text-xs text-fg-dimmed">
                     {a.projectKey ? (
                       <Popover.Close asChild>
-                        <Link
-                          to={`/projects/${a.projectKey}`}
+                        <button
+                          onClick={() => a.projectKey && panel.open(a.projectKey)}
                           className="text-xs text-accent hover:underline"
                         >
                           {a.projectKey} &rarr;
-                        </Link>
+                        </button>
                       </Popover.Close>
                     ) : (
                       <span>{formatDateTime(a.createdAt)}</span>

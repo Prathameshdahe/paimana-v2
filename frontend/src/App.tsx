@@ -17,6 +17,8 @@ const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ de
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
 const Bottlenecks = lazy(() => import('@/views/Bottlenecks').then(m => ({ default: m.Bottlenecks })))
 const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar })))
+// its own chunk (recharts, motion): the main bundle does not wait for it
+const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDetailDrawer').then(m => ({ default: m.ProjectDetailDrawer })))
 
 export default function App() {
   const location = useLocation()
@@ -66,6 +68,9 @@ export default function App() {
             </Routes>
           </Suspense>
         </main>
+
+        {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
+        {!isLogin && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
 
         {/* shown to IPMD analysts and ministry officials only (lib/auth/access.ts canChat) */}
         {!isLogin && <ChatWidget />}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -12,6 +13,7 @@ import type { FeedItem } from '@/contracts/portfolio'
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN') : 'date unknown')
 
 export function SignalCard({ s }: { s: FeedItem }) {
+  const panel = useProjectPanel()
   const cat = s.category ? EVENT_CATEGORY[s.category] : undefined
   const sev = s.severity ?? 0
   return (
@@ -40,9 +42,9 @@ export function SignalCard({ s }: { s: FeedItem }) {
           <div key={p.key} className="space-y-1 rounded-lg bg-surface-elevated/70 px-3 py-2 text-xs text-fg-dimmed">
             <div className="flex min-w-0 items-center gap-1.5">
               <Badge tier={p.tier} />
-              <Link to={`/projects/${p.key}`} className="shrink-0 text-accent hover:underline">
+              <button onClick={() => panel.open(p.key)} className="shrink-0 text-accent hover:underline">
                 {p.key}
-              </Link>
+              </button>
               <span className="truncate text-fg-muted" title={p.name ?? undefined}>{p.name ?? ''}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-2">
