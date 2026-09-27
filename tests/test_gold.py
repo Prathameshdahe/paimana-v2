@@ -86,3 +86,69 @@ def test_velocity_and_stagnation():
     f = gold.build_features(d, sectors=sectors())
     assert f["progress_velocity_2q"].tolist()[2:] == pytest.approx([5.1, 0.2, 9.9])
     assert f["stagnation_quarters"].tolist() == [0, 0, 1, 2, 0]
+
+
+def obs_rows(key, rows, agency="NHAI"):
+    """Minimal observations for one key: rows are (quarter index, cost, anticipated completion, completed)."""
+    d = pd.DataFrame([{"project_key": key, "period": QUARTERS[q], "anticipated_cost_cr": c,
+                       "anticipated_completion": a, "is_completed": done} for q, c, a, done in rows])
+    d["anticipated_completion"] = pd.to_datetime(d["anticipated_completion"]).astype("datetime64[us]")
+    template = panel(1).iloc[:0]
+    d = pd.concat([template, d], ignore_index=True).assign(
+        agency=agency, sector="Railways", period_type="quarterly", obs_count_in_quarter=1, dq_score=1.0,
+        original_cost_cr=d["anticipated_cost_cr"], physical_progress_pct=50.0)
+    return d.astype(template.dtypes.to_dict())
+
+
+def test_labels_exact_horizon_and_null_inputs():
+    d = pd.concat([obs_rows("PRJ-000001", [(0, 100.0, "2020-01", False), (1, 100.0, "2020-01", False),
+                                           (2, 104.0, None, False), (3, 110.0, "2020-06", False),
+                                           (4, 110.0, "2020-06", True)]),
+                   obs_rows("PRJ-000002", [(0, 100.0, "2020-01", False), (1, 100.0, "2020-01", False),
+                                           (3, 100.0, "2020-01", False)])], ignore_index=True)
+    lab = gold.build_labels(d, 2).set_index(["project_key", "period"])
+    assert list(lab.index) == [("PRJ-000001", QUARTERS[q]) for q in (0, 1, 2)] + [("PRJ-000002", QUARTERS[1])]
+    rows = lab[["y_date_push", "y_cost_rev", "y_any"]].astype("float64").to_numpy().tolist()
+    nan = float("nan")
+    assert np.array_equal(rows, [[nan, 0, nan], [1, 1, 1], [nan, 1, 1], [0, 0, 0]], equal_nan=True)
+    assert lab["y_months"].tolist()[1] == 5 and lab["y_cost_pct"].iloc[0] == pytest.approx(4.0)
+    assert (lab["target_period"] == [QUARTERS[q] for q in (2, 3, 4, 3)]).all()
+
+
+def test_cutoff_bounds_feature_frame():
+    c = QUARTERS[12]
+    f = gold.build_features(panel(), cutoff=c, sectors=sectors())
+    assert f["period"].max() == c
+
+
+def test_features_at_t_same_on_truncated_panel():
+    full = panel()
+    b = gold.build_features(full, sectors=sectors())
+    for t in QUARTERS[3::2]:
+        a = gold.build_features(full[full["period"] <= t], sectors=sectors())
+        pd.testing.assert_frame_equal(at(a, t), at(b, t))
+        pd.testing.assert_frame_equal(at(gold.build_features(full, cutoff=t, sectors=sectors()), t), at(b, t))
+
+
+def test_agency_stats_count_only_realised_labels():
+    # key 1 slips between q0 and q2; that outcome is known at q2, not at q1
+    d = pd.concat([obs_rows("PRJ-000001", [(0, 100.0, "2020-01", False), (2, 100.0, "2020-09", False)]),
+                   obs_rows("PRJ-000002", [(1, 100.0, "2021-01", False), (2, 100.0, "2021-01", False),
+                                           (3, 100.0, "2021-01", False)])], ignore_index=True)
+    f = gold.build_features(d, sectors=sectors()).set_index(["project_key", "period"])
+    k2 = f.loc["PRJ-000002"]
+    assert k2["agency_n"].tolist() == [0, 1, 2]
+    assert k2["agency_slip_rate"].iloc[1] > k2["agency_slip_rate"].iloc[0] or pd.isna(k2["agency_slip_rate"].iloc[0])
+
+
+def test_agency_n_matches_brute_force():
+    full = panel()
+    f = gold.build_features(full, sectors=sectors())
+    lab = gold.build_labels(gold.base(full), gold.AGENCY_H).merge(f[["project_key", "period", "agency"]],
+                                                                  on=["project_key", "period"])
+    pairs = f[["project_key", "period", "agency"]].merge(lab.loc[lab["agency"].notna(), ["agency", "target_period"]],
+                                                          on="agency")
+    want = (pairs[pairs["target_period"] <= pairs["period"]].groupby(["project_key", "period"]).size()
+            .reindex(pd.MultiIndex.from_frame(f[["project_key", "period"]]), fill_value=0))
+    assert (f["agency_n"].to_numpy() == want.to_numpy()).all()
+    assert f.loc[f["agency"].isna(), "agency_n"].eq(0).all()
