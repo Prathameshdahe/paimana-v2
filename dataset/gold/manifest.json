@@ -1,8 +1,8 @@
 {
-  "gold_version": "ad4e1c09b1ba",
+  "gold_version": "e1535e8506a6",
   "silver_version": "0d8abdcfc7cf",
-  "run_id": "RUN-20260927-174102",
-  "built_at": "2026-09-27T17:41:02+00:00",
+  "run_id": "RUN-20260927-215116",
+  "built_at": "2026-09-27T21:51:16+00:00",
   "latest_period": "2026-07-01",
   "horizons_quarters": [
     2,
@@ -41,7 +41,8 @@
       "agency_slip_rate",
       "agency_cost_optimism",
       "agency_n",
-      "ministry",
+      "agency_slip_4q",
+      "sector_slip_4q",
       "sector",
       "state"
     ],
@@ -62,6 +63,7 @@
       "ext_open_law_order",
       "ext_open_weather",
       "ext_open_total",
+      "ext_open_age_q",
       "ext_ever_land",
       "ext_ever_forest_env",
       "ext_ever_litigation",
@@ -75,8 +77,6 @@
       "ext_months_since_first_forest_env",
       "ext_remark_quarters",
       "fc_expected_complexity",
-      "fc_worst_complexity",
-      "fc_max_authority_level",
       "la_linked",
       "la_complexity_max_by_t",
       "la_parcels_by_t",
@@ -84,7 +84,6 @@
     ]
   },
   "categorical": [
-    "ministry",
     "sector",
     "state",
     "period_type"
@@ -102,6 +101,7 @@
   "params": {
     "agency_label_horizon": 2,
     "shrink_k": 10,
+    "recent_q": 4,
     "cost_step": 1.05,
     "date_step_months": 3,
     "stagnant_pp_per_quarter": 0.5,
@@ -129,7 +129,8 @@
       1000,
       5000
     ],
-    "external_open_last_q": 2
+    "external_open_last_q": 2,
+    "external_open_max_age_q": 4
   },
   "rows": {
     "features": 73167,

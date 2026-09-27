@@ -1,732 +1,227 @@
 {
   "as_of_date": "2026-07-01",
   "n_projects": 1763,
-  "model_version": "lgbm-any2q-20260927-174106",
+  "model_version": "lgbm-any2q-20260927-221217",
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
-      "n_flagged": 79,
-      "capital_exposed_cr": 163524.7,
+      "n_flagged": 35,
+      "capital_exposed_cr": 28153.6,
       "top": [
         {
-          "project_key": "PRJ-003795",
-          "project_name": "CBR 9 MMTPA Project",
-          "sector": "Petroleum & Natural Gas",
-          "state": "Tamil Nadu",
-          "anticipated_cost_cr": 36354.0,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "land: open in reports, mentioned Jul 2022 to Apr 2023: '\"1.Engineering A. \u00bf Acquisition of additional land by Government of Tamil Nadu (GoTN) for the project is in advanced sta'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001244",
-          "project_name": "Ratlam-Mhow-Khandwa-Akola 472.64 km including material modification for Fatehabad-Chandrawati Ganj-Ujjain 22.96 km and Rau-DADN doubling 9.40 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 13314.5,
-          "tier": "Low",
-          "p_any_2q": 0.229,
-          "slip_to_date_months": 18.0,
-          "evidence": [
-            "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Total land acquisition is 17.51 ha'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001499",
-          "project_name": "Dahod-Indore via Sardarpur, Jhabua & Dhar 200.97 km incl. material modification for change in alignment via Amjhera 4.82 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 9217.2,
+          "project_key": "PRJ-005971",
+          "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 3466.6,
           "tier": "Medium",
-          "p_any_2q": 0.621,
-          "slip_to_date_months": 0.0,
+          "p_any_2q": 0.905,
+          "slip_to_date_months": 69.0,
           "evidence": [
-            "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress'"
+            "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
           ]
         },
         {
-          "project_key": "PRJ-001643",
-          "project_name": "Nadikude-Srikalahasti 308.7 km",
-          "sector": "Railways",
-          "state": "Andhra Pradesh",
-          "anticipated_cost_cr": 5906.0,
-          "tier": "Low",
-          "p_any_2q": 0.297,
-          "slip_to_date_months": 10.0,
-          "evidence": [
-            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Further, LA in Prakasam and Nellore Dists to be expedited'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001732",
-          "project_name": "SIARMAL OCP",
-          "sector": "Coal",
-          "state": "Odisha",
-          "anticipated_cost_cr": 5195.0,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "land: open in reports, mentioned Oct 2014 to Apr 2023: 'R & R is also under process'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001637",
-          "project_name": "Rayadurg-Tumkur via Kalyandurg 213 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 4612.0,
-          "tier": "Low",
-          "p_any_2q": 0.341,
-          "slip_to_date_months": 149.0,
-          "evidence": [
-            "land: open in reports, mentioned Apr 2023 to Apr 2023: 'submitted by the Collector/Ananthapuram so as to reduce the land acquisition involved in the project and the completion '"
-          ]
-        },
-        {
-          "project_key": "PRJ-002906",
-          "project_name": "Luhri Stage-I Hydro Electric Project [210 MW]",
-          "sector": "Power",
-          "state": "Himachal Pradesh",
-          "anticipated_cost_cr": 4345.3,
-          "tier": "Low",
-          "p_any_2q": 0.407,
-          "slip_to_date_months": 52.0,
-          "evidence": [
-            "land: open in reports, mentioned Apr 2023 to Apr 2023: 'Proposal for private land compensation and RoW for transmission line has been prepared'"
-          ]
-        },
-        {
-          "project_key": "PRJ-000804",
-          "project_name": "Nangal Dam-Talwara 83.74 km - New broad gauge line & taking over siding Mukerian- Talwara 29.16 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 4076.2,
-          "tier": "Low",
-          "p_any_2q": 0.422,
+          "project_key": "PRJ-004050",
+          "project_name": "4L of Ratnagiri - Kolhapur section of NH-166 from km 0.000 to km 19.769 and km 31.000 to km 67.140 Pkg I",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 2108.4,
+          "tier": "High",
+          "p_any_2q": 0.938,
           "slip_to_date_months": 24.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition'"
+            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
           ]
         },
         {
-          "project_key": "PRJ-002360",
-          "project_name": "Trivandrum- Kanyakumari",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 3785.4,
-          "tier": "Low",
-          "p_any_2q": 0.288,
+          "project_key": "PRJ-005530",
+          "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 2020.6,
+          "tier": "Medium",
+          "p_any_2q": 0.866,
+          "slip_to_date_months": 72.0,
+          "evidence": [
+            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004439",
+          "project_name": "4L of Ratnagiri - Kolhapur section from km 112.340 to km 145.300 of NH-166 PkgIII",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1910.4,
+          "tier": "Medium",
+          "p_any_2q": 0.881,
+          "slip_to_date_months": 20.0,
+          "evidence": [
+            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004438",
+          "project_name": "4L of Ratnagiri - Kolhapur section from km 67.140 to km 112.340 of NH-166 Pkg II",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1798.0,
+          "tier": "Medium",
+          "p_any_2q": 0.862,
+          "slip_to_date_months": 20.0,
+          "evidence": [
+            "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005529",
+          "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1443.1,
+          "tier": "Medium",
+          "p_any_2q": 0.836,
+          "slip_to_date_months": 76.0,
+          "evidence": [
+            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004098",
+          "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1435.5,
+          "tier": "Medium",
+          "p_any_2q": 0.865,
+          "slip_to_date_months": 25.0,
+          "evidence": [
+            "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004404",
+          "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1432.8,
+          "tier": "Medium",
+          "p_any_2q": 0.739,
+          "slip_to_date_months": 41.0,
+          "evidence": [
+            "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
+          "project_key": "PRJ-004057",
+          "project_name": "4L of Baramati to Indapur Pkg-II from km. 41.400 to km. 84.550 of NH-965G Saint Tukaram Marg",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1297.5,
+          "tier": "Critical",
+          "p_any_2q": 0.952,
           "slip_to_date_months": 39.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land Acquisition in Progress.'"
+            "land: NH-965G: 4,288 parcels over 6.7 years of notifications, complexity 5/5; not mentioned in report remarks up to Apr 2023"
           ]
         },
         {
-          "project_key": "PRJ-001655",
-          "project_name": "Gadag - Wadi 252 km",
-          "sector": "Railways",
-          "state": "Karnataka",
-          "anticipated_cost_cr": 3668.2,
-          "tier": "Low",
-          "p_any_2q": 0.378,
-          "slip_to_date_months": 9.0,
+          "project_key": "PRJ-002382",
+          "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
+          "sector": "Roads & Highways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1142.6,
+          "tier": "Medium",
+          "p_any_2q": 0.878,
+          "slip_to_date_months": 70.0,
           "evidence": [
-            "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition is in progress for the Jumlapur road- Kekkra section and EPC Tender will be called when 90% of land is '"
+            "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
           ]
         }
       ]
     },
     "forest_clearance": {
-      "n_flagged": 35,
-      "capital_exposed_cr": 81810.2,
+      "n_flagged": 1,
+      "capital_exposed_cr": 1880.6,
       "top": [
         {
-          "project_key": "PRJ-001244",
-          "project_name": "Ratlam-Mhow-Khandwa-Akola 472.64 km including material modification for Fatehabad-Chandrawati Ganj-Ujjain 22.96 km and Rau-DADN doubling 9.40 km",
+          "project_key": "PRJ-002960",
+          "project_name": "Wadsa-Gadchiroli 49.5 km",
           "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 13314.5,
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 1880.6,
           "tier": "Low",
-          "p_any_2q": 0.229,
-          "slip_to_date_months": 18.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Alignment is passing through Melghat tiger Reserve'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002546",
-          "project_name": "Comprehensive Scheme for Strengthening of Transmission and Distribution [T&D] Systems [CSST&DS] in Arunachal Pradesh and Sikkim",
-          "sector": "Power",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 9129.3,
-          "tier": "Medium",
-          "p_any_2q": 0.655,
-          "slip_to_date_months": 99.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land for substation, RoW and forest clearance hampering progress'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002547",
-          "project_name": "NORTH EASTERN REGION POWER SYSTEM IMPROVEMENT PROJECT [NERPSIP]",
-          "sector": "Power",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 6700.0,
-          "tier": "Low",
-          "p_any_2q": 0.546,
-          "slip_to_date_months": 99.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land handover and forest clearance hampering progress'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-001643",
-          "project_name": "Nadikude-Srikalahasti 308.7 km",
-          "sector": "Railways",
-          "state": "Andhra Pradesh",
-          "anticipated_cost_cr": 5906.0,
-          "tier": "Low",
-          "p_any_2q": 0.297,
-          "slip_to_date_months": 10.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process. 4'; linear, 7.48 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002799",
-          "project_name": "DIPKA EXPANSION OCP [40 MTY]",
-          "sector": "Coal",
-          "state": "Chhattisgarh",
-          "anticipated_cost_cr": 5241.4,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2022 to Jan 2023: '\"Conducting Public Hearing for EC for 40 MTY'; non-linear mining, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 6.5)"
-          ]
-        },
-        {
-          "project_key": "PRJ-001732",
-          "project_name": "SIARMAL OCP",
-          "sector": "Coal",
-          "state": "Odisha",
-          "anticipated_cost_cr": 5195.0,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2015 to Apr 2023: 'DFO, Sundergarh has been requested on 19.01.2015 for providing 820 Ha land for Compensatory Afforestation'; non-linear mining, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 6.5)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002906",
-          "project_name": "Luhri Stage-I Hydro Electric Project [210 MW]",
-          "sector": "Power",
-          "state": "Himachal Pradesh",
-          "anticipated_cost_cr": 4345.3,
-          "tier": "Low",
-          "p_any_2q": 0.407,
-          "slip_to_date_months": 52.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Apr 2023 to Apr 2023: 'Case for diversion of forest land submitted on 06.06.2023'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002357",
-          "project_name": "Bondamunda - Ranchi 158.50 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 3029.0,
-          "tier": "Low",
-          "p_any_2q": 0.494,
-          "slip_to_date_months": 12.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Forest clearance in forest patch i.e. kurkura-orga (55 km) section got on 28.10.2021 and tree cutting permission also go'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-001576",
-          "project_name": "Pirpainti - Jasidih 97 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 2700.4,
-          "tier": "Low",
-          "p_any_2q": 0.351,
+          "p_any_2q": 0.63,
           "slip_to_date_months": 0.0,
           "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Forest land application for 9.14 Hect ( 22.50 acres ) has been accepted by Forest Deptt, Jharkhand Govt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
-          ]
-        },
-        {
-          "project_key": "PRJ-002260",
-          "project_name": "Koraput-Singapur Road 164.56 km",
-          "sector": "Railways",
-          "state": "Odisha",
-          "anticipated_cost_cr": 2462.2,
-          "tier": "Low",
-          "p_any_2q": 0.245,
-          "slip_to_date_months": 3.0,
-          "evidence": [
-            "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Preparation of details for forest diversion and Land acquisition in Tikiri-Bhalumaska section (45.86 Km) is  . 7'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+            "forest_clearance: high clearance complexity expected: linear, 71.722 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired during the month'"
           ]
         }
       ]
     },
     "litigation": {
-      "n_flagged": 3,
-      "capital_exposed_cr": 41128.3,
-      "top": [
-        {
-          "project_key": "PRJ-003795",
-          "project_name": "CBR 9 MMTPA Project",
-          "sector": "Petroleum & Natural Gas",
-          "state": "Tamil Nadu",
-          "anticipated_cost_cr": 36354.0,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "litigation: open in reports, mentioned Jan 2023 to Jan 2023: 'Balance ~350 acres is under final acquisition process at Collectorate by depositing the land value in Court and Right to'"
-          ]
-        },
-        {
-          "project_key": "PRJ-004207",
-          "project_name": "Kwar HE Project",
-          "sector": "Power",
-          "state": "Jammu & Kashmir",
-          "anticipated_cost_cr": 4526.1,
-          "tier": "Low",
-          "p_any_2q": 0.468,
-          "slip_to_date_months": 16.0,
-          "evidence": [
-            "litigation: open in reports, mentioned Apr 2023 to Apr 2023: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'"
-          ]
-        },
-        {
-          "project_key": "PRJ-003517",
-          "project_name": "SETTING UP OF PHYSICAL INFRASTRUCTURE FOR THE NATIONAL INSTITUTE OF COMMUNICATION FINANCE [NICF] AT GHITORNI",
-          "sector": "Telecommunications",
-          "state": "Delhi",
-          "anticipated_cost_cr": 248.2,
-          "tier": "Medium",
-          "p_any_2q": 0.739,
-          "slip_to_date_months": 79.0,
-          "evidence": [
-            "litigation: open in reports, mentioned Oct 2022 to Jan 2023: 'Opening of Sports Complex including swimming pool and Badminton Court, Library Block redesigning, Status of domestic ele'"
-          ]
-        }
-      ]
+      "n_flagged": 0,
+      "capital_exposed_cr": 0.0,
+      "top": []
     },
     "contractor": {
-      "n_flagged": 5,
-      "capital_exposed_cr": 49902.7,
-      "top": [
-        {
-          "project_key": "PRJ-002471",
-          "project_name": "KG-DWN-98/2 Cluster - II Development Project - NELP Block",
-          "sector": "Petroleum & Natural Gas",
-          "state": "Andhra Pradesh",
-          "anticipated_cost_cr": 34012.0,
-          "tier": "Medium",
-          "p_any_2q": 0.699,
-          "slip_to_date_months": 75.0,
-          "evidence": [
-            "contractor: open in reports, mentioned Jan 2022 to Apr 2023: 'Contract for Bundle Testing Services re- awarded to M/s'"
-          ]
-        },
-        {
-          "project_key": "PRJ-002546",
-          "project_name": "Comprehensive Scheme for Strengthening of Transmission and Distribution [T&D] Systems [CSST&DS] in Arunachal Pradesh and Sikkim",
-          "sector": "Power",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 9129.3,
-          "tier": "Medium",
-          "p_any_2q": 0.655,
-          "slip_to_date_months": 99.0,
-          "evidence": [
-            "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'DMS packages in Arunachal Pradesh, the contract was terminated due to non-performance of the agency and the packages hav'"
-          ]
-        },
-        {
-          "project_key": "PRJ-004207",
-          "project_name": "Kwar HE Project",
-          "sector": "Power",
-          "state": "Jammu & Kashmir",
-          "anticipated_cost_cr": 4526.1,
-          "tier": "Low",
-          "p_any_2q": 0.468,
-          "slip_to_date_months": 16.0,
-          "evidence": [
-            "contractor: open in reports, mentioned Apr 2023 to Apr 2023: 'Hydro mechanical Package (Lot-II) Due to poor response, the earlier tender was cancelled and Fresh re-tender NIT floated'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001827",
-          "project_name": "New Sinter Plant at BSL, SAIL",
-          "sector": "Steel",
-          "state": "Jharkhand",
-          "anticipated_cost_cr": 1752.3,
-          "tier": "Low",
-          "p_any_2q": 0.446,
-          "slip_to_date_months": -4.0,
-          "evidence": [
-            "contractor: open in reports, mentioned Oct 2022 to Apr 2023: 'executing the balance work under scope of M/s BEC through new contractor at the Risk & Cost of the defaulting contractor'"
-          ]
-        },
-        {
-          "project_key": "PRJ-002604",
-          "project_name": "SOURCING OF BAUXITE ARRANGEMENT FOR 5TH STREAM ALUMINA REFINERY FROM SOUTH BLOCK MINING LEASE OF PANCHPATMAILI MINES",
-          "sector": "Mines & Metals",
-          "state": "Odisha",
-          "anticipated_cost_cr": 483.0,
-          "tier": "Low",
-          "p_any_2q": 0.505,
-          "slip_to_date_months": 13.0,
-          "evidence": [
-            "contractor: open in reports, mentioned Jan 2023 to Jan 2023: 'Poor Performance by MECON the contractor engaged for crusher package, affected the project schedule. \"'"
-          ]
-        }
-      ]
+      "n_flagged": 0,
+      "capital_exposed_cr": 0.0,
+      "top": []
     },
     "utility_shifting": {
-      "n_flagged": 1,
-      "capital_exposed_cr": 315.6,
-      "top": [
-        {
-          "project_key": "PRJ-003675",
-          "project_name": "Widening to 2 Lanes with paved shoulders from Km.87/000 to 133/720 Nattukal to Thanau Jn. in Palakkad of NH-966 Old NH-213 on EPC mode Basis under NHO Annual Plan 2016-17 in the state of Kerala",
-          "sector": "Roads & Highways",
-          "state": "Kerala",
-          "anticipated_cost_cr": 315.6,
-          "tier": "Low",
-          "p_any_2q": 0.418,
-          "slip_to_date_months": 82.0,
-          "evidence": [
-            "utility_shifting: open in reports, mentioned Jul 2021 to Apr 2023: 'Estimate for Utility Shifting Approved by Ministry and work is in progress'"
-          ]
-        }
-      ]
+      "n_flagged": 0,
+      "capital_exposed_cr": 0.0,
+      "top": []
     },
     "inter_agency": {
-      "n_flagged": 3,
-      "capital_exposed_cr": 8597.3,
-      "top": [
-        {
-          "project_key": "PRJ-001732",
-          "project_name": "SIARMAL OCP",
-          "sector": "Coal",
-          "state": "Odisha",
-          "anticipated_cost_cr": 5195.0,
-          "tier": null,
-          "p_any_2q": null,
-          "slip_to_date_months": null,
-          "evidence": [
-            "inter_agency: open in reports, mentioned Apr 2015 to Apr 2023: 'Collector, Sundergarh has been requested for early issue of NOC on 12.01.2015.DGPS survey is expexted on March 2016'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001576",
-          "project_name": "Pirpainti - Jasidih 97 km",
-          "sector": "Railways",
-          "state": "Multi-State",
-          "anticipated_cost_cr": 2700.4,
-          "tier": "Low",
-          "p_any_2q": 0.351,
-          "slip_to_date_months": 0.0,
-          "evidence": [
-            "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: 'Census for forest trees, NOC under FRA Act (for protected forest land ) has been received, but for ?Jungle jhari land? i'"
-          ]
-        },
-        {
-          "project_key": "PRJ-001639",
-          "project_name": "Anand Vihar-Tilak Bridge - 3rd & 4th line 9.77 km",
-          "sector": "Railways",
-          "state": "Delhi",
-          "anticipated_cost_cr": 701.9,
-          "tier": "Medium",
-          "p_any_2q": 0.288,
-          "slip_to_date_months": 57.0,
-          "evidence": [
-            "inter_agency: open in reports, mentioned Jul 2021 to Apr 2023: 'Permission awaited from Forest deptt. for cutting of approx 6576 trees (for which applications have been submitted in 3 '"
-          ]
-        }
-      ]
+      "n_flagged": 0,
+      "capital_exposed_cr": 0.0,
+      "top": []
     }
   },
   "early_notice": {
-    "n_projects": 76,
-    "capital_exposed_cr": 166067.9,
+    "n_projects": 30,
+    "capital_exposed_cr": 25145.3,
     "by_factor": {
-      "land": 57,
-      "forest_clearance": 26,
-      "litigation": 2,
-      "contractor": 5,
-      "utility_shifting": 1,
-      "inter_agency": 2
+      "land": 29,
+      "forest_clearance": 1,
+      "litigation": 0,
+      "contractor": 0,
+      "utility_shifting": 0,
+      "inter_agency": 0
     },
-    "n_flagged_any": 104,
-    "capital_flagged_any_cr": 242761.2,
+    "n_flagged_any": 36,
+    "capital_flagged_any_cr": 30034.2,
     "no_slip_to_date": {
-      "n_projects": 18,
-      "capital_exposed_cr": 26202.0
+      "n_projects": 11,
+      "capital_exposed_cr": 6584.5
     },
     "top": [
       {
-        "project_key": "PRJ-002471",
-        "project_name": "KG-DWN-98/2 Cluster - II Development Project - NELP Block",
-        "sector": "Petroleum & Natural Gas",
-        "state": "Andhra Pradesh",
-        "anticipated_cost_cr": 34012.0,
-        "tier": "Medium",
-        "p_any_2q": 0.699,
-        "slip_to_date_months": 75.0,
-        "evidence": [
-          "contractor: open in reports, mentioned Jan 2022 to Apr 2023: 'Contract for Bundle Testing Services re- awarded to M/s'"
-        ]
-      },
-      {
-        "project_key": "PRJ-001244",
-        "project_name": "Ratlam-Mhow-Khandwa-Akola 472.64 km including material modification for Fatehabad-Chandrawati Ganj-Ujjain 22.96 km and Rau-DADN doubling 9.40 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 13314.5,
-        "tier": "Low",
-        "p_any_2q": 0.229,
-        "slip_to_date_months": 18.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2022 to Apr 2023: 'Total land acquisition is 17.51 ha'",
-          "forest_clearance: open in reports, mentioned Apr 2021 to Apr 2023: 'Alignment is passing through Melghat tiger Reserve'; linear, 21.446 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
-        ]
-      },
-      {
-        "project_key": "PRJ-001499",
-        "project_name": "Dahod-Indore via Sardarpur, Jhabua & Dhar 200.97 km incl. material modification for change in alignment via Amjhera 4.82 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 9217.2,
-        "tier": "Medium",
-        "p_any_2q": 0.621,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: open in reports, mentioned Jan 2023 to Apr 2023: 'Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002546",
-        "project_name": "Comprehensive Scheme for Strengthening of Transmission and Distribution [T&D] Systems [CSST&DS] in Arunachal Pradesh and Sikkim",
-        "sector": "Power",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 9129.3,
-        "tier": "Medium",
-        "p_any_2q": 0.655,
-        "slip_to_date_months": 99.0,
-        "evidence": [
-          "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land for substation, RoW and forest clearance hampering progress'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)",
-          "contractor: open in reports, mentioned Jan 2023 to Apr 2023: 'DMS packages in Arunachal Pradesh, the contract was terminated due to non-performance of the agency and the packages hav'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002547",
-        "project_name": "NORTH EASTERN REGION POWER SYSTEM IMPROVEMENT PROJECT [NERPSIP]",
-        "sector": "Power",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 6700.0,
-        "tier": "Low",
-        "p_any_2q": 0.546,
-        "slip_to_date_months": 99.0,
-        "evidence": [
-          "forest_clearance: open in reports, mentioned Jan 2023 to Apr 2023: 'Delay in land handover and forest clearance hampering progress'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
-        ]
-      },
-      {
-        "project_key": "PRJ-001643",
-        "project_name": "Nadikude-Srikalahasti 308.7 km",
-        "sector": "Railways",
-        "state": "Andhra Pradesh",
-        "anticipated_cost_cr": 5906.0,
-        "tier": "Low",
-        "p_any_2q": 0.297,
-        "slip_to_date_months": 10.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Further, LA in Prakasam and Nellore Dists to be expedited'",
-          "forest_clearance: open in reports, mentioned Apr 2022 to Apr 2023: 'Stage-II clearance under process. 4'; linear, 7.48 ha forest: up to Regional Office/Sub-Office with REC (scenario 2_main) (expected 3.0)"
-        ]
-      },
-      {
-        "project_key": "PRJ-001637",
-        "project_name": "Rayadurg-Tumkur via Kalyandurg 213 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 4612.0,
-        "tier": "Low",
-        "p_any_2q": 0.341,
-        "slip_to_date_months": 149.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2023 to Apr 2023: 'submitted by the Collector/Ananthapuram so as to reduce the land acquisition involved in the project and the completion '"
-        ]
-      },
-      {
-        "project_key": "PRJ-004207",
-        "project_name": "Kwar HE Project",
-        "sector": "Power",
-        "state": "Jammu & Kashmir",
-        "anticipated_cost_cr": 4526.1,
-        "tier": "Low",
-        "p_any_2q": 0.468,
-        "slip_to_date_months": 16.0,
-        "evidence": [
-          "litigation: open in reports, mentioned Apr 2023 to Apr 2023: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'",
-          "contractor: open in reports, mentioned Apr 2023 to Apr 2023: 'Hydro mechanical Package (Lot-II) Due to poor response, the earlier tender was cancelled and Fresh re-tender NIT floated'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002906",
-        "project_name": "Luhri Stage-I Hydro Electric Project [210 MW]",
-        "sector": "Power",
-        "state": "Himachal Pradesh",
-        "anticipated_cost_cr": 4345.3,
-        "tier": "Low",
-        "p_any_2q": 0.407,
-        "slip_to_date_months": 52.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2023 to Apr 2023: 'Proposal for private land compensation and RoW for transmission line has been prepared'",
-          "forest_clearance: open in reports, mentioned Apr 2023 to Apr 2023: 'Case for diversion of forest land submitted on 06.06.2023'; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0)"
-        ]
-      },
-      {
-        "project_key": "PRJ-000804",
-        "project_name": "Nangal Dam-Talwara 83.74 km - New broad gauge line & taking over siding Mukerian- Talwara 29.16 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 4076.2,
-        "tier": "Low",
-        "p_any_2q": 0.422,
-        "slip_to_date_months": 24.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002360",
-        "project_name": "Trivandrum- Kanyakumari",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 3785.4,
-        "tier": "Low",
-        "p_any_2q": 0.288,
-        "slip_to_date_months": 39.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land Acquisition in Progress.'"
-        ]
-      },
-      {
-        "project_key": "PRJ-001655",
-        "project_name": "Gadag - Wadi 252 km",
-        "sector": "Railways",
-        "state": "Karnataka",
-        "anticipated_cost_cr": 3668.2,
-        "tier": "Low",
-        "p_any_2q": 0.378,
-        "slip_to_date_months": 9.0,
-        "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'Land acquisition is in progress for the Jumlapur road- Kekkra section and EPC Tender will be called when 90% of land is '"
-        ]
-      },
-      {
-        "project_key": "PRJ-002241",
-        "project_name": "Daund - Manmad 247.50 km",
-        "sector": "Railways",
+        "project_key": "PRJ-005971",
+        "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
+        "sector": "Roads & Highways",
         "state": "Maharashtra",
-        "anticipated_cost_cr": 3554.7,
-        "tier": "Low",
-        "p_any_2q": 0.391,
-        "slip_to_date_months": 3.0,
-        "evidence": [
-          "land: open in reports, mentioned Oct 2022 to Apr 2023: 'Total land of 79.086 Ha is to be acquired. out of which 7.25 Ha land acquired.'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002262",
-        "project_name": "Budhapank-Salegaon via Rajatgarh - 3rd & 4th line 85 85 km",
-        "sector": "Railways",
-        "state": "Odisha",
-        "anticipated_cost_cr": 3034.8,
-        "tier": "Low",
-        "p_any_2q": 0.494,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "land: open in reports, mentioned Jul 2021 to Apr 2023: 'The project commissioning is getting delayed due to delay in land acquisition - early acquisition of 38.82 Ha. of privat'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002357",
-        "project_name": "Bondamunda - Ranchi 158.50 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 3029.0,
-        "tier": "Low",
-        "p_any_2q": 0.494,
-        "slip_to_date_months": 12.0,
-        "evidence": [
-          "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Forest clearance in forest patch i.e. kurkura-orga (55 km) section got on 28.10.2021 and tree cutting permission also go'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
-        ]
-      },
-      {
-        "project_key": "PRJ-001576",
-        "project_name": "Pirpainti - Jasidih 97 km",
-        "sector": "Railways",
-        "state": "Multi-State",
-        "anticipated_cost_cr": 2700.4,
-        "tier": "Low",
-        "p_any_2q": 0.351,
-        "slip_to_date_months": 0.0,
-        "evidence": [
-          "forest_clearance: open in reports, mentioned Jan 2022 to Jan 2023: 'Forest land application for 9.14 Hect ( 22.50 acres ) has been accepted by Forest Deptt, Jharkhand Govt'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)",
-          "inter_agency: open in reports, mentioned Jan 2022 to Jan 2023: 'Census for forest trees, NOC under FRA Act (for protected forest land ) has been received, but for ?Jungle jhari land? i'"
-        ]
-      },
-      {
-        "project_key": "PRJ-001537",
-        "project_name": "Araria-Supaul 92 km",
-        "sector": "Railways",
-        "state": "Bihar",
-        "anticipated_cost_cr": 2621.0,
+        "anticipated_cost_cr": 3466.6,
         "tier": "Medium",
-        "p_any_2q": 0.642,
-        "slip_to_date_months": 34.0,
+        "p_any_2q": 0.905,
+        "slip_to_date_months": 69.0,
         "evidence": [
-          "land: open in reports, mentioned Apr 2021 to Apr 2023: 'State Govt. has transferred Rs. 214.5 Crore to DM/Supaul for land acquisition of Araria \u00bf Supaul NL from the already dep'"
+          "land: NH-361: 13,041 parcels over 8.9 years of notifications, complexity 5/5; no free-text remarks in any report"
         ]
       },
       {
-        "project_key": "PRJ-002238",
-        "project_name": "Wardha-Balharshah - 3rd line 132 km",
-        "sector": "Railways",
+        "project_key": "PRJ-005530",
+        "project_name": "Kante - Wakad section of NH-66 4L PS from Km.281/300 to 332/200",
+        "sector": "Roads & Highways",
         "state": "Maharashtra",
-        "anticipated_cost_cr": 2603.1,
-        "tier": "Low",
-        "p_any_2q": 0.406,
-        "slip_to_date_months": 2.0,
+        "anticipated_cost_cr": 2020.6,
+        "tier": "Medium",
+        "p_any_2q": 0.866,
+        "slip_to_date_months": 72.0,
         "evidence": [
-          "land: open in reports, mentioned Jan 2022 to Apr 2023: 'Out of total 132.669 Ha land,118.21 Ha land acquired.'"
-        ]
-      },
-      {
-        "project_key": "PRJ-002260",
-        "project_name": "Koraput-Singapur Road 164.56 km",
-        "sector": "Railways",
-        "state": "Odisha",
-        "anticipated_cost_cr": 2462.2,
-        "tier": "Low",
-        "p_any_2q": 0.245,
-        "slip_to_date_months": 3.0,
-        "evidence": [
-          "land: open in reports, mentioned Jan 2022 to Apr 2023: 'Preparation of details for forest diversion and Land acquisition in Tikiri-Bhalumaska section (45.86 Km) is  . 7'",
-          "forest_clearance: open in reports, mentioned Jan 2022 to Apr 2023: 'Preparation of details for forest diversion and Land acquisition in Tikiri-Bhalumaska section (45.86 Km) is  . 7'; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       },
       {
@@ -736,122 +231,343 @@
         "state": "Maharashtra",
         "anticipated_cost_cr": 1910.4,
         "tier": "Medium",
-        "p_any_2q": 0.776,
+        "p_any_2q": 0.881,
         "slip_to_date_months": 20.0,
         "evidence": [
           "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-002960",
+        "project_name": "Wadsa-Gadchiroli 49.5 km",
+        "sector": "Railways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1880.6,
+        "tier": "Low",
+        "p_any_2q": 0.63,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "forest_clearance: high clearance complexity expected: linear, 71.722 ha forest: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired during the month'"
+        ]
+      },
+      {
+        "project_key": "PRJ-004438",
+        "project_name": "4L of Ratnagiri - Kolhapur section from km 67.140 to km 112.340 of NH-166 Pkg II",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1798.0,
+        "tier": "Medium",
+        "p_any_2q": 0.862,
+        "slip_to_date_months": 20.0,
+        "evidence": [
+          "land: NH-166 (Kolhapur, Ratnagiri): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005529",
+        "project_name": "Arawali Kante section of NH-17New NH-66 4L PS from Km.241/300 to 281/300",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1443.1,
+        "tier": "Medium",
+        "p_any_2q": 0.836,
+        "slip_to_date_months": 76.0,
+        "evidence": [
+          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004098",
+        "project_name": "6L of Kagal-Satara section from Km 592.500 to Km 658.000 of NH-48 Pkg-I",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1435.5,
+        "tier": "Medium",
+        "p_any_2q": 0.865,
+        "slip_to_date_months": 25.0,
+        "evidence": [
+          "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004404",
+        "project_name": "4L of Nagpur-Katol Section from Km. 13.00 to Km. 62.900 of NH-353J",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1432.8,
+        "tier": "Medium",
+        "p_any_2q": 0.739,
+        "slip_to_date_months": 41.0,
+        "evidence": [
+          "land: NH-353J (Nagpur): 1,784 parcels over 5.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023"
+        ]
+      },
+      {
+        "project_key": "PRJ-002382",
+        "project_name": "Kashedi to Parshuram Ghat section of NH-66 from Km 161/600 - Km 205/400 - 4L PS",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1142.6,
+        "tier": "Medium",
+        "p_any_2q": 0.878,
+        "slip_to_date_months": 70.0,
+        "evidence": [
+          "land: NH-66: 3,408 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-006213",
+        "project_name": "Construction of 6 Lane Elevated corridor from KM 612582 to KM 617540 including construction of Service Roads in Kolhapur City on NH -48 in the State of Maharashtra on EPC mode under NHO",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 1039.0,
+        "tier": "Low",
+        "p_any_2q": 0.073,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-48 (Kolhapur): 857 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005950",
+        "project_name": "6L of Gonde Km. 439.038 to Pimpri Sado Km. 459.905 section of NH-848 Old NH-3",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 718.8,
+        "tier": "Low",
+        "p_any_2q": 0.237,
+        "slip_to_date_months": 7.0,
+        "evidence": [
+          "land: NH-848: 584 parcels over 3.5 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005847",
+        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaishal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra- Package-II & Package III combined- starting from existing chainage Km 341/300 to Km 394/130 and design chainage Km 340/250 at Dahiwadi Village to Km 392/950 ending at Vita Village in the State of Maharashtra on EPC Mode.",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 631.8,
+        "tier": "Low",
+        "p_any_2q": 0.159,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005994",
+        "project_name": "Up-gradation to Four Lane with Paved Shoulder configuration of the highway starting from existing km 88.400 Savali Vihir to km 163.400 start of Ahmednagar bypass Design Length 75.000 km section of NH-160 in the State of Maharashtra under Bharatmala Pariyojana on EPC Mode",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 617.9,
+        "tier": "Low",
+        "p_any_2q": 0.288,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-160 (Ahmednagar): 566 parcels over 4.7 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005848",
+        "project_name": "Rehabilitation, upgradation & widening of existing highway to 2L/4LPS Rigid Pavement of NH 160 section- Phaltan to Mhaisal near Karnataka Border including Tasgaon Bypass, from existing chainage Km 301/430 to Km 458/415 in the State of Maharashtra. Package-I starting from existing chainage Km 301/430 at Phaltan Village Junction of Phaltan Baramati Road Design Chainage -301/430km & ending at existing chainage Km 341/300 Dahiwadi Village Bus Stop Design chainage Km 340466km in the S",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 533.8,
+        "tier": "Medium",
+        "p_any_2q": 0.897,
+        "slip_to_date_months": -6.0,
+        "evidence": [
+          "land: NH-160: 966 parcels over 6.4 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-004403",
+        "project_name": "4L Mitigation Measure structures on CH/MH Border to Wainganga Bridge Section of NH-6 New NH-53",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 468.9,
+        "tier": "Medium",
+        "p_any_2q": 0.883,
+        "slip_to_date_months": 33.0,
+        "evidence": [
+          "land: NH-53: 518 parcels over 4.6 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005767",
+        "project_name": "Satara Km 725.000 to Pune Km 865.350 of NH - 4 New NH - 48 in Maharashtra",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 425.5,
+        "tier": "Medium",
+        "p_any_2q": 0.897,
+        "slip_to_date_months": 55.0,
+        "evidence": [
+          "land: NH-48 (Satara): 791 parcels over 3.9 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-003297",
+        "project_name": "Nasratpur to Barasgaon section of NH-61 2L / 4L PS from Km.514/00 to 558/200",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 406.5,
+        "tier": "Medium",
+        "p_any_2q": 0.893,
+        "slip_to_date_months": 83.0,
+        "evidence": [
+          "land: NH-61: 293 parcels over 7.4 years of notifications, complexity 3/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005960",
+        "project_name": "Four laning from Dive Ghat Km. 220.900 to Hadapsar Km. 234.150 of Mohol Alandi section Pkg VI of NH-965",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 400.0,
+        "tier": "Low",
+        "p_any_2q": 0.401,
+        "slip_to_date_months": 6.0,
+        "evidence": [
+          "land: NH-965: 6,776 parcels over 6.7 years of notifications, complexity 4/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005934",
+        "project_name": "Upgradation & rehabilitation of Service Roads on both sides in urban areas of Pune City on PuneSatara section of NH48",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 388.8,
+        "tier": "Low",
+        "p_any_2q": 0.287,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-48: 867 parcels over 5.1 years of notifications, complexity 5/5; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-006209",
+        "project_name": "Capacity Augmentation in the stretch of Pimpri Sado Vadape section of NH848 Km. 460900 to Km. 537000 by Construction of Slip/Service Road on either side at various locations total length 25.140 Km LHSRHS, Flyover 2 x 25m at Borivali Junction Km. 528550 & LVUP 1 x 15m at Sherekarpada Km. 528800",
+        "sector": "Roads & Highways",
+        "state": "Maharashtra",
+        "anticipated_cost_cr": 372.0,
+        "tier": "Low",
+        "p_any_2q": 0.093,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: NH-848: 584 parcels over 3.5 years of notifications, complexity 4/5; no free-text remarks in any report"
         ]
       }
     ]
   },
   "notice_backtest": {
     "land_or_forest": {
-      "n_with": 805,
-      "slip_rate_with": 0.2373,
-      "n_without": 2865,
-      "slip_rate_without": 0.4346,
-      "lift": 0.546,
-      "projects_with": 155,
-      "lift_within_sector_year": 0.973,
+      "n_with": 776,
+      "slip_rate_with": 0.2436,
+      "n_without": 2894,
+      "slip_rate_without": 0.4309,
+      "lift": 0.565,
+      "projects_with": 149,
+      "lift_within_sector_year": 1.038,
       "by_sector": {
         "Coal": {
-          "n_with": 586,
-          "slip_rate_with": 0.1416,
-          "n_without": 468,
-          "slip_rate_without": 0.2265,
-          "lift": 0.625
+          "n_with": 573,
+          "slip_rate_with": 0.1466,
+          "n_without": 481,
+          "slip_rate_without": 0.2183,
+          "lift": 0.672
         },
         "Petroleum & Natural Gas": {
-          "n_with": 59,
-          "slip_rate_with": 0.4068,
-          "n_without": 718,
-          "slip_rate_without": 0.532,
-          "lift": 0.765
+          "n_with": 55,
+          "slip_rate_with": 0.4182,
+          "n_without": 722,
+          "slip_rate_without": 0.5305,
+          "lift": 0.788
         },
         "Power": {
-          "n_with": 70,
-          "slip_rate_with": 0.6,
-          "n_without": 448,
-          "slip_rate_without": 0.375,
-          "lift": 1.6
+          "n_with": 66,
+          "slip_rate_with": 0.5909,
+          "n_without": 452,
+          "slip_rate_without": 0.3783,
+          "lift": 1.562
         },
         "Railways": {
-          "n_with": 74,
-          "slip_rate_with": 0.4054,
-          "n_without": 188,
-          "slip_rate_without": 0.3138,
-          "lift": 1.292
+          "n_with": 66,
+          "slip_rate_with": 0.4697,
+          "n_without": 196,
+          "slip_rate_without": 0.2959,
+          "lift": 1.587
         }
       }
     },
     "land": {
-      "n_with": 642,
-      "slip_rate_with": 0.2072,
-      "n_without": 3028,
-      "slip_rate_without": 0.4303,
-      "lift": 0.481,
-      "projects_with": 120,
-      "lift_within_sector_year": 0.932,
+      "n_with": 631,
+      "slip_rate_with": 0.2171,
+      "n_without": 3039,
+      "slip_rate_without": 0.4274,
+      "lift": 0.508,
+      "projects_with": 116,
+      "lift_within_sector_year": 1.009,
       "by_sector": {
         "Coal": {
-          "n_with": 490,
-          "slip_rate_with": 0.1265,
-          "n_without": 564,
-          "slip_rate_without": 0.2252,
-          "lift": 0.562
+          "n_with": 489,
+          "slip_rate_with": 0.137,
+          "n_without": 565,
+          "slip_rate_without": 0.2159,
+          "lift": 0.635
         },
         "Petroleum & Natural Gas": {
-          "n_with": 33,
-          "slip_rate_with": 0.3333,
-          "n_without": 744,
-          "slip_rate_without": 0.5309,
-          "lift": 0.628
+          "n_with": 31,
+          "slip_rate_with": 0.3548,
+          "n_without": 746,
+          "slip_rate_without": 0.5295,
+          "lift": 0.67
         },
         "Power": {
-          "n_with": 54,
-          "slip_rate_with": 0.6667,
-          "n_without": 464,
-          "slip_rate_without": 0.375,
-          "lift": 1.778
+          "n_with": 51,
+          "slip_rate_with": 0.6471,
+          "n_without": 467,
+          "slip_rate_without": 0.379,
+          "lift": 1.707
         },
         "Railways": {
-          "n_with": 62,
-          "slip_rate_with": 0.371,
-          "n_without": 200,
-          "slip_rate_without": 0.33,
-          "lift": 1.124
+          "n_with": 57,
+          "slip_rate_with": 0.4386,
+          "n_without": 205,
+          "slip_rate_without": 0.3122,
+          "lift": 1.405
         }
       }
     },
     "forest_env": {
-      "n_with": 442,
-      "slip_rate_with": 0.2873,
-      "n_without": 3228,
-      "slip_rate_without": 0.4055,
-      "lift": 0.709,
-      "projects_with": 88,
-      "lift_within_sector_year": 1.176,
+      "n_with": 416,
+      "slip_rate_with": 0.2933,
+      "n_without": 3254,
+      "slip_rate_without": 0.4038,
+      "lift": 0.726,
+      "projects_with": 85,
+      "lift_within_sector_year": 1.235,
       "by_sector": {
         "Coal": {
-          "n_with": 332,
-          "slip_rate_with": 0.1747,
-          "n_without": 722,
-          "slip_rate_without": 0.1814,
-          "lift": 0.963
+          "n_with": 314,
+          "slip_rate_with": 0.1783,
+          "n_without": 740,
+          "slip_rate_without": 0.1797,
+          "lift": 0.992
         },
         "Petroleum & Natural Gas": {
-          "n_with": 33,
-          "slip_rate_with": 0.5152,
-          "n_without": 744,
+          "n_with": 31,
+          "slip_rate_with": 0.5161,
+          "n_without": 746,
           "slip_rate_without": 0.5228,
-          "lift": 0.985
+          "lift": 0.987
         },
         "Railways": {
-          "n_with": 35,
-          "slip_rate_with": 0.6857,
-          "n_without": 227,
-          "slip_rate_without": 0.2863,
-          "lift": 2.395
+          "n_with": 32,
+          "slip_rate_with": 0.75,
+          "n_without": 230,
+          "slip_rate_without": 0.2826,
+          "lift": 2.654
         }
       }
     }
@@ -872,7 +588,7 @@
       "fc_only": {
         "n_projects": 1705,
         "n_score_ge_high": 128,
-        "mean": 0.4655,
+        "mean": 0.4654,
         "min": 0.4286,
         "25%": 0.4286,
         "50%": 0.4286,
@@ -887,7 +603,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 3466.6,
-        "tier": "High",
+        "tier": "Medium",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
@@ -1007,7 +723,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 317.4,
-        "tier": "Medium",
+        "tier": "High",
         "external_factor_score": 0.7143,
         "fc_component": 0.4286,
         "la_component": 1.0,
@@ -1031,7 +747,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 2020.6,
-        "tier": "High",
+        "tier": "Medium",
         "external_factor_score": 0.6143,
         "fc_component": 0.4286,
         "la_component": 0.8,
@@ -1043,7 +759,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 1443.1,
-        "tier": "High",
+        "tier": "Medium",
         "external_factor_score": 0.6143,
         "fc_component": 0.4286,
         "la_component": 0.8,
@@ -1055,7 +771,7 @@
         "sector": "Roads & Highways",
         "state": "Maharashtra",
         "anticipated_cost_cr": 1432.8,
-        "tier": "High",
+        "tier": "Medium",
         "external_factor_score": 0.6143,
         "fc_component": 0.4286,
         "la_component": 0.8,
