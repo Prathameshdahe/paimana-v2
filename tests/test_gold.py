@@ -226,8 +226,21 @@ def test_external_open_at_t_follows_the_last_two_remark_quarters():
     assert f["ext_months_since_first_land"].tolist() == [0, 3, 6, 9, 12, 15, 18]
     assert f["ext_months_since_first_forest_env"].isna().tolist() == [True] * 5 + [False] * 2
     assert f["ext_open_total"].tolist() == [1, 1, 0, 0, 0, 1, 1]
-    assert f["fc_worst_complexity"].isna().all() and f["la_linked"].eq(0).all()
+    assert f["ext_open_age_q"].fillna(-1).tolist() == [0, 1, -1, -1, -1, 0, 1]   # null when nothing is open
+    assert f["fc_expected_complexity"].isna().all() and f["la_linked"].eq(0).all()
     assert f["la_parcels_by_t"].isna().all()                              # unlinked: unknown, not 0
+
+
+def test_open_flags_expire_four_calendar_quarters_after_the_last_mention():
+    # land mentioned at q0 only, and no remarks after it: still open by the remark rule, stale by the calendar
+    k = "PRJ-000001"
+    d = obs_rows(k, [(q, 100.0, "2020-01", False) for q in range(7)])
+    f = build(d, ext=external([(k, 0, "land", False)]))
+    assert f["ext_open_land"].tolist() == [1, 1, 1, 1, 0, 0, 0]
+    assert f["ext_open_age_q"].tolist() == [0, 1, 2, 3, 4, 5, 6]          # the age keeps counting once expired
+    assert f["ext_open_total"].tolist() == [1, 1, 1, 1, 0, 0, 0]
+    assert f["ext_ever_land"].eq(1).all()
+    assert not {"ministry", "fc_worst_complexity", "fc_max_authority_level"} & set(gold.FEATURES)
 
 
 def test_land_features_count_only_stretches_notified_by_t():
@@ -243,7 +256,7 @@ def test_land_features_count_only_stretches_notified_by_t():
     assert f.loc[QUARTERS[5], ["la_parcels_by_t", "la_complexity_max_by_t"]].isna().all()
     assert f.loc[QUARTERS[6], ["la_parcels_by_t", "la_complexity_max_by_t"]].tolist() == [50, 1]
     assert f.loc[QUARTERS[7], ["la_parcels_by_t", "la_complexity_max_by_t"]].tolist() == [150, 4]
-    assert f["fc_worst_complexity"].eq(7).all()
+    assert f["fc_expected_complexity"].eq(3).all()
 
 
 def test_land_totals_notified_after_t_do_not_reach_t():
