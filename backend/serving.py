@@ -423,13 +423,22 @@ def project(s, key):
 
 
 def public_project(d: dict) -> dict:
-    """The project page for the public: no SHAP drivers, quantile intervals, identity review or provenance
-    internals (model, data versions, source documents); tier, progress, cost, completion and top risks stay."""
+    """The project page for the public: no SHAP drivers, quantile intervals, identity review, risk evidence lines
+    (model probabilities, tier cuts) or provenance internals (model, data versions, source documents); tier,
+    progress, cost, completion, risk states and top risks stay."""
+    no_src = {"source_doc_id": None, "source_page": None}
     scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
                               **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
-    prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None,
-            "source_doc_id": None, "source_page": None}
-    return {**d, "scores": scores, "provenance": prov, "review": None}
+    prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None, **no_src}
+    return {**d, "scores": scores, "provenance": prov, "review": None,
+            "latest": d["latest"] and {**d["latest"], **no_src},
+            "risk_profile": [{**r, "evidence": None} for r in d["risk_profile"]],
+            "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]]}}
+
+
+def public_page(page: dict) -> dict:
+    """A project list page for the public: no upper slip quantile or rank percentile (as public_project)."""
+    return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None} for r in page["items"]]}
 
 
 @cached

@@ -1,6 +1,8 @@
 """Role-scoped API (backend/access.py): each role sees its own projects, the public a redacted page, POLICY 403s."""
 import asyncio
 import sys
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -10,7 +12,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import db, serving, store  # noqa: E402
-from backend.live import scheduler  # noqa: E402
+from backend.live import scheduler, scout  # noqa: E402
 from backend.main import app  # noqa: E402
 
 IPMD = {"X-Paimana-Role": "ipmd_analyst"}
@@ -88,7 +90,17 @@ def test_public_project_page_is_redacted(client):
     prov = pub["provenance"]
     assert prov["modelVersion"] is None and prov["goldVersion"] is None and prov["sourceDocId"] is None
     assert prov["asof"] == full["provenance"]["asof"] and pub["review"] is None
-    assert pub["latest"] == full["latest"]  # progress, cost, completion stay
+    for f in ("physicalProgressPct", "anticipatedCostCr", "expenditureCr", "anticipatedCompletion"):
+        assert pub["latest"][f] == full["latest"][f]  # progress, cost, completion stay
+    assert full["latest"]["sourceDocId"] and pub["latest"]["sourceDocId"] is None and pub["latest"]["sourcePage"] is None
+    assert [r["state"] for r in pub["riskProfile"]] == [r["state"] for r in full["riskProfile"]]
+    assert all(r["evidence"] is None for r in pub["riskProfile"])  # no "P = 0.55 (High-tier cut ...)"
+    assert all(e["sourceDocId"] is None for e in pub["external"]["events"])
+    pub_rows = client.get("/api/projects", params={"size": 20}).json()["items"]
+    full_rows = client.get("/api/projects", headers=IPMD, params={"size": 20}).json()["items"]
+    assert any(r["monthsP95"] is not None and r["tierRankPct"] is not None for r in full_rows)
+    assert all(r["monthsP95"] is None and r["tierRankPct"] is None for r in pub_rows)
+    assert [r["tier"] for r in pub_rows] == [r["tier"] for r in full_rows]
     flagged = [r for r in full["riskProfile"] if r["state"] == "flagged"]
     assert pub["topRisksPlain"] == full["topRisksPlain"] and len(pub["topRisksPlain"]) == min(3, len(flagged))
     assert all(s.endswith(".") and len(s) < 90 for s in pub["topRisksPlain"])
@@ -170,6 +182,68 @@ def test_bottlenecks_matrix_and_memos_in_scope(client, scopes):
     if other:  # IPMD sees it but decides only its own memos (checked before anything is written)
         r = client.post("/api/approvals", headers=IPMD, json={"draftId": other["id"], "decision": "approved"})
         assert r.status_code == 403
+
+
+def test_memos_reach_the_official_they_are_addressed_to(client, scopes, tmp_path, monkeypatch):
+    m, other = scopes["ministries"][2]["name"], scopes["ministries"][1]["name"]
+    a = next(x for x in scopes["agencies"] if x["n"] >= 5)["name"]
+    mkey, okey = (client.get("/api/projects", headers=ministry(n), params={"size": 1}).json()["items"][0]["key"]
+                  for n in (m, other))
+    akey = client.get("/api/projects", headers=agency(a), params={"size": 1}).json()["items"][0]["key"]
+    monkeypatch.setattr(store, "DISPATCH_DRAFTS_PATH", str(tmp_path / "drafts.json"))
+    store.append_dispatch_drafts([
+        {"id": i, "project_id": k, "project_name": k, "draft_memo": "memo", "recommended_recipient_role": role,
+         "status": "pending", "created_at": "2026-09-01T00:00:00+00:00", "evidence": []}
+        for i, k, role in (("m", mkey, "ministry_official"), ("a", akey, "agency_official"),
+                           ("o", okey, "ministry_official"))])
+    ids = lambda h: [d["id"] for d in client.get("/api/dispatch", headers=h).json()]  # noqa: E731
+    assert ids(IPMD) == ["m", "a", "o"]
+    assert ids(ministry(m)) == ["m"] and ids(ministry(other)) == ["o"] and ids(agency(a)) == ["a"]
+    r = client.post("/api/approvals", headers=ministry(other), json={"draftId": "m", "decision": "approved"})
+    assert r.status_code == 404
+    r = client.post("/api/approvals", headers=ministry(m), json={"draftId": "m", "decision": "approved"})
+    assert r.status_code == 200 and r.json()["status"] == "approved"
+
+
+def test_watchlist_delete_is_scoped(client, scopes):
+    coal, rail = scopes["ministries"][2]["name"], scopes["ministries"][1]["name"]
+    key = client.get("/api/projects", headers=ministry(rail), params={"size": 1}).json()["items"][0]["key"]
+    watched = lambda: [i["projectKey"] for i in client.get("/api/watchlist", headers=ministry(rail)).json()["items"]]  # noqa: E731
+    assert client.post("/api/watchlist", headers=ministry(rail), json={"projectKey": key}).status_code == 200
+    assert client.post("/api/watchlist", headers=ministry(coal), json={"projectKey": key}).status_code == 404
+    assert client.delete("/api/watchlist", headers=ministry(coal), params={"project_key": key}).status_code == 404
+    assert key in watched()
+    assert client.delete("/api/watchlist", headers=ministry(rail), params={"project_key": key}).status_code == 200
+    assert key not in watched()
+
+
+def test_signal_state_filter_keeps_the_viewer_scope(client, scopes):
+    m = scopes["ministries"][2]["name"]
+    keys = serving.scope_keys(("ministry", m))
+    idx = scout.index()["projects"]
+    mine = next(k for k, p in idx.items() if k in keys and p["state"])
+    x = idx[mine]["state"]
+    theirs_y = next(k for k, p in idx.items() if k not in keys and p["state"] not in (None, x))
+    theirs_x = next(k for k, p in idx.items() if k not in keys and p["state"] == x)
+    y = idx[theirs_y]["state"]
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with closing(db.connect()) as con, con:
+        sids = [con.execute("INSERT INTO signals (url, title, source, published_at, severity) VALUES (?, ?, 'PTI', ?, 3)",
+                            [f"https://n/state-{i}", f"s{i}", now]).lastrowid for i in range(2)]
+        con.executemany("INSERT INTO signal_projects (signal_id, project_key) VALUES (?, ?)",
+                        [(sids[0], mine), (sids[0], theirs_y), (sids[1], theirs_x)])
+    feed = lambda h, **p: client.get("/api/signals/feed", headers=h, params=p).json()  # noqa: E731
+    base = feed(ministry(m))
+    assert {h["state"]: h["n"] for h in base["stateHeat"]} == {x: 1}
+    for st in (x, y):
+        got = feed(ministry(m), state=st)
+        assert got["stateHeat"] == base["stateHeat"]  # the viewer's heat, not every project of that state
+        assert all(p["key"] in keys for s in got["items"] for p in s["projects"])
+    assert feed(ministry(m), state=y)["total"] == 0  # its only link to y is not the viewer's project
+    assert [s["id"] for s in feed(ministry(m), state=x)["items"]] == [sids[0]]
+    ipmd = feed(IPMD, state=x)
+    assert {h["state"] for h in ipmd["stateHeat"]} >= {x, y}  # IPMD: heat and links of every state
+    assert {p["key"] for s in ipmd["items"] if s["id"] == sids[0] for p in s["projects"]} == {mine, theirs_y}
 
 
 def test_stream_skips_alerts_outside_the_scope(tmp_path, monkeypatch):

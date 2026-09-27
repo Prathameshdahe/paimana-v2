@@ -83,7 +83,8 @@ def get_projects(q: str | None = Query(None, max_length=100), ministry: str | No
                  sector: str | None = None, state: str | None = None, tier: Tier | None = None,
                  flag: Flag | None = None, sort: Sort = "risk", order: Literal["asc", "desc"] | None = None,
                  page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100), v: Viewer = Anyone):
-    return serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size, scope=v.scope)
+    out = serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size, scope=v.scope)
+    return out if v.can("insights") else serving.public_page(out)
 
 
 @router.get("/projects/{key}", response_model=ProjectDetail)
@@ -216,7 +217,7 @@ def post_watchlist(body: WatchRequest, v: Viewer = Depends(need("watchlist"))):
 def delete_watchlist(role: Role | None = None, project_key: str = Query(max_length=32),
                      v: Viewer = Depends(need("watchlist"))):
     role = v.acting_as(role)
-    db.unwatch(role, serving.canonical(project_key) or project_key)
+    db.unwatch(role, _key(project_key, v))
     return _watchlist(v, role)
 
 

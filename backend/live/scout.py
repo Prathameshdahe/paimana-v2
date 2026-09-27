@@ -363,11 +363,11 @@ def feed(since=None, category=None, state=None, severity=None, linked=None, page
         if v is not None:
             conds.append(sql)
             params.append(v)
-    if state:
-        keys = [k for k, p in idx.items() if p["state"] == state]
-        conds.append(f"s.id IN (SELECT signal_id FROM signal_projects WHERE project_key IN ({','.join('?' * len(keys))}))"
-                     if keys else "0")
-        params += keys
+    if state:  # linked to a project of that state (of the viewer's); links and heat stay the viewer's
+        state_keys = [k for k, p in idx.items() if p["state"] == state and (keys is None or k in keys)]
+        conds.append(f"s.id IN (SELECT signal_id FROM signal_projects WHERE project_key IN "
+                     f"({','.join('?' * len(state_keys))}))" if state_keys else "0")
+        params += state_keys
     if linked is not None:
         conds.append(("" if linked else "NOT ") + "EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id)")
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
