@@ -38,7 +38,7 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-fg-dimmed">
         <Link to="/command" className="hover:text-fg-muted transition-colors">
-          COMMAND
+          Command
         </Link>
         <span>/</span>
         <span className="text-fg-muted">{detail.key}</span>

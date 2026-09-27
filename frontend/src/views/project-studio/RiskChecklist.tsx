@@ -43,7 +43,8 @@ export function RiskChecklist({ rows }: { rows: RiskRow[] }) {
 
   return (
     <Card
-      title={`Risk Profile · ${rows.length} dimensions`}
+      title={`Risk profile · ${rows.length} dimensions`}
+      info="Unknown means there is no data for that dimension here — it is not the same as clear."
       titleRight={
         <span className="text-xs text-fg-dimmed">
           <span className="text-critical font-semibold">{count('flagged')} flagged</span> ·{' '}
@@ -77,9 +78,6 @@ export function RiskChecklist({ rows }: { rows: RiskRow[] }) {
           ))}
         </div>
       )}
-      <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-dimmed">
-        Unknown means there is no data for that dimension here — it is not the same as clear.
-      </div>
     </Card>
   )
 }

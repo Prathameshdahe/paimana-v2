@@ -44,7 +44,10 @@ function CalTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
 export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runId: string }) {
   const models = Object.keys(MODEL_COLOR).filter((m) => bins.some((b) => b.model === m))
   return (
-    <Card title={`Calibration · model/runs/${runId}/calibration.csv`}>
+    <Card
+      title="Calibration"
+      info={<>Dashed diagonal: perfectly calibrated. Tiers go by rank, so the probabilities are read as a ranking. From model/runs/{runId}/calibration.csv.</>}
+    >
       {models.length === 0 ? (
         <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no calibration bins for this target</div>
       ) : (
@@ -92,9 +95,6 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
           </ResponsiveContainer>
         </div>
       )}
-      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
-        dashed diagonal: perfectly calibrated. Tiers go by rank, so the probabilities are read as a ranking.
-      </div>
     </Card>
   )
 }
@@ -103,7 +103,10 @@ export function CalibrationChart({ bins, runId }: { bins: CalibrationBin[]; runI
 export function ShapSummary({ rows, runId }: { rows: ShapSummaryRow[]; runId: string }) {
   const data = rows.map((r) => ({ ...r, label: featureLabel(r.feature) }))
   return (
-    <Card title={`What the model leans on · any slip, 2q · ${runId}`}>
+    <Card
+      title="What the model leans on"
+      info={<>Mean absolute TreeSHAP contribution in log-odds over the validation rows (any slip, 2 quarters; run {runId}): how much a feature moves scores, not which way.</>}
+    >
       {data.length === 0 ? (
         <div className="px-5 py-8 text-center text-xs text-fg-dimmed">no shap_summary.csv in this run</div>
       ) : (
@@ -124,9 +127,6 @@ export function ShapSummary({ rows, runId }: { rows: ShapSummaryRow[]; runId: st
           </ResponsiveContainer>
         </div>
       )}
-      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
-        mean absolute TreeSHAP contribution in log-odds over the validation rows: how much a feature moves scores, not which way
-      </div>
     </Card>
   )
 }
@@ -141,8 +141,8 @@ export function RegistryHistory({ decisions, entries }: { decisions: RegistryDec
       ) : (
         <div className="overflow-x-auto max-h-[360px]">
           <table className="w-full text-xs font-mono border-collapse">
-            <thead className="sticky top-0 bg-surface-base">
-              <tr className="border-b border-border-default text-fg-muted text-left">
+            <thead className="sticky top-0 bg-surface-elevated font-sans">
+              <tr className="border-b border-border-subtle text-fg-muted text-left">
                 <th className={th}>When</th>
                 <th className={th}>Challenger</th>
                 <th className={th}>Champion before</th>
@@ -169,8 +169,8 @@ export function RegistryHistory({ decisions, entries }: { decisions: RegistryDec
       {entries.length > 0 && (
         <div className="overflow-x-auto border-t border-border-subtle">
           <table className="w-full text-xs font-mono border-collapse">
-            <thead>
-              <tr className="border-b border-border-default text-fg-muted bg-surface-base">
+            <thead className="font-sans">
+              <tr className="border-b border-border-subtle text-fg-muted bg-surface-elevated/60">
                 <th className={cn(th, 'text-left')}>Registered entry</th>
                 <th className={cn(th, 'text-left')}>Registered</th>
                 <th className={cn(th, 'text-right')}>Val PR-AUC</th>
@@ -209,13 +209,13 @@ function horizonReport(asof: string, quarters = 2): string {
 /** Live accuracy of logged predictions (gold/prediction_log.parquet); nothing is estimated before outcomes land. */
 export function LiveAccuracyCard({ live }: { live: LiveAccuracy }) {
   const stat = (label: string, value: string) => (
-    <div className="bg-surface-panel px-4 py-3">
-      <div className="text-xs text-fg-dimmed">{label}</div>
-      <div className="font-mono text-lg font-semibold text-fg-base tabular-nums">{value}</div>
+    <div className="bg-surface-panel px-5 py-4">
+      <div className="text-xs text-fg-muted">{label}</div>
+      <div className="mt-1.5 text-xl font-semibold tabular-nums leading-none text-fg-base">{value}</div>
     </div>
   )
   return (
-    <Card title="Live accuracy · logged predictions vs what happened">
+    <Card title="Live accuracy" info={<>Logged predictions against what happened. {live.note}</>}>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-border-subtle border-b border-border-subtle">
         {stat('logged', live.nLogged.toLocaleString())}
         {stat('realised', live.nRealised.toLocaleString())}
@@ -232,7 +232,6 @@ export function LiveAccuracyCard({ live }: { live: LiveAccuracy }) {
             .
           </div>
         )}
-        <div className="text-xs text-fg-dimmed">{live.note}</div>
       </div>
     </Card>
   )

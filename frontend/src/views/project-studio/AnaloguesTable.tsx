@@ -8,7 +8,7 @@ export function AnaloguesTable({ forecast }: { forecast: Forecast | undefined })
   const rows = forecast?.analogues ?? []
 
   return (
-    <Card title={`Analogue Projects · ${rows.length}`} className="h-full">
+    <Card title={`Analogue projects · ${rows.length}`} className="h-full">
       <div className="px-4 py-2.5 border-b border-border-subtle text-xs text-fg-base">
         {forecast ? forecast.analogueSummary : <span className="text-fg-dimmed">no forecast for this project</span>}
       </div>

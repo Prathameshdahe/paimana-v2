@@ -1,4 +1,5 @@
 import { MonoFigure } from '@/components/ui/MonoFigure'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { cn } from '@/lib/formatters'
 import { featureLabel } from '@/lib/featureLabels'
 import type { ShapValue } from '@/contracts/project'
@@ -20,9 +21,12 @@ export function ShapWaterfall({ drivers }: { drivers: ShapValue[] }) {
 
   return (
     <div className="bg-surface-panel flex flex-col border border-border-subtle overflow-hidden h-full rounded-xl shadow-card">
-      <div className="border-b border-border-subtle px-4 py-3 flex items-center justify-between">
-        <span className="text-xs text-fg-muted">
-          Why this score · top 5 drivers
+      <div className="border-b border-border-subtle px-5 py-3 flex items-center justify-between">
+        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-fg-base">
+          Why this score
+          <InfoTip label="About the drivers">
+            The top 5 TreeSHAP drivers of the LightGBM P(slip, 2q) model, in log-odds. Red raises the probability, green lowers it.
+          </InfoTip>
         </span>
         {sorted[0] && (
           <span className="text-xs text-critical font-medium truncate ml-3">
@@ -64,9 +68,6 @@ export function ShapWaterfall({ drivers }: { drivers: ShapValue[] }) {
         </div>
       )}
 
-      <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-muted">
-        TreeSHAP on the LightGBM P(slip, 2q) model, log-odds. Red raises the probability, green lowers it.
-      </div>
     </div>
   )
 }

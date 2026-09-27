@@ -1,4 +1,5 @@
 import { MonoFigure } from '@/components/ui/MonoFigure'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { TIER_LABEL, TIER_SENTIMENT, tierKey } from '@/lib/riskPalette'
 import { formatPct, formatProb, orDash, cn } from '@/lib/formatters'
 import type { ProjectDetail } from '@/contracts/project'
@@ -7,9 +8,9 @@ const NOT_SCORED = 'No completion date in reports — schedule not scored'
 
 function Row({ label, value, hint, strong }: { label: string; value: string; hint?: string; strong?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-xs font-mono" title={hint}>
+    <div className="flex items-baseline justify-between gap-3 text-sm" title={hint}>
       <span className="text-fg-muted">{label}</span>
-      <span className={cn('tabular-nums', strong ? 'text-fg-base font-semibold' : 'text-fg-base')}>{value}</span>
+      <span className={cn('font-mono text-xs tabular-nums', strong ? 'text-fg-base font-semibold' : 'text-fg-base')}>{value}</span>
     </div>
   )
 }
@@ -46,7 +47,13 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
       <div className="flex flex-col divide-y divide-border-subtle h-full">
         {/* Tier */}
         <div className="px-4 py-3 space-y-1.5">
-          <div className="text-xs text-fg-muted">AI Prediction · next 2 quarters</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-fg-base">
+            AI prediction · next 2 quarters
+            <InfoTip label="About the prediction">
+              Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.
+              Intervals are the 5th–95th percentile of LightGBM quantile models.
+            </InfoTip>
+          </div>
           {untiered ? (
             <div className="text-sm text-fg-muted border-l-2 border-border-strong pl-3 py-1">{NOT_SCORED}</div>
           ) : (
@@ -105,10 +112,6 @@ export function PredictionPanel({ detail }: { detail: ProjectDetail }) {
           </div>
         </div>
 
-        <div className="px-4 py-2 text-xs text-fg-dimmed leading-relaxed">
-          Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.
-          Intervals are the 5th–95th percentile of LightGBM quantile models.
-        </div>
       </div>
     </div>
   )

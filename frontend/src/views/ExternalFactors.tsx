@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRightLeft, Cable, HardHat, Info, LandPlot, Scale, Siren, Trees, type LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { MonoFigure } from '@/components/ui/MonoFigure'
+import { Badge, IconChip } from '@/components/ui/Badge'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Page, PageHeader } from '@/components/layout/Page'
@@ -18,15 +20,15 @@ import type {
   ExternalSummary,
 } from '@/contracts/portfolio'
 
-const FACTORS: Array<{ key: ExternalFactorKey; label: string; short: string; flag?: Flag }> = [
-  { key: 'land', label: 'Land acquisition', short: 'land', flag: 'land' },
-  { key: 'forest_clearance', label: 'Forest clearance', short: 'forest', flag: 'forest' },
-  { key: 'litigation', label: 'Litigation', short: 'litigation', flag: 'litigation' },
-  { key: 'contractor', label: 'Contractor stress', short: 'contractor', flag: 'contractor' },
-  { key: 'utility_shifting', label: 'Utility shifting', short: 'utility' },
-  { key: 'inter_agency', label: 'Inter-agency', short: 'inter-agency' },
+const FACTORS: Array<{ key: ExternalFactorKey; label: string; icon: LucideIcon; flag?: Flag }> = [
+  { key: 'land', label: 'Land acquisition', icon: LandPlot, flag: 'land' },
+  { key: 'forest_clearance', label: 'Forest clearance', icon: Trees, flag: 'forest' },
+  { key: 'litigation', label: 'Litigation', icon: Scale, flag: 'litigation' },
+  { key: 'contractor', label: 'Contractor stress', icon: HardHat, flag: 'contractor' },
+  { key: 'utility_shifting', label: 'Utility shifting', icon: Cable },
+  { key: 'inter_agency', label: 'Inter-agency', icon: ArrowRightLeft },
 ]
-const FACTOR_LABEL: Record<string, string> = Object.fromEntries(FACTORS.map((f) => [f.key, f.label]))
+const FACTOR: Partial<Record<string, (typeof FACTORS)[number]>> = Object.fromEntries(FACTORS.map((f) => [f.key, f]))
 
 // ml/risk_profile.py COMPOSITE_HIGH: the composite flags at this score (fc+la coverage only)
 const COMPOSITE_HIGH = 0.6
@@ -41,11 +43,20 @@ const pct = (v: number | null) => orDash(v, (x) => formatProb(x))
 const times = (v: number | null) => orDash(v, (x) => `×${x.toFixed(2)}`)
 const slip = (v: number | null) => orDash(v, (x) => `${x.toFixed(0)}mo`)
 
+/** a rounded bar, `share` of 0-1 filled */
+function Bar({ share, className = 'bg-warning' }: { share: number; className?: string }) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
+      <div className={cn('h-full rounded-full', className)} style={{ width: `${Math.min(100, Math.max(0, share * 100))}%` }} />
+    </div>
+  )
+}
+
 /**
- * External Factors (/external) over /api/external/summary: per-factor rollups,
- * the early-notice list, coverage and caveats, and the composite score. Every
- * figure comes from gold/external_summary.json (one aggregate response). The
- * news evidence below it pages /api/signals/feed (officials only; the public sees the summary).
+ * External Factors (/external) over /api/external/summary: per-factor tiles and their top
+ * projects, the early-notice list, coverage and the composite score; the caveats sit in one
+ * "About this data" section. Every figure comes from gold/external_summary.json. The news
+ * evidence below pages /api/signals/feed (officials only; the public sees the summary).
  */
 export function ExternalFactors() {
   const { data, error, isLoading } = useExternalSummary()
@@ -71,17 +82,16 @@ export function ExternalFactors() {
           <ApiErrorNote error={error} />
         </Card>
       ) : isLoading || !data ? (
-        <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
-          loading external factors...
-        </div>
+        <div className="h-48 flex items-center justify-center text-sm text-fg-dimmed">loading external factors...</div>
       ) : (
         <>
-          <FactorCards s={data} />
+          <FactorBoard s={data} />
           <EarlyNoticePanel s={data} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
             <CoveragePanel s={data} />
             <CompositePanel s={data} />
           </div>
+          <AboutData s={data} />
         </>
       )}
 
@@ -92,19 +102,14 @@ export function ExternalFactors() {
   )
 }
 
-function Stat({ label, value, sub, sentiment = 'default' }: {
-  label: string
-  value: string
-  sub?: string
-  sentiment?: 'critical' | 'warning' | 'default'
-}) {
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'critical' | 'warning' }) {
   return (
-    <div className="px-4 py-3">
-      <div className="text-xs font-sans font-semibold text-fg-dimmed">{label}</div>
-      <MonoFigure size="xl" sentiment={sentiment} className="block mt-1.5">
+    <div className="bg-surface-panel px-5 py-4">
+      <div className="text-xs text-fg-muted">{label}</div>
+      <div className={cn('mt-1.5 text-xl font-semibold tabular-nums leading-none', tone === 'critical' ? 'text-critical' : tone === 'warning' ? 'text-warning' : 'text-fg-base')}>
         {value}
-      </MonoFigure>
-      {sub && <div className="text-xs text-fg-dimmed mt-1">{sub}</div>}
+      </div>
+      {sub && <div className="mt-1.5 text-xs text-fg-dimmed">{sub}</div>}
     </div>
   )
 }
@@ -114,21 +119,19 @@ function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactor
   const lines = p.evidence.map(splitEvidence).filter(([f]) => f === factor)
 
   return (
-    <Link to={`/projects/${p.project_key}`} className="block px-4 py-2.5 hover:bg-surface-elevated transition-colors">
-      <div className="flex items-center gap-2">
-        <Badge tier={p.tier} className="w-[60px] shrink-0" />
-        <span className="truncate text-xs font-semibold text-fg-base" title={p.project_name ?? undefined}>
+    <Link to={`/projects/${p.project_key}`} className="block bg-surface-panel px-5 py-3 transition-colors hover:bg-surface-elevated">
+      <div className="flex items-start justify-between gap-3">
+        <span className="truncate text-sm font-medium text-fg-base" title={p.project_name ?? undefined}>
           {p.project_name ?? p.project_key}
         </span>
-        <span className="ml-auto shrink-0 text-xs text-fg-muted tabular-nums">
-          {orDash(p.anticipated_cost_cr, formatINR)}
-        </span>
+        <span className="shrink-0 font-mono text-sm tabular-nums text-fg-base">{orDash(p.anticipated_cost_cr, formatINR)}</span>
       </div>
-      <div className="text-xs text-fg-dimmed mt-0.5 pl-[68px]">
-        {p.project_key} · {p.state ?? 'state unknown'} · slip to date {slip(p.slip_to_date_months)}
+      <div className="mt-1 flex items-center gap-2 text-xs text-fg-dimmed">
+        <Badge tier={p.tier} />
+        <span className="truncate">{p.project_key} · {p.state ?? 'state unknown'} · slip so far {slip(p.slip_to_date_months)}</span>
       </div>
       {lines.map(([, text], i) => (
-        <div key={i} className="mt-1 pl-[68px] text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
+        <div key={i} className="mt-1.5 text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
           {text}
         </div>
       ))}
@@ -136,63 +139,82 @@ function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactor
   )
 }
 
-function FactorCards({ s }: { s: ExternalSummary }) {
+/** six factor tiles (count, capital bar, early notice); the picked one lists its top projects */
+function FactorBoard({ s }: { s: ExternalSummary }) {
+  const first = FACTORS.find(({ key }) => (s.factors[key]?.n_flagged ?? 0) > 0)?.key ?? 'land'
+  const [picked, setPicked] = useState<ExternalFactorKey>(first)
+  const maxCap = Math.max(1, ...FACTORS.map(({ key }) => s.factors[key]?.capital_exposed_cr ?? 0))
+  const f = s.factors[picked]
+  const meta = FACTOR[picked]
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {FACTORS.map(({ key, label, flag }) => {
-        const f = s.factors[key]
-        return (
-          <Card
-            key={key}
-            title={label}
-            titleRight={
-              <span className="text-xs text-fg-dimmed">
-                {f ? `${f.n_flagged} flagged` : 'not in summary'}
-              </span>
-            }
-            className="flex flex-col"
-          >
-            {!f ? (
-              <div className="px-5 py-6 text-center text-xs text-fg-dimmed">
-                no rollup for this factor in external_summary.json — unknown, not clear
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {FACTORS.map(({ key, label, icon }) => {
+          const x = s.factors[key]
+          const en = s.earlyNotice.by_factor[key] ?? 0
+          const on = key === picked
+          return (
+            <button
+              key={key}
+              aria-pressed={on}
+              disabled={!x}
+              onClick={() => setPicked(key)}
+              className={cn(
+                'rounded-xl border bg-surface-panel p-4 text-left shadow-card transition-all animate-card-in disabled:opacity-60',
+                on ? 'border-accent ring-2 ring-accent/20' : 'border-border-subtle hover:border-border-strong'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <IconChip icon={icon} size="sm" variant={x?.n_flagged ? 'warning' : 'muted'} />
+                <span className="truncate text-sm font-medium text-fg-base">{label}</span>
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 divide-x divide-border-subtle border-b border-border-subtle">
-                  <Stat label="Flagged" value={f.n_flagged.toLocaleString()} sentiment={f.n_flagged ? 'warning' : 'default'} />
-                  <Stat label="Capital exposed" value={formatINRShort(f.capital_exposed_cr)} />
-                  <Stat
-                    label="Early notice"
-                    value={String(s.earlyNotice.by_factor[key] ?? 0)}
-                    sentiment={s.earlyNotice.by_factor[key] ? 'critical' : 'default'}
-                  />
-                </div>
-                {f.top.length === 0 ? (
-                  <div className="px-5 py-6 text-center text-xs text-fg-dimmed">
-                    no current project flagged for this factor
+              {!x ? (
+                <div className="mt-3 text-xs text-fg-dimmed">not in the summary — unknown, not clear</div>
+              ) : (
+                <>
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-semibold tabular-nums leading-none text-fg-base">{x.n_flagged.toLocaleString()}</span>
+                    <span className="text-xs text-fg-dimmed">flagged</span>
                   </div>
-                ) : (
-                  <div className="flex-1 divide-y divide-border-subtle/60 max-h-[360px] overflow-y-auto" data-lenis-prevent>
-                    {f.top.map((p) => (
-                      <ProjectLine key={p.project_key} p={p} factor={key} />
-                    ))}
+                  <div className="mt-3"><Bar share={x.capital_exposed_cr / maxCap} /></div>
+                  <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
+                    <span className="text-fg-muted">{formatINRShort(x.capital_exposed_cr)}</span>
+                    {en > 0 && (
+                      <span className="flex items-center gap-1 font-medium text-critical" title="early notice: flagged while the numbers show no slip yet">
+                        <Siren className="size-3" /> {en}
+                      </span>
+                    )}
                   </div>
-                )}
-                <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-dimmed flex justify-between gap-2">
-                  <span>
-                    top {f.top.length} of {f.n_flagged} by capital
-                  </span>
-                  {flag && (
-                    <Link to={`/command?flag=${flag}`} className="hover:text-fg-base hover:underline">
-                      all in Command Center &rarr;
-                    </Link>
-                  )}
-                </div>
-              </>
-            )}
-          </Card>
-        )
-      })}
+                </>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {f && meta && (
+        <Card
+          title={<>{meta.label} <span className="font-normal text-fg-dimmed">· top {f.top.length} of {f.n_flagged} by capital</span></>}
+          titleRight={
+            meta.flag && (
+              <Link to={`/command?flag=${meta.flag}`} className="text-accent hover:underline">
+                All in Command Center &rarr;
+              </Link>
+            )
+          }
+        >
+          {f.top.length === 0 ? (
+            <div className="px-5 py-6 text-center text-sm text-fg-dimmed">no current project flagged for this factor</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-px bg-border-subtle lg:grid-cols-2">
+              {f.top.map((p) => (
+                <ProjectLine key={p.project_key} p={p} factor={picked} />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
@@ -201,19 +223,20 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
   const navigate = useNavigate()
 
   if (rows.length === 0) {
-    return <div className="px-5 py-6 text-center text-xs text-fg-dimmed">no project in this list</div>
+    return <div className="px-5 py-6 text-center text-sm text-fg-dimmed">no project in this list</div>
   }
+  const th = 'py-2.5 px-4 text-xs font-medium text-fg-muted'
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left font-mono text-xs">
+      <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="border-y border-border-default text-fg-dimmed font-sans text-xs">
-            <th className="py-2.5 px-4 font-semibold">Project</th>
-            <th className="py-2.5 px-4 font-semibold">Factor</th>
-            <th className="py-2.5 px-4 font-semibold">Evidence</th>
-            <th className="py-2.5 px-4 font-semibold">Tier</th>
-            <th className="py-2.5 px-4 font-semibold text-right whitespace-nowrap">Slip to date</th>
-            <th className="py-2.5 px-4 font-semibold text-right">Cost</th>
+          <tr className="border-y border-border-subtle bg-surface-elevated/60">
+            <th className={cn(th, 'pl-5')}>Project</th>
+            <th className={th}>Factor</th>
+            <th className={th}>Evidence</th>
+            <th className={th}>Tier</th>
+            <th className={cn(th, 'text-right whitespace-nowrap')}>Slip so far</th>
+            <th className={cn(th, 'pr-5 text-right')}>Cost</th>
           </tr>
         </thead>
         <tbody>
@@ -223,41 +246,47 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
               <tr
                 key={p.project_key}
                 onClick={() => navigate(`/projects/${p.project_key}`)}
-                className="border-b border-border-subtle/60 hover:bg-surface-elevated/50 cursor-pointer align-top"
+                className="cursor-pointer border-b border-border-subtle/70 align-top transition-colors hover:bg-surface-elevated/70"
               >
-                <td className="py-2.5 px-4 max-w-[280px]">
+                <td className="max-w-[280px] py-3 pl-5 pr-4">
                   <Link
                     to={`/projects/${p.project_key}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="block truncate font-sans text-sm font-semibold text-fg-base hover:underline"
+                    className="block truncate font-medium text-fg-base hover:underline"
                     title={p.project_name ?? undefined}
                   >
                     {p.project_name ?? p.project_key}
                   </Link>
-                  <div className="text-xs text-fg-dimmed mt-0.5">
+                  <div className="mt-0.5 truncate text-xs text-fg-dimmed">
                     {p.project_key} · {p.sector ?? 'sector unknown'} · {p.state ?? 'state unknown'}
                   </div>
                 </td>
-                <td className="py-2.5 px-4 whitespace-nowrap">
-                  {lines.map(([f], i) => (
-                    <div key={i} className="text-warning text-xs leading-5">
-                      {FACTOR_LABEL[f] ?? f}
-                    </div>
-                  ))}
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    {lines.map(([f], i) => {
+                      const m = FACTOR[f]
+                      return (
+                        <span key={i} className="flex items-center gap-1.5 whitespace-nowrap text-xs text-warning">
+                          {m && <m.icon className="size-3.5" />}
+                          {m?.label ?? f}
+                        </span>
+                      )
+                    })}
+                  </div>
                 </td>
-                <td className="py-2.5 px-4 min-w-[320px]">
+                <td className="min-w-[240px] px-4 py-3">
                   {lines.map(([, text], i) => (
-                    <div key={i} className="font-sans text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
+                    <div key={i} className="text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
                       {text}
                     </div>
                   ))}
                 </td>
-                <td className="py-2.5 px-4">
+                <td className="px-4 py-3">
                   <Badge tier={p.tier} />
-                  <div className="text-xs text-fg-dimmed mt-1">P(slip) {pct(p.p_any_2q)}</div>
+                  <div className="mt-1 text-xs text-fg-dimmed">P(slip) {pct(p.p_any_2q)}</div>
                 </td>
-                <td className="py-2.5 px-4 text-right text-fg-base">{slip(p.slip_to_date_months)}</td>
-                <td className="py-2.5 px-4 text-right text-fg-base tabular-nums whitespace-nowrap">
+                <td className="px-4 py-3 text-right font-mono tabular-nums text-fg-base">{slip(p.slip_to_date_months)}</td>
+                <td className="whitespace-nowrap py-3 pl-4 pr-5 text-right font-mono tabular-nums text-fg-base">
                   {orDash(p.anticipated_cost_cr, formatINR)}
                 </td>
               </tr>
@@ -272,76 +301,73 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
 function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
   const en = s.earlyNotice
   const strictTop = en.top.filter((p) => p.slip_to_date_months !== null && p.slip_to_date_months <= 0)
+  const maxBy = Math.max(1, ...FACTORS.map(({ key }) => en.by_factor[key] ?? 0))
 
   return (
     <Card
-      title={`Early Notice · ${en.n_projects} projects`}
+      title={<><Siren className="size-4 text-critical" /> Early notice</>}
+      info={
+        <>
+          A flagged external factor while the CUF numbers do not show a slip yet. Two readings of &ldquo;no slip yet&rdquo;:
+          strictly, slip to date of 0 months or less; broadly, that or a Low/Medium tier (which includes projects that
+          already slipped but rank low on the model).
+        </>
+      }
       titleRight={
-        <Link to="/command?flag=early_notice" className="text-xs text-fg-dimmed hover:text-fg-base hover:underline">
-          all {en.n_projects} in Command Center &rarr;
+        <Link to="/command?flag=early_notice" className="text-accent hover:underline">
+          All {en.n_projects} in Command Center &rarr;
         </Link>
       }
     >
-      <div className="px-5 py-3 text-xs text-fg-muted border-b border-border-subtle">
-        A flagged external factor while the CUF numbers do not show a slip yet. Two readings of &ldquo;no slip
-        yet&rdquo;: strictly, slip to date of 0 months or less; broadly, that or a Low/Medium tier (which includes
-        projects that already slipped but rank low on the model).
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border-subtle border-b border-border-subtle">
+      <div className="grid grid-cols-2 gap-px border-b border-border-subtle bg-border-subtle lg:grid-cols-4">
         <Stat
-          label="No slip or tier Low/Medium"
+          label="Broad: no slip or tier Low/Medium"
           value={en.n_projects.toLocaleString()}
           sub={`${formatINRShort(en.capital_exposed_cr)} capital`}
-          sentiment="critical"
+          tone="critical"
         />
         <Stat
           label="Strict: no slip to date"
           value={en.no_slip_to_date.n_projects.toLocaleString()}
           sub={`${formatINRShort(en.no_slip_to_date.capital_exposed_cr)} capital`}
-          sentiment="critical"
+          tone="critical"
         />
         <Stat
           label="Any external factor flagged"
           value={en.n_flagged_any.toLocaleString()}
           sub={`${formatINRShort(en.capital_flagged_any_cr)} capital`}
         />
-        <div className="px-4 py-3">
-          <div className="text-xs font-sans font-semibold text-fg-dimmed">
-            Early notice by factor
-          </div>
-          <div className="mt-1.5 grid grid-cols-2 gap-x-3 text-xs text-fg-muted">
-            {FACTORS.map(({ key, label, short }) => (
-              <span key={key} className="flex justify-between gap-2" title={label}>
-                <span className="truncate">{short}</span>
-                <span className="text-fg-base tabular-nums">{en.by_factor[key] ?? 0}</span>
-              </span>
+        <div className="bg-surface-panel px-5 py-4">
+          <div className="text-xs text-fg-muted">Early notice by factor</div>
+          <div className="mt-2 space-y-1">
+            {FACTORS.map(({ key, label, icon: Icon }) => (
+              <div key={key} className="grid grid-cols-[1rem_1fr_2rem] items-center gap-2 text-xs" title={label}>
+                <Icon className="size-3.5 text-fg-dimmed" />
+                <Bar share={(en.by_factor[key] ?? 0) / maxBy} className="bg-critical/70" />
+                <span className="text-right tabular-nums text-fg-base">{en.by_factor[key] ?? 0}</span>
+              </div>
             ))}
           </div>
         </div>
       </div>
 
       <Tabs defaultValue="broad" className="pt-3">
-        <div className="px-5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 px-5">
           <TabsList>
-            <TabsTrigger value="broad">No slip or Low/Medium · {en.top.length}</TabsTrigger>
-            <TabsTrigger value="strict">Strict: no slip to date · {strictTop.length}</TabsTrigger>
+            <TabsTrigger value="broad">Broad · {en.top.length}</TabsTrigger>
+            <TabsTrigger value="strict">Strict · {strictTop.length}</TabsTrigger>
           </TabsList>
-          <span className="text-xs text-fg-dimmed">
-            the {en.top.length} largest by anticipated cost; the strict tab filters those
-          </span>
+          <InfoTip label="About these lists">
+            The {en.top.length} largest by anticipated cost; the strict tab filters those.
+            {strictTop.length < en.no_slip_to_date.n_projects &&
+              ` ${strictTop.length} of the ${en.no_slip_to_date.n_projects} strict cases are among them; the rest are in the Command Center early-notice list.`}
+          </InfoTip>
         </div>
         <TabsContent value="broad" className="mt-3">
           <NoticeTable rows={en.top} />
         </TabsContent>
         <TabsContent value="strict" className="mt-3">
           <NoticeTable rows={strictTop} />
-          {strictTop.length < en.no_slip_to_date.n_projects && (
-            <div className="px-5 py-2 text-xs text-fg-dimmed">
-              {strictTop.length} of the {en.no_slip_to_date.n_projects} strict cases are among the {en.top.length} largest;
-              the rest are in the Command Center early-notice list.
-            </div>
-          )}
         </TabsContent>
       </Tabs>
     </Card>
@@ -349,6 +375,115 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
 }
 
 function CoveragePanel({ s }: { s: ExternalSummary }) {
+  const c = s.coverage
+  const lf = s.noticeBacktest.land_or_forest
+  const n = Math.max(c.n_current, 1)
+  const rows = [
+    { label: 'Land records linked', v: c.land_linked, note: 'Maharashtra national highways only' },
+    { label: 'Forest area known', v: c.forest_area_known },
+    { label: 'Composite: forest + land', v: c.composite_fc_la },
+    { label: 'Composite: forest only', v: c.composite_fc_only, note: 'land missing' },
+  ]
+  const maxRate = Math.max(lf?.slip_rate_with ?? 0, lf?.slip_rate_without ?? 0, 0.0001)
+
+  return (
+    <Card title="Coverage" info="How many current projects each external data source reaches. Outside it a factor is unknown, not clear." className="h-full">
+      <div className="space-y-3 px-5 py-4">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+              <span className="text-fg-base">{r.label}{r.note && <span className="text-fg-dimmed"> · {r.note}</span>}</span>
+              <span className="tabular-nums text-fg-muted">{r.v.toLocaleString()} of {c.n_current.toLocaleString()}</span>
+            </div>
+            <Bar share={r.v / n} className="bg-accent" />
+          </div>
+        ))}
+      </div>
+
+      {lf && (
+        <div className="border-t border-border-subtle px-5 py-4">
+          <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg-base">
+            Did an open land or forest remark come before a slip?
+            <InfoTip label="About this backtest">
+              Past reports with no slip yet: share whose completion was pushed 3+ months within 4 quarters. Within the same
+              sector and year the lift is {times(lf.lift_within_sector_year)}. It does not hold in every sector (see About this
+              data), so an early notice is a reason to ask the agency, not a forecast.
+            </InfoTip>
+          </div>
+          {[
+            { label: 'with a remark', v: lf.slip_rate_with, cls: 'bg-critical/80' },
+            { label: 'without', v: lf.slip_rate_without, cls: 'bg-fg-dimmed/50' },
+          ].map((r) => (
+            <div key={r.label} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3 py-0.5 text-xs">
+              <span className="text-fg-muted">{r.label}</span>
+              <Bar share={(r.v ?? 0) / maxRate} className={r.cls} />
+              <span className="text-right tabular-nums text-fg-base">{pct(r.v)}</span>
+            </div>
+          ))}
+          <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** min-max whisker, 25-75% box, median tick and the flag line on a 0-1 track */
+function BoxPlot({ d }: { d: CompositeDistribution }) {
+  const x = (v: number) => `${Math.min(100, Math.max(0, v * 100))}%`
+  return (
+    <div className="relative h-6 rounded-md bg-surface-input" role="img"
+      aria-label={`min ${d.min.toFixed(2)}, quartiles ${d['25%'].toFixed(2)} / ${d['50%'].toFixed(2)} / ${d['75%'].toFixed(2)}, max ${d.max.toFixed(2)}`}>
+      <div className="absolute top-1/2 h-px bg-fg-dimmed" style={{ left: x(d.min), width: x(d.max - d.min) }} />
+      <div
+        className="absolute top-1 bottom-1 min-w-[3px] rounded-sm bg-accent/30 border border-accent"
+        style={{ left: x(d['25%']), width: x(d['75%'] - d['25%']) }}
+      />
+      <div className="absolute top-0 bottom-0 w-0.5 bg-fg-base" style={{ left: x(d['50%']) }} />
+      <div className="absolute top-0 bottom-0 border-l border-dashed border-critical" style={{ left: x(COMPOSITE_HIGH) }} />
+    </div>
+  )
+}
+
+function CompositePanel({ s }: { s: ExternalSummary }) {
+  const rows = [
+    { key: 'fc+la' as const, label: 'Forest + land', note: `rated: flagged at ${COMPOSITE_HIGH} or above` },
+    { key: 'fc_only' as const, label: 'Forest only', note: 'not rated: the land half is missing, so unknown' },
+  ]
+
+  return (
+    <Card title="External-factor score" info="Distribution of the land + forest composite by data coverage. Box: middle half; bar: median; dashed line: the flag threshold." className="h-full">
+      <div className="space-y-5 px-5 py-4">
+        {rows.map(({ key, label, note }) => {
+          const d = s.externalComposite.by_coverage[key]
+          return (
+            <div key={key} className="space-y-1.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-fg-base">
+                  {label}
+                  <InfoTip label={`About ${label}`}>{note}</InfoTip>
+                </span>
+                <span className="text-xs text-fg-dimmed">
+                  {d
+                    ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · median ${d['50%'].toFixed(2)} · mean ${d.mean.toFixed(2)}`
+                    : 'no projects'}
+                </span>
+              </div>
+              {d && <BoxPlot d={d} />}
+            </div>
+          )
+        })}
+        <div className="flex justify-between text-xs text-fg-dimmed">
+          <span>0</span>
+          <span>score · dashed at {COMPOSITE_HIGH}</span>
+          <span>1</span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/** every caveat and method note of this page, folded into one section */
+function AboutData({ s }: { s: ExternalSummary }) {
   const c = s.coverage
   const lf = s.noticeBacktest.land_or_forest
   const sectors = lf ? Object.entries(lf.by_sector) : []
@@ -372,74 +507,21 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
   }
 
   return (
-    <Card title="Coverage & Caveats" className="h-full">
-      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-border-subtle border-b border-border-subtle">
-        <Stat label="Land linked" value={c.land_linked.toLocaleString()} sub={`of ${c.n_current.toLocaleString()} · MH NH only`} />
-        <Stat label="Forest area known" value={c.forest_area_known.toLocaleString()} sub={`of ${c.n_current.toLocaleString()}`} />
-        <Stat label="Composite fc+la" value={c.composite_fc_la.toLocaleString()} sub="forest + land" />
-        <Stat label="Composite fc only" value={c.composite_fc_only.toLocaleString()} sub="land missing" />
+    <details className="group rounded-xl border border-border-subtle bg-surface-panel shadow-card">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3 text-sm font-semibold text-fg-base">
+        <Info className="size-4 text-fg-dimmed" />
+        About this data
+        <span className="ml-auto text-xs font-normal text-fg-dimmed group-open:hidden">show</span>
+        <span className="ml-auto hidden text-xs font-normal text-fg-dimmed group-open:inline">hide</span>
+      </summary>
+      <div className="space-y-3 border-t border-border-subtle px-5 py-4 text-sm leading-relaxed text-fg-muted">
+        <ul className="list-disc space-y-2 pl-5">
+          {caveats.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+        <p className="text-xs text-fg-dimmed">Composite score: {s.externalComposite.rule}</p>
       </div>
-      <ul className="list-disc pl-9 pr-5 py-3 space-y-2.5 text-xs leading-relaxed text-fg-muted">
-        {caveats.map((t) => (
-          <li key={t}>{t}</li>
-        ))}
-      </ul>
-    </Card>
-  )
-}
-
-/** min-max whisker, 25-75% box, median tick and the flag line on a 0-1 track */
-function BoxPlot({ d }: { d: CompositeDistribution }) {
-  const x = (v: number) => `${Math.min(100, Math.max(0, v * 100))}%`
-  return (
-    <div className="relative h-6 bg-surface-input border border-border-subtle" role="img"
-      aria-label={`min ${d.min.toFixed(2)}, quartiles ${d['25%'].toFixed(2)} / ${d['50%'].toFixed(2)} / ${d['75%'].toFixed(2)}, max ${d.max.toFixed(2)}`}>
-      <div className="absolute top-1/2 h-px bg-fg-dimmed" style={{ left: x(d.min), width: x(d.max - d.min) }} />
-      <div
-        className="absolute top-1 bottom-1 min-w-[3px] bg-accent/30 border border-accent"
-        style={{ left: x(d['25%']), width: x(d['75%'] - d['25%']) }}
-      />
-      <div className="absolute top-0 bottom-0 w-0.5 bg-fg-base" style={{ left: x(d['50%']) }} />
-      <div className="absolute top-0 bottom-0 border-l border-dashed border-critical" style={{ left: x(COMPOSITE_HIGH) }} />
-    </div>
-  )
-}
-
-function CompositePanel({ s }: { s: ExternalSummary }) {
-  const rows = [
-    { key: 'fc+la' as const, label: 'Forest + land (fc+la)', note: `rated: flagged at ${COMPOSITE_HIGH} or above` },
-    { key: 'fc_only' as const, label: 'Forest only (fc_only)', note: 'not rated: the land half is missing, so unknown' },
-  ]
-
-  return (
-    <Card title="External-Factor Score by Coverage" className="h-full">
-      <div className="px-5 py-3 space-y-4">
-        {rows.map(({ key, label, note }) => {
-          const d = s.externalComposite.by_coverage[key]
-          return (
-            <div key={key} className="space-y-1.5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-xs font-semibold text-fg-base">{label}</span>
-                <span className="text-xs text-fg-dimmed">
-                  {d
-                    ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · mean ${d.mean.toFixed(2)} · median ${d['50%'].toFixed(2)}`
-                    : 'no projects'}
-                </span>
-              </div>
-              {d && <BoxPlot d={d} />}
-              <div className={cn('text-xs', key === 'fc+la' ? 'text-fg-muted' : 'text-fg-dimmed')}>{note}</div>
-            </div>
-          )
-        })}
-        <div className="flex justify-between text-xs text-fg-dimmed">
-          <span>0</span>
-          <span>score (dashed: {COMPOSITE_HIGH})</span>
-          <span>1</span>
-        </div>
-        <p className="text-xs leading-relaxed text-fg-dimmed border-t border-border-subtle pt-3">
-          {s.externalComposite.rule}
-        </p>
-      </div>
-    </Card>
+    </details>
   )
 }

@@ -104,11 +104,23 @@ export function TrajectoryChart({
   return (
     <Card
       variant="section"
-      title={historyOnly ? 'Progress over time' : 'Trajectory & Scenarios'}
+      title={historyOnly ? 'Progress over time' : 'Trajectory & scenarios'}
+      info={
+        !historyOnly && forecast && (
+          <>
+            <p>
+              S-curve: {forecast.sector ?? 'sector'} median progress by elapsed share of the sanctioned span
+              {forecast.scurveFitYear && ` (fit ${forecast.scurveFitYear})`}, placed on this project&apos;s own dates.
+            </p>
+            <p>{forecast.bandMethod}</p>
+          </>
+        )
+      }
       titleRight={
         <span className="text-fg-dimmed hidden sm:inline text-xs">
           {timeline ? `${timeline.points.length} reports` : ''}
           {forecast && ` · ${forecast.scenarios.length} forecast quarters`}
+          {!historyOnly && c?.p50 && ` · completion p50 ${formatDate(c.p50)}`}
         </span>
       }
       className="h-full flex flex-col"
@@ -221,24 +233,17 @@ export function TrajectoryChart({
         </div>
       )}
 
-      {!historyOnly && <div className="border-t border-border-subtle px-4 py-2 text-xs text-fg-dimmed leading-relaxed space-y-1">
-        {forecastError instanceof ApiError && forecastError.status === 404 ? (
-          <div>no forecast — the project is not in the current scored portfolio; the history is shown alone</div>
-        ) : forecastError ? (
-          <ApiErrorNote error={forecastError} className="py-2 text-left" />
-        ) : forecast ? (
-          <>
-            <div>
-              S-curve: {forecast.sector ?? 'sector'} median progress by elapsed share of the sanctioned span
-              {forecast.scurveFitYear && ` (fit ${forecast.scurveFitYear})`}, placed on this project&apos;s own dates.
-              {c?.p50 && ` Predicted completion p50 ${formatDate(c.p50)}.`}
-            </div>
-            <div>{forecast.bandMethod}</div>
-          </>
-        ) : (
-          <div>loading forecast...</div>
-        )}
-      </div>}
+      {!historyOnly && !forecast && (
+        <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed leading-relaxed">
+          {forecastError instanceof ApiError && forecastError.status === 404 ? (
+            <div>no forecast — the project is not in the current scored portfolio; the history is shown alone</div>
+          ) : forecastError ? (
+            <ApiErrorNote error={forecastError} className="py-2 text-left" />
+          ) : (
+            <div>loading forecast...</div>
+          )}
+        </div>
+      )}
     </Card>
   )
 }

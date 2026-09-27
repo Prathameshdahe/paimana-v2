@@ -1,3 +1,4 @@
+import { InfoTip } from '@/components/ui/Tooltip'
 import { cn, formatProb, orDash } from '@/lib/formatters'
 import type { AblationRow } from '@/contracts/audit'
 
@@ -46,14 +47,21 @@ export function AblationTable({ rows, runId }: AblationTableProps) {
 
   return (
     <div className="border border-border-subtle bg-surface-panel overflow-x-auto rounded-xl shadow-card">
-      <div className="border-b border-border-subtle px-4 py-3">
-        <span className="text-xs text-fg-muted font-semibold">
-          Clause (c) · Feature-group ablation — model/runs/{runId}/ablation.csv
-        </span>
+      <div className="flex items-center gap-1.5 border-b border-border-subtle px-5 py-3 text-sm font-semibold text-fg-base">
+        What each feature group adds
+        <InfoTip label="About the ablation">
+          <p>Clause (c): feature-group ablation, from model/runs/{runId}/ablation.csv.</p>
+          <p>
+            Validation folds only ({r0.nFolds} cutoffs, {r0.n.toLocaleString()} rows, base rate {pct(r0.baseRate)}). Each
+            step retrains LightGBM with one more feature group; Δ is the step minus the step before, so a small or negative
+            Δ means the group adds little beyond what the earlier groups already carry.
+          </p>
+          <p>The last step is the full feature set, the same model as the LightGBM row above.</p>
+        </InfoTip>
       </div>
       <table className="w-full text-sm font-mono border-collapse">
-        <thead>
-          <tr className="border-b border-border-default text-fg-muted bg-surface-base">
+        <thead className="font-sans">
+          <tr className="border-b border-border-subtle text-xs text-fg-muted bg-surface-elevated/60">
             <th className="py-3 px-4 text-left font-medium">Step · group added</th>
             <th className="py-3 px-4 text-right font-medium">Features</th>
             <th className="py-3 px-4 text-right font-medium">PR-AUC</th>
@@ -69,7 +77,7 @@ export function AblationTable({ rows, runId }: AblationTableProps) {
             const group = r.step.replace(/^\+/, '')
             return (
               <tr key={r.step} className="hover:bg-surface-elevated/30">
-                <td className="py-3 px-4 align-top">
+                <td className="py-3 px-4 align-top font-sans">
                   <div className="text-fg-base font-medium">{r.step}</div>
                   <div className="text-xs text-fg-muted mt-1 max-w-xl">{GROUPS[group] ?? r.groups}</div>
                 </td>
@@ -85,14 +93,6 @@ export function AblationTable({ rows, runId }: AblationTableProps) {
           })}
         </tbody>
       </table>
-      <div className="border-t border-border-subtle px-4 py-3 text-xs text-fg-muted space-y-1">
-        <div>
-          · Validation folds only ({r0.nFolds} cutoffs, {r0.n.toLocaleString()} rows, base rate {pct(r0.baseRate)}). Each
-          step retrains LightGBM with one more feature group; Δ is the step minus the step before, so a small or negative
-          Δ means the group adds little beyond what the earlier groups already carry.
-        </div>
-        <div>· The last step is the full feature set, the same model as the LightGBM row above.</div>
-      </div>
     </div>
   )
 }

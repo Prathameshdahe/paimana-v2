@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
+import type React from 'react'
+import { Hourglass, Link2, Radio, Search, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { IconChip } from '@/components/ui/Badge'
+import { Select } from '@/components/ui/Input'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
@@ -14,52 +19,74 @@ import { EVENT_CATEGORY, TIER_COLOR, categoryLabel } from '@/lib/riskPalette'
 import { cn, formatDateTime } from '@/lib/formatters'
 import type { RadarSummary, SignalFeed } from '@/contracts/portfolio'
 
-const selectCls =
-  'bg-surface-input border border-border-default px-2 py-0.5 text-xs font-sans font-semibold text-fg-muted focus:outline-none max-w-[200px]'
+function Tile({ icon, label, value, sub, info, tone }: {
+  icon: LucideIcon
+  label: string
+  value: React.ReactNode
+  sub?: React.ReactNode
+  info?: React.ReactNode
+  tone?: 'critical' | 'accent' | 'warning' | 'stable' | 'muted'
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-panel p-4 shadow-card animate-card-in">
+      <div className="flex items-center gap-2">
+        <IconChip icon={icon} size="sm" variant={tone ?? 'muted'} />
+        <span className="truncate text-xs text-fg-muted">{label}</span>
+        {info && <InfoTip label={`About ${label}`}>{info}</InfoTip>}
+      </div>
+      <div className="mt-2.5 text-xl font-semibold tabular-nums leading-none text-fg-base">{value}</div>
+      {sub && <div className="mt-1.5 text-xs text-fg-dimmed">{sub}</div>}
+    </div>
+  )
+}
 
 function SummaryStrip({ s }: { s: RadarSummary }) {
   const severe = s.bySeverity.filter((r) => Number(r.name) >= 2).reduce((a, r) => a + r.n, 0)
   const cats = s.byCategory.filter((r) => r.name !== 'none').slice(0, 4)
+  const catMax = Math.max(1, ...cats.map((c) => c.n))
   const lt = s.leadTime
-  const cell = 'bg-surface-panel px-4 py-3 min-w-0'
-  const label = 'text-xs text-fg-dimmed'
-  const value = 'font-mono text-lg font-semibold text-fg-base tabular-nums'
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-px bg-border-subtle border border-border-subtle">
-      <div className={cell}>
-        <div className={label}>last {s.windowDays} days</div>
-        <div className={value}>{s.nWindow}</div>
-        <div className="text-xs text-fg-dimmed">signals of {s.nSignalsTotal} stored</div>
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Tile icon={Radio} tone="accent" label={`Last ${s.windowDays} days`} value={s.nWindow} sub={`signals of ${s.nSignalsTotal} stored`} />
+      <Tile
+        icon={Link2}
+        label="Linked · unlinked"
+        value={<>{s.nLinked} <span className="text-fg-dimmed">· {s.nUnlinked}</span></>}
+        info="Unlinked: an ambiguous or weak match to a project."
+      />
+      <Tile
+        icon={TriangleAlert}
+        tone={severe > 0 ? 'critical' : 'muted'}
+        label="Severity ≥ 2"
+        value={<span className={cn(severe > 0 && 'text-critical')}>{severe}</span>}
+        sub={`in the last ${s.windowDays} days`}
+      />
+      <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-panel p-4 shadow-card animate-card-in">
+        <div className="text-xs text-fg-muted">Top categories</div>
+        {cats.length === 0 ? (
+          <div className="mt-2 text-xs text-fg-dimmed">none tagged</div>
+        ) : (
+          <div className="mt-2 space-y-1">
+            {cats.map((c) => (
+              <div key={String(c.name)} className="grid grid-cols-[1fr_2rem] items-center gap-2 text-xs" title={categoryLabel(String(c.name))}>
+                <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
+                  <div className="h-full rounded-full" style={{ width: `${(c.n / catMax) * 100}%`, background: EVENT_CATEGORY[String(c.name)]?.color ?? '#9a968c' }} />
+                </div>
+                <span className="text-right tabular-nums text-fg-base">{c.n}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <div className={cell}>
-        <div className={label}>linked · unlinked</div>
-        <div className={value}>
-          {s.nLinked} · <span className="text-fg-muted">{s.nUnlinked}</span>
-        </div>
-        <div className="text-xs text-fg-dimmed">unlinked: ambiguous or weak match</div>
-      </div>
-      <div className={cell}>
-        <div className={label}>severity ≥ 2</div>
-        <div className={cn(value, severe > 0 && 'text-critical')}>{severe}</div>
-        <div className="text-xs text-fg-dimmed">in the last {s.windowDays} days</div>
-      </div>
-      <div className={cell}>
-        <div className={label}>categories</div>
-        <div className="text-xs text-fg-muted leading-snug">
-          {cats.length === 0 ? 'none tagged' : cats.map((c) => `${categoryLabel(String(c.name))} ${c.n}`).join(' · ')}
-        </div>
-      </div>
-      <div className={cell}>
-        <div className={label}>projects scouted</div>
-        <div className={value}>{s.nProjectsScouted}</div>
-      </div>
-      <div className={cell} title={lt.basis}>
-        <div className={label}>lead time (median)</div>
-        <div className={value}>{lt.medianLeadDays === null ? '—' : `${lt.medianLeadDays} d`}</div>
-        <div className="text-xs text-fg-dimmed">
-          {lt.nWithLaterChange} of {lt.nLinkedPairs} linked pairs saw a later CUF change
-        </div>
-      </div>
+      <Tile icon={Search} label="Projects scouted" value={s.nProjectsScouted} />
+      <Tile
+        icon={Hourglass}
+        tone="warning"
+        label="Lead time"
+        value={lt.medianLeadDays === null ? '—' : `${lt.medianLeadDays} d`}
+        sub={`median · ${lt.nWithLaterChange} of ${lt.nLinkedPairs} linked saw a later change`}
+        info={<>Lead time: {lt.basis}. Search results can be years old, so a long gap is weak evidence of an early warning.</>}
+      />
     </div>
   )
 }
@@ -74,7 +101,7 @@ function HeatMap({ feed, state, onState }: { feed: SignalFeed | undefined; state
   const hot = hovered ? byKey.get(normStateKey(hovered)) : undefined
 
   return (
-    <Card title="Severe signals by state · 90 days">
+    <Card title="Severe signals by state" info="Severity 2 or more, last 90 days, by the state of the linked project. Click a state to filter the feed.">
       <div className="relative bg-white">
         <ComposableMap
           projection="geoMercator"
@@ -117,10 +144,11 @@ function HeatMap({ feed, state, onState }: { feed: SignalFeed | undefined; state
           </div>
         )}
       </div>
-      <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-8" style={{ background: `linear-gradient(90deg, #eeebe4, ${TIER_COLOR.Critical})` }} />
-          fill: severity ≥ 2 signals linked to the state's projects (max {heat.length ? max : 0}) · click to filter
+      <div className="border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed space-y-1">
+        <div className="flex items-center gap-2">
+          <span>0</span>
+          <span className="h-2 w-16 rounded-full" style={{ background: `linear-gradient(90deg, #eeebe4, ${TIER_COLOR.Critical})` }} />
+          <span>{heat.length ? max : 0} severe signals</span>
         </div>
         {heat.length === 0 && <div>no severe signal in the last 90 days — or the scout has not searched those projects</div>}
         {offMap.length > 0 && (
@@ -199,42 +227,37 @@ export function Radar() {
       ) : (
         summary.data && <SummaryStrip s={summary.data} />
       )}
-      <p className="text-xs text-fg-dimmed">
-        Lead time: {summary.data?.leadTime.basis ?? 'news date to the first later CUF change'}. Search results can be
-        years old, so a long gap is weak evidence of an early warning.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <select className={selectCls} value={filters.category ?? ''} onChange={(e) => set({ category: e.target.value || undefined })}>
-          <option value="">all categories</option>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 py-2 shadow-card">
+        <Select aria-label="category" value={filters.category ?? ''} onChange={(e) => set({ category: e.target.value || undefined })}>
+          <option value="">All categories</option>
           {Object.keys(EVENT_CATEGORY).map((c) => (
             <option key={c} value={c}>{categoryLabel(c)}</option>
           ))}
-        </select>
-        <select className={selectCls} value={filters.state ?? ''} onChange={(e) => set({ state: e.target.value || undefined })}>
-          <option value="">all states</option>
+        </Select>
+        <Select aria-label="state" value={filters.state ?? ''} onChange={(e) => set({ state: e.target.value || undefined })}>
+          <option value="">All states</option>
           {states.map((st) => (
             <option key={st} value={st}>{st}</option>
           ))}
-        </select>
-        <select
-          className={selectCls}
+        </Select>
+        <Select
+          aria-label="severity"
           value={filters.severity ?? ''}
           onChange={(e) => set({ severity: e.target.value ? Number(e.target.value) : undefined })}
         >
-          <option value="">any severity</option>
+          <option value="">Any severity</option>
           <option value="2">severity ≥ 2</option>
           <option value="3">severity 3</option>
-        </select>
-        <select
-          className={selectCls}
+        </Select>
+        <Select
+          aria-label="linked"
           value={filters.linked === undefined ? '' : String(filters.linked)}
           onChange={(e) => set({ linked: e.target.value === '' ? undefined : e.target.value === 'true' })}
         >
-          <option value="">linked and unlinked</option>
+          <option value="">Linked and unlinked</option>
           <option value="true">linked to a project</option>
           <option value="false">unlinked</option>
-        </select>
+        </Select>
         {filtered && (
           <Button size="sm" variant="ghost" onClick={() => { setFilters({}); setPage(1) }}>
             clear filters

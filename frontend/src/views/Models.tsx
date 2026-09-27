@@ -65,7 +65,7 @@ export function Models() {
       ) : (
         <>
           {otherRun && (
-            <div className="border border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning">
+            <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning">
               The served scores come from {served[0]}, not from run {runId} shown here: re-run
               python -m pipeline.run score.
             </div>

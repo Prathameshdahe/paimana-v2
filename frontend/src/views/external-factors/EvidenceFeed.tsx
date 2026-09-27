@@ -6,29 +6,30 @@ import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useLiveStatus, useSignalFeed } from '@/lib/queries'
 import { formatDate, formatDateTime, cn } from '@/lib/formatters'
+import { EVENT_CATEGORY, categoryLabel } from '@/lib/riskPalette'
 import type { FeedItem } from '@/contracts/portfolio'
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN') : 'date unknown')
 
 export function SignalCard({ s }: { s: FeedItem }) {
+  const cat = s.category ? EVENT_CATEGORY[s.category] : undefined
+  const sev = s.severity ?? 0
   return (
-    <div className="bg-surface-panel px-4 py-3 space-y-1.5 min-w-0">
+    <div className="min-w-0 space-y-2 bg-surface-panel px-5 py-4">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-dimmed">
-        <span className="text-fg-muted font-semibold">{s.source ?? 'source unknown'}</span>
+        <span className="font-medium text-fg-muted">{s.source ?? 'source unknown'}</span>
         <span>{day(s.publishedAt)}</span>
         {s.category && (
-          <span className="border border-border-default px-1 uppercase tracking-wider">{s.category.replace(/_/g, ' ')}</span>
+          <span className="flex items-center gap-1 rounded-full bg-surface-elevated px-2 py-0.5 text-fg-muted">
+            <span className="size-2 rounded-full" style={{ background: cat?.color ?? '#9a968c' }} />
+            {categoryLabel(s.category)}
+          </span>
         )}
-        <span className={cn((s.severity ?? 0) >= 2 && 'text-critical font-semibold')}>
-          severity {s.severity ?? 'unknown'}
-        </span>
+        <Badge variant={sev >= 3 ? 'critical' : sev >= 2 ? 'warning' : 'muted'} className="ml-auto">
+          severity {s.severity ?? '?'}
+        </Badge>
       </div>
-      <a
-        href={s.url}
-        target="_blank"
-        rel="noreferrer"
-        className="block text-xs font-medium leading-snug text-fg-base hover:underline"
-      >
+      <a href={s.url} target="_blank" rel="noreferrer" className="block text-sm font-medium leading-snug text-fg-base hover:underline">
         {s.title ?? s.url}
       </a>
       {s.summary && <div className="text-xs leading-snug text-fg-muted line-clamp-2">{s.summary}</div>}
@@ -36,21 +37,29 @@ export function SignalCard({ s }: { s: FeedItem }) {
         <div className="text-xs text-fg-dimmed">not linked: ambiguous or weak match to a project</div>
       ) : (
         s.projects.map((p) => (
-          <div key={p.key} className="border-l-2 border-border-default pl-2 text-xs text-fg-dimmed space-y-0.5">
-            <div className="flex items-center gap-1.5 min-w-0">
+          <div key={p.key} className="space-y-1 rounded-lg bg-surface-elevated/70 px-3 py-2 text-xs text-fg-dimmed">
+            <div className="flex min-w-0 items-center gap-1.5">
               <Badge tier={p.tier} />
-              <Link to={`/projects/${p.key}`} className="text-accent hover:underline shrink-0">
+              <Link to={`/projects/${p.key}`} className="shrink-0 text-accent hover:underline">
                 {p.key}
               </Link>
               <span className="truncate text-fg-muted" title={p.name ?? undefined}>{p.name ?? ''}</span>
             </div>
-            <div>
-              {p.state ?? 'state unknown'}
-              {p.linkScore !== null && ` · link ${p.linkScore.toFixed(2)} (${p.method ?? 'match'})`}
-              {' · '}
-              {p.cufChangePeriod
-                ? `news ${day(s.publishedAt)} vs CUF change ${formatDate(p.cufChangePeriod)}: ${p.leadDays} days gap`
-                : 'no later report has changed the date or cost yet'}
+            <div className="flex flex-wrap items-center gap-x-2">
+              <span>{p.state ?? 'state unknown'}</span>
+              {p.linkScore !== null && (
+                <span title={`matched by ${p.method ?? 'match'}`}>· link {p.linkScore.toFixed(2)}</span>
+              )}
+              {p.cufChangePeriod ? (
+                <span
+                  className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning"
+                  title={`news ${day(s.publishedAt)}, then the report of ${formatDate(p.cufChangePeriod)} pushed the date or revised the cost`}
+                >
+                  report change {p.leadDays} days later
+                </span>
+              ) : (
+                <span>· no later report change yet</span>
+              )}
             </div>
           </div>
         ))
@@ -69,15 +78,12 @@ export function EvidenceFeed() {
 
   return (
     <Card
-      title={`External Evidence · News${data ? ` · ${data.total}` : ''}`}
+      title={<>News evidence <span className="font-normal text-fg-dimmed">{data ? data.total : ''}</span></>}
+      info={lastRun?.finishedAt ? `The news scout last ran ${formatDateTime(lastRun.finishedAt)}.` : 'The news scout has not run yet.'}
       titleRight={
-        <span className="text-xs text-fg-dimmed">
-          {lastRun?.finishedAt ? `news scout last ran ${formatDateTime(lastRun.finishedAt)}` : 'news scout has not run yet'}
-          {' · '}
-          <Link to="/radar" className="text-accent hover:underline">
-            filter and map it on the Radar →
-          </Link>
-        </span>
+        <Link to="/radar" className="text-accent hover:underline">
+          Filter and map on the Radar →
+        </Link>
       }
     >
       {error ? (
@@ -85,7 +91,7 @@ export function EvidenceFeed() {
       ) : !data ? (
         <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading news evidence...</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed space-y-1">
+        <div className="px-5 py-8 text-center text-sm text-fg-dimmed space-y-1">
           <div>no news evidence stored yet — not the same as no external trouble</div>
           <div className="text-xs">
             {lastRun

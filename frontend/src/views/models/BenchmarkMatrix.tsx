@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { MonoFigure } from '@/components/ui/MonoFigure'
 import { Badge } from '@/components/ui/Badge'
+import { InfoTip } from '@/components/ui/Tooltip'
 import { cn, formatProb, orDash } from '@/lib/formatters'
 import type { BacktestModel, BacktestRow } from '@/contracts/audit'
 
@@ -70,15 +71,20 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
       )}
 
       <div className="border border-border-subtle bg-surface-panel overflow-x-auto rounded-xl shadow-card">
-        <div className="border-b border-border-subtle px-4 py-3">
-          <span className="text-xs text-fg-muted font-semibold">
-            Clause (b) · ML vs statistical baselines — model/runs/{runId}/backtest_summary.csv
-          </span>
+        <div className="flex items-center gap-1.5 border-b border-border-subtle px-5 py-3 text-sm font-semibold text-fg-base">
+          <span>ML against statistical baselines</span>
+          <InfoTip label="About the backtest">
+            <p>Clause (b), from model/runs/{runId}/backtest_summary.csv.</p>
+            <p>Rolling origin: each cutoff trains only on labels known by that cutoff and scores the rows at it. Test is the newest usable cutoff, held out; validation is the cutoffs before it (model/runs/{runId}/windows.json).</p>
+            <p>PR-AUC starts at the base rate (a random ranking), not at 0: read it against the naive row.</p>
+            <p>Lead time: mean quarters from a project&apos;s first top-100 flag to the slip it was flagged for. With one test cutoff it is {h} quarters by construction.</p>
+            <p>Probabilities rank projects (tiers go by rank); Brier and ECE show they are not calibrated frequencies.</p>
+          </InfoTip>
         </div>
 
         <table className="w-full text-sm font-mono border-collapse">
-          <thead>
-            <tr className="border-b border-border-default text-fg-muted">
+          <thead className="font-sans text-xs">
+            <tr className="border-b border-border-subtle bg-surface-elevated/60 text-fg-muted">
               <th className="py-3 px-4 text-left font-medium">Model</th>
               <th className="py-3 px-4 text-right font-medium">PR-AUC ↑</th>
               <th className="py-3 px-4 text-right font-medium">ROC-AUC ↑</th>
@@ -98,7 +104,7 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
               <tbody key={s.key}>
                 <tr className="border-b border-border-subtle bg-surface-base text-fg-muted">
                   <td colSpan={8} className="py-2 px-4 text-xs">
-                    <span className="text-fg-base font-semibold uppercase tracking-wider">{s.label}</span>
+                    <span className="text-fg-base font-semibold">{s.label}</span>
                     {' · '}{r0.nFolds} cutoff{r0.nFolds === 1 ? '' : 's'} · {r0.n.toLocaleString()} rows ·{' '}
                     {r0.nPos.toLocaleString()} {outcome} (base rate {pct(r0.baseRate)})
                   </td>
@@ -114,7 +120,7 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
                         isChamp ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-surface-elevated/30'
                       )}
                     >
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 font-sans">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={cn('text-fg-base', isChamp && 'font-semibold')}>{info?.name ?? r.model}</span>
                           {r.model === 'naive' && <Badge>floor</Badge>}
@@ -139,12 +145,6 @@ export function BenchmarkMatrix({ rows, champion, runId }: BenchmarkMatrixProps)
           })}
         </table>
 
-        <div className="border-t border-border-subtle px-4 py-3 text-xs text-fg-muted space-y-1">
-          <div>· Rolling origin: each cutoff trains only on labels known by that cutoff and scores the rows at it. Test is the newest usable cutoff, held out; validation is the cutoffs before it (model/runs/{runId}/windows.json).</div>
-          <div>· PR-AUC starts at the base rate (a random ranking), not at 0: read it against the naive row.</div>
-          <div>· Lead time: mean quarters from a project's first top-100 flag to the slip it was flagged for. With one test cutoff it is {h} quarters by construction.</div>
-          <div>· Probabilities rank projects (tiers go by rank); Brier and ECE show they are not calibrated frequencies.</div>
-        </div>
       </div>
     </div>
   )

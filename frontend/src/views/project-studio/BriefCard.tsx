@@ -49,8 +49,8 @@ export function BriefCard({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="bg-surface-panel border border-border-subtle rounded-xl shadow-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-        <span className="text-xs text-fg-muted">Brief · local LLM</span>
+      <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
+        <span className="text-sm font-semibold text-fg-base">Brief <span className="font-normal text-fg-dimmed">· local LLM</span></span>
         {data ? (
           <span className="rounded-full bg-stable/10 px-2.5 py-0.5 text-xs font-medium text-stable ring-1 ring-inset ring-stable/20">
             validated: every number traced to the panel

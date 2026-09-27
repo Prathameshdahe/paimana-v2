@@ -13,7 +13,7 @@ export function ExternalEvents({ events }: { events: EventRow[] }) {
 
   return (
     <Card
-      title={`External Events from Report Remarks · ${events.length}`}
+      title={`Issues in the report remarks · ${events.length}`}
       titleRight={
         remarksUntil && (
           <span className="text-xs text-fg-dimmed">remarks read up to {formatDate(remarksUntil)}</span>
@@ -72,7 +72,7 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
 
   return (
     <Card
-      title={`Linked News · ${data?.items.length ?? 0}`}
+      title={`Linked news · ${data?.items.length ?? 0}`}
       titleRight={
         data && (
           <span className="text-xs text-fg-dimmed">
