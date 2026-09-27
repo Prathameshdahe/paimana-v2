@@ -2,6 +2,7 @@ import sqlite3
 import sys
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,8 +16,14 @@ from backend.main import app  # noqa: E402
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
         yield c
+
+
+def ministry_of(client, key):
+    """Headers of a ministry official of key's ministry."""
+    ministry = client.get("/api/projects", params={"q": key}).json()["items"][0]["ministry"]
+    return {"X-Paimana-Role": "ministry_official", "X-Paimana-Ministry": quote(ministry)}
 
 
 def audit_rows():
@@ -36,7 +43,7 @@ def test_seed_is_idempotent(client):
     assert all(a["severity"] == 3 and a["detail"].startswith(f"entered Critical at asof {asof}") for a in crit)
     # a second start and a direct call seed nothing
     assert db.init() == 0 and db.seed() == 0
-    with TestClient(app) as again:
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as again:
         assert again.get("/api/alerts").json()["total"] == n_early + n_critical
     jobs = client.get("/api/jobs").json()
     assert [j["job"] for j in jobs] == ["seed_alerts"] and jobs[0]["summary"]["alerts"] == n_early + n_critical
@@ -55,7 +62,8 @@ def test_ack_flow_writes_audit(client):
     assert r.status_code == 200 and r.json()["ackedBy"] == "ipmd_analyst" and r.json()["ackedAt"]
     assert client.get("/api/alerts", params={"acked": True}).json()["total"] == 1
     # a later ack does not overwrite the first, but is still logged
-    again = client.post(f"/api/alerts/{first['id']}/ack", json={"role": "ministry_official"}).json()
+    again = client.post(f"/api/alerts/{first['id']}/ack", json={"role": "ministry_official"},
+                        headers=ministry_of(client, first["projectKey"])).json()
     assert again["ackedBy"] == "ipmd_analyst"
     assert audit_rows() == [("ipmd_analyst", "alert.ack", str(first["id"]), None),
                             ("ministry_official", "alert.ack", str(first["id"]), "already acked by ipmd_analyst")]
@@ -65,16 +73,19 @@ def test_ack_flow_writes_audit(client):
 
 def test_watchlist_add_remove(client):
     key = client.get("/api/projects", params={"size": 1}).json()["items"][0]["key"]
-    assert client.get("/api/watchlist", params={"role": "agency_official"}).json()["total"] == 0
-    body = {"role": "agency_official", "projectKey": key}
-    w = client.post("/api/watchlist", json=body).json()
+    h = ministry_of(client, key)
+    assert client.get("/api/watchlist", params={"role": "ministry_official"}, headers=h).json()["total"] == 0
+    body = {"role": "ministry_official", "projectKey": key}
+    w = client.post("/api/watchlist", json=body, headers=h).json()
     assert w["total"] == 1 and w["items"][0]["projectKey"] == key and w["items"][0]["project"]["key"] == key
-    assert client.post("/api/watchlist", json=body).json()["total"] == 1
+    assert client.post("/api/watchlist", json=body, headers=h).json()["total"] == 1
     assert client.get("/api/watchlist", params={"role": "ipmd_analyst"}).json()["total"] == 0  # per role
-    gone = client.delete("/api/watchlist", params={"role": "agency_official", "project_key": key}).json()
+    gone = client.delete("/api/watchlist", params={"role": "ministry_official", "project_key": key}, headers=h).json()
     assert gone["total"] == 0
     assert [a[1] for a in audit_rows()] == ["watchlist.add", "watchlist.add", "watchlist.remove"]
-    assert client.post("/api/watchlist", json={**body, "projectKey": "PRJ-999999"}).status_code == 404
+    assert client.post("/api/watchlist", json={**body, "projectKey": "PRJ-999999"}, headers=h).status_code == 404
+    # the role sent must be the signed-in one
+    assert client.post("/api/watchlist", json=body).status_code == 403
 
 
 def test_project_signals_empty_is_not_clear(client):

@@ -19,6 +19,7 @@ reads "searched, nothing found" only for projects that were searched ("unknown i
 """
 import hashlib
 import html
+import json
 import os
 import re
 import threading
@@ -346,10 +347,18 @@ def lead_time(key: str, published_at: str | None) -> dict:
     return {"cuf_change_period": change, "lead_days": (change - pub).days if change else None}
 
 
-def feed(since=None, category=None, state=None, severity=None, linked=None, page=1, size=50) -> dict:
-    """One page of stored signals, newest first, each with its linked projects and their lead time."""
+LINKED_TO_KEYS = f"s.id IN (SELECT signal_id FROM signal_projects WHERE {db.IN_KEYS})"
+
+
+def feed(since=None, category=None, state=None, severity=None, linked=None, page=1, size=50, keys=None) -> dict:
+    """One page of stored signals, newest first, each with its linked projects and their lead time. keys (a
+    viewer's project keys, backend/access.py): only signals linked to one of them, with only those links; the
+    unlinked pool is then empty."""
     idx = index()["projects"]
     conds, params = [], []
+    if keys is not None:
+        conds.append(LINKED_TO_KEYS)
+        params.append(json.dumps(sorted(keys)))
     for sql, v in (("s.published_at >= ?", since), ("s.category = ?", category), ("s.severity >= ?", severity)):
         if v is not None:
             conds.append(sql)
@@ -375,39 +384,44 @@ def feed(since=None, category=None, state=None, severity=None, linked=None, page
                           "state": idx.get(ln["project_key"], {}).get("state"),
                           "tier": idx.get(ln["project_key"], {}).get("tier"), "link_score": ln["link_score"],
                           "method": ln["method"], **lead_time(ln["project_key"], r["published_at"])}
-                         for ln in links.get(r["id"], [])]
-    return {"total": total, "page": page, "size": size, "items": rows, "state_heat": heat()}
+                         for ln in links.get(r["id"], []) if keys is None or ln["project_key"] in keys]
+    return {"total": total, "page": page, "size": size, "items": rows, "state_heat": heat(keys=keys)}
 
 
-def heat(days: int = HEAT_DAYS) -> list[dict]:
-    """Signals of severity >= 2 in the last `days` days per state of their linked projects."""
+def heat(days: int = HEAT_DAYS, keys=None) -> list[dict]:
+    """Signals of severity >= 2 in the last `days` days per state of their linked projects (in keys, if given)."""
     idx = index()["projects"]
     since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
     with closing(db.connect()) as con:
         pairs = con.execute("""SELECT DISTINCT sp.signal_id, sp.project_key FROM signal_projects sp
             JOIN signals s ON s.id = sp.signal_id WHERE s.severity >= 2 AND s.published_at >= ?""", [since]).fetchall()
-    n = Counter(st for _, st in {(sid, idx[k]["state"]) for sid, k in pairs if k in idx})
+    n = Counter(st for _, st in {(sid, idx[k]["state"]) for sid, k in pairs
+                                 if k in idx and (keys is None or k in keys)})
     return [{"state": s, "n": c} for s, c in n.most_common()]
 
 
-def radar_summary(days: int = HEAT_DAYS) -> dict:
+def radar_summary(days: int = HEAT_DAYS, keys=None) -> dict:
     """Radar rollup: stored signals published in the last `days` days by category, severity and source, linked vs
-    unlinked; lead time over every linked signal (a positive gap: the news came before the CUF row changed)."""
+    unlinked; lead time over every linked signal (a positive gap: the news came before the CUF row changed). keys
+    (a viewer's project keys): only the signals linked to them, those links and the scouting of those projects."""
     since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
     linked_sql = "EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id)"
+    signals_in, keys_in, kp = "true", "true", []
+    if keys is not None:
+        signals_in, keys_in, kp = LINKED_TO_KEYS, db.IN_KEYS, [json.dumps(sorted(keys))]
     with closing(db.connect()) as con:
         def counts(col, limit=20):
             return [{"name": r[0], "n": r[1]} for r in con.execute(
-                f"""SELECT {col}, count(*) FROM signals s WHERE s.published_at >= ? GROUP BY 1
-                    ORDER BY 2 DESC, 1 LIMIT {limit}""", [since])]
-        total = con.execute("SELECT count(*) FROM signals").fetchone()[0]
+                f"""SELECT {col}, count(*) FROM signals s WHERE s.published_at >= ? AND {signals_in} GROUP BY 1
+                    ORDER BY 2 DESC, 1 LIMIT {limit}""", [since] + kp)]
+        total = con.execute(f"SELECT count(*) FROM signals s WHERE {signals_in}", kp).fetchone()[0]
         n_window, n_linked = con.execute(f"""SELECT count(*), count(*) FILTER (WHERE {linked_sql}) FROM signals s
-            WHERE s.published_at >= ?""", [since]).fetchone()
+            WHERE s.published_at >= ? AND {signals_in}""", [since] + kp).fetchone()
         by_category, by_severity, by_source = counts("coalesce(s.category, 'none')"), counts("s.severity"), counts(
             "s.source", 10)
-        pairs = con.execute("""SELECT sp.project_key, s.published_at FROM signal_projects sp
-            JOIN signals s ON s.id = sp.signal_id""").fetchall()
-        scouted = con.execute("SELECT count(*) FROM scouted").fetchone()[0]
+        pairs = con.execute(f"""SELECT project_key, s.published_at FROM signal_projects
+            JOIN signals s ON s.id = signal_id WHERE {keys_in}""", kp).fetchall()
+        scouted = con.execute(f"SELECT count(*) FROM scouted WHERE {keys_in}", kp).fetchone()[0]
     gaps = [g for g in (lead_time(k, pub)["lead_days"] for k, pub in pairs) if g is not None]
     gaps.sort()
     return {"window_days": days, "since": since, "n_signals_total": total, "n_window": n_window,

@@ -168,7 +168,7 @@ def test_unknown_file_is_an_error_not_a_run(live, monkeypatch):
 
 
 def test_upload_endpoint(live, monkeypatch):
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
         r = c.post("/api/jobs/ingest", files={"file": ("../../Projects_Report.csv", io.BytesIO(PORTAL_CSV.encode()))})
         assert r.status_code == 200 and r.json()["kind"] == "portal_csv", r.text
         assert r.json()["savedAs"].endswith("inbox/Projects_Report.csv")

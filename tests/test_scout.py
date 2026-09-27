@@ -110,7 +110,7 @@ def test_run_stores_dedupes_links_and_alerts(tmp_db, monkeypatch):
 def test_feed_lead_time_and_heat(tmp_db, monkeypatch):
     scout.run(["PRJ-A"], pib=False, get=lambda url, params=None: RSS)
     monkeypatch.setattr(scout, "cuf_changes", lambda key: [date(2025, 10, 1), date(2026, 4, 1)] if key == "PRJ-A" else [])
-    monkeypatch.setattr(scout, "heat", lambda days=90: [{"state": "Uttarakhand", "n": 1}])  # published dates are old
+    monkeypatch.setattr(scout, "heat", lambda days=90, keys=None: [{"state": "Uttarakhand", "n": 1}])  # published dates are old
     f = scout.feed()
     assert f["total"] == 3 and len(f["items"]) == 3
     a = next(i for i in f["items"] if i["url"] == "https://n/1")
@@ -138,7 +138,7 @@ def test_cuf_changes_on_real_panel():
 
 
 def test_feed_endpoint_bounds(tmp_db):
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
         assert c.get("/api/signals/feed", params={"size": 101}).status_code == 422
         assert c.get("/api/signals/feed", params={"severity": 4}).status_code == 422
         body = c.get("/api/signals/feed").json()

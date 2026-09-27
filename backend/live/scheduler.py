@@ -75,14 +75,17 @@ def status() -> dict:
             "scout": {**STATUS["scout"], "last_run": jobs.get("scout")}}
 
 
-async def alert_stream(after: int | None):
-    """SSE lines: every alert with id > after (default: the newest at connect) as `event: alert`."""
+async def alert_stream(after: int | None, keys=None):
+    """SSE lines: every alert with id > after (default: the newest at connect) as `event: alert`; with keys (a
+    viewer's project keys, backend/access.py) only the alerts on those projects."""
     last = after if after is not None else await asyncio.to_thread(db.max_alert_id)
     yield ": connected\n\n"
     beat = time.monotonic()
     while True:
         for a in await asyncio.to_thread(db.alerts_after, last):
             last = a["id"]
+            if keys is not None and a["project_key"] not in keys:
+                continue
             yield f"id: {a['id']}\nevent: alert\ndata: {Alert(**a).model_dump_json(by_alias=True)}\n\n"
         if time.monotonic() - beat >= HEARTBEAT_S:
             beat = time.monotonic()

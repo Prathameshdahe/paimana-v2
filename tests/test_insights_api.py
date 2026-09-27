@@ -19,7 +19,7 @@ MAX_ROWS = 100
 def client(tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app) as c:
+        with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
             yield c
 
 

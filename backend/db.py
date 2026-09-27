@@ -15,6 +15,8 @@ from pathlib import Path
 from . import serving
 
 DEFAULT_PATH = serving.ROOT / "database" / "paimana.db"
+# a viewer's project keys (backend/access.py) as one JSON parameter: json.dumps(sorted(keys))
+IN_KEYS = "project_key IN (SELECT value FROM json_each(?))"
 ALERT_KINDS = ("tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice", "pipeline_error")
 
 SCHEMA = f"""
@@ -132,8 +134,12 @@ def add_alerts(rows: list[dict]) -> int:
     return len(rows)
 
 
-def alerts(since=None, kind=None, acked=None, page=1, size=50) -> dict:
+def alerts(since=None, kind=None, acked=None, page=1, size=50, keys=None) -> dict:
+    """keys: only alerts on these projects (None: every alert; project-less pipeline errors are in no scope)."""
     conds, params = [], []
+    if keys is not None:
+        conds.append(IN_KEYS)
+        params.append(json.dumps(sorted(keys)))
     if since:
         conds.append("created_at >= ?")
         params.append(since)
@@ -162,11 +168,12 @@ def alerts_after(alert_id: int, limit=100) -> list[dict]:
         return [dict(r) for r in con.execute("SELECT * FROM alerts WHERE id > ? ORDER BY id LIMIT ?", [alert_id, limit])]
 
 
-def ack(alert_id: int, role: str) -> dict | None:
-    """Mark an alert acknowledged by role (the first ack stands); None if there is no such alert."""
+def ack(alert_id: int, role: str, keys=None) -> dict | None:
+    """Mark an alert acknowledged by role (the first ack stands); None if there is no such alert (or it is not on
+    one of keys, when given)."""
     with closing(connect()) as con, con:
         row = con.execute("SELECT * FROM alerts WHERE id = ?", [alert_id]).fetchone()
-        if row is None:
+        if row is None or (keys is not None and row["project_key"] not in keys):
             return None
         if row["acked_at"] is None:
             con.execute("UPDATE alerts SET acked_by = ?, acked_at = ? WHERE id = ?", [role, _now(), alert_id])

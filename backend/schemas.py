@@ -181,10 +181,11 @@ class External(CamelModel):
 
 
 class Provenance(CamelModel):
+    """model, data versions and source document are None on the public page (backend/access.py)."""
     asof: date
     model_version: str | None
-    gold_version: str
-    silver_version: str
+    gold_version: str | None
+    silver_version: str | None
     source_doc_id: str | None
     source_page: int | None
     period: date | None
@@ -205,6 +206,7 @@ class ProjectDetail(CamelModel):
     scores: Scores | None
     flags: list[str]
     risk_profile: list[RiskRow]
+    top_risks_plain: list[str]  # up to 3 flagged checklist rows in plain words
     external: External
     provenance: Provenance
     review: ReviewBadge | None
@@ -362,6 +364,7 @@ class AgencyPoint(CamelModel):
     hidden: bool
     trend: float | None
     n_recent: int
+    is_self: bool = False  # the signed-in agency official's own agency
 
 
 class AgencyMatrix(CamelModel):
@@ -490,12 +493,26 @@ class AlertPage(CamelModel):
     items: list[Alert]
 
 
+class ScopeOption(CamelModel):
+    name: str
+    n: int  # current projects
+    names: str | None = None  # agencies: every printed name
+    ministry: str | None = None
+
+
+class Scopes(CamelModel):
+    """The sign-in picker: ministries and canonical agencies of the current portfolio."""
+    ministries: list[ScopeOption]
+    agencies: list[ScopeOption]
+
+
 class RoleBody(CamelModel):
-    role: Role
+    """role: optional, and when sent it must be the signed-in one (X-Paimana-Role, backend/access.py)."""
+    role: Role | None = None
 
 
 class WatchRequest(CamelModel):
-    role: Role
+    role: Role | None = None
     project_key: str = Field(max_length=32)
 
 
@@ -684,7 +701,7 @@ class DispatchDraft(CamelModel):
 class ApprovalRequest(CamelModel):
     draft_id: str
     decision: Decision
-    role: str
+    role: Role | None = None
 
 
 class TriggerResult(BaseModel):

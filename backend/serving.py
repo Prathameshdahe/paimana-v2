@@ -19,6 +19,7 @@ import logging
 import math
 import threading
 import time
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -33,6 +34,8 @@ POINTER, SILVER_MANIFEST = GOLD / "predictions_latest.json", SILVER / "silver_ma
 EXTERNAL_SUMMARY, BOTTLENECKS_SUMMARY = GOLD / "external_summary.json", GOLD / "bottlenecks_summary.json"
 RETRY_S = 30
 TOP_MEMBERS = 5
+N_EVIDENCE = 3  # evidence lines per bottleneck, as pipeline/bottlenecks.py
+TOP_FACTOR, TOP_NOTICE = 10, 20  # top lists of external_summary.json, as ml/risk_profile.py
 
 TIERS = ["Critical", "High", "Medium", "Low"]
 # list flag -> risk-profile dimension that raises it
@@ -68,6 +71,22 @@ AGENCY_METHOD = (
     "n / (n + 10) (raw kept); agencies with n < 5 are hidden. Trend = median schedule bias of projects sanctioned in "
     "the last 3 years of data minus that of earlier ones: recent projects have had less time to slip, so a negative "
     "trend is partly that. Capital and n_open are the current portfolio.")
+# flagged checklist rows in plain words, most concrete first (the public project page's top risks)
+PLAIN_RISK = {
+    "land_acquisition": "Land for the project is not fully acquired yet.",
+    "forest_clearance": "A forest or environment clearance is still pending.",
+    "litigation": "A court case is holding up the project.",
+    "contractor_stress": "There are problems with the contractor.",
+    "execution_stagnation": "Work on site has slowed down or stopped.",
+    "schedule_slip": "The completion date is likely to be pushed back.",
+    "cost_escalation": "The cost is likely to be revised upward.",
+    "expenditure_lag": "Spending and work done on site are out of step.",
+    "repeated_revisions": "The cost or completion date has been revised several times already.",
+    "external_composite": "Land and forest issues together raise the risk.",
+    "data_staleness": "The latest progress report is old.",
+    "agency_optimism": "Projects of this agency usually finish later than planned.",
+    "sector_headwind": "The sector as a whole is behind its targets.",
+}
 LIVE_NOTE = ("Live accuracy compares logged predictions with outcomes once the report 2 quarters after their asof "
              "is in silver; PR-AUC needs at least 30 realised rows.")
 
@@ -220,8 +239,23 @@ def _one(s: dict, sql: str, params: list | tuple = ()) -> dict | None:
     return rows[0] if rows else None
 
 
-def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None, agency=None) -> tuple[str, list]:
+def _scope_sql(scope) -> tuple[str, list]:
+    """Condition over cur (or master: same columns) and its params for a viewer's scope (backend/access.py):
+    ('ministry', name), ('agency', canonical name), None for every project."""
+    if not scope:
+        return "true", []
+    kind, name = scope
+    if kind == "ministry":
+        return "ministry = ?", [name]
+    return "agency IN (SELECT raw FROM amap WHERE canonical = ?)", [name]
+
+
+def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None, agency=None,
+           scope=None) -> tuple[str, list]:
     conds, params = [], []
+    if scope:
+        sql, params = _scope_sql(scope)
+        conds.append(sql)
     if agency:  # canonical agency (gold/agency_map.csv): every printed name that maps to it
         conds.append("agency IN (SELECT raw FROM amap WHERE canonical = ?)")
         params.append(agency)
@@ -250,6 +284,27 @@ def canonical(key: str) -> str | None:
     return k if k in idmap._projects else None  # noqa: SLF001 - read-only, as in pipeline/identity/bundle.py
 
 
+@cached
+def scope_keys(s, scope) -> frozenset:
+    """Keys of the current and past projects in a scope (alerts, signals and memos are cut to these)."""
+    sql, params = _scope_sql(scope)
+    return frozenset(r["k"] for r in _rows(s, f"""SELECT project_key AS k FROM cur WHERE {sql}
+        UNION SELECT project_key FROM master WHERE {sql}""", params * 2))
+
+
+@cached
+def scopes(s):
+    """Ministries and canonical agencies of the current portfolio with their project counts (the sign-in picker)."""
+    return {
+        "ministries": _rows(s, """SELECT ministry AS name, count(*) AS n FROM cur WHERE ministry IS NOT NULL
+            GROUP BY 1 ORDER BY n DESC, name"""),
+        "agencies": _rows(s, """SELECT a.canonical AS name, count(*) AS n, any_value(g.names) AS names,
+                any_value(c.ministry) AS ministry
+            FROM cur c JOIN amap a ON a.raw = c.agency LEFT JOIN agencies g ON g.agency = a.canonical
+            WHERE a.canonical IS NOT NULL GROUP BY 1 ORDER BY n DESC, name"""),
+    }
+
+
 # ------------------------------------------------------------------ portfolio
 
 @cached
@@ -264,8 +319,8 @@ def meta(s):
 
 
 @cached
-def portfolio(s, ministry=None, sector=None, state_=None, tier=None):
-    where, params = _where(ministry, sector, state_, tier)
+def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None):
+    where, params = _where(ministry, sector, state_, tier, scope=scope)
     k = _one(s, f"""SELECT count(*) AS n_projects,
             sum(original_cost_cr) AS original_cost_cr, sum(anticipated_cost_cr) AS anticipated_cost_cr,
             sum(expenditure_cr) AS expenditure_cr,
@@ -294,10 +349,10 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None):
 
 @cached
 def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag=None, sort="risk", order=None,
-             page=1, size=50, agency=None):
+             page=1, size=50, agency=None, scope=None):
     size = max(1, min(int(size), 100))
     page = max(1, int(page))
-    where, params = _where(ministry, sector, state_, tier, q, flag, agency)
+    where, params = _where(ministry, sector, state_, tier, q, flag, agency, scope)
     direction = (order or ("asc" if sort == "name" else "desc")).upper()
     total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
@@ -340,11 +395,13 @@ def project(s, key):
     if review:
         review["note"] = (f"{review['n_rows']} report rows are linked to this project with an identity match still "
                           "under review; they are not in the numbers shown.")
+    risk = _rows(s, "SELECT dimension, state, evidence, source, as_of_date FROM rp WHERE project_key = ?", [key])
+    flagged = {r["dimension"] for r in risk if r["state"] == "flagged"}
     return {
         "key": key, "master": master, "latest": latest, "scores": scores,
         "flags": cur["flags"] if cur else [],
-        "risk_profile": _rows(s, """SELECT dimension, state, evidence, source, as_of_date FROM rp
-            WHERE project_key = ?""", [key]),
+        "risk_profile": risk,
+        "top_risks_plain": [text for dim, text in PLAIN_RISK.items() if dim in flagged][:3],
         "external": {
             "fc": _one(s, "SELECT * EXCLUDE (project_key) FROM fc WHERE project_key = ?", [key]),
             "land": _one(s, "SELECT * EXCLUDE (project_key) FROM land WHERE project_key = ?", [key]),
@@ -362,6 +419,16 @@ def project(s, key):
         },
         "review": review,
     }
+
+
+def public_project(d: dict) -> dict:
+    """The project page for the public: no SHAP drivers, quantile intervals, identity review or provenance
+    internals (model, data versions, source documents); tier, progress, cost, completion and top risks stay."""
+    scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
+                              **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
+    prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None,
+            "source_doc_id": None, "source_page": None}
+    return {**d, "scores": scores, "provenance": prov, "review": None}
 
 
 @cached
@@ -420,16 +487,81 @@ def forecast(s, key):
 
 # ------------------------------------------------------------ external, models
 
+# external_summary.json factor -> (condition over cur, risk-profile dimension with its evidence line)
+EXT_FACTORS = {"land": ("list_contains(c.flags, 'land')", "land_acquisition"),
+               "forest_clearance": ("list_contains(c.flags, 'forest')", "forest_clearance"),
+               "litigation": ("list_contains(c.flags, 'litigation')", "litigation"),
+               "contractor": ("list_contains(c.flags, 'contractor')", "contractor_stress"),
+               "utility_shifting": ("coalesce(c.ext_open_utility_shifting = 1, false)", None),
+               "inter_agency": ("coalesce(c.ext_open_inter_agency = 1, false)", None)}
+CARD = ("project_key", "project_name", "sector", "state", "anticipated_cost_cr", "tier", "p_any_2q",
+        "slip_to_date_months")
+
+
+def _scoped_external(s, summary, scope):
+    """external_summary.json recounted over the projects in scope (factor and early-notice counts, capital, top
+    lists, as ml/risk_profile.py builds them); the notice backtest and the composite's coverage stats stay
+    portfolio-wide."""
+    sql, params = _scope_sql(scope)
+    # ponytail: utility shifting / inter-agency evidence comes from the file's top lists, complete while those
+    # factors flag <= TOP_FACTOR projects (1 and 3 today); read project_events if they grow past that
+    file_lines = {}
+    for name, (_, dim) in EXT_FACTORS.items():
+        for r in summary["factors"][name]["top"] if dim is None else []:
+            file_lines.setdefault(r["project_key"], []).extend(r["evidence"] or [])
+    dims = "', '".join(d for _, d in EXT_FACTORS.values() if d)
+    rows = _rows(s, f"""SELECT c.project_key, c.project_name, c.sector, c.state, c.anticipated_cost_cr, c.tier,
+            c.p_any_2q, c.slip_to_date_months, c.early_notice,
+            {", ".join(f"{cond} AS f_{n}" for n, (cond, _) in EXT_FACTORS.items())},
+            list({{'d': r.dimension, 'e': r.evidence}}) FILTER (WHERE r.project_key IS NOT NULL) AS ev
+        FROM cur c LEFT JOIN rp r ON r.project_key = c.project_key AND r.state = 'flagged' AND r.dimension IN ('{dims}')
+        WHERE c.project_key IN (SELECT project_key FROM cur WHERE {sql})
+        GROUP BY ALL ORDER BY c.anticipated_cost_cr DESC NULLS LAST, c.project_key""", params)
+
+    def card(r, names):
+        ev = {x["d"]: x["e"] for x in r["ev"] or []}
+        lines = []
+        for n in names:
+            dim = EXT_FACTORS[n][1]
+            if r[f"f_{n}"]:
+                lines += ([f"{n}: {ev[dim]}"] if dim in ev else
+                          [ln for ln in file_lines.get(r["project_key"], []) if ln.startswith(n + ":")])
+        return {**{k: r[k] for k in CARD}, "anticipated_cost_cr": r["anticipated_cost_cr"] and round(
+            r["anticipated_cost_cr"], 1), "p_any_2q": r["p_any_2q"] and round(r["p_any_2q"], 3), "evidence": lines}
+
+    def cap(rs):
+        return round(sum(r["anticipated_cost_cr"] or 0 for r in rs), 1)
+
+    factors = {}
+    for n in EXT_FACTORS:
+        d = [r for r in rows if r[f"f_{n}"]]
+        factors[n] = {"n_flagged": len(d), "capital_exposed_cr": cap(d), "top": [card(r, [n]) for r in d[:TOP_FACTOR]]}
+    flagged = [r for r in rows if any(r[f"f_{n}"] for n in EXT_FACTORS)]
+    notice = [r for r in rows if r["early_notice"]]
+    strict = [r for r in notice if r["slip_to_date_months"] is not None and r["slip_to_date_months"] <= 0]
+    keys = scope_keys(scope)
+    return {**summary, "n_projects": len(rows), "factors": factors, "early_notice": {
+        **summary["early_notice"], "n_projects": len(notice), "capital_exposed_cr": cap(notice),
+        "by_factor": {n: sum(1 for r in notice if r[f"f_{n}"]) for n in EXT_FACTORS},
+        "n_flagged_any": len(flagged), "capital_flagged_any_cr": cap(flagged),
+        "no_slip_to_date": {"n_projects": len(strict), "capital_exposed_cr": cap(strict)},
+        "top": [card(r, list(EXT_FACTORS)) for r in notice[:TOP_NOTICE]]},
+        "external_composite": {**summary["external_composite"], "top_fc_la": [
+            r for r in summary["external_composite"]["top_fc_la"] if r["project_key"] in keys]}}
+
+
 @cached
-def external_summary(s):
-    summary = s["external_summary"]
-    cov = _one(s, """SELECT count(*) AS n_current,
+def external_summary(s, scope=None):
+    summary = s["external_summary"] if scope is None else _scoped_external(s, s["external_summary"], scope)
+    sql, params = _scope_sql(scope)
+    cov = _one(s, f"""SELECT count(*) AS n_current,
             count(*) FILTER (WHERE l.la_linked) AS land_linked,
             count(*) FILTER (WHERE f.fc_area_known) AS forest_area_known,
             count(*) FILTER (WHERE c.coverage = 'fc+la') AS composite_fc_la,
             count(*) FILTER (WHERE c.coverage = 'fc_only') AS composite_fc_only
         FROM cur LEFT JOIN land l USING (project_key) LEFT JOIN fc f USING (project_key)
-        LEFT JOIN composite c USING (project_key)""")
+        LEFT JOIN composite c USING (project_key)
+        WHERE project_key IN (SELECT project_key FROM cur WHERE {sql})""", params)
     return {**summary, "coverage": cov, "caveats": CAVEATS[:2] + [
         f"Land is linked for {cov['land_linked']} of {cov['n_current']} current projects and forest area is known "
         f"for {cov['forest_area_known']}; everything else is unknown, not clear."]}
@@ -520,16 +652,29 @@ def live_accuracy(s):
 # ------------------------------------------------------ agencies, bottlenecks
 
 @cached
-def agency_matrix(s, sector=None, ministry=None, include_hidden=False):
-    conds, params = ([] if include_hidden else ["NOT hidden"]), []
+def agency_matrix(s, sector=None, ministry=None, include_hidden=False, scope=None):
+    """scope ('ministry', m): the agencies with a current project of that ministry (or matrix ministry m);
+    ('agency', a): every agency, a flagged is_self and always shown."""
+    kind, name = scope or (None, None)
+    self_ = name if kind == "agency" else None
+    scope_sql, scope_params = "true", []
+    if kind == "ministry":
+        scope_sql = """(ministry = ? OR agency IN (SELECT a.canonical FROM cur c JOIN amap a ON a.raw = c.agency
+            WHERE c.ministry = ?))"""
+        scope_params = [name, name]
+    counts = _one(s, f"""SELECT count(*) AS n, count(*) FILTER (WHERE hidden) AS n_hidden FROM agencies
+        WHERE {scope_sql}""", scope_params)
+    conds, params = [scope_sql], list(scope_params)
+    if not include_hidden:
+        conds.append("(NOT hidden OR agency = ?)")
+        params.append(self_)
     for col, v in (("sector", sector), ("ministry", ministry)):
         if v:
             conds.append(f"{col} = ?")
             params.append(v)
-    where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    counts = _one(s, "SELECT count(*) AS n, count(*) FILTER (WHERE hidden) AS n_hidden FROM agencies")
-    points = _rows(s, f"""SELECT * EXCLUDE ("asof") FROM agencies{where}
-        ORDER BY hidden, capital_cr DESC, n_projects DESC, agency LIMIT 500""", params)
+    points = _rows(s, f"""SELECT * EXCLUDE ("asof"), coalesce(agency = ?, false) AS is_self FROM agencies
+        WHERE {" AND ".join(conds)} ORDER BY hidden, capital_cr DESC, n_projects DESC, agency LIMIT 500""",
+                   [self_] + params)
     return {"asof": s["asof"], "n_agencies": counts["n"], "n_hidden": counts["n_hidden"], "method": AGENCY_METHOD,
             "points": points}
 
@@ -549,26 +694,62 @@ def _top_members(s, rows):
     return rows
 
 
-@cached
-def bottlenecks(s, category=None, state_=None, min_projects=None, level=None, page=1, size=50):
-    conds, params = [], []
-    for sql, v in (("category = ?", category), ("state = ?", state_), ("n_projects >= ?", min_projects),
-                   ("level = ?", level)):
-        if v is not None:
-            conds.append(sql)
-            params.append(v)
-    where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    total = _one(s, f"SELECT count(*) AS n FROM bottlenecks{where}", params)["n"]
-    rows = _rows(s, f"""SELECT * EXCLUDE ("asof") FROM bottlenecks{where}
-        ORDER BY capital_exposed_cr DESC, bottleneck_id LIMIT ? OFFSET ?""", params + [size, (page - 1) * size])
-    return {"asof": s["asof"], "total": total, "page": page, "size": size, "summary": s["bottlenecks_summary"],
-            "items": _top_members(s, rows)}
+def _cut_bottleneck(s, b, keys):
+    """Bottleneck row b cut to its members in keys (None: b as it is): counts, capital, means, dates, evidence lines
+    and headline over those members, as pipeline/bottlenecks.py builds them; None when no member is in scope."""
+    if keys is None:
+        return b
+    members = [k for k in b["member_keys"] if k in keys]
+    if not members:
+        return None
+    m = _one(s, f"""SELECT coalesce(sum(anticipated_cost_cr), 0) AS cap, avg(p_any_2q) AS p, avg(months_p50) AS mo,
+        count(*) FILTER (WHERE tier IN ('Critical', 'High')) AS ch FROM cur
+        WHERE project_key IN ({','.join('?' * len(members))})""", members)
+    names = {r["k"]: r["name"] for r in _rows(s, f"""SELECT project_key AS k, project_name AS name FROM cur
+        WHERE project_key IN ({','.join('?' * len(members))})""", members)}
+    ev = [e for e in _rows(s, """SELECT project_key, kind, first_seen, last_seen, evidence FROM bmembers
+        WHERE bottleneck_id = ? ORDER BY last_seen DESC NULLS LAST, kind""", [b["bottleneck_id"]])
+          if e["project_key"] in keys]
+    lines = list({e["project_key"]: e for e in reversed(ev)}.values())[::-1]  # the latest line per project
+    firsts, lasts = [e["first_seen"] for e in ev if e["first_seen"]], [e["last_seen"] for e in ev if e["last_seen"]]
+    return {**b, "member_keys": members, "n_projects": len(members), "capital_exposed_cr": round(m["cap"], 2),
+            "mean_p_any_2q": m["p"], "mean_months_p50": m["mo"], "n_critical_high": m["ch"],
+            "earliest_first_seen": min(firsts, default=None), "last_seen": max(lasts, default=None),
+            "n_signals": sum(e["kind"] == "signal" for e in ev),
+            "evidence": [f"{str(names.get(e['project_key'], e['project_key']))[:70]} ({e['project_key']}): "
+                         f"{e['evidence']}" for e in lines[:N_EVIDENCE]],
+            "headline": f"Blocking {len(members)} project{'s' * (len(members) != 1)} worth Rs {m['cap']:,.0f} Cr"}
 
 
 @cached
-def bottleneck(s, bid, page=1, size=50):
-    """One bottleneck and one page of its member projects (riskiest first) with their evidence lines."""
+def bottlenecks(s, category=None, state_=None, min_projects=None, level=None, page=1, size=50, scope=None):
+    """scope: members cut to the viewer's projects and every figure recounted over them; clusters with none hidden
+    (then min_projects applies to the in-scope count)."""
+    keys = scope_keys(scope) if scope else None
+    every = [r for r in (_cut_bottleneck(s, b, keys) for b in _rows(s, 'SELECT * EXCLUDE ("asof") FROM bottlenecks'))
+             if r is not None]
+    rows = [r for r in every if r["n_projects"] >= (min_projects or 0) and all(
+        r[c] == v for c, v in (("category", category), ("state", state_), ("level", level)) if v is not None)]
+    rows.sort(key=lambda r: (-r["capital_exposed_cr"], r["bottleneck_id"]))
+    summary = s["bottlenecks_summary"]
+    if keys is not None:
+        members = sorted({k for r in every for k in r["member_keys"]})
+        cap = _one(s, f"""SELECT coalesce(sum(anticipated_cost_cr), 0) AS cap FROM cur
+            WHERE project_key IN ({','.join('?' * len(members)) or 'NULL'})""", members)["cap"]
+        summary = {**summary, "n_bottlenecks": sum(r["level"] == "authority" for r in every),
+                   "n_rollups": sum(r["level"] == "state" for r in every), "n_projects": len(members),
+                   "capital_exposed_cr": round(cap, 1),
+                   "by_category": dict(sorted(Counter(r["category"] for r in every).items()))}
+    return {"asof": s["asof"], "total": len(rows), "page": page, "size": size, "summary": summary,
+            "items": _top_members(s, rows[(page - 1) * size: page * size])}
+
+
+@cached
+def bottleneck(s, bid, page=1, size=50, scope=None):
+    """One bottleneck and one page of its member projects (riskiest first) with their evidence lines; None when it
+    does not exist or has no member in scope."""
     b = _one(s, 'SELECT * EXCLUDE ("asof") FROM bottlenecks WHERE bottleneck_id = ?', [bid])
+    b = b and _cut_bottleneck(s, b, scope_keys(scope) if scope else None)
     if b is None:
         return None
     keys = b["member_keys"]

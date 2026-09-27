@@ -20,7 +20,7 @@ from backend.main import app  # noqa: E402
 def test_scheduler_is_off_in_tests(tmp_path, monkeypatch):
     monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     assert scheduler.start() == []  # LIVE_JOBS=0 from conftest.py
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
         s = c.get("/api/live/status").json()
     assert s["enabled"] is False and s["watch"]["lastRun"] is None and s["scout"]["nextDue"] is None
     assert isinstance(s["inboxPending"], int)
@@ -65,7 +65,7 @@ def test_stream_pushes_a_new_alert(tmp_path, monkeypatch):
     while not server.started and time.time() < deadline:
         time.sleep(0.05)
     try:
-        with httpx.stream("GET", f"http://127.0.0.1:{port}/api/stream", timeout=10) as r:
+        with httpx.stream("GET", f"http://127.0.0.1:{port}/api/stream?role=ipmd_analyst", timeout=10) as r:
             assert r.headers["content-type"].startswith("text/event-stream")
             lines = r.iter_lines()
             assert next(lines) == ": connected"  # the stream has taken its starting id
