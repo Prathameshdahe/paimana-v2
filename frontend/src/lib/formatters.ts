@@ -184,6 +184,21 @@ export function orDash<T>(v: T | null | undefined, f: (v: T) => string): string 
   return v === null || v === undefined ? '—' : f(v)
 }
 
+/** A ratio as a signed percent: 0.56 → "+56%", missing → "—" (agency schedule and cost bias). */
+export function formatSignedRatio(v: number | null): string {
+  return orDash(v, (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`)
+}
+
+/** Two ratios as a signed-percent range: "+12% … +40%". */
+export function formatRatioRange(lo: number | null, hi: number | null): string {
+  return lo === null || hi === null ? '—' : `${formatSignedRatio(lo)} … ${formatSignedRatio(hi)}`
+}
+
+/** ' 90% CI [..]', or for a shrunk median ' raw +x%, 90% CI [..]': the CI is of the raw median. */
+export function formatBiasCi(shrunk: boolean, raw: number | null, lo: number | null, hi: number | null): string {
+  return `${shrunk ? ` raw ${formatSignedRatio(raw)},` : ''} 90% CI ${formatRatioRange(lo, hi)}`
+}
+
 // ── Risk Score ────────────────────────────────────────────────────────────────
 
 /**

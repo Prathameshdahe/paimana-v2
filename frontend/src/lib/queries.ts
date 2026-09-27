@@ -34,6 +34,7 @@ import type {
 } from '@/contracts/project'
 import type { ModelsOut } from '@/contracts/audit'
 import type { AgencyMatrix, BottleneckDetail, BottleneckPage } from '@/contracts/intel'
+import type { DispatchDraft } from '@/contracts/workers'
 import { useScopeKey } from '@/lib/auth/RoleContext'
 
 export type PortfolioFilters = {
@@ -258,6 +259,12 @@ export function useRadarSummary() {
     queryKey: ['signals', 'radar-summary', scope],
     queryFn: () => apiGet<RadarSummary>('/api/radar/summary'),
   })
+}
+
+/** Worker-cell memos the viewer may see: addressed to their role, on their projects (IPMD: all). */
+export function useDispatchDrafts() {
+  const scope = useScopeKey()
+  return useQuery({ queryKey: ['dispatch', 'drafts', scope], queryFn: () => apiGet<DispatchDraft[]>('/api/dispatch') })
 }
 
 /** Starts a scout batch in the background; its progress shows in the live status (scout.running). */

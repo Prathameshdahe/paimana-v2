@@ -41,7 +41,8 @@ TIERS = ["Critical", "High", "Medium", "Low"]
 # list flag -> risk-profile dimension that raises it
 FLAG_DIMS = {"land": "land_acquisition", "forest": "forest_clearance", "litigation": "litigation",
              "contractor": "contractor_stress"}
-SORTS = {"risk": "p_any_2q", "cost": "anticipated_cost_cr", "slip": "slip_to_date_months", "name": "project_name"}
+SORTS = {"risk": "p_any_2q", "cost": "anticipated_cost_cr", "slip": "slip_to_date_months", "name": "project_name",
+         "progress": "physical_progress_pct"}
 ROW_SQL = """project_key AS "key", project_name AS name, sector, state, agency, ministry, tier, tier_rank_pct,
     stagnation_override AS override, p_any_2q, p_date_push_2q, p_cost_rev_2q, months_p50, months_p95,
     anticipated_cost_cr, expenditure_cr, physical_progress_pct, anticipated_completion, slip_to_date_months,

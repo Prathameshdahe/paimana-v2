@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProjectPanel } from '@/lib/useProjectPanel'
-import { ArrowRightLeft, Cable, HardHat, Info, LandPlot, Scale, Siren, Trees, type LucideIcon } from 'lucide-react'
+import { Info, Siren } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge, IconChip } from '@/components/ui/Badge'
 import { InfoTip } from '@/components/ui/Tooltip'
@@ -13,22 +13,9 @@ import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
-import type { Flag } from '@/contracts/project'
-import type {
-  CompositeDistribution,
-  ExternalFactorKey,
-  ExternalProject,
-  ExternalSummary,
-} from '@/contracts/portfolio'
+import { EXTERNAL_FACTORS as FACTORS } from '@/lib/riskPalette'
+import type { CompositeDistribution, ExternalFactorKey, ExternalProject, ExternalSummary } from '@/contracts/portfolio'
 
-const FACTORS: Array<{ key: ExternalFactorKey; label: string; icon: LucideIcon; flag?: Flag }> = [
-  { key: 'land', label: 'Land acquisition', icon: LandPlot, flag: 'land' },
-  { key: 'forest_clearance', label: 'Forest clearance', icon: Trees, flag: 'forest' },
-  { key: 'litigation', label: 'Litigation', icon: Scale, flag: 'litigation' },
-  { key: 'contractor', label: 'Contractor stress', icon: HardHat, flag: 'contractor' },
-  { key: 'utility_shifting', label: 'Utility shifting', icon: Cable },
-  { key: 'inter_agency', label: 'Inter-agency', icon: ArrowRightLeft },
-]
 const FACTOR: Partial<Record<string, (typeof FACTORS)[number]>> = Object.fromEntries(FACTORS.map((f) => [f.key, f]))
 
 // ml/risk_profile.py COMPOSITE_HIGH: the composite flags at this score (fc+la coverage only)

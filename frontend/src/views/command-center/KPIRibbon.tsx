@@ -5,11 +5,13 @@ import { IconChip } from '@/components/ui/Badge'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { TIERS, TIER_COLOR, TIER_LABEL, TIER_TEXT } from '@/lib/riskPalette'
-import { formatINRShort, formatPct, orDash, cn } from '@/lib/formatters'
+import { formatINRShort, formatPct, formatPctDelta, orDash, cn } from '@/lib/formatters'
+import type { TierCount } from '@/contracts/portfolio'
 
 const tile = 'rounded-xl border border-border-subtle bg-surface-panel p-4 shadow-card animate-card-in'
 
-function Tile({ icon, tone, label, value, children }: {
+/** a stat tile: icon chip, label, one big figure, and whatever sits under it */
+export function Tile({ icon, tone, label, value, children }: {
   icon: React.ComponentType<{ className?: string }>
   tone: 'critical' | 'accent' | 'stable' | 'warning'
   label: string
@@ -31,10 +33,24 @@ function Tile({ icon, tone, label, value, children }: {
 }
 
 /** a thin rounded bar: `pct` filled */
-function Meter({ pct, className }: { pct: number; className: string }) {
+export function Meter({ pct, className }: { pct: number; className: string }) {
   return (
     <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
       <div className={cn('h-full rounded-full transition-[width] duration-700', className)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    </div>
+  )
+}
+
+/** the tier mix as one segmented bar, untiered last; each segment names its count on hover */
+export function TierBar({ tiers, total, className = 'h-2' }: { tiers: TierCount[]; total: number; className?: string }) {
+  const n = (t: string) => tiers.find((x) => x.tier === t)?.n ?? 0
+  return (
+    <div className={cn('flex gap-px overflow-hidden rounded-full bg-surface-input', className)}>
+      {[...TIERS, 'untiered' as const].map((t) => (
+        <Tooltip key={t} content={`${TIER_LABEL[t]}: ${n(t).toLocaleString()} projects`}>
+          <div style={{ width: `${(n(t) / Math.max(total, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full transition-[width] duration-700" />
+        </Tooltip>
+      ))}
     </div>
   )
 }
@@ -65,7 +81,6 @@ export function KPIRibbon() {
   const tierN = (t: string) => p.tiers.find((x) => x.tier === t)?.n ?? 0
   const spentPct =
     k.expenditureCr !== null && k.anticipatedCostCr ? (k.expenditureCr / k.anticipatedCostCr) * 100 : null
-  const segments = [...TIERS, 'untiered' as const]
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -77,7 +92,7 @@ export function KPIRibbon() {
 
       <Tile icon={TrendingUp} tone="critical" label="Cost overrun so far" value={<span className="text-critical">{orDash(k.overrunCr, formatINRShort)}</span>}>
         <div className="mt-2 text-xs text-fg-dimmed">
-          <span className="font-semibold text-critical">{orDash(k.overrunPct, (v) => `+${formatPct(v)}`)}</span> over the original cost
+          <span className="font-semibold text-critical">{orDash(k.overrunPct, formatPctDelta)}</span> over the original cost
         </div>
       </Tile>
 
@@ -90,13 +105,7 @@ export function KPIRibbon() {
             </span>
           ))}
         </div>
-        <div className="mt-2.5 flex h-2 gap-px overflow-hidden rounded-full bg-surface-input">
-          {segments.map((t) => (
-            <Tooltip key={t} content={`${TIER_LABEL[t]}: ${tierN(t).toLocaleString()} projects`}>
-              <div style={{ width: `${(tierN(t) / Math.max(k.nProjects, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full" />
-            </Tooltip>
-          ))}
-        </div>
+        <TierBar tiers={p.tiers} total={k.nProjects} className="mt-2.5 h-2" />
         <div className="mt-1.5 text-xs text-fg-dimmed">+ {tierN('untiered').toLocaleString()} with no completion date</div>
       </Tile>
 

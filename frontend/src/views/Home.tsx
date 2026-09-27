@@ -1,40 +1,70 @@
 import { Link } from 'react-router-dom'
+import { ArrowRight, BrainCircuit, LayoutList, Network, Radar, Trees, type LucideIcon } from 'lucide-react'
 import { Page, PageHeader } from '@/components/layout/Page'
+import { IconChip } from '@/components/ui/Badge'
 import { KPIRibbon } from '@/views/command-center/KPIRibbon'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
 import { LiveStatus } from '@/views/home/LiveStatus'
+import { AgencyHome, LinkButton, MinistryHome, PublicHome } from '@/views/home/RoleHomes'
 import { useRole } from '@/lib/auth/RoleContext'
-import { can } from '@/lib/auth/access'
+import { canOpen } from '@/lib/auth/access'
 
 /**
- * Landing page. Overview + geography + action inbox — the "what does the
- * portfolio look like right now, and what needs a decision" entry point.
- * Deep triage/sort/filter work lives in Command Center (/command). The public
- * gets the transparency view: KPIs, tier counts and the map, no alert inbox.
+ * Landing page, one per role on the same route: the public's transparency view, a ministry's dashboard, an
+ * agency's scorecard (views/home/RoleHomes), and the IPMD portfolio overview below. Deep triage lives in
+ * Command Center (/command).
  */
 export function Home() {
+  const { role, ministry, agency } = useRole()
+  if (role === 'ministry_official' && ministry) return <MinistryHome ministry={ministry} />
+  if (role === 'agency_official' && agency) return <AgencyHome agency={agency} />
+  if (role === 'ipmd_analyst') return <AnalystHome />
+  return <PublicHome />
+}
+
+const QUICK_LINKS: Array<{ to: string; label: string; hint: string; icon: LucideIcon }> = [
+  { to: '/command', label: 'Command Center', hint: 'Triage every project', icon: LayoutList },
+  { to: '/external', label: 'External factors', hint: 'Land, forest, courts', icon: Trees },
+  { to: '/bottlenecks', label: 'Bottlenecks', hint: 'Shared blockers', icon: Network },
+  { to: '/radar', label: 'Radar', hint: 'Linked news', icon: Radar },
+  { to: '/models', label: 'Models', hint: 'Accuracy checks', icon: BrainCircuit },
+]
+
+/** IPMD: the whole portfolio, the live jobs, quick links to the analysis pages, the map and the alert inbox. */
+function AnalystHome() {
   const { role } = useRole()
-  const alerts = can(role, 'canSeeAlerts')
   return (
     <Page>
       <PageHeader
-        title="PAIMANA Radar"
-        subtitle="Early warning for central-sector infrastructure projects"
-        actions={
-          <Link to="/command" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-default bg-surface-panel px-4 text-sm font-medium text-fg-base shadow-sm transition-colors hover:bg-surface-elevated">
-            Open Command Center &rarr;
-          </Link>
-        }
+        title="Portfolio overview"
+        subtitle="Every open central-sector project: risk, spend, alerts and live jobs"
+        actions={<LinkButton to="/command">Open Command Center <ArrowRight className="size-4" /></LinkButton>}
       />
 
       <KPIRibbon />
       <LiveStatus />
 
-      {/* without the inbox the map keeps a readable width instead of stretching across the page */}
-      <div className={alerts ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch' : 'mx-auto max-w-[900px]'}>
+      <nav className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Analysis pages">
+        {QUICK_LINKS.filter((l) => canOpen(role, l.to)).map(({ to, label, hint, icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="group flex items-center gap-3 rounded-xl border border-border-subtle bg-surface-panel px-4 py-3 shadow-card transition-all animate-card-in hover:-translate-y-0.5 hover:border-border-default hover:shadow-pop"
+          >
+            <IconChip icon={icon} variant="accent" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-fg-base">{label}</span>
+              <span className="block truncate text-xs text-fg-dimmed">{hint}</span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-fg-dimmed transition-transform group-hover:translate-x-0.5 group-hover:text-fg-base" />
+          </Link>
+        ))}
+      </nav>
+
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
         <IndiaMap />
-        {alerts && <EarlyWarningInbox />}
+        <EarlyWarningInbox />
       </div>
     </Page>
   )

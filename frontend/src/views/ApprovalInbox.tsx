@@ -1,11 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useRole, useScopeKey } from '@/lib/auth/RoleContext'
+import { useRole } from '@/lib/auth/RoleContext'
 import type { DispatchDraft } from '@/contracts/workers'
-import { apiGet, apiPost } from '@/lib/api'
+import { apiPost } from '@/lib/api'
+import { useDispatchDrafts } from '@/lib/queries'
 
 /**
  * Memos from the worker cell. The backend sends only what the role may see (ported from Pranjal's
@@ -14,13 +15,8 @@ import { apiGet, apiPost } from '@/lib/api'
  */
 export function ApprovalInbox() {
   const { role } = useRole()
-  const scope = useScopeKey()
   const queryClient = useQueryClient()
-
-  const { data: drafts, isError } = useQuery({
-    queryKey: ['dispatch', 'drafts', scope],
-    queryFn: () => apiGet<DispatchDraft[]>('/api/dispatch'),
-  })
+  const { data: drafts, isError } = useDispatchDrafts()
 
   const decide = useMutation({
     mutationFn: (vars: { draftId: string; decision: 'approved' | 'rejected' }) =>

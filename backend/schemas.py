@@ -26,7 +26,7 @@ def _camel_keys(d: dict) -> dict:
 Record = Annotated[dict[str, Any], AfterValidator(_camel_keys)]
 Tier = Literal["Critical", "High", "Medium", "Low", "untiered"]
 Flag = Literal["land", "forest", "litigation", "contractor", "early_notice"]
-Sort = Literal["risk", "cost", "slip", "name"]
+Sort = Literal["risk", "cost", "slip", "name", "progress"]
 
 
 class Meta(CamelModel):

@@ -92,6 +92,9 @@ def test_filters(client):
     costly = client.get("/api/projects", params={"sort": "cost", "order": "asc", "size": 10}).json()["items"]
     costs = [r["anticipatedCostCr"] for r in costly]
     assert costs == sorted(costs)
+    done = client.get("/api/projects", params={"sort": "progress", "size": 10}).json()["items"]
+    progress = [r["physicalProgressPct"] for r in done]
+    assert progress == sorted(progress, reverse=True)
 
 
 def test_unknown_project_is_404(client):

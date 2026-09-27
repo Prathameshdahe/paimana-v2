@@ -5,11 +5,12 @@
  * Medium/Low); a project with no anticipated completion date is untiered.
  */
 import {
-  Building2, Bug, Calendar, CalendarX, CirclePlus, Clock, Gavel, HardHat, IndianRupee, LandPlot, Layers, Map as MapIcon,
-  Newspaper, Pause, Repeat, Scale, Siren, Trees, TrendingDown, TrendingUp, Wallet, type LucideIcon,
+  ArrowRightLeft, Building2, Bug, Cable, Calendar, CalendarX, CirclePlus, Clock, Gavel, HardHat, IndianRupee, LandPlot,
+  Layers, Map as MapIcon, Newspaper, Pause, Repeat, Scale, Siren, Trees, TrendingDown, TrendingUp, Wallet,
+  type LucideIcon,
 } from 'lucide-react'
 import type { Flag, RiskState, Tier, TierFilter } from '@/contracts/project'
-import type { AlertKind } from '@/contracts/portfolio'
+import type { AlertKind, ExternalFactorKey } from '@/contracts/portfolio'
 
 export const TIERS: Tier[] = ['Critical', 'High', 'Medium', 'Low']
 
@@ -86,6 +87,16 @@ export const FLAG_ICON: Record<Flag, LucideIcon> = {
   contractor: HardHat,
   early_notice: Siren,
 }
+
+/** the six external factors of gold/external_summary.json, in page order; flag: the list flag that filters them */
+export const EXTERNAL_FACTORS: Array<{ key: ExternalFactorKey; label: string; icon: LucideIcon; flag?: Flag }> = [
+  { key: 'land', label: 'Land acquisition', icon: LandPlot, flag: 'land' },
+  { key: 'forest_clearance', label: 'Forest clearance', icon: Trees, flag: 'forest' },
+  { key: 'litigation', label: 'Litigation', icon: Scale, flag: 'litigation' },
+  { key: 'contractor', label: 'Contractor stress', icon: HardHat, flag: 'contractor' },
+  { key: 'utility_shifting', label: 'Utility shifting', icon: Cable },
+  { key: 'inter_agency', label: 'Inter-agency', icon: ArrowRightLeft },
+]
 
 /** the 13 risk-profile dimensions (ml/risk_profile.py), in checklist order: full label, tile label, icon */
 export const RISK_DIMENSION: Record<string, { label: string; short: string; icon: LucideIcon }> = {

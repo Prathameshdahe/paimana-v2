@@ -19,7 +19,10 @@ import { Button } from '@/components/ui/Button'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAgencyMatrix, useAgencyProjects } from '@/lib/queries'
-import { cn, formatDate, formatINR, formatINRShort, formatProb, orDash } from '@/lib/formatters'
+import {
+  cn, formatBiasCi as rawCi, formatDate, formatINR, formatINRShort, formatProb, formatRatioRange as ci,
+  formatSignedRatio as signedPct, orDash,
+} from '@/lib/formatters'
 import type { AgencyPoint } from '@/contracts/intel'
 
 /**
@@ -34,11 +37,6 @@ const MINISTRY_COLOR: Array<[string, string, string]> = [
 ]
 const OTHER = { label: 'Other / unknown', color: '#9a968c' }
 
-/** ratio -> signed percent: 0.56 -> "+56%" */
-const signedPct = (v: number | null) => orDash(v, (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`)
-const ci = (lo: number | null, hi: number | null) =>
-  lo === null || hi === null ? '—' : `${signedPct(lo)} … ${signedPct(hi)}`
-
 type Plotted = AgencyPoint & { x: number; y: number }
 
 /** [lo, hi, ticks] in percent: a round step, 0 always inside with room on both sides */
@@ -49,11 +47,6 @@ function axis(values: number[]): [number, number, number[]] {
   const a = Math.floor(lo / step) * step
   const b = Math.ceil(hi / step) * step
   return [a, b, Array.from({ length: (b - a) / step + 1 }, (_, i) => a + i * step)]
-}
-
-/** ' 90% CI [..]', or for a shrunk median ' raw +x%, 90% CI [..]' (the CI is of the raw median) */
-function rawCi(shrunk: boolean, raw: number | null, lo: number | null, hi: number | null): string {
-  return `${shrunk ? ` raw ${signedPct(raw)},` : ''} 90% CI ${ci(lo, hi)}`
 }
 
 function AgencyTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: Plotted }> }) {

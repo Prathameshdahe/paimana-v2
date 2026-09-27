@@ -9,7 +9,7 @@
 export type Tier = 'Critical' | 'High' | 'Medium' | 'Low'
 export type TierFilter = Tier | 'untiered'
 export type Flag = 'land' | 'forest' | 'litigation' | 'contractor' | 'early_notice'
-export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name'
+export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name' | 'progress'
 
 export interface ProjectRow {
   key: string
