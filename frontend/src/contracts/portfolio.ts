@@ -261,6 +261,30 @@ export interface CompositeDistribution {
   max: number
 }
 
+/** pipeline/hidden_delay.py: extra slip over the next 4 quarters against matched projects */
+export interface HiddenDelayPrior {
+  factor: 'forest_clearance' | 'land_progress' | 'land_complexity' | 'land_complexity_nh'
+  group: string
+  label: string
+  strata: string
+  n_rows: number
+  n_projects: number
+  /** false: fewer projects than min_projects, no estimate */
+  measurable: boolean
+  extra_months: number | null
+  extra_months_lo: number | null
+  extra_months_hi: number | null
+  /** extra probability (0-1) of a 3+ month date push */
+  extra_push: number | null
+  extra_push_lo: number | null
+  extra_push_hi: number | null
+  holm_months: number | null
+  holm_push: number | null
+  garvit_status: string
+  garvit_band: string
+  as_of_note: string
+}
+
 export interface ExternalSummary {
   asOfDate: string
   nProjects: number
@@ -284,6 +308,33 @@ export interface ExternalSummary {
     composite_fc_only: number
   }
   caveats: string[]
+  /** remark-derived events: open by the remark rule vs live at as-of (free text ends in 2023-Q2) */
+  remarkFlags: {
+    last_remark_quarter: string
+    live_window_quarters: number
+    n_projects_open_by_remark_rule: number
+    n_projects_live: number
+    n_projects_stale: number
+  } | null
+  /** PARIVESH-linked current projects */
+  portal: {
+    source: string
+    n_linked: number
+    n_open: number
+    n_overdue: number
+    n_open_not_in_report: number
+    capital_open_cr: number
+    by_stage: Record<string, number>
+    top_overdue: ExternalProject[]
+  } | null
+  landCoverage: {
+    states_with_data: number
+    n_rated: number
+    n_flagged: number
+    n_possible: number
+    link_check?: Record<string, { n: number; correct: number; ci_lo: number; ci_hi: number }>
+  } | null
+  hiddenDelayPriors: { note: string; min_projects: number; rows: HiddenDelayPrior[] } | null
 }
 
 /** GET /api/scopes: the sign-in picker */

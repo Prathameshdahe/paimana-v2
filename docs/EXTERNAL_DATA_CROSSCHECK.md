@@ -154,10 +154,70 @@ A method under 70% is shown as possible, never flagged. So only `nh_chainage` ra
   more on forest alone (mostly non-linear mining, expected 6.5/7).
 - **The forest part barely varies.** It is 3/7 for most current projects, because forest hectares are rarely
   known (63 projects in all have them).
-- **Early notice.** 99 current projects (Rs 129,920 cr) have a flagged external factor while the numbers show no
-  slip yet or a Low/Medium tier, 98 of them for land; 18 have no slip to date. Before, 32 (11).
+- **Forest row.** 20 current projects are flagged: 19 have a linked PARIVESH proposal still open past its rule
+  limit at July 2026 (filed with no Stage-I after more than the 255 or 300 days of the 2004 rules, or Stage-I
+  granted more than five years ago with Stage-II still awaited), and 1 is flagged by the rulebook (linear, known
+  area, worst complexity 6 or more). Before the portal data, 1.
+- **Early notice.** 109 current projects (Rs 171,650 cr) have a flagged external factor while the numbers show no
+  slip yet or a Low/Medium tier: 98 for land and 14 for forest clearance. 22 have no slip to date. Before this
+  work, 32 (11).
 - **Open events in the current portfolio.** The remark rule leaves 34 forest and 44 land events open, but remark
   free text ends in 2023-Q2, so under the four-quarter expiry none of them is open at July 2026.
+
+## Garvit's prior vs measured
+
+Garvit's mock files give each forest-clearance status and each land-acquisition share a "hidden delay" in months.
+Those numbers are guesses: the mock outcomes were built from them. `pipeline/hidden_delay.py` measures the same
+groups on real projects instead (gold/hidden_delay_priors.parquet). For every key-quarter from 2014 that has a
+4-quarter date label, it compares projects in the group with matched projects that have no forest (or land)
+mention: within the same sector and year for the remark groups, and within the same months-to-deadline band for land
+complexity. The two outcomes are the extra months the anticipated completion moved over the next 4 quarters and the
+extra chance of a push of 3 months or more. The 95% intervals come from a project-cluster bootstrap. Groups with
+fewer than 15 projects are not measured. The groups were chosen after looking at the data, so these are exploratory
+results; after a Holm correction over all groups and both outcomes only "FC awaited" stays below 0.05 (p = 0.048).
+
+| Group (remark stage or land band) | Garvit's status: hidden delay (months) | Projects (rows) | Extra push, next 4 quarters (months) | Extra date-push risk (points) |
+|---|---|---|---|---|
+| Applied or preparing the proposal | Pending Clearances: 15-32 (median 25.5) | 9 (29) | too few to measure | too few to measure |
+| Pending at state level (DFO, CF, nodal, state government) | Pending Clearances: 15-32 (median 25.5) | 53 (253) | +0.1 [-2.7, +3.2] | -5 [-16, +6] |
+| Pending at the regional office | Pending at IRO: 11-31 (median 19.5) | 6 (10) | too few to measure | too few to measure |
+| Pending at FAC / MoEFCC | Pending at FAC: 28-63 (median 46) | 13 (52) | too few to measure | too few to measure |
+| Stage-I granted, awaiting Stage-II or working permission | Stage-I Approved: 4-20 (median 11) | 38 (137) | +2.5 [+0.5, +4.3] | +19 [+7, +30] |
+| Stage-II or final approval | Stage-II Approved: 0-16 (median 8) | 28 (119) | +3.0 [-1.2, +8.5] | +16 [+1, +31] |
+| Forest clearance awaited, no stage named | Pending Clearances: 15-32 (median 25.5) | 105 (494) | +1.5 [-0.7, +3.5] | +12 [+4, +21] |
+| Rejected, returned or in appeal | Rejected / In-Appeal: 78-85 (median 79) | 3 (8) | too few to measure | too few to measure |
+| Land under 50% acquired | about 29-59 (0.59 per point left; mock median 31) | 17 (58) | -0.3 [-5.2, +5.8] | -14 [-36, +13] |
+| Land 50-80% acquired | about 12-29 (mock median 21) | 31 (156) | +1.1 [-2.4, +4.7] | +4 [-10, +16] |
+| Land 80-95% acquired | about 3-12 (mock median 6) | 24 (140) | +0.3 [-3.3, +4.2] | -5 [-20, +8] |
+| Land 95-100% acquired | 0-3 (0 at 100%; mock median 1) | 15 (70) | +1.0 [-3.3, +4.9] | -3 [-21, +15] |
+| Land complexity 4-5 on the km-matched stretch | fragmentation factor only | 69 (246) | -1.2 [-3.3, +0.5] | +3 [-6, +11] |
+| Land complexity 0-3 on the km-matched stretch | fragmentation factor only | 212 (1,072) | -0.9 [-2.2, +0.1] | -1 [-6, +3] |
+| Land complexity 4-5 on an NH or district link | fragmentation factor only | 184 (665) | +0.3 [-0.8, +1.1] | +6 [+1, +11] |
+
+How to read it:
+
+- **Garvit's order and sizes are not supported.** His numbers are a total hidden delay; ours is the extra slip over
+  the next year, so they are not the same quantity. Even so, no group comes near his bands. Pending at state level
+  shows nothing, and the stages he rates worst (FAC, rejected) have too few projects with labels to measure.
+- **Stage-I granted, awaiting Stage-II** is the clearest forest signal: about 2.5 extra months and 19 points more
+  date-push risk. It does not survive the Holm correction (p = 0.32 and 0.09).
+- **"FC awaited" with no stage** adds 12 points of date-push risk and survives Holm.
+- **Land share (the real version of his "Land Acquisition Progress %") has no measurable effect in any band.** His
+  0.59 months per point is not supported.
+- **Land complexity depends on the link.** On the km-matched links that the checklist rates, complexity 4-5 adds
+  +3 points (CI -6 to +11, not measurable). On the looser NH or district links of the 2026-09 analysis it adds
+  +6 points (CI +1 to +11), which reproduces that analysis, but those links were only 32-64% right on the hand
+  check.
+- **Pending at FAC / MoEFCC:** the 2026-09 research reported +7 months (CI 2-12) on 16 projects. It counted every
+  key-quarter; here only rows with a 4-quarter date label count, which leaves 13 projects, so we show it as too few
+  to measure.
+
+The checklist shows the matching line next to each project's forest and land rows, with the quarter the remark
+stage or share is as of, for example "expected hidden delay, Stage-I granted, awaiting Stage-II or working
+permission (as of 2023-Q2): +3 months over the next year (CI +1 to +4) and +19 pts date-push risk (CI +7 to +30),
+measured on 38 projects". Projects linked to PARIVESH also get the portal stage and the rule limit, for example "no
+Stage-I after 76 months at Jul 2026; rule limit about 10 months (FC Rules 2004: 300 days to Stage-I for more than 40
+ha or mining)".
 
 ## What we deliberately did not do
 

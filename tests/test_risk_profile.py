@@ -14,11 +14,11 @@ ASOF = pd.Timestamp("2026-07-01")
 T = pd.Timestamp
 
 
-def checklist(fc_p1=None, land_p1=None):
+def checklist(fc_p1=None, land_p1=None, **extra):
     """Four projects: P1 Maharashtra road linked with low land complexity, remarks but no mentions; P2 outside
     Maharashtra with no remarks at all; P3 open land and litigation events, a forest clearance reported done;
     P4 untiered, linear with 50 ha forest known, a small agency, stale data, no sector data. fc_p1 / land_p1
-    override P1's forest / land columns."""
+    override P1's forest / land columns; extra goes to build_rows (remark_status, priors, portal)."""
     keys = ["P1", "P2", "P3", "P4"]
     cur = pd.DataFrame({
         "project_key": keys, "p_date_push_2q": [0.9, 0.5, 0.1, np.nan], "p_cost_rev_2q": [0.1, 0.2, 0.3, 0.4],
@@ -56,7 +56,7 @@ def checklist(fc_p1=None, land_p1=None):
     for df, over in ((fc, fc_p1), (land, land_p1)):
         for col, v in (over or {}).items():
             df.loc[0, col] = v
-    rows = R.build_rows(cur, ASOF, ev, mentions, fc, land, agencies, sector)
+    rows = R.build_rows(cur, ASOF, ev, mentions, fc, land, agencies, sector, **extra)
     return rows.set_index(["project_key", "dimension"])
 
 
@@ -150,3 +150,40 @@ def test_evidence_of_a_dimension_no_project_flags_is_null():
     got = R.evidence_of(ev, "land_acquisition", keys)
     assert got.iloc[0] == "land line" and pd.isna(got.iloc[1])
     assert R.evidence_of(ev, "litigation", keys).isna().all()
+
+
+
+def test_measured_hidden_delay_and_overdue_parivesh_reach_the_checklist():
+    remark_status = pd.DataFrame({"project_key": ["P2", "P3"], "fc_stage": ["central_fac_moef", "stage1_granted"],
+                                  "fc_stage_as_of": T("2023-04-01"), "la_pct": [np.nan, 60.0],
+                                  "la_pct_as_of": [pd.NaT, T("2022-10-01")]})
+    ci = {"strata": "x", "n_rows": 50, "extra_months_lo": 1.0, "extra_months_hi": 9.0, "extra_push": 0.1,
+          "extra_push_lo": -0.05, "extra_push_hi": 0.25}
+    priors = pd.DataFrame([
+        {"factor": "forest_clearance", "group": "fc_central", "measurable": False, "n_projects": 13},
+        {"factor": "forest_clearance", "group": "fc_stage1", "measurable": True, "n_projects": 38, "extra_months": 3.0,
+         **ci},
+        {"factor": "land_progress", "group": "la_50_80", "measurable": True, "n_projects": 31, "extra_months": 1.0,
+         **ci | {"extra_months_lo": -2.0}},
+        {"factor": "land_complexity", "group": "cx_0_3", "measurable": True, "n_projects": 212, "extra_months": -1.0,
+         **ci | {"extra_months_lo": -2.0, "extra_months_hi": 0.1}}])
+    portal = pd.DataFrame({"project_key": ["P2"], "n_overdue": [1],
+                           "evidence": ["FP/XX/RAIL/1/2019 (a line, 70 ha): filed Jan 2019, no Stage-I after 90 months"]})
+    r = checklist(remark_status=remark_status, priors=priors, portal=portal)
+    p2 = r.loc[("P2", "forest_clearance")]
+    assert p2["state"] == "flagged" and p2["source"] == "parivesh_portal"
+    assert p2["evidence"].startswith("open on PARIVESH past its rule limit; ")
+    assert "; PARIVESH: FP/XX/RAIL/1/2019" in p2["evidence"]
+    assert p2["evidence"].endswith("expected hidden delay, pending at FAC / MoEFCC (as of 2023-Q2): too few projects "
+                                   "to measure (13, need 15)")
+    # P3's clearance is reported done: its old remark stage gets no prior; its land share does
+    assert "expected hidden delay" not in r.loc[("P3", "forest_clearance"), "evidence"]
+    assert r.loc[("P3", "land_acquisition"), "evidence"].endswith(
+        "; land 60% acquired in the remarks (as of 2022-Q4): no measurable extra delay (+1 month over the next year, "
+        "CI -2 to +9; +10 pts date-push risk, CI -5 to +25; 31 projects)")
+    # P1 is rated clear on its stretch: the complexity 0-3 prior; the unrated P2 gets none
+    assert "measured hidden delay at the same deadline distance, complexity 0-3/5" in r.loc[
+        ("P1", "land_acquisition"), "evidence"]
+    assert "measured hidden delay" not in r.loc[("P2", "land_acquisition"), "evidence"]
+    # without the new inputs the rows are as before
+    assert checklist().loc[("P2", "forest_clearance"), "state"] == "unknown"

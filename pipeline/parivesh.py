@@ -35,6 +35,8 @@ EXTERNAL = ROOT / "dataset" / "raw" / "external"
 LEGACY = EXTERNAL / "parivesh_fc_proposals_legacy.csv"
 TIMELINES = EXTERNAL / "parivesh_fc_timelines_remarks.csv"
 LINKS = EXTERNAL / "fc_project_links_reviewed.csv"
+NORMS = EXTERNAL / "fc_norms.csv"
+FC_RULES_2022 = pd.Timestamp("2022-06-28")   # proposals filed from here are under the 2022 rules (PARIVESH 2.0)
 LEGACY_URL = "https://forestsclearance.nic.in/Online_Status.aspx"
 TIMELINE_URL = "https://forestsclearance.nic.in/timeline.aspx"
 USER_AGENT = "PAIMANA-early-warning/0.1 (public-data research prototype)"
@@ -63,11 +65,11 @@ TIMELINE_COLS = ["proposal_no", "http", "name", "state", "category", "area_ha", 
                  "nodal", "state_govt", "regional_office", "stage1", "stage2", "last_query_on", "last_query_by",
                  "last_query_replied", "note", "source", "retrieved"]
 STATUS_COLS = ["project_key", "proposal_no", "found_in", "name", "category", "area_ha", "received", "stage1", "stage2",
-               "stage_at_asof", "open_at_asof", "months_in_stage", "last_query_on", "last_query_by",
-               "last_query_replied", "status_retrieved", "retrieved", "evidence"]
+               "stage_at_asof", "open_at_asof", "months_in_stage", "norm_months", "norm_rule", "overdue",
+               "last_query_on", "last_query_by", "last_query_replied", "status_retrieved", "retrieved", "evidence"]
 PORTAL_COLS = ["project_key", "link_source", "n_proposals", "proposals", "area_ha", "n_open", "n_stage1_only",
-               "n_final", "n_dropped", "stage_at_asof", "months_in_stage", "oldest_open_received",
-               "open_not_in_report", "evidence"]
+               "n_final", "n_dropped", "n_overdue", "stage_at_asof", "months_in_stage", "norm_months",
+               "oldest_open_received", "open_not_in_report", "evidence"]
 # stage at asof, most to least outstanding: the project's reading is its most outstanding proposal
 STAGE_ORDER = ["filed, no Stage-I", "Stage-I, awaiting Stage-II", "dropped without approval", "Stage-II (final)"]
 
@@ -186,6 +188,34 @@ def stage_at(received, stage1, stage2, dropped, asof):
     return None, pd.NaT
 
 
+def load_norms(path=NORMS):
+    return pd.read_csv(path)
+
+
+def norm(stage, received, area_ha, category, asof, norms):
+    """(months, rule text) the rules allow for the stage a proposal is in at asof; (nan, None) where no rule sets
+    one. Filed with no Stage-I: the 2004 rules' days to Stage-I (in force at filing, before the 2022 rules; the
+    2022 rules give screening times only). Stage-I awaiting Stage-II: how long Stage-I stays valid while the state's
+    compliance is awaited (Van Rules 2023 rule 11(10), the version in force at asof)."""
+    if stage == STAGE_ORDER[0] and pd.notna(received) and received < FC_RULES_2022:
+        big = str(category).lower().startswith("min") or (pd.notna(area_ha) and area_ha > 40)
+        band = ">40, or any mining" if big else "<=40 (not mining)"
+        n = norms[norms["rules"].str.startswith("Forest (Conservation) Rules 2003") & norms["area_band_ha"].eq(band)
+                  & norms["stage"].eq("to Stage-I (sum)")]
+        days = int(n["days"].iloc[0])
+        what = "more than 40 ha or mining" if big else "up to 40 ha, not mining"
+        return days / 30.4375, f"FC Rules 2004: {days} days to Stage-I for {what}"
+    if stage == STAGE_ORDER[1]:
+        n = norms[norms["stage"].eq("Stage-I validity while compliance is awaited")
+                  & (pd.to_datetime(norms["in_force_from"]) <= asof)].sort_values("in_force_from")
+        if len(n):
+            days = int(n["days"].iloc[-1])
+            return days / 30.4375, (f"Van Rules 2023 rule 11(10): Stage-I "
+                                    + ("may be revoked" if days > 1000 else "lapses")
+                                    + f" after {days / 365.25:.0f} years of pending compliance")
+    return np.nan, None
+
+
 def load_legacy(path=LEGACY):
     d = pd.read_csv(path, dtype={"proposal_no": "str"})
     for c in ["received", "stage1", "stage2"]:
@@ -200,8 +230,9 @@ def load_timelines(path=TIMELINES):
     return d
 
 
-def proposal_rows(pairs, legacy, timelines, asof):
+def proposal_rows(pairs, legacy, timelines, asof, norms=None):
     """(project_key, proposal_no) pairs -> STATUS_COLS rows from the legacy list, else the timeline cache."""
+    norms = load_norms() if norms is None else norms
     lg, tl = legacy.set_index("proposal_no"), timelines.set_index("proposal_no")
     out = []
     for k, pid in pairs[["project_key", "proposal_no"]].itertuples(index=False):
@@ -233,6 +264,11 @@ def proposal_rows(pairs, legacy, timelines, asof):
     d["stage_at_asof"] = [s for s, _ in st]
     d["months_in_stage"] = [round(months(t, asof), 1) if pd.notna(t) else np.nan for _, t in st]
     d["open_at_asof"] = d["stage_at_asof"].isin(STAGE_ORDER[:2])
+    nr = [norm(s, rc, a, c, asof, norms) for s, rc, a, c in zip(d["stage_at_asof"], d["received"], d["area_ha"],
+                                                               d["category"])]
+    d["norm_months"] = [round(m, 1) if pd.notna(m) else np.nan for m, _ in nr]
+    d["norm_rule"] = [t for _, t in nr]
+    d["overdue"] = d["open_at_asof"] & (d["months_in_stage"] > d["norm_months"])
     d["evidence"] = [evidence(r, asof) for r in d.itertuples(index=False)]
     return d
 
@@ -261,7 +297,8 @@ def evidence(r, asof):
         q = f"; last query {r.last_query_on:%d %b %Y}{who}{replied}"
     elif pd.notna(r.last_query_on) and r.stage_at_asof != STAGE_ORDER[3]:
         q = f"; last EDS or site-inspection entry {r.last_query_on:%d %b %Y} ({r.last_query_by})"
-    return f"{head}: {body}{q}; portal status on {r.retrieved}: {r.status_retrieved}"
+    rule = f"; rule limit about {r.norm_months:.0f} months ({r.norm_rule})" if isinstance(r.norm_rule, str) else ""
+    return f"{head}: {body}{rule}{q}; portal status on {r.retrieved}: {r.status_retrieved}"
 
 
 def portal_projects(rows, links, events, asof, open_q=4):
@@ -283,7 +320,9 @@ def portal_projects(rows, links, events, asof, open_q=4):
                     "n_stage1_only": int(g["stage_at_asof"].eq(STAGE_ORDER[1]).sum()),
                     "n_final": int(g["stage_at_asof"].eq(STAGE_ORDER[3]).sum()),
                     "n_dropped": int(g["stage_at_asof"].eq(STAGE_ORDER[2]).sum()),
+                    "n_overdue": int(g["overdue"].sum()),
                     "stage_at_asof": top["stage_at_asof"], "months_in_stage": top["months_in_stage"],
+                    "norm_months": top["norm_months"],
                     "oldest_open_received": op["received"].min() if len(op) else pd.NaT,
                     "open_not_in_report": bool(len(op)) and k not in set(fe["project_key"]),
                     "evidence": " | ".join(g["evidence"].head(3))

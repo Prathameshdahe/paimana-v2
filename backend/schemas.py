@@ -306,6 +306,11 @@ class ExternalSummary(CamelModel):
     external_composite: dict[str, Any]
     coverage: dict[str, Any]
     caveats: list[str]
+    # remark flags live vs stale, PARIVESH-linked projects, land coverage and the measured hidden-delay priors
+    remark_flags: dict[str, Any] | None = None
+    portal: dict[str, Any] | None = None
+    land_coverage: dict[str, Any] | None = None
+    hidden_delay_priors: dict[str, Any] | None = None
 
 
 class LiveAccuracy(CamelModel):

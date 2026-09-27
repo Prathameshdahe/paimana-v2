@@ -516,8 +516,9 @@ CARD = ("project_key", "project_name", "sector", "state", "anticipated_cost_cr",
 
 def _scoped_external(s, summary, scope):
     """external_summary.json recounted over the projects in scope (factor and early-notice counts, capital, top
-    lists, as ml/risk_profile.py builds them); the notice backtest and the composite's coverage stats stay
-    portfolio-wide."""
+    lists, as ml/risk_profile.py builds them); the notice backtest, the composite's coverage stats, the PARIVESH and
+    land counts, the remark staleness and the hidden-delay priors stay portfolio-wide (the overdue PARIVESH list is
+    filtered to the scope)."""
     sql, params = _scope_sql(scope)
     # ponytail: utility shifting / inter-agency evidence comes from the file's top lists, complete while those
     # factors flag <= TOP_FACTOR projects (1 and 3 today); read project_events if they grow past that
@@ -563,7 +564,10 @@ def _scoped_external(s, summary, scope):
         "no_slip_to_date": {"n_projects": len(strict), "capital_exposed_cr": cap(strict)},
         "top": [card(r, list(EXT_FACTORS)) for r in notice[:TOP_NOTICE]]},
         "external_composite": {**summary["external_composite"], "top_fc_la": [
-            r for r in summary["external_composite"]["top_fc_la"] if r["project_key"] in keys]}}
+            r for r in summary["external_composite"]["top_fc_la"] if r["project_key"] in keys]},
+        **({"portal": {**summary["portal"], "top_overdue": [r for r in summary["portal"]["top_overdue"]
+                                                            if r["project_key"] in keys]}}
+           if summary.get("portal") else {})}
 
 
 @cached

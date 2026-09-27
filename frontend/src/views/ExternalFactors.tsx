@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { Info, Siren } from 'lucide-react'
@@ -14,7 +14,7 @@ import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
 import { EXTERNAL_FACTORS as FACTORS } from '@/lib/riskPalette'
-import type { CompositeDistribution, ExternalFactorKey, ExternalProject, ExternalSummary } from '@/contracts/portfolio'
+import type { CompositeDistribution, ExternalFactorKey, ExternalProject, ExternalSummary, HiddenDelayPrior } from '@/contracts/portfolio'
 
 const FACTOR: Partial<Record<string, (typeof FACTORS)[number]>> = Object.fromEntries(FACTORS.map((f) => [f.key, f]))
 
@@ -79,6 +79,7 @@ export function ExternalFactors() {
             <CoveragePanel s={data} />
             <CompositePanel s={data} />
           </div>
+          <HiddenDelayPanel s={data} />
           <AboutData s={data} />
         </>
       )}
@@ -370,6 +371,7 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
   const rows = [
     { label: 'Land rated', v: c.land_linked, note: 'km range on a Bhoomi Rashi NH stretch, 29 states' },
     { label: 'Land: possible link', v: c.land_possible, note: 'NH or district only, not rated' },
+    ...(s.portal ? [{ label: 'PARIVESH proposal linked', v: s.portal.n_linked, note: `${s.portal.n_open} still open` }] : []),
     { label: 'Forest area known', v: c.forest_area_known },
     { label: 'Composite: forest + land', v: c.composite_fc_la },
     { label: 'Composite: forest only', v: c.composite_fc_only, note: 'land missing' },
@@ -413,6 +415,88 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
           <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>
         </div>
       )}
+    </Card>
+  )
+}
+
+const FACTOR_TITLE: Record<HiddenDelayPrior['factor'], string> = {
+  forest_clearance: 'Forest-clearance stage in the report remarks',
+  land_progress: 'Land acquired, share in the report remarks',
+  land_complexity: 'Land complexity on the km-matched stretch (the links the checklist rates)',
+  land_complexity_nh: 'Land complexity on NH or district links (the looser 2026-09 grouping)',
+}
+
+/** '+3', '-2', '0' (half away from zero, as pipeline/hidden_delay.py fmt) */
+const signed = (v: number) => {
+  const n = Math.sign(v) * Math.floor(Math.abs(v) + 0.5)
+  return n === 0 ? '0' : `${n > 0 ? '+' : ''}${n}`
+}
+
+/** '+3 mo (CI +1 to +5)', bold when the CI excludes 0 */
+function Est({ v, lo, hi, scale = 1, unit }: { v: number | null; lo: number | null; hi: number | null; scale?: number; unit: string }) {
+  if (v === null || lo === null || hi === null) return <span className="text-fg-dimmed">—</span>
+  const clear = lo > 0 || hi < 0
+  return (
+    <span className={cn('tabular-nums', clear ? 'font-semibold text-fg-base' : 'text-fg-muted')}>
+      {signed(v * scale)} {unit}
+      <span className="ml-1 text-xs font-normal text-fg-dimmed">(CI {signed(lo * scale)} to {signed(hi * scale)})</span>
+    </span>
+  )
+}
+
+/** measured extra slip per forest stage and land group against matched projects, next to Garvit's guessed band */
+function HiddenDelayPanel({ s }: { s: ExternalSummary }) {
+  const h = s.hiddenDelayPriors
+  if (!h) return null
+  const groups = (Object.keys(FACTOR_TITLE) as HiddenDelayPrior['factor'][])
+    .map((f) => [f, h.rows.filter((r) => r.factor === f)] as const)
+    .filter(([, rows]) => rows.length > 0)
+  const th = 'py-2.5 px-4 text-xs font-medium text-fg-muted'
+  return (
+    <Card
+      title="Measured hidden delay"
+      info={<>{h.note} Bold: the 95% interval excludes zero.</>}
+      titleRight={s.portal && <span>{s.portal.n_overdue} of {s.portal.n_linked} PARIVESH-linked projects open past the rule limit</span>}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border-subtle bg-surface-elevated/60">
+              <th className={cn(th, 'pl-5')}>Group</th>
+              <th className={cn(th, 'text-right')}>Projects</th>
+              <th className={th}>Extra completion push, next 4 quarters</th>
+              <th className={th}>Extra date-push risk</th>
+              <th className={cn(th, 'pr-5')}>Garvit&rsquo;s guessed band (months)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(([f, rows]) => (
+              <Fragment key={f}>
+                <tr className="border-b border-border-subtle/70 bg-surface-elevated/30">
+                  <td colSpan={5} className="px-5 py-2 text-xs font-medium text-fg-muted">
+                    {FACTOR_TITLE[f]} <span className="font-normal text-fg-dimmed">· matched on {rows[0]?.strata} · {rows[0]?.as_of_note}</span>
+                  </td>
+                </tr>
+                {rows.map((r) => (
+                  <tr key={r.group} className="border-b border-border-subtle/70 align-top">
+                    <td className="py-2.5 pl-5 pr-4 text-fg-base">{r.label}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-fg-muted">{r.n_projects}</td>
+                    {r.measurable ? (
+                      <>
+                        <td className="px-4 py-2.5"><Est v={r.extra_months} lo={r.extra_months_lo} hi={r.extra_months_hi} unit="mo" /></td>
+                        <td className="px-4 py-2.5"><Est v={r.extra_push} lo={r.extra_push_lo} hi={r.extra_push_hi} scale={100} unit="pts" /></td>
+                      </>
+                    ) : (
+                      <td colSpan={2} className="px-4 py-2.5 text-xs text-fg-dimmed">too few projects to measure (need {h.min_projects})</td>
+                    )}
+                    <td className="py-2.5 pl-4 pr-5 text-xs text-fg-dimmed">{r.garvit_status}: {r.garvit_band}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   )
 }
@@ -482,10 +566,16 @@ function AboutData({ s }: { s: ExternalSummary }) {
   const list = (rows: typeof sectors) => rows.map(([name, r]) => `${name} ${times(r.lift)}`).join(', ')
   const of = (n: number) => `${n.toLocaleString()} of ${c.n_current.toLocaleString()}`
 
+  const rf = s.remarkFlags
   const caveats = [
-    'Report remarks are free text only through 2023; later reports print templates. So "open" means open when last mentioned — the last known state, not a confirmed state today.',
+    rf
+      ? `Report remarks are free text only through ${rf.last_remark_quarter}; later reports print templates. ${rf.n_projects_stale.toLocaleString()} current projects still had a land, forest, court or contractor issue open when the remarks ended; ${rf.n_projects_live} of them are recent enough (within ${rf.live_window_quarters} quarters) to count as open today, so remark flags describe the last known state, not today's.`
+      : 'Report remarks are free text only through 2023; later reports print templates. So "open" means open when last mentioned — the last known state, not a confirmed state today.',
     `Land records come from the Bhoomi Rashi highway register (29 states). A road project is rated only when the km range in its name places it on notified stretches of its NH (${of(c.land_linked)} current projects; 84% right on a hand-checked sample). ${c.land_possible.toLocaleString()} more have a possible link on the NH or district alone, shown but not rated. Everything else is unknown, not clear.`,
     `Forest-clearance complexity comes from the Parivesh rulebook. Forest area is known for ${of(c.forest_area_known)} projects; for the rest the complexity is the rulebook's expected value — an estimate, not a measurement.`,
+    ...(s.portal
+      ? [`PARIVESH: ${s.portal.n_linked.toLocaleString()} current projects have a hand-reviewed link to a forest-clearance proposal in the PARIVESH 1.0 list (proposals filed 2014 to mid-2022; the list is not a census). ${s.portal.n_open} were still open in ${formatDate(s.asOfDate)} and ${s.portal.n_overdue} of those were past the rule limit, which flags the forest row; none of the ${s.portal.n_open} is mentioned in the report remarks.`]
+      : []),
   ]
   if (lf) {
     caveats.push(

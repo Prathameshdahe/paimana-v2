@@ -40,7 +40,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml import backtest, score  # noqa: E402
-from pipeline import external, gold  # noqa: E402
+from pipeline import external, gold, hidden_delay  # noqa: E402
 
 GOLD, SILVER, ROOT = backtest.GOLD, backtest.SILVER, backtest.ROOT
 DIMENSIONS = ["schedule_slip", "cost_escalation", "execution_stagnation", "expenditure_lag", "repeated_revisions",
@@ -144,9 +144,42 @@ def event_info(cur, ev, cat, remarks_last):
     return opened, done, pd.Series(ev_line, index=cur.index)
 
 
-def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
+def quarter_label(t):
+    return f"{t.year}-Q{(t.month - 1) // 3 + 1}" if pd.notna(t) else "n/a"
+
+
+def hidden_delay_lines(keys, remark_status, priors, land):
+    """Per project, the measured hidden-delay phrases (pipeline/hidden_delay.py) for its land and forest rows:
+    (land line, forest line), empty strings where nothing applies. Remark stages and shares carry the quarter they
+    are as of (remarks end in 2023-Q2); a land complexity prior applies only to km-matched (rated) links."""
+    empty = pd.Series("", index=keys.index)
+    if priors is None or remark_status is None:
+        return empty, empty
+    pri = priors.set_index(["factor", "group"])
+    get = lambda f, g: hidden_delay.text(pri.loc[(f, g)] if (f, g) in pri.index else None)  # noqa: E731
+    rs = remark_status.set_index("project_key").reindex(keys).set_axis(keys.index)
+    la = land.set_index("project_key").reindex(keys).set_axis(keys.index)
+    cx = la["la_state"].map({"flagged": "cx_4_5", "clear": "cx_0_3"})
+    lab = {"cx_4_5": "complexity 4+/5 on the linked stretch", "cx_0_3": "complexity 0-3/5 on the linked stretch"}
+    land_line = pd.Series([f"; measured hidden delay at the same deadline distance, {lab[g]}: "
+                           f"{get('land_complexity', g)}" if isinstance(g, str) else "" for g in cx], index=keys.index)
+    bands = pd.cut(rs["la_pct"], [b[0] for b in hidden_delay.LA_BANDS] + [100],
+                   labels=[b[2] for b in hidden_delay.LA_BANDS]).astype("str")
+    land_line += pd.Series([f"; land {v:.0f}% acquired in the remarks (as of {quarter_label(t)}): "
+                            f"{get('land_progress', b)}" if pd.notna(v) else ""
+                            for v, t, b in zip(rs["la_pct"], rs["la_pct_as_of"], bands)], index=keys.index)
+    groups = {k: (v[0], v[1]) for k, v in hidden_delay.FOREST_GROUPS.items()}
+    forest_line = pd.Series([f"; expected hidden delay, {groups[st][1]} (as of {quarter_label(t)}): "
+                             f"{get('forest_clearance', groups[st][0])}" if st in groups else ""
+                             for st, t in zip(rs["fc_stage"], rs["fc_stage_as_of"])], index=keys.index)
+    return land_line, forest_line
+
+
+def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_status=None, priors=None, portal=None):
     """The thirteen checklist rows (twelve checks and the external composite) for every project in cur, long
-    format."""
+    format. remark_status, priors (gold/hidden_delay_priors) and portal (gold/external_fc_portal) add the measured
+    hidden delay and the PARIVESH stage to the land and forest rows; a linked PARIVESH proposal still open past its
+    rule limit at asof flags the forest row."""
     k, out = cur["project_key"], []
 
     def add(dim, flag, clear, evidence, source):
@@ -217,9 +250,10 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     la_flag, la_clear = la["la_state"].eq("flagged"), la["la_state"].eq("clear")
     la_line = la["la_evidence"].fillna(la["la_match_method"].map(LA_REASON)).fillna("not in the land linkage")
     land_flag = opened | la_flag
+    land_prior, forest_prior = hidden_delay_lines(k, remark_status, priors, land)
     add("land_acquisition", land_flag, la_clear,
         pd.Series(np.where(opened, line + np.where(la["la_evidence"].notna(), "; " + la_line, ""),
-                           la_line + "; " + line), index=cur.index),
+                           la_line + "; " + line), index=cur.index) + land_prior,
         pd.Series(np.where(opened, "report", "bhoomi_rashi"), index=cur.index))
 
     f = fc.set_index("project_key").reindex(k).set_axis(cur.index)
@@ -230,14 +264,21 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector):
     high = f["fc_shape"].eq("Linear") & (f["fc_worst_complexity"] >= FC_HIGH) & informed
     rules = (f["fc_evidence"].fillna("no Parivesh profile") + " (expected "
              + num(f["fc_expected_complexity"], ".1f") + ")")
-    fc_flag = opened | high
+    po = (portal if portal is not None else pd.DataFrame(columns=["project_key", "n_overdue", "evidence"]))
+    po = po.set_index("project_key").reindex(k).set_axis(cur.index)
+    overdue = po["n_overdue"].fillna(0).gt(0)
+    portal_line = ("; PARIVESH: " + po["evidence"]).fillna("")
+    fc_flag = opened | high | overdue
     # the forest half is measured only with hectares (or a clearance reported done); else it is the rulebook's
     # expected value over every area band, an estimate
     fc_known = (f["fc_area_known"].fillna(False).astype(bool) | done) & ~fc_flag
+    base = pd.Series(np.select([opened, high], [line + "; " + rules, "high clearance complexity expected: " + rules
+                                                 + "; " + line], line + "; " + rules), index=cur.index)
     add("forest_clearance", fc_flag, done,
-        pd.Series(np.select([opened, high], [line + "; " + rules, "high clearance complexity expected: " + rules + "; "
-                                             + line], line + "; " + rules), index=cur.index),
-        pd.Series(np.where(opened | done, "report", "parivesh_rules"), index=cur.index))
+        pd.Series(np.where(overdue, "open on PARIVESH past its rule limit; ", ""), index=cur.index) + base
+        + portal_line + forest_prior.where(~done, ""),
+        pd.Series(np.select([opened | done, overdue], ["report", "parivesh_portal"], "parivesh_rules"),
+                  index=cur.index))
 
     comp = external.external_composite(fc, land).set_index("project_key").reindex(k).set_axis(cur.index)
     both, ext_score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
@@ -359,6 +400,80 @@ def evidence_of(ev_lines, dim, keys):
     return ev_lines[ev_lines.index.get_level_values("dimension") == dim].droplevel("dimension").reindex(keys)
 
 
+def records(df):
+    """DataFrame -> JSON-safe records (NaN as null)."""
+    return json.loads(df.to_json(orient="records", date_format="iso"))
+
+
+def remark_flags(cur, events, asof):
+    """Remark-derived events of the current projects: open by the remark rule (last remark quarters) against live
+    at asof (last mention within gold.OPEN_MAX_AGE_Q calendar quarters; the checklist and early notice use live
+    only). Remark free text ends in 2023-Q2, so every open event is stale by 2026."""
+    e = events[events["project_key"].isin(cur["project_key"]) & events["status"].eq("open")
+               & events["category"].isin(list(EVENT_DIMENSION))]
+    live = e["last_seen"] > asof - pd.DateOffset(months=3 * gold.OPEN_MAX_AGE_Q)
+    last = events["last_seen"].max()
+    return {"last_remark_quarter": quarter_label(last), "live_window_quarters": gold.OPEN_MAX_AGE_Q,
+            "n_projects_open_by_remark_rule": int(e["project_key"].nunique()),
+            "n_projects_live": int(e.loc[live, "project_key"].nunique()),
+            "n_projects_stale": int(e.loc[~live, "project_key"].nunique()),
+            "by_category": {c: {"open": int(g["project_key"].nunique()),
+                                "live": int(g.loc[live.loc[g.index], "project_key"].nunique())}
+                            for c, g in e.groupby("category")}}
+
+
+def portal_summary(cur, portal, forest_lines):
+    """PARIVESH-linked current projects: linked, open at asof, open past the rule limit, open while the report is
+    silent, and the largest overdue ones."""
+    p = cur[["project_key", "project_name", "sector", "state", "anticipated_cost_cr", "tier", "p_any_2q",
+             "slip_to_date_months"]].merge(portal, on="project_key")
+    od = p[p["n_overdue"].gt(0)].sort_values("anticipated_cost_cr", ascending=False)
+    card = project_card(od.head(TOP_FACTOR), forest_lines.set_axis(cur["project_key"]).reindex(od["project_key"])
+                        .set_axis(od.index)) if len(od) else []
+    return {"source": "PARIVESH 1.0 online list (proposals visible 2014 to mid-2022, not a census) and its timeline "
+                      "pages; project links reviewed by hand",
+            "n_linked": int(len(p)), "n_open": int(p["n_open"].gt(0).sum()),
+            "n_overdue": int(len(od)), "n_open_not_in_report": int(p["open_not_in_report"].sum()),
+            "capital_open_cr": round(float(p.loc[p["n_open"].gt(0), "anticipated_cost_cr"].sum()), 1),
+            "by_stage": {k: int(v) for k, v in p["stage_at_asof"].value_counts().items()}, "top_overdue": card}
+
+
+def land_coverage(cur, land):
+    """Bhoomi Rashi coverage of the current projects and the hand-checked link precision per method."""
+    c = land[land["project_key"].isin(cur["project_key"])]
+    out = {"states_with_data": 29, "n_rated": int(c["la_linked"].sum()),
+           "n_flagged": int(c["la_state"].eq("flagged").sum()), "n_possible": int(c["la_state"].eq("possible").sum()),
+           "by_method": {k: int(v) for k, v in c["la_match_method"].value_counts().items()}}
+    chk = GOLD / "land_link_check.csv"
+    if chk.exists():
+        k = pd.read_csv(chk)
+        out["link_check"] = {m: {"n": int(len(g)), "correct": int(g["judgement"].eq("correct").sum()),
+                                 **dict(zip(("ci_lo", "ci_hi"), wilson(int(g["judgement"].eq("correct").sum()),
+                                                                         len(g))))}
+                             for m, g in k.groupby("la_match_method")}
+    return out
+
+
+def wilson(k, n, z=1.96):
+    """Wilson 95% interval of k successes in n, rounded to 3 decimals."""
+    p = k / n
+    c = (p + z * z / (2 * n)) / (1 + z * z / n)
+    h = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return round(float(c - h), 3), round(float(c + h), 3)
+
+
+def priors_summary(priors):
+    keep = ["factor", "group", "label", "strata", "n_rows", "n_projects", "measurable", "extra_months",
+            "extra_months_lo", "extra_months_hi", "extra_push", "extra_push_lo", "extra_push_hi", "holm_months",
+            "holm_push", "garvit_status", "garvit_band", "as_of_note"]
+    return {"note": "Extra slip over the next 4 quarters against matched projects (forest and land share: sector x "
+                    "year; land complexity: months to the anticipated completion), 95% project-cluster bootstrap "
+                    f"CIs; groups under {hidden_delay.MIN_PROJECTS} projects are too few to measure. Holm-adjusted "
+                    "p over every group and both outcomes; the groups are exploratory. Garvit's band is the hidden "
+                    "delay his mock files assign, not a measurement.",
+            "min_projects": hidden_delay.MIN_PROJECTS, "rows": records(priors[keep].round(4))}
+
+
 def build_risk_profile(asof=None):
     """Write gold/risk_profile_<asof>.parquet and gold/external_summary.json; returns (rows, summary)."""
     t0 = time.time()
@@ -369,7 +484,11 @@ def build_risk_profile(asof=None):
     fc = pd.read_parquet(GOLD / "external_fc.parquet")
     land = pd.read_parquet(GOLD / "external_land.parquet")
     sectors = pd.read_parquet(SILVER / "sector_context.parquet")
-    rows = build_rows(cur, asof, events, mentions, fc, land, agency_bias(obs, asof), sector_now(sectors, cur, asof))
+    remark_status = pd.read_parquet(GOLD / "remark_status.parquet")
+    priors = pd.read_parquet(GOLD / "hidden_delay_priors.parquet")
+    portal = pd.read_parquet(GOLD / "external_fc_portal.parquet")
+    rows = build_rows(cur, asof, events, mentions, fc, land, agency_bias(obs, asof), sector_now(sectors, cur, asof),
+                      remark_status, priors, portal)
     path = GOLD / f"risk_profile_{asof:%Y-%m}.parquet"
     rows.to_parquet(path, index=False)
 
@@ -415,6 +534,10 @@ def build_risk_profile(asof=None):
             "top": project_card(notice.head(TOP_NOTICE), lines(list(FACTORS)))},
         "notice_backtest": notice_backtest(feats, pd.read_parquet(GOLD / "labels_h4.parquet")),
         "external_composite": composite_summary(cur, external.external_composite(fc, land)),
+        "remark_flags": remark_flags(cur, events, asof),
+        "portal": portal_summary(cur, portal, lines(["forest_clearance"])),
+        "land_coverage": land_coverage(cur, land),
+        "hidden_delay_priors": priors_summary(priors),
     }
     (GOLD / "external_summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
 
