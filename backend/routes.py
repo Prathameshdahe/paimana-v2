@@ -1,16 +1,24 @@
-import json
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from llm import worker
 
-from . import data_access, store
+from . import serving, store
 from .schemas import (
     ApprovalRequest,
     DispatchDraft,
-    ExplanationOut,
-    ForecastOut,
-    ProjectScore,
+    ExternalSummary,
+    Flag,
+    Forecast,
+    Meta,
+    ModelsOut,
+    Portfolio,
+    ProjectDetail,
+    ProjectPage,
+    Sort,
+    Tier,
+    Timeline,
     TriggerResult,
     WorkerRun,
 )
@@ -18,25 +26,64 @@ from .schemas import (
 router = APIRouter(prefix="/api")
 
 
-@router.get("/model-scores", response_model=list[ProjectScore])
-def get_model_scores():
-    """One-shot bulk export of every project's live model score, so the
-    frontend can overlay real risk onto the existing dashboard instead of
-    the heuristic composite score."""
-    df = data_access.load_latest_features()
-    out = []
-    for _, row in df.iterrows():
-        shap = json.loads(row.get("shap_top5_json") or "[]")
-        out.append(
-            ProjectScore(
-                project_id=str(row["project_id"]),
-                slip_probability=float(row["slip_probability"]),
-                model_version=str(row.get("model_version") or ""),
-                shap=shap,
-            )
-        )
+def _key(key: str) -> str:
+    k = serving.canonical(key)
+    if k is None:
+        raise HTTPException(status_code=404, detail=f"project {key} not found")
+    return k
+
+
+# ---------- read side (DuckDB over Parquet) ----------
+
+@router.get("/meta", response_model=Meta)
+def get_meta():
+    return serving.meta()
+
+
+@router.get("/portfolio", response_model=Portfolio)
+def get_portfolio(ministry: str | None = None, sector: str | None = None, state: str | None = None,
+                  tier: Tier | None = None):
+    return serving.portfolio(ministry, sector, state, tier)
+
+
+@router.get("/projects", response_model=ProjectPage)
+def get_projects(q: str | None = Query(None, max_length=100), ministry: str | None = None,
+                 sector: str | None = None, state: str | None = None, tier: Tier | None = None,
+                 flag: Flag | None = None, sort: Sort = "risk", order: Literal["asc", "desc"] | None = None,
+                 page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    return serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size)
+
+
+@router.get("/projects/{key}", response_model=ProjectDetail)
+def get_project(key: str):
+    return serving.project(_key(key))
+
+
+@router.get("/projects/{key}/timeline", response_model=Timeline)
+def get_timeline(key: str):
+    k = _key(key)
+    return {"key": k, "points": serving.timeline(k)}
+
+
+@router.get("/projects/{key}/forecast", response_model=Forecast)
+def get_forecast(key: str):
+    out = serving.forecast(_key(key))
+    if out is None:
+        raise HTTPException(status_code=404, detail=f"project {key} is not in the current scored portfolio")
     return out
 
+
+@router.get("/external/summary", response_model=ExternalSummary)
+def get_external_summary():
+    return serving.external_summary()
+
+
+@router.get("/models", response_model=ModelsOut)
+def get_models():
+    return serving.models()
+
+
+# ---------- worker cell (JSON store) ----------
 
 @router.get("/worker-runs", response_model=list[WorkerRun])
 def get_worker_runs():
@@ -55,28 +102,6 @@ def post_approval(body: ApprovalRequest):
     if updated is None:
         raise HTTPException(status_code=404, detail=f"dispatch draft {body.draft_id} not found")
     return updated
-
-
-@router.get("/projects/{project_id}/forecast", response_model=ForecastOut)
-def get_forecast(project_id: str):
-    row = data_access.get_project_row(project_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
-    return ForecastOut(
-        project_id=project_id,
-        slip_probability=row["slip_probability"],
-        risk_exposure_cr=row["risk_exposure_cr"],
-        model_version=row["model_version"],
-    )
-
-
-@router.get("/projects/{project_id}/explanations", response_model=ExplanationOut)
-def get_explanations(project_id: str):
-    row = data_access.get_project_row(project_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
-    shap = json.loads(row.get("shap_top5_json") or "[]")
-    return ExplanationOut(project_id=project_id, shap=shap)
 
 
 @router.post("/worker-runs/trigger", response_model=TriggerResult)

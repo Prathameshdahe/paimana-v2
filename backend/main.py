@@ -1,9 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import serving
 from .routes import router
 
-app = FastAPI(title="PAIMANA Radar backend")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    serving.state()  # load the current data version before the first request
+    yield
+
+
+app = FastAPI(title="PAIMANA Radar backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
