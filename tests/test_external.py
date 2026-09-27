@@ -6,6 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from pipeline import bhoomi_rashi as B  # noqa: E402
 from pipeline import external as X  # noqa: E402
 
 CATEGORY_SAMPLES = {
@@ -219,7 +220,7 @@ def test_nh_from_text_patterns_old_new_and_chainage():
 
 
 LA = pd.DataFrame({
-    "highway_name": ["161 (New)", "161 (New)", "166", "Greenfield Highway"],
+    "state": "MAHARASHTRA", "highway_name": ["161 (New)", "161 (New)", "166", "Greenfield Highway"],
     "districts_touched": ["NANDED", "HINGOLI|NANDED", "Satara", "PUNE"],
     "num_parcels": [100, 50, 10, 5], "total_area_ha": [10.0, 5.0, 1.0, 0.5],
     "acquisition_complexity_score": [4, 1, 0, 2], "notif_span_days": [900, 100, 0, 10],
@@ -238,7 +239,7 @@ def test_link_land_district_first_then_nh_and_unknown_elsewhere():
     st = X.stretches(LA)
     land, pairs = X.link_land(master, st)
     r = land.set_index("project_key")
-    assert r.la_match_method.tolist() == ["nh_district", "nh_only", "outside_maharashtra", "no_nh_in_name",
+    assert r.la_match_method.tolist() == ["nh_district", "nh_only", "no_land_data_for_state", "no_nh_in_name",
                                           "nh_district", "not_road"]
     assert r.loc["P1", "la_stretches"] == 1 and r.loc["P1", "la_parcels"] == 50         # only the Hingoli stretch
     assert r.loc["P2", "la_stretches"] == 2 and r.loc["P2", "la_complexity_max"] == 4
@@ -248,3 +249,79 @@ def test_link_land_district_first_then_nh_and_unknown_elsewhere():
     by_nh, by_d = X.land_tables(st)
     assert by_nh.set_index("nh").loc["161", "parcels"] == 150
     assert by_d.set_index(["nh", "district"]).loc[("161", "NANDED"), "stretches"] == 2
+
+
+def test_la_complexity_reproduces_every_real_stretch():
+    la = pd.read_csv(X.EXTERNAL / "land_acquisition_maharashtra.csv")
+    got = B.la_complexity(la["num_districts"], la["notif_span_days"], la["num_parcels"], la["total_area_ha"])
+    assert len(la) == 347 and got.tolist() == la["acquisition_complexity_score"].tolist()
+
+
+EXPORT_HEADER = ["State", " highway name ", "Chainage", "DISTRICT", "Sub-District", "Village", "Survey No.",
+                 "Area (Ha)", "Publish Date"]
+EXPORT_ROWS = [["GUJARAT", "48", "10.000 - 30.000", "SURAT", "Olpad", "Kim", "12/A", "1.5", "15/01/2019"],
+               ["", "", "", "", "", "", "13", "2.25", "20/03/2020"],
+               ["", "", "", "BHARUCH", "Ankleshwar", "Kosamba", "7", "", "01/02/2022"],
+               ["", "48", "30.000 - 30.000", "BHARUCH", "Ankleshwar", "Kosamba", "8", "0.5", "05/05/2021"]]
+
+
+def write_export(path, header=EXPORT_HEADER, rows=EXPORT_ROWS, th=False):
+    """A Bhoomi Rashi-style export: an HTML table saved as .xls, header as its first row (th: a real header row),
+    group cells blank."""
+    tr = lambda cells, td="td": "<tr>" + "".join(f"<{td}>{c}</{td}>" for c in cells) + "</tr>"   # noqa: E731
+    body = tr(header, "th" if th else "td") + "".join(tr(r) for r in rows)
+    path.write_text("<html><body><table>" + body + "</table></body></html>", encoding="utf-8")
+    return path
+
+
+def test_parse_and_aggregate_a_bhoomi_rashi_export(tmp_path):
+    p = B.parse_bhoomi_rashi(write_export(tmp_path / "gujarat.xls"))
+    assert len(p) == 4 and p["state"].eq("GUJARAT").all()                        # forward-filled
+    assert p["district"].tolist() == ["SURAT", "SURAT", "BHARUCH", "BHARUCH"]
+    assert p["publish_date"].iloc[1] == pd.Timestamp("2020-03-20")                # dd/mm/YYYY
+    assert p["chainage_start_km"].iloc[0] == 10.0 and p["chainage_end_km"].iloc[0] == 30.0
+    th = B.parse_bhoomi_rashi(write_export(tmp_path / "th.xls", th=True))       # numeric NH column read as 48.0
+    assert th["highway_name"].eq("48").all() and th["survey_no"].tolist() == ["12/A", "13", "7", "8"]
+    s = B.aggregate_stretches(p)
+    assert s.columns.tolist() == pd.read_csv(X.EXTERNAL / "land_acquisition_maharashtra.csv", nrows=1).columns.tolist()
+    r = s.set_index("chainage_raw").loc["10.000 - 30.000"]
+    assert (r.districts_touched, r.num_districts, r.num_subdistricts, r.num_villages, r.num_parcels) == (
+        "BHARUCH|SURAT", 2, 2, 2, 3)
+    assert (r.total_area_ha, r.avg_area_per_parcel_ha, r.chainage_length_km, r.parcels_per_km) == (3.75, 1.875, 20.0,
+                                                                                                    0.15)
+    assert (r.first_notif_date, r.last_notif_date, r.notif_span_days) == ("2019-01-15", "2022-02-01", 1113)
+    assert r.acquisition_complexity_score == 3                                    # 2 districts, span >= 1 and 3 years
+    z = s.set_index("chainage_raw").loc["30.000 - 30.000"]
+    assert pd.isna(z.parcels_per_km) and z.acquisition_complexity_score == 0
+    with pytest.raises(ValueError, match=r"lacks \['publish_date'\].*columns found"):
+        B.parse_bhoomi_rashi(write_export(tmp_path / "bad.xls", EXPORT_HEADER[:-1], [r[:-1] for r in EXPORT_ROWS]))
+
+
+def test_load_land_reads_every_state_and_dedupes(tmp_path):
+    LA.assign(chainage_raw=["0 - 9", "9 - 12", "0 - 4", "0 - 2"]).to_csv(tmp_path / "land_acquisition_maharashtra.csv",
+                                                                       index=False)
+    (tmp_path / "bhoomi_rashi").mkdir()
+    write_export(tmp_path / "bhoomi_rashi" / "gujarat.xls")
+    B.aggregate_stretches(B.parse_bhoomi_rashi(tmp_path / "bhoomi_rashi" / "gujarat.xls")).assign(
+        state="Gujarat").to_csv(tmp_path / "land_acquisition_gujarat.csv", index=False)   # same stretches again
+    la = X.load_land(tmp_path)
+    assert len(la) == len(LA) + 2
+    assert X.state_key(la["state"]).value_counts().to_dict() == {"MAHARASHTRA": 4, "GUJARAT": 2}
+
+
+def test_link_land_needs_the_state_of_the_stretch():
+    guj = pd.DataFrame({"state": "Gujarat", "highway_name": ["48"], "districts_touched": ["SURAT"],
+                        "num_parcels": [300], "total_area_ha": [25.0], "acquisition_complexity_score": [2],
+                        "notif_span_days": [10], "first_notif_date": ["2020-01-01"], "last_notif_date": ["2020-01-11"]})
+    st = X.stretches(pd.concat([LA, guj], ignore_index=True))
+    master = pd.DataFrame({
+        "project_key": ["G1", "G2", "B1", "M1", "U1"], "sector": "Roads & Highways",
+        "state": ["Gujarat", "Gujarat", "Bihar", "Multi-State", "Maharashtra"],
+        "project_name": ["Six laning of NH-48 Surat section", "Widening of NH-161", "Four laning of NH-161 in Bihar",
+                         "NH-48 Vadodara - Surat - Mumbai", "Six laning of NH-48 near Pune"], "codes_seen": None})
+    land, _ = X.link_land(master, st)
+    r = land.set_index("project_key")
+    assert r.la_match_method.tolist() == ["nh_district", "nh_not_in_table", "no_land_data_for_state", "nh_district",
+                                          "nh_not_in_table"]
+    assert r.la_state.tolist() == ["clear", "unknown", "unknown", "clear", "unknown"]
+    assert r.loc["G1", "la_parcels"] == 300 and r.loc["G1", "la_evidence"].startswith("NH-48 (Surat): 300 parcels")

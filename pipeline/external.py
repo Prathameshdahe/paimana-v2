@@ -6,7 +6,8 @@ Run from repo root after the silver build:  python -m pipeline.run external
 
 Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver/observations.parquet,
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
-         raw/external/land_acquisition_maharashtra.csv
+         raw/external/land_acquisition_*.csv (stretch tables, Maharashtra so far) and raw/external/bhoomi_rashi/
+         (raw Bhoomi Rashi state exports, parsed by pipeline/bhoomi_rashi.py)
 Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/external_fc.parquet,
          gold/external_land.parquet, gold/external_land_pairs.parquet
 
@@ -30,10 +31,11 @@ exemptions to defence projects only; the public-utility-in-LWE exemption (<= 0.1
 fc_prior_* repeat the match from sector and name alone (no remark hectares or violation): the same at every t,
 so gold can use them as features without reading later remarks.
 
-Land acquisition: road projects in Maharashtra (or Multi-State naming a Maharashtra district) are linked to the
-Bhoomi Rashi NH stretches of the NH number in their name, on (NH, district) first, then NH alone. Everything else
-is 'unknown', never 'clear'. The table is one snapshot: a stretch's parcels and complexity count every notification,
-so gold reads them at t only for stretches whose last notification is by t (external_land_pairs keeps the dates).
+Land acquisition: road projects are linked to the Bhoomi Rashi NH stretches of their own state (a Multi-State
+project: of each state whose district its name mentions) and of the NH number in their name, on (NH, district)
+first, then NH alone. A state with no land data (every state but Maharashtra so far) is 'unknown', never 'clear'.
+The table is one snapshot: a stretch's parcels and complexity count every notification, so gold reads them at t
+only for stretches whose last notification is by t (external_land_pairs keeps the dates).
 """
 import re
 import sys
@@ -44,6 +46,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.bhoomi_rashi import aggregate_stretches, parse_bhoomi_rashi  # noqa: E402
 from pipeline.silver import ROOT, SILVER, quarter  # noqa: E402
 
 GOLD = ROOT / "dataset" / "gold"          # not imported from pipeline.gold, which imports this module
@@ -520,9 +523,27 @@ def nh_from_text(s):
     return ids.groupby(level=0).agg(joined).reindex(s.index)
 
 
+def state_key(s):
+    """State names -> comparable keys: 'Jammu & Kashmir' and 'JAMMU AND KASHMIR' both -> 'JAMMU AND KASHMIR'."""
+    return s.str.upper().str.replace("&", " AND ").str.replace(r"[^A-Z]+", " ", regex=True).str.strip()
+
+
+def load_land(external=EXTERNAL):
+    """Every land source as one stretch table (the land_acquisition_maharashtra.csv schema): the stretch CSVs
+    raw/external/land_acquisition_*.csv, then the raw Bhoomi Rashi exports in raw/external/bhoomi_rashi/ (.xls,
+    .html) parsed and aggregated. A (state, highway, chainage) stretch found in more than one keeps its first copy."""
+    text = {"state": "str", "highway_name": "str", "chainage_raw": "str"}
+    parts = [pd.read_csv(p, dtype=text) for p in sorted(external.glob("land_acquisition_*.csv"))]
+    raw = sorted(p for p in (external / "bhoomi_rashi").glob("*") if p.suffix.lower() in (".xls", ".html", ".htm"))
+    parts += [aggregate_stretches(parse_bhoomi_rashi(p)) for p in raw]
+    la = pd.concat(parts, ignore_index=True)
+    return la[~la.assign(k=state_key(la["state"])).duplicated(["k", "highway_name", "chainage_raw"])].reset_index(
+        drop=True)
+
+
 def stretches(la):
-    """LA rows -> one row per stretch with its NH id, parsed dates and upper-case district list."""
-    d = la.assign(stretch_id=np.arange(len(la)), nh=nh_id(la["highway_name"]),
+    """LA rows -> one row per stretch with its state key, NH id, parsed dates and upper-case district list."""
+    d = la.assign(stretch_id=np.arange(len(la)), state=state_key(la["state"]), nh=nh_id(la["highway_name"]),
                   districts=la["districts_touched"].str.upper().str.split("|"),
                   first_notif_date=pd.to_datetime(la["first_notif_date"]),
                   last_notif_date=pd.to_datetime(la["last_notif_date"]))
@@ -546,31 +567,41 @@ def land_tables(st):
 
 
 def districts_in(names, st):
-    """Maharashtra districts (and their alias names) each project name mentions, as (index, district) pairs."""
+    """Land-table districts (and their alias names) each project name mentions, as (index, state, district) rows."""
     names = names.fillna("").str.upper()
     out = []
-    for dist in sorted({x for ds in st["districts"] for x in ds}):
+    for state, dist in sorted({(s, x) for s, ds in zip(st["state"], st["districts"]) for x in ds}):
         words = [w.strip() for w in re.split(r"[()]", dist) if w.strip()] + DISTRICT_ALIAS.get(dist, [])
         hit = names.str.contains(r"\b(?:" + "|".join(map(re.escape, words)) + r")\b", regex=True)
-        out.append(pd.DataFrame({"idx": names.index[hit], "district": dist}))
+        out.append(pd.DataFrame({"idx": names.index[hit], "state": state, "district": dist}))
     return pd.concat(out, ignore_index=True)
 
 
 def link_land(master, st):
-    """Maharashtra road projects -> the LA stretches of the NH they name: (NH, district) in the name first, then the
-    NH alone. Returns one row per project_key and the (project_key, nh, stretch_id, la_match_method) pairs."""
+    """Road projects -> the LA stretches of their state and of the NH they name: (NH, district) in the name first,
+    then the NH alone. A project's state is its own, or for a Multi-State project each land-table state whose
+    district its name mentions; a state with no stretches leaves it unknown. Returns one row per project_key and the
+    (project_key, nh, stretch_id, la_match_method) pairs. master has a RangeIndex."""
     road = master["sector"].eq("Roads & Highways")
     dist = districts_in(master["project_name"], st)
-    # ponytail: a district name shared with another state (Aurangabad, Bihar) makes a Multi-State road a candidate;
-    # it links only if its NH is in the Maharashtra table too. Needs a location field to do better.
-    mh = master["state"].eq("Maharashtra") | (master["state"].eq("Multi-State") & master.index.isin(dist["idx"]))
+    # ponytail: a district name shared by two states (Aurangabad: Maharashtra and Bihar) makes a Multi-State road a
+    # candidate in both; it links only where its NH is in that state's table too. Needs a location field to do better.
+    own = pd.DataFrame({"idx": master.index, "state": state_key(master["state"].fillna(""))})
+    multi = dist.loc[master["state"].eq("Multi-State").to_numpy()[dist["idx"]], ["idx", "state"]]
+    at = pd.concat([own[own["state"].isin(set(st["state"]))], multi]).drop_duplicates()
+    has_land = master.index.isin(at["idx"])
     nh = nh_from_text(master["project_name"].fillna("") + " " + master["codes_seen"].fillna(""))
-    cand = master.loc[road & mh, ["project_key"]].assign(nh=nh[road & mh].str.split(";")).explode("nh").dropna()
-    named = dist.assign(project_key=master["project_key"].to_numpy()[dist["idx"]])[["project_key", "district"]]
-    ex = st.explode("districts").rename(columns={"districts": "district"})[["nh", "district", "stretch_id"]]
-    by_d = cand.merge(named, on="project_key").merge(ex, on=["nh", "district"]).assign(la_match_method="nh_district")
+    at = at[road.to_numpy()[at["idx"]] & nh.notna().to_numpy()[at["idx"]]]
+    cand = at.assign(project_key=master["project_key"].to_numpy()[at["idx"]],
+                     nh=nh.to_numpy()[at["idx"]]).drop(columns="idx")
+    cand = cand.assign(nh=cand["nh"].str.split(";")).explode("nh")
+    named = dist.assign(project_key=master["project_key"].to_numpy()[dist["idx"]])[["project_key", "state",
+                                                                                    "district"]]
+    ex = st.explode("districts").rename(columns={"districts": "district"})[["state", "nh", "district", "stretch_id"]]
+    by_d = cand.merge(named, on=["project_key", "state"]).merge(ex, on=["state", "nh", "district"]).assign(
+        la_match_method="nh_district")
     rest = cand[~cand["project_key"].isin(by_d["project_key"])]
-    by_n = rest.merge(st[["nh", "stretch_id"]], on="nh").assign(la_match_method="nh_only")
+    by_n = rest.merge(st[["state", "nh", "stretch_id"]], on=["state", "nh"]).assign(la_match_method="nh_only")
     pairs = pd.concat([by_d, by_n], ignore_index=True)[["project_key", "nh", "stretch_id", "la_match_method"]]
     agg = aggregate(pairs.merge(st.drop(columns="nh"), on="stretch_id"), ["project_key"])
     pg = pairs.groupby("project_key")
@@ -578,7 +609,8 @@ def link_land(master, st):
     agg["la_match_method"] = agg["project_key"].map(pg["la_match_method"].first())
     out = master[["project_key"]].merge(agg, on="project_key", how="left")
     out["la_linked"] = out["stretches"].notna()
-    reason = np.select([~road, ~mh, nh.isna()], ["not_road", "outside_maharashtra", "no_nh_in_name"], "nh_not_in_table")
+    reason = np.select([~road, ~has_land, nh.isna()], ["not_road", "no_land_data_for_state", "no_nh_in_name"],
+                       "nh_not_in_table")
     out["la_match_method"] = out["la_match_method"].fillna(pd.Series(reason, index=out.index))
     flag = np.where(out["complexity_max"] >= LA_FLAG, "flagged", "clear")
     out["la_state"] = np.where(out["la_linked"], flag, "unknown")
@@ -637,7 +669,7 @@ def main(out=GOLD, silver=SILVER):
     print(fc_cur.groupby(["fc_shape", "fc_mining", "fc_area_known", "fc_expected_complexity", "fc_worst_complexity",
                           "fc_likely_authority"]).size().rename("projects").to_string())
 
-    st = stretches(pd.read_csv(EXTERNAL / "land_acquisition_maharashtra.csv"))
+    st = stretches(load_land())
     by_nh, by_nh_district = land_tables(st)
     land, pairs = link_land(master, st)
     land.to_parquet(out / "external_land.parquet", index=False)
@@ -645,7 +677,8 @@ def main(out=GOLD, silver=SILVER):
     pairs.sort_values(["project_key", "stretch_id"], ignore_index=True).to_parquet(
         out / "external_land_pairs.parquet", index=False)
     lc = land[land["project_key"].isin(cur)]
-    print(f"external_land: {len(st)} stretches on {len(by_nh)} NH ids ({len(by_nh_district)} NH x district); "
+    print(f"external_land: {len(st)} stretches in {st['state'].nunique()} state(s) "
+          f"({', '.join(sorted(st['state'].unique()))}) on {len(by_nh)} NH ids ({len(by_nh_district)} NH x district); "
           f"{int(land['la_linked'].sum())} projects linked, {int(lc['la_linked'].sum())} of {len(lc)} current ones")
     print(pd.crosstab(lc["la_match_method"], lc["la_state"], margins=True).to_string())
     with pd.option_context("display.width", 250, "display.max_colwidth", 120):

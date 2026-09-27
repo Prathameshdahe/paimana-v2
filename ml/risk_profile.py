@@ -50,10 +50,10 @@ FACTORS = {"land": "land_acquisition", "forest_clearance": "forest_clearance", "
            "contractor": "contractor_stress", "utility_shifting": "utility_shifting", "inter_agency": "inter_agency"}
 EVENT_DIMENSION = {"land": "land_acquisition", "forest_env": "forest_clearance", "litigation": "litigation",
                    "contractor": "contractor_stress"}
-LA_REASON = {"outside_maharashtra": "no land data for this state (Maharashtra NH only)",
+LA_REASON = {"no_land_data_for_state": "no land data for this state (no Bhoomi Rashi export for it yet)",
              "not_road": "no land data for non-road projects",
              "no_nh_in_name": "no NH number in the name to link land data",
-             "nh_not_in_table": "its NH is not in the Maharashtra land table"}
+             "nh_not_in_table": "its NH is not in the land table of its state"}
 TOP_FACTOR, TOP_NOTICE = 10, 20
 COLS = ["project_key", "dimension", "state", "evidence", "source", "as_of_date"]
 

@@ -44,7 +44,7 @@ def checklist():
                          "la_linked": [True, False, True, False],
                          "la_evidence": ["NH-161: 50 parcels, complexity 1/5", None,
                                          "NH-160: 9 parcels, complexity 0/5", None],
-                         "la_match_method": ["nh_only", "outside_maharashtra", "nh_district", "not_road"]})
+                         "la_match_method": ["nh_only", "no_land_data_for_state", "nh_district", "not_road"]})
     agencies = pd.DataFrame({"bias": [0.5, 0.9], "n": [100, 3], "slip_rate_raw": [0.4, np.nan]},
                             index=pd.Index(["NHAI", "SMALL"], name="agency"))
     sector = pd.DataFrame({"actual_target_ratio": [0.9, 1.0, 1.0, np.nan], "trend_4q": [2.0, 1.0, 1.0, np.nan],
