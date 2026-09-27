@@ -11,14 +11,18 @@ import { ShapWaterfall } from './project-studio/ShapWaterfall'
 import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
 import { BriefCard } from './project-studio/BriefCard'
-import { PublicSummary } from './project-studio/PublicSummary'
+import {
+  ExternalChips, MoneyBar, ProgressTrend, ProjectChips, RiskGrid, RiskRingCard, TimelineStrip, TimeVsWork, VisualsSkeleton,
+} from './project-studio/ProjectVisuals'
 import { Page } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 
 /**
  * Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief.
- * Without canSeeDrivers (the public) it is the simple page: summary, top risks in plain words, progress history.
+ * Without canSeeDrivers (the public) it is the simple page, built from the side panel's visual blocks
+ * (project-studio/ProjectVisuals) over the redacted API: no drivers, intervals or model internals.
  */
 export function ProjectStudio() {
   const { key = '' } = useParams<{ key: string }>()
@@ -30,6 +34,10 @@ export function ProjectStudio() {
   const timeline = useTimeline(k)
   const forecast = useForecast(full ? k : null)
   const signals = useSignals(full ? k : null)
+
+  if (isLoading && !full) {
+    return <Page narrow><VisualsSkeleton /></Page>
+  }
 
   if (isLoading) {
     return (
@@ -60,14 +68,26 @@ export function ProjectStudio() {
 
   if (!full) {
     return (
-      <Page>
-        <ProjectIdentityStrip detail={detail} showProvenance={false} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <PublicSummary detail={detail} />
-          <div className="lg:col-span-2">
-            <TrajectoryChart timeline={timeline.data} forecast={undefined} forecastError={timeline.error}
-              asof={detail.provenance.asof} historyOnly />
+      <Page narrow>
+        <div className="space-y-2">
+          <Link to="/command" className="text-xs text-fg-dimmed transition-colors hover:text-fg-muted">&larr; All projects</Link>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-fg-dimmed">{detail.key}</span>
+            {detail.scores && <Badge tier={detail.scores.tier} />}
           </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg-base">{detail.master?.projectName ?? detail.key}</h1>
+          <ProjectChips detail={detail} />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RiskRingCard detail={detail} full={false} />
+          <TimelineStrip detail={detail} />
+          <TimeVsWork detail={detail} />
+          <MoneyBar detail={detail} />
+        </div>
+        <ProgressTrend timeline={timeline.data} error={timeline.error} height={200} />
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <RiskGrid detail={detail} plain className="lg:col-span-2" />
+          <ExternalChips events={detail.external.events} />
         </div>
       </Page>
     )

@@ -9,7 +9,7 @@ function basename(path: string): string {
 }
 
 /** asof -> model -> gold -> silver -> source document and page: where every number on the page comes from */
-export function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
+function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
   const p = detail.provenance
   return (
     <div className="text-xs text-fg-dimmed flex flex-wrap gap-x-1.5">
@@ -26,8 +26,7 @@ export function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
   )
 }
 
-/** showProvenance false: the public page (the backend sends no versions or source document) */
-export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail: ProjectDetail; showProvenance?: boolean }) {
+export function ProjectIdentityStrip({ detail }: { detail: ProjectDetail }) {
   const m: MasterRecord = detail.master ?? {}
   const o: ObservationRecord = detail.latest ?? {}
   const codes = [o.projectCode, ...(m.codesSeen ?? '').split(';')]
@@ -71,7 +70,7 @@ export function ProjectIdentityStrip({ detail, showProvenance = true }: { detail
               )}
             </div>
 
-            {showProvenance && <ProvenanceLine detail={detail} />}
+            <ProvenanceLine detail={detail} />
           </div>
 
           {/* Key figures from the latest report — inline, right-aligned */}

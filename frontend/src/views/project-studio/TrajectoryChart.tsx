@@ -89,14 +89,11 @@ export function TrajectoryChart({
   forecast,
   forecastError,
   asof,
-  historyOnly = false,
 }: {
   timeline: Timeline | undefined
   forecast: Forecast | undefined
   forecastError: unknown
   asof: string
-  /** the public page: reported progress alone, no forecast and no method notes */
-  historyOnly?: boolean
 }) {
   const rows = useMemo(() => buildRows(timeline, forecast), [timeline, forecast])
   const c = forecast?.completion
@@ -104,9 +101,9 @@ export function TrajectoryChart({
   return (
     <Card
       variant="section"
-      title={historyOnly ? 'Progress over time' : 'Trajectory & scenarios'}
+      title="Trajectory & scenarios"
       info={
-        !historyOnly && forecast && (
+        forecast && (
           <>
             <p>
               S-curve: {forecast.sector ?? 'sector'} median progress by elapsed share of the sanctioned span
@@ -120,7 +117,7 @@ export function TrajectoryChart({
         <span className="text-fg-dimmed hidden sm:inline text-xs">
           {timeline ? `${timeline.points.length} reports` : ''}
           {forecast && ` · ${forecast.scenarios.length} forecast quarters`}
-          {!historyOnly && c?.p50 && ` · completion p50 ${formatDate(c.p50)}`}
+          {c?.p50 && ` · completion p50 ${formatDate(c.p50)}`}
         </span>
       }
       className="h-full flex flex-col"
@@ -213,27 +210,26 @@ export function TrajectoryChart({
               <ReferenceLine yAxisId="pct" x={ts(asof)} stroke="#1f2937" strokeDasharray="4 4"
                 label={{ value: 'asof', position: 'insideBottomRight', fontSize: 12, fill: '#1f2937' }} />
 
-              {/* scenario series only with a forecast: the public page draws the reported history alone */}
-              {!historyOnly && <Area yAxisId="pct" dataKey="band" name="Scenario range" stroke="none" fill="#5b7299" fillOpacity={0.18}
-                connectNulls isAnimationActive={false} legendType="square" />}
-              {!historyOnly && <Line yAxisId="pct" dataKey="scurve" name={SERIES.scurve?.name} stroke="#8a8578" strokeWidth={1.5}
-                strokeDasharray="1 3" dot={false} connectNulls isAnimationActive={false} />}
+              <Area yAxisId="pct" dataKey="band" name="Scenario range" stroke="none" fill="#5b7299" fillOpacity={0.18}
+                connectNulls isAnimationActive={false} legendType="square" />
+              <Line yAxisId="pct" dataKey="scurve" name={SERIES.scurve?.name} stroke="#8a8578" strokeWidth={1.5}
+                strokeDasharray="1 3" dot={false} connectNulls isAnimationActive={false} />
               <Line yAxisId="cr" dataKey="spend" name={SERIES.spend?.name} stroke="#1946b8" strokeWidth={1.5}
                 dot={{ r: 2 }} connectNulls isAnimationActive={false} />
               <Line yAxisId="pct" dataKey="progress" name={SERIES.progress?.name} stroke="#0b7249" strokeWidth={2.5}
                 dot={{ r: 3, fill: '#0b7249' }} connectNulls isAnimationActive={false} />
-              {!historyOnly && <Line yAxisId="pct" dataKey="cont" name={SERIES.cont?.name} stroke="#0b7249" strokeWidth={2}
-                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />}
-              {!historyOnly && <Line yAxisId="pct" dataKey="rec" name={SERIES.rec?.name} stroke="#1946b8" strokeWidth={1.5}
-                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />}
-              {!historyOnly && <Line yAxisId="pct" dataKey="agy" name={SERIES.agy?.name} stroke="#ba1b2b" strokeWidth={1.5}
-                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />}
+              <Line yAxisId="pct" dataKey="cont" name={SERIES.cont?.name} stroke="#0b7249" strokeWidth={2}
+                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />
+              <Line yAxisId="pct" dataKey="rec" name={SERIES.rec?.name} stroke="#1946b8" strokeWidth={1.5}
+                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />
+              <Line yAxisId="pct" dataKey="agy" name={SERIES.agy?.name} stroke="#ba1b2b" strokeWidth={1.5}
+                strokeDasharray="5 3" dot={false} connectNulls isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {!historyOnly && !forecast && (
+      {!forecast && (
         <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed leading-relaxed">
           {forecastError instanceof ApiError && forecastError.status === 404 ? (
             <div>no forecast — the project is not in the current scored portfolio; the history is shown alone</div>

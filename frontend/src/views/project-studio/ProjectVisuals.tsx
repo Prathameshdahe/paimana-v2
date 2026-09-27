@@ -422,12 +422,13 @@ const STATE_WORD: Record<RiskState, string> = { flagged: 'Flagged', clear: 'Clea
  * The 13 checklist dimensions as icon tiles: red flagged, green clear, dashed grey no data; hover shows the
  * evidence line. plain (the public): state only on hover, and the top risks in plain words below.
  */
-export function RiskGrid({ detail, plain }: { detail: ProjectDetail; plain: boolean }) {
+export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; plain: boolean; className?: string }) {
   const byDim = new Map<string, RiskRow>(detail.riskProfile.map((r) => [r.dimension, r]))
   const n = (st: RiskState) => detail.riskProfile.filter((r) => r.state === st).length
 
   return (
     <Section
+      className={className}
       title={plain ? 'What could hold it up' : 'Risk checklist'}
       info="Each tile is one risk check on the latest reports. Grey dashed means there is no data for it, which is not the same as clear."
       right={detail.riskProfile.length > 0 && (
