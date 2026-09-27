@@ -1,12 +1,12 @@
 """
 External factors (docs/IMPLEMENTATION_GUIDE_v2.md A.4, B 2.2 External, B 5.2): delay events from the report
-remarks, per project.
+remarks and the Parivesh forest-clearance path, per project.
 
 Run from repo root after the silver build:  python -m pipeline.run external
 
 Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver/observations.parquet,
-         silver/project_master.parquet
-Outputs  gold/project_events.parquet
+         silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv
+Outputs  gold/project_events.parquet, gold/external_fc.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -18,6 +18,11 @@ all report it done ('EC received on ...'), and the project is not completed.
 Remarks come from typed_rows (every accepted clean report row), not observations (the quarter's last remark):
 it finds every observations mention plus 6% more key-quarter-category mentions and 16% more events, and the
 first mention keeps its own document and page.
+
+Forest clearance: each project gets a profile (linear or not, mining, violation, forest hectares from its
+events) and is matched to the Parivesh scenarios it can fall under. The form (A-H) is never known, so every
+form counts; with no hectares every area band counts. Survey rows apply to survey projects and defence
+exemptions to defence projects only; the public-utility-in-LWE exemption (<= 0.1 ha of amenities) never.
 """
 import re
 import sys
@@ -29,7 +34,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.gold import GOLD  # noqa: E402
-from pipeline.silver import SILVER, quarter  # noqa: E402
+from pipeline.silver import ROOT, SILVER, quarter  # noqa: E402
+
+EXTERNAL = ROOT / "dataset" / "raw" / "external"
 
 # category -> subtype -> regex (case-insensitive; (?-i:...) marks the case-sensitive acronyms).
 # The first subtype that matches names the mention.
@@ -135,8 +142,11 @@ BOILERPLATE = (r"milestones achieved/total:\s*\d+/\d+|start:\s*\d{4}-\d{2}|doc r
                r"|this project was approved on \w+ \d+ with capital investment of rs\.? [\d.,]+ crores?"
                r"(?: with schedule completion date \w+ \d+)?|under progress(?: \(p\))?|work in progress")
 SENTENCE = r"\s*(?:[;•\n\r]|\.\s+(?=[A-Z(])|\s-\s*(?=[A-Z])|(?:^|(?<=\s))\(?(?:[ivx]{1,4}|\d{1,2})\)\s)\s*"
-FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha|hect\w*)\.?\s*(?:of\s+)?(?:\w+\s+){0,2}forest"
-             r"|forest\s+land\s*(?:of|:|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)")
+FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha|hect\w*)\.?\s*(?:of\s+)?(?:\w+\s+){0,2}(?<!non )forest"
+             r"|forest\s+land\s*(?:of|:|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)"
+             r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha|hect)")
+VIOLATION = (r"violat\w*|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC|environment\w*\s+clearance"
+             r"|clearance)|post[\s-]*facto")
 # a mention that reports the matter done ('EC received on 31.07.23') and names no hold-up is resolved
 DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed|achieved|approved|done|removed|resolved|vacated"
         r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available)\b")
@@ -147,7 +157,7 @@ MIN_FREE_WORDS = 3        # a report has free text when this many 3+ letter word
 OPEN_LAST_Q = 2           # an event is open when seen in one of the project's last 2 remark-observed quarters
 SNIPPET = 200
 EVENT_COLS = ["project_key", "category", "event_no", "first_seen", "last_seen", "n_quarters", "n_mentions", "status",
-              "resolved", "subtype", "authority", "forest_area_ha", "evidence", "source_doc_id", "source_page", "state", "sector",
+              "resolved", "subtype", "authority", "forest_area_ha", "violation", "evidence", "source_doc_id", "source_page", "state", "sector",
               "remarks_last_seen"]
 
 
@@ -189,7 +199,9 @@ def tag(text):
     m = pd.concat(parts, ignore_index=True)
     m["subtype"] = pd.concat([first_match(g["sentence"], TAXONOMY[c]) for c, g in m.groupby("category")]).sort_index()
     m["authority"] = first_match(m["sentence"], AUTHORITY)
-    m["forest_area_ha"] = forest_area(m["sentence"]).where(m["category"].eq("forest_env"))
+    fe = m["category"].eq("forest_env")
+    m["forest_area_ha"] = forest_area(m["sentence"]).where(fe)
+    m["violation"] = fe & m["sentence"].str.contains(VIOLATION, case=False, regex=True)
     m["resolved"] = (m["sentence"].str.contains(DONE, case=False, regex=True)
                      & ~m["sentence"].str.contains(BLOCKED, case=False, regex=True))
     return m
@@ -248,7 +260,8 @@ def events(seen, m, master):
     key = ["project_key", "category", "event_no"]
     g = q.groupby(key)
     ev = g.agg(first_seen=("period", "min"), last_seen=("period", "max"), n_quarters=("period", "nunique"),
-               n_mentions=("report", "nunique"), qn_end=("qn", "max"), forest_area_ha=("forest_area_ha", "max"))
+               n_mentions=("report", "nunique"), qn_end=("qn", "max"), forest_area_ha=("forest_area_ha", "max"),
+               violation=("violation", "any"))
     at_end = q["period"].eq(g["period"].transform("max"))
     ev["resolved"] = q[at_end].groupby(key)["resolved"].all()
     ev["subtype"] = g["subtype"].agg(lambda s: s.mode().iloc[0])
@@ -268,6 +281,145 @@ def events(seen, m, master):
     ev["status"] = np.where(recent & ~ev["resolved"] & ev["completed_period"].isna(), "open", "closed")
     ev["source_page"] = ev["source_page"].astype("Int64")
     return ev[EVENT_COLS].sort_values(["project_key", "category", "event_no"], ignore_index=True)
+
+
+LINEAR_SECTORS = {"Roads & Highways", "Railways"}
+# name keywords; a linear keyword wins over a non-linear one, the sector decides when neither is there
+LINEAR_NAME = (r"pipe\s*lines?|superlines?|city\s+gas|gas\s+distribution|(?-i:\bCGD\b)|transmission|\btr\.?\s+system"
+               r"|\bsys(?:tem)?\.?\s+associated|(?:system|grid|regional)\s+streng\w*|\bgrid\b|evacuation|\d\s*kv\b|\bckm\b"
+               r"|(?-i:\bLILO\b)|\bhvdc\b|canal|optical\s+fib|(?-i:\bOFC\b)|bharat\s*net|highway|expressway|flyover"
+               r"|rural\s+roads?|roads?\s+(?:and|&)\s+bridges?|road\s+connectivity"
+               r"|(?:new|broad\s+gauge|3rd|4\s*th|third|fourth|tie)\s+(?:\w+\s+){0,2}lines?\b|doubling|tripling|quadrupling"
+               r"|gauge\s+conversion|\(GC\)|rail(?:way)?\s+(?:line|link|connectivity)|metro|(?-i:\bRRTS\b)|corridor")
+NON_LINEAR_NAME = (r"workshop|factory|coach|wagon|\bshed\b|depot|station\s+(?:re)?develop|building|hospital|campus"
+                   r"|refinery|plant|terminal|airport|jetty|berth|\bport\b|\bdam\b|hydro|(?-i:\bHEP\b)")
+OFC_NAME = r"optical\s+fib|(?-i:\bOFC\b)|bharat\s*net"
+DEFENCE_NAME = r"defence|border\s+road|(?-i:\bBRO\b)|strategic|\barmy\b|military|naval"
+SURVEY_NAME = r"\bsurvey|exploration|seismic|prospecting"
+# project_category text of a scenario -> the ordinary projects it covers (encroachment, dereservation and the
+# entity type are never known, so they do not narrow anything)
+CATEGORY = {
+    "": lambda p: True,
+    "Any": lambda p: True,
+    "All except Mining/Encroachment/Violation/Dereservation": lambda p: not p["mining"] and not p["violation"],
+    "Except Encroachment/Violation/Mining": lambda p: not p["mining"] and not p["violation"],
+    "All linear": lambda p: p["linear"],
+    "All except linear project": lambda p: not p["linear"],
+    "Non-Mining": lambda p: not p["mining"],
+    "Mining": lambda p: p["mining"],
+    "Encroachment/Dereservation/Mining": lambda p: p["mining"],
+    "Mining/Encroachment/Dereservation/Violation": lambda p: p["mining"] or p["violation"],
+    "Non-Govt entity except Encroachment/Dereservation/Mining": lambda p: not p["mining"],
+    "Govt entity under OFC and GA categories": lambda p: p["ofc"],
+    "Govt entity except Encroachment/Dereservation/Violation/Mining/OFC/GA":
+        lambda p: not p["mining"] and not p["violation"] and not p["ofc"],
+}
+GATES = {"psc_required": "PSC", "rec_required": "REC", "fac_required": "FAC", "site_inspection_required": "site inspection"}
+FC_COLS = ["project_key", "fc_shape", "fc_mining", "fc_violation", "fc_area_ha", "fc_area_known",
+           "fc_expected_complexity", "fc_worst_complexity", "fc_min_authority_level", "fc_max_authority_level",
+           "fc_likely_authority", "fc_gates", "fc_candidate_scenarios", "fc_mentioned", "fc_pending", "fc_evidence"]
+
+
+def shape(sector, name):
+    """'Linear' for roads, railway lines, pipelines, transmission lines, optical fibre, canals and metro corridors,
+    else 'Non-Linear'. Roads are always linear ('... Port Road' names its end point); otherwise a linear name keyword
+    wins, then a non-linear one, then the sector."""
+    name = name.fillna("")
+    lin = name.str.contains(LINEAR_NAME, case=False, regex=True) | sector.eq("Roads & Highways")
+    non = name.str.contains(NON_LINEAR_NAME, case=False, regex=True)
+    return pd.Series(np.where(lin | (~non & sector.isin(LINEAR_SECTORS)), "Linear", "Non-Linear"), index=name.index)
+
+
+def mining(sector, name, linear):
+    """Coal or mines in the sector, or a mine in the name of a project that is not a line (a railway to a mine
+    is not a mining lease)."""
+    named = name.fillna("").str.contains(r"\bmines?\b|\bmining\b", case=False, regex=True)
+    return sector.fillna("").str.contains(r"coal|mine|mining", case=False, regex=True) | (named & ~linear)
+
+
+def band(cond):
+    """Area condition -> (low, high], hectares; None when it is not a plain band ('NA (<=100 trees...)',
+    'Within 100 km')."""
+    c = str(cond).strip()
+    if c.lower() == "any":
+        return (-np.inf, np.inf)
+    m = re.fullmatch(r"(>|<=)\s*(\d+(?:\.\d+)?)(?:\s*&\s*(>|<=)\s*(\d+(?:\.\d+)?))?", c)
+    if not m:
+        return None
+    lo, hi = -np.inf, np.inf
+    for op, v in [(m[1], m[2]), (m[3], m[4])]:
+        if op == ">":
+            lo = float(v)
+        elif op == "<=":
+            hi = float(v)
+    return lo, hi
+
+
+def scenarios_for(scen, p):
+    """Scenario rows a project profile can fall under (p: linear, mining, violation, ofc, defence, survey, area_ha)."""
+    ok = []
+    for r in scen.itertuples(index=False):
+        sid, cat = r.scenario_id, "" if pd.isna(r.project_category) else r.project_category
+        if "survey" in sid or cat == "Survey":
+            fits = p["survey"]
+        elif sid.startswith("exempt_def"):
+            fits = p["defence"]
+        elif sid.startswith("exempt_"):
+            fits = False
+        else:
+            fits = CATEGORY[cat](p)
+        shp = "Any" if pd.isna(r.shape) else r.shape
+        fits = fits and shp in ("Any", "Linear" if p["linear"] else "Non-Linear")
+        fits = fits and ("Yes" if p["violation"] else "No") in str(r.violation).split("/")
+        b = band(r.area_ha_condition)
+        if fits and b is not None and not np.isnan(p["area_ha"]):
+            fits = b[0] < p["area_ha"] <= b[1]
+        ok.append(fits)
+    return scen[ok]
+
+
+def fc_summary(match, p):
+    """Expected (median) and worst complexity, authority levels, and the worst case's authority and gates."""
+    if match.empty:
+        return {}
+    w = match.sort_values(["complexity_score", "authority_level"], ascending=False, kind="mergesort").iloc[0]
+    gates = " + ".join(g for c, g in GATES.items() if w[c]) or "no PSC/REC/FAC/site inspection"
+    area = f"{p['area_ha']:g} ha forest" if not np.isnan(p["area_ha"]) else "area unknown"
+    head = ("linear" if p["linear"] else "non-linear") + (" mining" if p["mining"] else "")
+    head += ", violation" if p["violation"] else ""
+    return {"fc_expected_complexity": float(match["complexity_score"].median()),
+            "fc_worst_complexity": int(w["complexity_score"]),
+            "fc_min_authority_level": int(match["authority_level"].min()),
+            "fc_max_authority_level": int(match["authority_level"].max()),
+            "fc_likely_authority": w["approving_authority"], "fc_gates": gates,
+            "fc_candidate_scenarios": ";".join(match["scenario_id"]),
+            "fc_evidence": f"{head}, {area}: up to {w['approving_authority']} with {gates} (scenario {w['scenario_id']})"}
+
+
+def forest_clearance(master, ev, scen):
+    """One row per project_key: its Parivesh profile and the complexity of the scenarios it matches."""
+    name, sector = master["project_name"], master["sector"]
+    lin = shape(sector, name).eq("Linear")
+    fe_ev = ev[ev["category"].eq("forest_env")]
+    fe = fe_ev.groupby("project_key")
+    d = pd.DataFrame({
+        "project_key": master["project_key"], "linear": lin, "mining": mining(sector, name, lin),
+        "violation": master["project_key"].map(fe["violation"].any()).fillna(False).astype(bool),
+        "ofc": name.fillna("").str.contains(OFC_NAME, case=False, regex=True),
+        "defence": sector.eq("Defence") | name.fillna("").str.contains(DEFENCE_NAME, case=False, regex=True),
+        "survey": name.fillna("").str.contains(SURVEY_NAME, case=False, regex=True),
+        "area_ha": master["project_key"].map(fe["forest_area_ha"].max()).astype("float64")})
+    prof = ["linear", "mining", "violation", "ofc", "defence", "survey", "area_ha"]
+    # ponytail: one scenario scan per distinct profile, a few dozen; vectorise if hectares become common
+    keys = d[prof].drop_duplicates()
+    rows = [dict(p, **fc_summary(scenarios_for(scen, p), p)) for p in keys.to_dict("records")]
+    out = d.merge(pd.DataFrame(rows), on=prof, how="left")
+    out["fc_shape"] = np.where(out["linear"], "Linear", "Non-Linear")
+    out["fc_area_known"] = out["area_ha"].notna()
+    out["fc_mentioned"] = out["project_key"].isin(fe_ev["project_key"])
+    out["fc_pending"] = out["project_key"].isin(fe_ev.loc[fe_ev["status"].eq("open"), "project_key"])
+    out = out.rename(columns={"mining": "fc_mining", "violation": "fc_violation", "area_ha": "fc_area_ha"})
+    return out[FC_COLS]
 
 
 def current_keys(obs, master):
@@ -296,7 +448,16 @@ def main(out=GOLD, silver=SILVER):
         print(ev.sample(min(10, len(ev)), random_state=0)[
             ["project_key", "category", "subtype", "first_seen", "last_seen", "n_mentions", "status", "authority",
              "evidence"]].to_string(index=False))
-    return ev
+
+    fc = forest_clearance(master, ev, pd.read_csv(EXTERNAL / "parivesh_fc_scenarios.csv"))
+    fc.to_parquet(out / "external_fc.parquet", index=False)
+    fc_cur = fc[fc["project_key"].isin(cur)]
+    print(f"external_fc: {len(fc)} projects, {int(fc['fc_area_known'].sum())} with forest hectares, "
+          f"{int(fc['fc_violation'].sum())} with a violation mention; current portfolio "
+          f"(mentioned {int(fc_cur['fc_mentioned'].sum())}, pending {int(fc_cur['fc_pending'].sum())}):")
+    print(fc_cur.groupby(["fc_shape", "fc_mining", "fc_area_known", "fc_expected_complexity", "fc_worst_complexity",
+                          "fc_likely_authority"]).size().rename("projects").to_string())
+    return ev, fc
 
 
 if __name__ == "__main__":

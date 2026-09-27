@@ -87,3 +87,73 @@ def test_events_split_on_gaps_and_open_only_at_the_end():
     assert ev.source_doc_id.tolist() == ["d0", "d3", "d5"]
     done = X.events(seen, m, master.assign(completed_period=q[-1]))
     assert (done.status == "closed").all()                        # a completed project has no open events
+
+
+SCEN = pd.read_csv(X.EXTERNAL / "parivesh_fc_scenarios.csv")
+
+
+def profile(**kw):
+    p = {"linear": False, "mining": False, "violation": False, "ofc": False, "defence": False, "survey": False,
+         "area_ha": float("nan")}
+    return {**p, **kw}
+
+
+def test_band_parser():
+    assert X.band(">5 & <=40") == (5.0, 40.0)
+    assert X.band("<=5") == (float("-inf"), 5.0)
+    assert X.band(">40") == (40.0, float("inf"))
+    assert X.band(">1 & <=5") == (1.0, 5.0)
+    assert X.band("<=0.1") == (float("-inf"), 0.1)
+    assert X.band("Any") == (float("-inf"), float("inf"))
+    assert X.band("NA (<=100 trees/<=25 boreholes-per-10sqkm/<=80 shotholes-per-sqkm)") is None
+    assert X.band("Within 100 km") is None
+
+
+def test_every_scenario_category_has_a_rule():
+    cats = set(SCEN.project_category.fillna(""))
+    special = {"Survey", "Security/Defence Strategic Linear Infrastructure", "Defence-Related Infrastructure",
+               "Defence-Related Infrastructure in LWE District", "Public Utility (road/rail-side amenities) in LWE"}
+    assert cats - special <= set(X.CATEGORY)
+
+
+def test_linear_area_unknown_worst_case_is_moefcc():
+    p = profile(linear=True)
+    m = X.scenarios_for(SCEN, p)
+    assert m.scenario_id.tolist() == ["1A", "1F", "2_main", "2_linear_gt40", "2_DH", "2F", "4_main", "4_govt_all",
+                                      "4_DH", "5_DH_gt40"]              # no survey, exemption, mining or violation rows
+    s = X.fc_summary(m, p)
+    assert (s["fc_expected_complexity"], s["fc_worst_complexity"], s["fc_likely_authority"]) == (3.0, 7, "MoEFCC")
+    assert s["fc_gates"] == "PSC + FAC + site inspection"
+    assert s["fc_evidence"] == ("linear, area unknown: up to MoEFCC with PSC + FAC + site inspection "
+                                "(scenario 5_DH_gt40)")
+
+
+def test_non_linear_50_ha_and_mining_3_ha():
+    m = X.scenarios_for(SCEN, profile(area_ha=50.0))
+    assert m.scenario_id.tolist() == ["1A", "1F", "2F", "5_main", "5_DH_gt40"]
+    assert X.fc_summary(m, profile(area_ha=50.0))["fc_evidence"].endswith("(scenario 5_main)")
+    m = X.scenarios_for(SCEN, profile(mining=True, area_ha=3.0))
+    assert m.scenario_id.tolist() == ["1A", "7_main"]
+    assert X.fc_summary(m, profile(mining=True, area_ha=3.0))["fc_expected_complexity"] == 4.0
+
+
+def test_violation_only_matches_violation_rows():
+    m = X.scenarios_for(SCEN, profile(linear=True, violation=True))
+    assert m.scenario_id.tolist() == ["3F_violation", "5_violation", "7_violation"]
+
+
+def test_shape_and_mining_rules():
+    sector = pd.Series(["Roads & Highways", "Railways", "Railways", "Power", "Power", "Petroleum & Natural Gas",
+                        "Petroleum & Natural Gas", "Telecommunications", "Telecommunications", "Water Resources",
+                        "Urban Development & Housing", "Coal", "Railways", "Roads & Highways", "Railways"])
+    name = pd.Series(["Widening of NH-161A", "Rewari-Rohtak", "Rail Coach Factory Raebareli",
+                      "Transmission system associated with Rampur HEP", "Khurja super thermal power project",
+                      "Paradip-Hyderabad product pipeline", "Paradip refinery", "BharatNet optical fibre network",
+                      "GSM equipment of 799000 lines", "Madhya Ganga canal Phase-II", "Pune Metro Rail Project",
+                      "Kerandari opencast project", "Kodingamali bauxite mines to Singaram railway station",
+                      "Dedicated Port road to Krishnapatnam Port", "Nangal Dam-Talwara new broad gauge line"])
+    s = X.shape(sector, name)
+    assert s.tolist() == ["Linear", "Linear", "Non-Linear", "Linear", "Non-Linear", "Linear", "Non-Linear", "Linear",
+                          "Non-Linear", "Linear", "Linear", "Non-Linear", "Linear", "Linear", "Linear"]
+    mine = X.mining(sector, name, s.eq("Linear"))
+    assert mine[mine].index.tolist() == [11]                        # the rail line to a mine is not a mining lease
