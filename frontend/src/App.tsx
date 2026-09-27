@@ -15,6 +15,7 @@ const Login = lazy(() => import('@/views/Login').then(m => ({ default: m.Login }
 const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ default: m.WorkerConsole })))
 const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ default: m.ApprovalInbox })))
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
+const Bottlenecks = lazy(() => import('@/views/Bottlenecks').then(m => ({ default: m.Bottlenecks })))
 
 export default function App() {
   const location = useLocation()
@@ -50,6 +51,9 @@ export default function App() {
               {/* Route 3: External Factors — land, forest, litigation, contractor; replaces the what-if sandbox */}
               <Route path="/external" element={<RequireRole><ExternalFactors /></RequireRole>} />
               <Route path="/sandbox" element={<Navigate to="/external" replace />} />
+
+              {/* Bottleneck Intelligence (guide §6.1) */}
+              <Route path="/bottlenecks" element={<RequireRole><Bottlenecks /></RequireRole>} />
 
               {/* Agency Performance Matrix (guide §6.3) */}
               <Route path="/agencies" element={<RequireRole><Agencies /></RequireRole>} />

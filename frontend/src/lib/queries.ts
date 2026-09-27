@@ -30,7 +30,7 @@ import type {
   Timeline,
 } from '@/contracts/project'
 import type { ModelsOut } from '@/contracts/audit'
-import type { AgencyMatrix } from '@/contracts/intel'
+import type { AgencyMatrix, BottleneckDetail, BottleneckPage } from '@/contracts/intel'
 import type { Role } from '@/lib/auth/RoleContext'
 
 export type PortfolioFilters = {
@@ -134,6 +134,24 @@ export function useAgencyProjects(agency: string | null, page: number, size = 20
     queryFn: () => apiGet<ProjectPage>(`/api/agencies/${enc(agency ?? '')}/projects`, { page, size }),
     placeholderData: keepPreviousData,
     enabled: !!agency,
+  })
+}
+
+/** Every bottleneck in one page (13 today); the page filters and sorts them itself. */
+export function useBottlenecks() {
+  // ponytail: one page of 100, server-side filters and paging if clusters ever pass that
+  return useQuery({
+    queryKey: ['bottlenecks'],
+    queryFn: () => apiGet<BottleneckPage>('/api/bottlenecks', { size: 100 }),
+  })
+}
+
+export function useBottleneck(id: string | null, page: number, size = 20) {
+  return useQuery({
+    queryKey: ['bottlenecks', id, page, size],
+    queryFn: () => apiGet<BottleneckDetail>(`/api/bottlenecks/${enc(id ?? '')}`, { page, size }),
+    placeholderData: keepPreviousData,
+    enabled: !!id,
   })
 }
 

@@ -81,3 +81,23 @@ export const ALERT_SEVERITY = { 3: 'critical', 2: 'warning', 1: 'muted' } as con
 export function alertVariant(severity: number) {
   return ALERT_SEVERITY[severity as 1 | 2 | 3] ?? 'muted'
 }
+
+/**
+ * Report-remark / news event categories (pipeline/external.py TAXONOMY): label, fill and the ink
+ * readable on that fill. Fixed per category, so a filter never repaints one.
+ */
+export const EVENT_CATEGORY: Record<string, { label: string; color: string; ink: string }> = {
+  land: { label: 'Land', color: '#2a78d6', ink: '#ffffff' },
+  forest_env: { label: 'Forest / environment', color: '#1baf7a', ink: '#0b0b0b' },
+  litigation: { label: 'Litigation', color: '#eb6834', ink: '#0b0b0b' },
+  contractor: { label: 'Contractor', color: '#eda100', ink: '#0b0b0b' },
+  funding: { label: 'Funding', color: '#e87ba4', ink: '#0b0b0b' },
+  utility_shifting: { label: 'Utility shifting', color: '#008300', ink: '#ffffff' },
+  inter_agency: { label: 'Inter-agency', color: '#4a3aa7', ink: '#ffffff' },
+  law_order: { label: 'Law & order', color: '#e34948', ink: '#ffffff' },
+  weather: { label: 'Weather', color: '#8a8578', ink: '#ffffff' },
+}
+
+export function categoryLabel(c: string | null | undefined): string {
+  return c ? (EVENT_CATEGORY[c]?.label ?? c.replace(/_/g, ' ')) : 'uncategorised'
+}
