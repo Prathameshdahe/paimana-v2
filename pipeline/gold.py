@@ -12,7 +12,11 @@ groupby cumulative ops and backward as-of joins; cross-project statistics use ro
 sector velocity median uses the same quarter, the S-curve for calendar year Y is fitted on rows before Y-01-01
 of projects completed before Y-01-01, and agency rates use label rows whose outcome period t0 + h is <= t.
 """
+import hashlib
+import json
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +38,8 @@ SCURVE_MIN_ROWS = 20      # sector bins with fewer rows use the all-sector curve
 ALL = "*"
 COST_BANDS = [0, 500, 1000, 5000, np.inf]   # crore; band 0-3
 PK = ["project_key", "period"]
+BINARY = ["y_date_push", "y_cost_rev", "y_any"]
+TARGETS = BINARY + ["y_months", "y_cost_pct"]
 
 FEATURE_GROUPS = {
     "state": ["physical_progress_pct", "elapsed_ratio", "cost_variation_pct", "expenditure_ratio", "burn_gap",
@@ -164,20 +170,27 @@ def expected_progress(d, curves):
 def build_labels(obs, h):
     """Outcome h quarters after each row, from the same key's observation at exactly t + h quarters.
     Rows completed at t and rows without an observation at t + h are dropped; a target whose inputs are
-    null stays null. y_any is true if either flag is true, false only when both are false."""
-    cols = ["project_key", "anticipated_cost_cr", "anticipated_completion"]
+    null stays null. y_any is labelled only when both flags are known: were it true whenever one known flag
+    is true, rows missing one input would be labelled only when positive and the model would learn the gap.
+    A value taken from a different field at t + h than at t (cost_basis / completion_basis: anticipated, revised,
+    original) is not compared either: from 2025-07 the flash reports print no anticipated cost or date, and QPISR
+    anticipated vs flash revised is a change of report format, not a revision."""
+    cols = ["project_key", "anticipated_cost_cr", "anticipated_completion", "cost_basis", "completion_basis"]
     q = qindex(obs["period"])
     now = obs.loc[~obs["is_completed"], cols + ["period"]].assign(_q=q + h)
     later = obs[cols + ["period"]].assign(_q=q).rename(columns={"period": "target_period"})
     m = now.merge(later, on=["project_key", "_q"], suffixes=("", "_h"), validate="1:1")
-    slip = months(m["anticipated_completion_h"]) - months(m["anticipated_completion"])
-    cost_pct = (m["anticipated_cost_cr_h"] / m["anticipated_cost_cr"].where(m["anticipated_cost_cr"] > 0) - 1) * 100
+    slip = (months(m["anticipated_completion_h"]) - months(m["anticipated_completion"])).where(
+        m["completion_basis"].eq(m["completion_basis_h"]))
+    cost_pct = ((m["anticipated_cost_cr_h"] / m["anticipated_cost_cr"].where(m["anticipated_cost_cr"] > 0) - 1)
+                * 100).where(m["cost_basis"].eq(m["cost_basis_h"]))
     date_push = pd.Series(slip >= DATE_STEP, dtype="boolean").mask(slip.isna())
     cost_rev = pd.Series(m["anticipated_cost_cr_h"] >= COST_STEP * m["anticipated_cost_cr"],
                          dtype="boolean").mask(cost_pct.isna())
+    any_slip = (date_push | cost_rev).mask(date_push.isna() | cost_rev.isna())
     out = pd.DataFrame({"project_key": m["project_key"], "period": m["period"],
                         "target_period": m["target_period"], "y_date_push": date_push.astype("Int8"),
-                        "y_cost_rev": cost_rev.astype("Int8"), "y_any": (date_push | cost_rev).astype("Int8"),
+                        "y_cost_rev": cost_rev.astype("Int8"), "y_any": any_slip.astype("Int8"),
                         "y_months": slip.astype("float64"), "y_cost_pct": cost_pct})
     return out.sort_values(PK, kind="mergesort", ignore_index=True)
 
@@ -268,3 +281,97 @@ def build_features(obs, cutoff=None, sectors=None):
     num = [c for c in FEATURES + BASELINE if c not in CATEGORICAL]
     out[num] = out[num].astype("float64")
     return out
+
+
+def label_summary(lab):
+    """target -> labelled (non-null) rows, plus the positive rate for the binary targets."""
+    out = {}
+    for c in TARGETS:
+        v = lab[c].astype("float64").dropna()
+        out[c] = {"n": len(v)} | ({"pos_rate": round(float(v.mean()), 4) if len(v) else None} if c in BINARY else {})
+    return out
+
+
+def truncation_check(obs, sectors, feats, cutoffs):
+    """Features at each cutoff are identical whether built on the full panel or on the panel cut there."""
+    out = {}
+    for c in cutoffs:
+        a = feats[feats["period"] == c].reset_index(drop=True)
+        b = build_features(obs, cutoff=c, sectors=sectors)
+        b = b[b["period"] == c].reset_index(drop=True)
+        out[str(c.date())] = {"rows": len(a), "identical": bool(a.equals(b))}
+    return out
+
+
+def label_checks(lab, obs, h):
+    done = lab.merge(obs[PK + ["is_completed"]], on=PK, how="left")["is_completed"]
+    return {"exact_horizon": bool((qindex(lab["target_period"]) - qindex(lab["period"])).eq(h).all()),
+            "no_completed_rows": not bool(done.any()), "unique": not bool(lab.duplicated(PK).any())}
+
+
+def main(silver=SILVER, out=GOLD):
+    """Build features, labels, S-curves and agency stats; run the leakage checks (raise before writing); write."""
+    t0 = time.time()
+    obs = pd.read_parquet(silver / "observations.parquet")
+    sectors = pd.read_parquet(silver / "sector_context.parquet")
+    feats = build_features(obs, sectors=sectors)
+    d = base(obs)
+    frames = {"features": feats, **{f"labels_h{h}": build_labels(obs, h) for h in HORIZONS},
+              "sector_scurve": fit_scurves(d), "agency_stats": agency_table(d)}
+    # cutoffs at the 25/50/75% points of the quarters present, and the second-latest quarter
+    periods = np.sort(obs["period"].unique())
+    cutoffs = [pd.Timestamp(periods[int(len(periods) * f)]) for f in (0.25, 0.5, 0.75)] + [pd.Timestamp(periods[-2])]
+    ag = frames["agency_stats"]
+    checks = {"truncation": truncation_check(obs, sectors, feats, cutoffs),
+              "agency_outcomes_realised": bool((ag["last_outcome_period"].isna()
+                                                | (ag["last_outcome_period"] <= ag["period"])).all()),
+              **{f"labels_h{h}": label_checks(frames[f"labels_h{h}"], obs, h) for h in HORIZONS}}
+    bad = [c for c, v in checks["truncation"].items() if not v["identical"]]
+    assert not bad, f"features change when the panel is cut at {bad}"
+    assert checks["agency_outcomes_realised"], "agency stats use outcomes after their period"
+    assert all(all(checks[f"labels_h{h}"].values()) for h in HORIZONS), checks
+
+    out.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+    for name, f in frames.items():
+        path = out / f"{name}.parquet"
+        f.to_parquet(path, index=False, row_group_size=50000)
+        digest.update(name.encode() + bytes(1) + path.read_bytes())
+    years = {f"h{h}": {str(y): label_summary(g) for y, g in lab.groupby(lab["period"].dt.year)}
+             for h in HORIZONS for lab in [frames[f"labels_h{h}"]]}
+    now = datetime.now(timezone.utc)
+    silver_man = json.loads((silver / "silver_manifest.json").read_text(encoding="utf-8"))
+    man = {
+        "gold_version": digest.hexdigest()[:12],
+        "silver_version": silver_man["silver_version"],
+        "run_id": f"RUN-{now:%Y%m%d-%H%M%S}",
+        "built_at": now.isoformat(timespec="seconds"),
+        "latest_period": str(obs["period"].max().date()),
+        "horizons_quarters": list(HORIZONS),
+        "features": FEATURE_GROUPS,
+        "categorical": CATEGORICAL,
+        "baselines": BASELINE,
+        "meta": META,
+        "params": {"agency_label_horizon": AGENCY_H, "shrink_k": SHRINK_K, "cost_step": COST_STEP,
+                   "date_step_months": DATE_STEP, "stagnant_pp_per_quarter": STAGNANT_PP,
+                   "scurve_bins": SCURVE_BINS, "scurve_min_rows": SCURVE_MIN_ROWS,
+                   "cost_bands_cr": COST_BANDS[:-1]},
+        "rows": {name: len(f) for name, f in frames.items()},
+        "labelled": {f"h{h}": label_summary(frames[f"labels_h{h}"]) for h in HORIZONS},
+        "labelled_by_year": years,
+        "checks": checks,
+    }
+    (out / "manifest.json").write_text(json.dumps(man, indent=2, default=str) + "\n", encoding="utf-8")
+    for k, by_year in years.items():
+        table = pd.DataFrame({y: {f"{c} {s}": v for c, st in t.items() for s, v in st.items()}
+                              for y, t in by_year.items()}).T
+        table = table.astype({c: "int64" for c in table.columns if c.endswith(" n")})
+        print(f"labelled rows (n) and positive rate (pos_rate) per year of t, {k}:")
+        print(table.to_string())
+    print(f"gold {man['gold_version']} (silver {man['silver_version']}): "
+          + ", ".join(f"{v} {n}" for n, v in man["rows"].items()) + f", {time.time() - t0:.1f}s")
+    return man
+
+
+if __name__ == "__main__":
+    main()

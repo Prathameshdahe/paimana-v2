@@ -1,0 +1,928 @@
+{
+  "gold_version": "3bafb1f033a6",
+  "silver_version": "0d8abdcfc7cf",
+  "run_id": "RUN-20260927-124209",
+  "built_at": "2026-09-27T12:42:09+00:00",
+  "latest_period": "2026-07-01",
+  "horizons_quarters": [
+    2,
+    4
+  ],
+  "features": {
+    "state": [
+      "physical_progress_pct",
+      "elapsed_ratio",
+      "cost_variation_pct",
+      "expenditure_ratio",
+      "burn_gap",
+      "spi",
+      "months_to_scheduled_completion",
+      "months_to_anticipated_completion",
+      "slip_to_date_months",
+      "revisions_so_far",
+      "months_since_last_revision",
+      "log_cost",
+      "cost_band"
+    ],
+    "dynamics": [
+      "progress_velocity_2q",
+      "progress_velocity_4q",
+      "spend_velocity_2q",
+      "acceleration",
+      "stagnation_quarters",
+      "velocity_vs_sector_median"
+    ],
+    "context": [
+      "expected_progress_scurve",
+      "scurve_deviation",
+      "sector_actual_target_ratio",
+      "sector_yoy_growth",
+      "sector_trend_4q",
+      "agency_slip_rate",
+      "agency_cost_optimism",
+      "agency_n",
+      "ministry",
+      "sector",
+      "state"
+    ],
+    "freshness": [
+      "obs_count_in_quarter",
+      "months_since_last_obs",
+      "dq_score",
+      "period_type"
+    ]
+  },
+  "categorical": [
+    "ministry",
+    "sector",
+    "state",
+    "period_type"
+  ],
+  "baselines": [
+    "slipped_last_period",
+    "rule_score"
+  ],
+  "meta": [
+    "project_key",
+    "period",
+    "agency",
+    "is_completed"
+  ],
+  "params": {
+    "agency_label_horizon": 2,
+    "shrink_k": 10,
+    "cost_step": 1.05,
+    "date_step_months": 3,
+    "stagnant_pp_per_quarter": 0.5,
+    "scurve_bins": [
+      0,
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0,
+      1.25,
+      1.5,
+      2.0,
+      3.0001
+    ],
+    "scurve_min_rows": 20,
+    "cost_bands_cr": [
+      0,
+      500,
+      1000,
+      5000
+    ]
+  },
+  "rows": {
+    "features": 73167,
+    "labels_h2": 58069,
+    "labels_h4": 46757,
+    "sector_scurve": 1105,
+    "agency_stats": 5371
+  },
+  "labelled": {
+    "h2": {
+      "y_date_push": {
+        "n": 44452,
+        "pos_rate": 0.3534
+      },
+      "y_cost_rev": {
+        "n": 54311,
+        "pos_rate": 0.0522
+      },
+      "y_any": {
+        "n": 43130,
+        "pos_rate": 0.3831
+      },
+      "y_months": {
+        "n": 44452
+      },
+      "y_cost_pct": {
+        "n": 54311
+      }
+    },
+    "h4": {
+      "y_date_push": {
+        "n": 33042,
+        "pos_rate": 0.5495
+      },
+      "y_cost_rev": {
+        "n": 40767,
+        "pos_rate": 0.1048
+      },
+      "y_any": {
+        "n": 31778,
+        "pos_rate": 0.5855
+      },
+      "y_months": {
+        "n": 33042
+      },
+      "y_cost_pct": {
+        "n": 40767
+      }
+    }
+  },
+  "labelled_by_year": {
+    "h2": {
+      "2005": {
+        "y_date_push": {
+          "n": 701,
+          "pos_rate": 0.3067
+        },
+        "y_cost_rev": {
+          "n": 984,
+          "pos_rate": 0.0691
+        },
+        "y_any": {
+          "n": 701,
+          "pos_rate": 0.3481
+        },
+        "y_months": {
+          "n": 701
+        },
+        "y_cost_pct": {
+          "n": 984
+        }
+      },
+      "2006": {
+        "y_date_push": {
+          "n": 1334,
+          "pos_rate": 0.2826
+        },
+        "y_cost_rev": {
+          "n": 1729,
+          "pos_rate": 0.0833
+        },
+        "y_any": {
+          "n": 1334,
+          "pos_rate": 0.3418
+        },
+        "y_months": {
+          "n": 1334
+        },
+        "y_cost_pct": {
+          "n": 1729
+        }
+      },
+      "2007": {
+        "y_date_push": {
+          "n": 1513,
+          "pos_rate": 0.4098
+        },
+        "y_cost_rev": {
+          "n": 1887,
+          "pos_rate": 0.0684
+        },
+        "y_any": {
+          "n": 1513,
+          "pos_rate": 0.4488
+        },
+        "y_months": {
+          "n": 1513
+        },
+        "y_cost_pct": {
+          "n": 1887
+        }
+      },
+      "2008": {
+        "y_date_push": {
+          "n": 1550,
+          "pos_rate": 0.329
+        },
+        "y_cost_rev": {
+          "n": 1957,
+          "pos_rate": 0.0562
+        },
+        "y_any": {
+          "n": 1550,
+          "pos_rate": 0.3574
+        },
+        "y_months": {
+          "n": 1550
+        },
+        "y_cost_pct": {
+          "n": 1957
+        }
+      },
+      "2009": {
+        "y_date_push": {
+          "n": 1473,
+          "pos_rate": 0.4379
+        },
+        "y_cost_rev": {
+          "n": 1656,
+          "pos_rate": 0.0791
+        },
+        "y_any": {
+          "n": 1472,
+          "pos_rate": 0.4898
+        },
+        "y_months": {
+          "n": 1473
+        },
+        "y_cost_pct": {
+          "n": 1656
+        }
+      },
+      "2010": {
+        "y_date_push": {
+          "n": 1426,
+          "pos_rate": 0.4137
+        },
+        "y_cost_rev": {
+          "n": 1560,
+          "pos_rate": 0.0712
+        },
+        "y_any": {
+          "n": 1390,
+          "pos_rate": 0.4439
+        },
+        "y_months": {
+          "n": 1426
+        },
+        "y_cost_pct": {
+          "n": 1560
+        }
+      },
+      "2011": {
+        "y_date_push": {
+          "n": 1545,
+          "pos_rate": 0.3327
+        },
+        "y_cost_rev": {
+          "n": 1683,
+          "pos_rate": 0.0677
+        },
+        "y_any": {
+          "n": 1510,
+          "pos_rate": 0.3576
+        },
+        "y_months": {
+          "n": 1545
+        },
+        "y_cost_pct": {
+          "n": 1683
+        }
+      },
+      "2012": {
+        "y_date_push": {
+          "n": 1700,
+          "pos_rate": 0.3441
+        },
+        "y_cost_rev": {
+          "n": 1785,
+          "pos_rate": 0.0499
+        },
+        "y_any": {
+          "n": 1686,
+          "pos_rate": 0.3737
+        },
+        "y_months": {
+          "n": 1700
+        },
+        "y_cost_pct": {
+          "n": 1785
+        }
+      },
+      "2013": {
+        "y_date_push": {
+          "n": 1744,
+          "pos_rate": 0.3245
+        },
+        "y_cost_rev": {
+          "n": 2221,
+          "pos_rate": 0.0504
+        },
+        "y_any": {
+          "n": 1744,
+          "pos_rate": 0.3486
+        },
+        "y_months": {
+          "n": 1744
+        },
+        "y_cost_pct": {
+          "n": 2221
+        }
+      },
+      "2014": {
+        "y_date_push": {
+          "n": 1719,
+          "pos_rate": 0.4124
+        },
+        "y_cost_rev": {
+          "n": 2561,
+          "pos_rate": 0.0793
+        },
+        "y_any": {
+          "n": 1718,
+          "pos_rate": 0.4476
+        },
+        "y_months": {
+          "n": 1719
+        },
+        "y_cost_pct": {
+          "n": 2561
+        }
+      },
+      "2015": {
+        "y_date_push": {
+          "n": 1815,
+          "pos_rate": 0.3063
+        },
+        "y_cost_rev": {
+          "n": 3013,
+          "pos_rate": 0.0329
+        },
+        "y_any": {
+          "n": 1815,
+          "pos_rate": 0.319
+        },
+        "y_months": {
+          "n": 1815
+        },
+        "y_cost_pct": {
+          "n": 3013
+        }
+      },
+      "2016": {
+        "y_date_push": {
+          "n": 2663,
+          "pos_rate": 0.267
+        },
+        "y_cost_rev": {
+          "n": 4141,
+          "pos_rate": 0.0464
+        },
+        "y_any": {
+          "n": 2663,
+          "pos_rate": 0.2858
+        },
+        "y_months": {
+          "n": 2663
+        },
+        "y_cost_pct": {
+          "n": 4141
+        }
+      },
+      "2017": {
+        "y_date_push": {
+          "n": 2235,
+          "pos_rate": 0.1803
+        },
+        "y_cost_rev": {
+          "n": 3509,
+          "pos_rate": 0.041
+        },
+        "y_any": {
+          "n": 2235,
+          "pos_rate": 0.2112
+        },
+        "y_months": {
+          "n": 2235
+        },
+        "y_cost_pct": {
+          "n": 3509
+        }
+      },
+      "2021": {
+        "y_date_push": {
+          "n": 2679,
+          "pos_rate": 0.3949
+        },
+        "y_cost_rev": {
+          "n": 4659,
+          "pos_rate": 0.065
+        },
+        "y_any": {
+          "n": 2671,
+          "pos_rate": 0.4257
+        },
+        "y_months": {
+          "n": 2679
+        },
+        "y_cost_pct": {
+          "n": 4659
+        }
+      },
+      "2022": {
+        "y_date_push": {
+          "n": 4929,
+          "pos_rate": 0.3968
+        },
+        "y_cost_rev": {
+          "n": 5621,
+          "pos_rate": 0.0441
+        },
+        "y_any": {
+          "n": 4916,
+          "pos_rate": 0.4186
+        },
+        "y_months": {
+          "n": 4929
+        },
+        "y_cost_pct": {
+          "n": 5621
+        }
+      },
+      "2023": {
+        "y_date_push": {
+          "n": 6103,
+          "pos_rate": 0.3559
+        },
+        "y_cost_rev": {
+          "n": 5294,
+          "pos_rate": 0.0499
+        },
+        "y_any": {
+          "n": 5249,
+          "pos_rate": 0.409
+        },
+        "y_months": {
+          "n": 6103
+        },
+        "y_cost_pct": {
+          "n": 5294
+        }
+      },
+      "2024": {
+        "y_date_push": {
+          "n": 6710,
+          "pos_rate": 0.3385
+        },
+        "y_cost_rev": {
+          "n": 6434,
+          "pos_rate": 0.0398
+        },
+        "y_any": {
+          "n": 6399,
+          "pos_rate": 0.3526
+        },
+        "y_months": {
+          "n": 6710
+        },
+        "y_cost_pct": {
+          "n": 6434
+        }
+      },
+      "2025": {
+        "y_date_push": {
+          "n": 1283,
+          "pos_rate": 0.484
+        },
+        "y_cost_rev": {
+          "n": 1976,
+          "pos_rate": 0.0238
+        },
+        "y_any": {
+          "n": 1246,
+          "pos_rate": 0.4936
+        },
+        "y_months": {
+          "n": 1283
+        },
+        "y_cost_pct": {
+          "n": 1976
+        }
+      },
+      "2026": {
+        "y_date_push": {
+          "n": 1330,
+          "pos_rate": 0.4729
+        },
+        "y_cost_rev": {
+          "n": 1641,
+          "pos_rate": 0.0439
+        },
+        "y_any": {
+          "n": 1318,
+          "pos_rate": 0.5144
+        },
+        "y_months": {
+          "n": 1330
+        },
+        "y_cost_pct": {
+          "n": 1641
+        }
+      }
+    },
+    "h4": {
+      "2005": {
+        "y_date_push": {
+          "n": 630,
+          "pos_rate": 0.4905
+        },
+        "y_cost_rev": {
+          "n": 916,
+          "pos_rate": 0.1496
+        },
+        "y_any": {
+          "n": 630,
+          "pos_rate": 0.5619
+        },
+        "y_months": {
+          "n": 630
+        },
+        "y_cost_pct": {
+          "n": 916
+        }
+      },
+      "2006": {
+        "y_date_push": {
+          "n": 1228,
+          "pos_rate": 0.478
+        },
+        "y_cost_rev": {
+          "n": 1643,
+          "pos_rate": 0.1388
+        },
+        "y_any": {
+          "n": 1228,
+          "pos_rate": 0.5554
+        },
+        "y_months": {
+          "n": 1228
+        },
+        "y_cost_pct": {
+          "n": 1643
+        }
+      },
+      "2007": {
+        "y_date_push": {
+          "n": 1352,
+          "pos_rate": 0.5666
+        },
+        "y_cost_rev": {
+          "n": 1769,
+          "pos_rate": 0.1357
+        },
+        "y_any": {
+          "n": 1352,
+          "pos_rate": 0.6146
+        },
+        "y_months": {
+          "n": 1352
+        },
+        "y_cost_pct": {
+          "n": 1769
+        }
+      },
+      "2008": {
+        "y_date_push": {
+          "n": 1171,
+          "pos_rate": 0.6328
+        },
+        "y_cost_rev": {
+          "n": 1455,
+          "pos_rate": 0.0997
+        },
+        "y_any": {
+          "n": 1171,
+          "pos_rate": 0.6661
+        },
+        "y_months": {
+          "n": 1171
+        },
+        "y_cost_pct": {
+          "n": 1455
+        }
+      },
+      "2009": {
+        "y_date_push": {
+          "n": 1027,
+          "pos_rate": 0.6388
+        },
+        "y_cost_rev": {
+          "n": 1142,
+          "pos_rate": 0.155
+        },
+        "y_any": {
+          "n": 1017,
+          "pos_rate": 0.7011
+        },
+        "y_months": {
+          "n": 1027
+        },
+        "y_cost_pct": {
+          "n": 1142
+        }
+      },
+      "2010": {
+        "y_date_push": {
+          "n": 1237,
+          "pos_rate": 0.5853
+        },
+        "y_cost_rev": {
+          "n": 1384,
+          "pos_rate": 0.1315
+        },
+        "y_any": {
+          "n": 1204,
+          "pos_rate": 0.6163
+        },
+        "y_months": {
+          "n": 1237
+        },
+        "y_cost_pct": {
+          "n": 1384
+        }
+      },
+      "2011": {
+        "y_date_push": {
+          "n": 1408,
+          "pos_rate": 0.5142
+        },
+        "y_cost_rev": {
+          "n": 1528,
+          "pos_rate": 0.1217
+        },
+        "y_any": {
+          "n": 1378,
+          "pos_rate": 0.5522
+        },
+        "y_months": {
+          "n": 1408
+        },
+        "y_cost_pct": {
+          "n": 1528
+        }
+      },
+      "2012": {
+        "y_date_push": {
+          "n": 1600,
+          "pos_rate": 0.53
+        },
+        "y_cost_rev": {
+          "n": 1707,
+          "pos_rate": 0.0926
+        },
+        "y_any": {
+          "n": 1590,
+          "pos_rate": 0.5616
+        },
+        "y_months": {
+          "n": 1600
+        },
+        "y_cost_pct": {
+          "n": 1707
+        }
+      },
+      "2013": {
+        "y_date_push": {
+          "n": 1586,
+          "pos_rate": 0.5366
+        },
+        "y_cost_rev": {
+          "n": 2089,
+          "pos_rate": 0.0962
+        },
+        "y_any": {
+          "n": 1586,
+          "pos_rate": 0.5605
+        },
+        "y_months": {
+          "n": 1586
+        },
+        "y_cost_pct": {
+          "n": 2089
+        }
+      },
+      "2014": {
+        "y_date_push": {
+          "n": 1443,
+          "pos_rate": 0.5897
+        },
+        "y_cost_rev": {
+          "n": 2405,
+          "pos_rate": 0.1202
+        },
+        "y_any": {
+          "n": 1442,
+          "pos_rate": 0.6262
+        },
+        "y_months": {
+          "n": 1443
+        },
+        "y_cost_pct": {
+          "n": 2405
+        }
+      },
+      "2015": {
+        "y_date_push": {
+          "n": 1682,
+          "pos_rate": 0.5083
+        },
+        "y_cost_rev": {
+          "n": 2796,
+          "pos_rate": 0.0862
+        },
+        "y_any": {
+          "n": 1682,
+          "pos_rate": 0.5321
+        },
+        "y_months": {
+          "n": 1682
+        },
+        "y_cost_pct": {
+          "n": 2796
+        }
+      },
+      "2016": {
+        "y_date_push": {
+          "n": 2413,
+          "pos_rate": 0.3995
+        },
+        "y_cost_rev": {
+          "n": 3979,
+          "pos_rate": 0.0865
+        },
+        "y_any": {
+          "n": 2411,
+          "pos_rate": 0.426
+        },
+        "y_months": {
+          "n": 2413
+        },
+        "y_cost_pct": {
+          "n": 3979
+        }
+      },
+      "2017": {
+        "y_date_push": {
+          "n": 620,
+          "pos_rate": 0.2952
+        },
+        "y_cost_rev": {
+          "n": 1112,
+          "pos_rate": 0.0728
+        },
+        "y_any": {
+          "n": 620,
+          "pos_rate": 0.3387
+        },
+        "y_months": {
+          "n": 620
+        },
+        "y_cost_pct": {
+          "n": 1112
+        }
+      },
+      "2021": {
+        "y_date_push": {
+          "n": 2452,
+          "pos_rate": 0.6195
+        },
+        "y_cost_rev": {
+          "n": 4074,
+          "pos_rate": 0.1112
+        },
+        "y_any": {
+          "n": 2450,
+          "pos_rate": 0.6449
+        },
+        "y_months": {
+          "n": 2452
+        },
+        "y_cost_pct": {
+          "n": 4074
+        }
+      },
+      "2022": {
+        "y_date_push": {
+          "n": 4297,
+          "pos_rate": 0.6286
+        },
+        "y_cost_rev": {
+          "n": 4378,
+          "pos_rate": 0.0923
+        },
+        "y_any": {
+          "n": 3922,
+          "pos_rate": 0.6698
+        },
+        "y_months": {
+          "n": 4297
+        },
+        "y_cost_pct": {
+          "n": 4378
+        }
+      },
+      "2023": {
+        "y_date_push": {
+          "n": 5492,
+          "pos_rate": 0.5686
+        },
+        "y_cost_rev": {
+          "n": 4988,
+          "pos_rate": 0.0994
+        },
+        "y_any": {
+          "n": 4940,
+          "pos_rate": 0.6018
+        },
+        "y_months": {
+          "n": 5492
+        },
+        "y_cost_pct": {
+          "n": 4988
+        }
+      },
+      "2024": {
+        "y_date_push": {
+          "n": 3067,
+          "pos_rate": 0.5152
+        },
+        "y_cost_rev": {
+          "n": 2830,
+          "pos_rate": 0.0777
+        },
+        "y_any": {
+          "n": 2820,
+          "pos_rate": 0.545
+        },
+        "y_months": {
+          "n": 3067
+        },
+        "y_cost_pct": {
+          "n": 2830
+        }
+      },
+      "2025": {
+        "y_date_push": {
+          "n": 337,
+          "pos_rate": 0.5134
+        },
+        "y_cost_rev": {
+          "n": 572,
+          "pos_rate": 0.1573
+        },
+        "y_any": {
+          "n": 335,
+          "pos_rate": 0.6269
+        },
+        "y_months": {
+          "n": 337
+        },
+        "y_cost_pct": {
+          "n": 572
+        }
+      }
+    }
+  },
+  "checks": {
+    "truncation": {
+      "2009-10-01": {
+        "rows": 416,
+        "identical": true
+      },
+      "2014-07-01": {
+        "rows": 707,
+        "identical": true
+      },
+      "2022-01-01": {
+        "rows": 1895,
+        "identical": true
+      },
+      "2026-04-01": {
+        "rows": 2034,
+        "identical": true
+      }
+    },
+    "agency_outcomes_realised": true,
+    "labels_h2": {
+      "exact_horizon": true,
+      "no_completed_rows": true,
+      "unique": true
+    },
+    "labels_h4": {
+      "exact_horizon": true,
+      "no_completed_rows": true,
+      "unique": true
+    }
+  }
+}
