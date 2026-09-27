@@ -43,6 +43,5 @@ Routes are in `src/App.tsx`: `/`, `/login`, `/command`, `/external`,
 `/projects/:key`, `/audit`, `/workers` and `/approvals`. The `@` import alias
 points to `src/`.
 
-`src/mocks/audit.ts` holds the hardcoded Audit Suite numbers from the v1 model;
-the Models page will replace them with `/api/models`. The role picker
-behind `/login` is in `src/lib/auth/`.
+The Audit Suite (`/audit`) reads `/api/models`: the champion run's backtest
+and ablation tables. The role picker behind `/login` is in `src/lib/auth/`.

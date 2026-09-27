@@ -167,11 +167,9 @@ python pipeline/clean_sector_state.py     # raw CSVs -> dataset/silver/*_clean.c
 python ml/train.py                        # -> dataset/gold/*.csv and model/*
 ```
 
-The frontend has no bundled project data; every view reads the backend API.
-The Audit Suite numbers are still hardcoded in
-`frontend/src/mocks/audit.ts` (benchmark rows and `BENCHMARK_NOTES` from
-`model/metrics.json`, CUF info-gain percentages from
-`model/shap_test_sanity.json`), so update them by hand after retraining.
+The frontend has no bundled data; every view reads the backend API. The Audit
+Suite shows the champion run's `backtest_summary.csv` and `ablation.csv` through
+`/api/models`, so it follows a retrain without edits.
 
 ## Data cleaning
 

@@ -29,6 +29,7 @@ import type {
   TierFilter,
   Timeline,
 } from '@/contracts/project'
+import type { ModelsOut } from '@/contracts/audit'
 import type { Role } from '@/lib/auth/RoleContext'
 
 export type PortfolioFilters = {
@@ -109,6 +110,11 @@ export function useSignals(key: string | null) {
     queryFn: () => apiGet<ProjectSignals>(`/api/projects/${enc(key ?? '')}/signals`),
     enabled: !!key,
   })
+}
+
+/** Champion registry + the champion run's backtest and ablation tables (a few dozen rows). */
+export function useModels() {
+  return useQuery({ queryKey: ['models'], queryFn: () => apiGet<ModelsOut>('/api/models') })
 }
 
 export function useExternalSummary() {

@@ -1,103 +1,97 @@
-import { cn, formatPct } from '@/lib/formatters'
-import type { CUFFieldAuditRow } from '@/contracts/audit'
+import { cn, formatProb, orDash } from '@/lib/formatters'
+import type { AblationRow } from '@/contracts/audit'
 
-interface CUFAuditTableProps {
-  rows: CUFFieldAuditRow[]
+// pipeline/gold.py FEATURE_GROUPS, in words
+const GROUPS: Record<string, string> = {
+  state: 'progress, elapsed time, cost variation, spend vs build, SPI, months to completion, slip so far, revisions, cost size',
+  dynamics: 'progress and spend velocity, acceleration, quarters without progress, velocity vs sector median',
+  context: 'sector S-curve and output, agency track record, ministry / sector / state',
+  freshness: 'reports in the quarter, months since the last report, data quality, report type',
+  external: 'report-remark events (land, forest, litigation, contractor, utility, inter-agency), Parivesh forest rules, Bhoomi Rashi land linkage',
 }
 
-export function CUFAuditTable({ rows }: CUFAuditTableProps) {
-  const currentFields = rows.filter((r) => r.currentlyCollected)
-  const proposedFields = rows.filter((r) => !r.currentlyCollected)
+const f3 = (v: number | null) => orDash(v, (x) => x.toFixed(3))
+const pct = (v: number | null) => orDash(v, (x) => formatProb(x, 1))
+
+/** A step's gain over the step before; `points` shows a share as percentage points. */
+function Gain({ v, points }: { v: number | null; points?: boolean }) {
+  if (v === null) return <span className="text-fg-dimmed">—</span>
+  // sign and colour go by the shown (rounded) value, so -0.00016 reads 0.000, not -0.000
+  const shown = points ? Math.round(v * 1000) / 10 : Math.round(v * 1000) / 1000
+  const text = points ? `${Math.abs(shown).toFixed(1)} pp` : Math.abs(shown).toFixed(3)
+  return (
+    <span className={cn('font-medium', shown > 0 ? 'text-stable' : shown < 0 ? 'text-critical' : 'text-fg-muted')}>
+      {shown > 0 ? '+' : shown < 0 ? '-' : ''}
+      {text}
+    </span>
+  )
+}
+
+interface AblationTableProps {
+  /** ablation.csv rows of one target, in step order */
+  rows: AblationRow[]
+  runId: string
+}
+
+/** Clause (c): what each feature group adds to LightGBM for one target (the champion run's ablation). */
+export function AblationTable({ rows, runId }: AblationTableProps) {
+  const r0 = rows[0]
+  if (!r0) {
+    return (
+      <div className="border border-border-subtle bg-surface-panel px-4 py-8 text-center font-mono text-xs text-fg-dimmed">
+        no ablation rows for this target in model/runs/{runId}/ablation.csv
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Currently Collected Fields */}
-      <div className="border border-border-subtle bg-surface-panel">
-        <div className="border-b border-border-subtle px-4 py-3">
-          <span className="text-xs font-mono uppercase tracking-widest text-fg-muted font-semibold">
-            Clause (c) · Current CUF Field Utility
-          </span>
-        </div>
-        <table className="w-full text-[13px] font-mono border-collapse">
-          <thead>
-            <tr className="border-b border-border-default text-fg-muted bg-surface-base">
-              <th className="py-2 px-3 text-left font-medium w-1/4">Field</th>
-              <th className="py-2 px-3 text-left font-medium w-1/3">Utility Rationale</th>
-              <th className="py-2 px-3 text-right font-medium">Info Gain</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle/60">
-            {currentFields.map((row) => (
-              <tr key={row.fieldName} className="hover:bg-surface-elevated/30">
-                <td className="py-3 px-4 align-top">
-                  <div className="text-fg-base font-medium">{row.fieldName}</div>
-                  <div className="text-xs text-fg-muted mt-1.5 line-clamp-2">
-                    {row.description}
-                  </div>
-                </td>
-                <td className="py-3 px-4 align-top">
-                  <div className="text-fg-base whitespace-pre-wrap leading-relaxed text-xs">
-                    {row.rationale}
-                  </div>
-                </td>
-                <td className="py-3 px-4 align-top text-right">
-                  <span className="text-stable font-medium">+{formatPct(row.infoGainPct)}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="border border-border-subtle bg-surface-panel overflow-x-auto">
+      <div className="border-b border-border-subtle px-4 py-3">
+        <span className="text-xs font-mono uppercase tracking-widest text-fg-muted font-semibold">
+          Clause (c) · Feature-group ablation — model/runs/{runId}/ablation.csv
+        </span>
       </div>
-
-      {/* Proposed Missing Variables */}
-      <div className="border border-border-subtle bg-surface-panel">
-        <div className="border-b border-border-subtle px-4 py-3">
-          <span className="text-xs font-mono uppercase tracking-widest text-warning font-semibold">
-            Clause (c) · Recommended Strategic Additions
-          </span>
-        </div>
-        <table className="w-full text-[13px] font-mono border-collapse">
-          <thead>
-            <tr className="border-b border-border-default text-fg-muted bg-surface-base">
-              <th className="py-3 px-4 text-left font-medium w-1/4">Proposed Field</th>
-              <th className="py-3 px-4 text-left font-medium w-1/3">Strategic Rationale</th>
-              <th className="py-3 px-4 text-left font-medium">Feasibility</th>
-              <th className="py-3 px-4 text-right font-medium">Δ Accuracy</th>
-              <th className="py-3 px-4 text-right font-medium">Lead Time</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle/60">
-            {proposedFields.map((row) => (
-              <tr key={row.fieldName} className="hover:bg-surface-elevated/30">
+      <table className="w-full text-[13px] font-mono border-collapse">
+        <thead>
+          <tr className="border-b border-border-default text-fg-muted bg-surface-base">
+            <th className="py-3 px-4 text-left font-medium">Step · group added</th>
+            <th className="py-3 px-4 text-right font-medium">Features</th>
+            <th className="py-3 px-4 text-right font-medium">PR-AUC</th>
+            <th className="py-3 px-4 text-right font-medium">Δ</th>
+            <th className="py-3 px-4 text-right font-medium">Precision@50</th>
+            <th className="py-3 px-4 text-right font-medium">Δ</th>
+            <th className="py-3 px-4 text-right font-medium">Recall@100</th>
+            <th className="py-3 px-4 text-right font-medium">Δ</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border-subtle/60">
+          {rows.map((r) => {
+            const group = r.step.replace(/^\+/, '')
+            return (
+              <tr key={r.step} className="hover:bg-surface-elevated/30">
                 <td className="py-3 px-4 align-top">
-                  <div className="text-warning font-medium">{row.fieldName}</div>
-                  <div className="text-xs text-fg-muted mt-1.5 line-clamp-2">
-                    {row.description}
-                  </div>
+                  <div className="text-fg-base font-medium">{r.step}</div>
+                  <div className="text-xs text-fg-muted mt-1 max-w-xl">{GROUPS[group] ?? r.groups}</div>
                 </td>
-                <td className="py-3 px-4 align-top">
-                  <div className="text-fg-base whitespace-pre-wrap leading-relaxed text-xs">
-                    {row.rationale}
-                  </div>
-                </td>
-                <td className="py-3 px-4 align-top">
-                  <span className={cn(
-                    'text-xs uppercase tracking-wider font-semibold',
-                    row.acquisitionFeasibility === 'immediate' ? 'text-stable' : 'text-accent'
-                  )}>
-                    {row.acquisitionFeasibility}
-                  </span>
-                </td>
-                <td className="py-3 px-4 align-top text-right">
-                  <span className="text-stable font-medium">+{formatPct(row.projectedAccuracyDeltaPct)}</span>
-                </td>
-                <td className="py-3 px-4 align-top text-right">
-                  <span className="text-stable font-medium">+{row.earlyWarningLeadDays}d</span>
-                </td>
+                <td className="py-3 px-4 align-top text-right text-fg-muted">{r.nFeatures}</td>
+                <td className="py-3 px-4 align-top text-right text-fg-base">{f3(r.prAuc)}</td>
+                <td className="py-3 px-4 align-top text-right"><Gain v={r.prAucGain} /></td>
+                <td className="py-3 px-4 align-top text-right text-fg-base">{pct(r.precision50)}</td>
+                <td className="py-3 px-4 align-top text-right"><Gain v={r.precision50Gain} points /></td>
+                <td className="py-3 px-4 align-top text-right text-fg-base">{pct(r.recall100)}</td>
+                <td className="py-3 px-4 align-top text-right"><Gain v={r.recall100Gain} points /></td>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            )
+          })}
+        </tbody>
+      </table>
+      <div className="border-t border-border-subtle px-4 py-3 font-mono text-[11px] text-fg-muted space-y-1">
+        <div>
+          · Validation folds only ({r0.nFolds} cutoffs, {r0.n.toLocaleString()} rows, base rate {pct(r0.baseRate)}). Each
+          step retrains LightGBM with one more feature group; Δ is the step minus the step before, so a small or negative
+          Δ means the group adds little beyond what the earlier groups already carry.
+        </div>
+        <div>· The last step is the full feature set, the same model as the LightGBM row above.</div>
       </div>
     </div>
   )
