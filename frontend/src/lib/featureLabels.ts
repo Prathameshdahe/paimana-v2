@@ -29,6 +29,8 @@ const FEATURE_LABELS: Record<string, string> = {
   agency_n: 'Agency portfolio size (projects)',
   agency_slip_rate: 'Agency 2-quarter slip rate',
   agency_cost_optimism: 'Agency cost optimism',
+  agency_slip_4q: 'Agency slip rate, last 4 quarters',
+  sector_slip_4q: 'Sector slip rate, last 4 quarters',
   ministry: 'Ministry',
   sector: 'Sector',
   state: 'State',
