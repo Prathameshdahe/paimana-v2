@@ -32,10 +32,10 @@ export function Login() {
     reduce
       ? {}
       : {
-          initial: { opacity: 0, y: 14, filter: 'blur(6px)' },
-          animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
-          transition: { duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] as const },
-        }
+        initial: { opacity: 0, y: 14, filter: 'blur(6px)' },
+        animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+        transition: { duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] as const },
+      }
 
   return (
     <SonarGrid
@@ -55,45 +55,46 @@ export function Login() {
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_50%_45%_at_50%_42%,#ffffff_0%,transparent_100%)]"
       />
 
-      <motion.div {...enter(0)} className="mb-8 flex flex-col items-center text-center">
-        <span className="font-sans text-2xl font-extrabold tracking-[0.2em] text-fg-base">
+      <motion.div {...enter(0)} className="mb-10 flex flex-col items-center text-center">
+        <span className="font-sans text-3xl font-extrabold tracking-[0.2em] text-fg-base">
           PAIMANA
-          <span className="ml-2 text-sm font-bold tracking-widest text-fg-dimmed">RADAR</span>
+          <span className="ml-2 text-base font-bold tracking-widest text-fg-dimmed">RADAR</span>
         </span>
-        <span className="mt-2 font-mono text-[11px] uppercase tracking-widest text-fg-dimmed">
+        <span className="mt-3 font-mono text-xs uppercase tracking-widest text-fg-dimmed">
           Early warning &amp; predictive decision support
         </span>
       </motion.div>
 
-      <motion.div {...enter(0.1)} className="w-full max-w-sm">
+      <motion.div {...enter(0.1)} className="w-full max-w-md">
         <Card
           title="Sign In"
           className="border-border-default bg-surface-panel/95 shadow-2xl shadow-black/10 backdrop-blur-md"
         >
-          <div className="px-5 py-4 space-y-4">
-            <p className="font-mono text-[11px] leading-relaxed text-warning">
+          <div className="px-8 py-6 space-y-6">
+            <p className="font-mono text-xs leading-relaxed text-warning">
               Prototype login — role-based access, not yet connected to real authentication.
             </p>
 
-            <div className="space-y-1.5">
-              <label className="block font-mono text-[10px] uppercase tracking-widest text-fg-dimmed">
+            <div className="space-y-2">
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-fg-dimmed">
                 Name
               </label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
+                className="py-2 text-sm"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block font-mono text-[10px] uppercase tracking-widest text-fg-dimmed">
+            <div className="space-y-2">
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-fg-dimmed">
                 Role
               </label>
               <select
                 value={role}
                 onChange={(e) => setRoleValue(e.target.value as Role)}
-                className="w-full rounded-md border border-border-default bg-surface-input px-3 py-1.5 text-xs text-fg-base focus:border-accent focus:outline-none"
+                className="w-full rounded-md border border-border-default bg-surface-input px-3 py-2 text-sm text-fg-base focus:border-accent focus:outline-none"
               >
                 <option value="" disabled>
                   Select a role…
@@ -108,7 +109,7 @@ export function Login() {
 
             <Button
               variant="primary"
-              className="w-full justify-center"
+              className="w-full justify-center py-2.5 text-sm"
               disabled={!role}
               onClick={handleContinue}
             >

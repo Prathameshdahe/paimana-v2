@@ -41,16 +41,16 @@ export default function App() {
               <Route path="/login" element={<Login />} />
 
               {/* Route 1: Executive Command Center (DETECT) */}
-              <Route path="/command" element={<RequireRole><CommandCenter /></RequireRole>} />
+              <Route path="/command" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><CommandCenter /></RequireRole>} />
 
               {/* Route 2: Project Deep-Dive Studio (DIAGNOSE) */}
-              <Route path="/projects/:id" element={<RequireRole><ProjectStudio /></RequireRole>} />
+              <Route path="/projects/:id" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><ProjectStudio /></RequireRole>} />
 
               {/* Route 3: Prescriptive What-If Sandbox (PRESCRIBE) */}
-              <Route path="/sandbox" element={<RequireRole><PrescriptiveSandbox /></RequireRole>} />
+              <Route path="/sandbox" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><PrescriptiveSandbox /></RequireRole>} />
 
               {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) */}
-              <Route path="/audit" element={<RequireRole><AuditSuite /></RequireRole>} />
+              <Route path="/audit" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><AuditSuite /></RequireRole>} />
 
               {/* Route 5: Worker Console — IPMD analyst + ministry official only */}
               <Route

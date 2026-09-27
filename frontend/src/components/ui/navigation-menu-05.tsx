@@ -11,9 +11,9 @@ import {
 
 const navigationMenuItems = [
   { title: "HOME", href: "/", icon: Home, end: true, requiresAuth: false, roles: undefined as Role[] | undefined },
-  { title: "COMMAND", href: "/command", icon: Terminal, end: false, requiresAuth: true, roles: undefined },
-  { title: "SANDBOX", href: "/sandbox", icon: Box, end: false, requiresAuth: true, roles: undefined },
-  { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, requiresAuth: true, roles: undefined },
+  { title: "COMMAND", href: "/command", icon: Terminal, end: false, requiresAuth: true, roles: ["ipmd_analyst", "ministry_official", "agency_official"] as Role[] },
+  { title: "SANDBOX", href: "/sandbox", icon: Box, end: false, requiresAuth: true, roles: ["ipmd_analyst", "ministry_official", "agency_official"] as Role[] },
+  { title: "AUDIT", href: "/audit", icon: ClipboardCheck, end: false, requiresAuth: true, roles: ["ipmd_analyst", "ministry_official", "agency_official"] as Role[] },
   {
     title: "WORKERS",
     href: "/workers",
