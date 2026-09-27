@@ -67,7 +67,9 @@ FEATURE_GROUPS = {
                 "sector_trend_4q", "agency_slip_rate", "agency_cost_optimism", "agency_n", "agency_slip_4q",
                 "sector_slip_4q", "sector", "state"],
     "freshness": ["obs_count_in_quarter", "months_since_last_obs", "dq_score", "period_type"],
-    "external": [f"ext_open_{c}" for c in EXT_CATS] + ["ext_open_total", "ext_open_age_q"]
+    # no age-of-open-flag feature: it cost y_any_h2 0.0025 validation and 0.0063 flash-block PR-AUC (3 seeds,
+    # paired project bootstrap CIs above 0), likely as a report-era proxy (stale flags are ~13 quarters old in 2026)
+    "external": [f"ext_open_{c}" for c in EXT_CATS] + ["ext_open_total"]
                 + [f"ext_ever_{c}" for c in EXT_CATS]
                 + [f"ext_months_since_first_{c}" for c in EXT_FIRST] + ["ext_remark_quarters"] + FC_FEATURES
                 + ["la_linked", "la_complexity_max_by_t", "la_parcels_by_t", "la_notif_span_by_t"],
@@ -311,8 +313,7 @@ def external_features(d, ext):
     """External group at each (project_key, period) row of d. A category is open at t when it is mentioned in one
     of the key's last OPEN_LAST_Q remark-observed quarters up to t, that latest mention does not report it done
     (the pipeline/external.py rule applied at t, not the final status) and it is less than OPEN_MAX_AGE_Q calendar
-    quarters old. ext_open_age_q: calendar quarters since the newest mention of a category open by the remark rule,
-    expired or not (null when none is). Land: a key is linked at t when a stretch
+    quarters old. Land: a key is linked at t when a stretch
     of its NH (pipeline/external.py link_land) was first notified by t; the notification span is cut at t, parcels
     and complexity count only stretches fully notified by t, and the land values of a key not linked at t are null
     (unknown), not 0."""
@@ -323,7 +324,6 @@ def external_features(d, ext):
     qn_t = asof_join(d, seen, ["qn"])["qn"]
     ment = mq.loc[mq["category"].notna(), PK + ["category", "resolved"]].merge(seen, on=PK)
     ment["cq"] = qindex(ment["period"]).astype("float64")
-    ages = []
     for c in EXT_CATS:
         mc = ment[ment["category"].eq(c)]
         last = asof_join(d, mc, ["qn", "resolved", "cq"])
@@ -332,13 +332,11 @@ def external_features(d, ext):
         age = qindex(d["period"]) - last["cq"]
         by_remarks = ever & (last["qn"] >= qn_t - (OPEN_LAST_Q - 1)) & ~done
         out[f"ext_open_{c}"] = (by_remarks & (age < OPEN_MAX_AGE_Q)).astype("float64")
-        ages.append(age.where(by_remarks))
         out[f"ext_ever_{c}"] = ever.astype("float64")
         if c in EXT_FIRST:
             first = d["project_key"].map(months(mc["period"]).astype("float64").groupby(mc["project_key"]).min())
             out[f"ext_months_since_first_{c}"] = (months(d["period"]) - first).where(ever)
     out["ext_open_total"] = out[[f"ext_open_{c}" for c in EXT_CATS]].sum(axis=1)
-    out["ext_open_age_q"] = pd.concat(ages, axis=1).min(axis=1)
     out["ext_remark_quarters"] = (qn_t + 1).fillna(0)
     fc = ext["fc"].set_index("project_key")
     for c in FC_FEATURES:
