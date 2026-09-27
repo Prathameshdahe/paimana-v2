@@ -8,9 +8,12 @@ export type Params = Record<string, string | number | boolean | null | undefined
 /** status 0: the request never reached the backend (not running, wrong API_BASE, CORS). */
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** the parsed JSON error body, when there is one */
+  body: unknown
+  constructor(status: number, message: string, body?: unknown) {
     super(message)
     this.status = status
+    this.body = body
   }
 }
 
@@ -39,13 +42,15 @@ async function request<T>(method: string, path: string, params?: Params, body?: 
   }
   if (!res.ok) {
     let detail = res.statusText
+    let body: unknown
     try {
-      const j = (await res.json()) as { detail?: unknown }
-      if (typeof j.detail === 'string') detail = j.detail
+      body = await res.json()
+      const d = (body as { detail?: unknown } | null)?.detail
+      if (typeof d === 'string') detail = d
     } catch {
       // not a JSON error body
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, body)
   }
   return res.json() as Promise<T>
 }

@@ -8,10 +8,11 @@ import { RiskChecklist } from './project-studio/RiskChecklist'
 import { ShapWaterfall } from './project-studio/ShapWaterfall'
 import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
+import { BriefCard } from './project-studio/BriefCard'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Button } from '@/components/ui/Button'
 
-/** Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast and signals. */
+/** Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief. */
 export function ProjectStudio() {
   const { key = '' } = useParams<{ key: string }>()
   const { data: detail, isLoading, error } = useProject(key)
@@ -63,6 +64,10 @@ export function ProjectStudio() {
             forecastError={forecast.error ?? timeline.error}
             asof={detail.provenance.asof}
           />
+        </div>
+
+        <div className="col-span-1 lg:col-span-3">
+          <BriefCard projectKey={detail.key} />
         </div>
 
         <div className="col-span-1 lg:col-span-2">

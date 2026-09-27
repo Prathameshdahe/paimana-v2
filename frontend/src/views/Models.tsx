@@ -4,8 +4,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useMeta, useModels } from '@/lib/queries'
 import { formatDate } from '@/lib/formatters'
-import { BenchmarkMatrix } from './audit-suite/BenchmarkMatrix'
-import { AblationTable } from './audit-suite/AblationTable'
+import { BenchmarkMatrix } from './models/BenchmarkMatrix'
+import { AblationTable } from './models/AblationTable'
+import { CalibrationChart, LiveAccuracyCard, RegistryHistory, ShapSummary } from './models/ModelPanels'
 
 const TARGETS: Record<string, string> = {
   y_any_h2: 'Any slip · 2q',
@@ -16,12 +17,12 @@ const TARGETS: Record<string, string> = {
 const targetKey = (r: { target: string; horizon: number }) => `${r.target}_h${r.horizon}`
 
 /**
- * Transparency & Audit (/audit) over /api/models: the champion run's
- * rolling-origin backtest against the baselines (clause b) and its
- * feature-group ablation (clause c), one target at a time. Every figure is a
- * row of model/runs/<runId>/backtest_summary.csv or ablation.csv.
+ * Models (/models, was /audit) over /api/models: live accuracy of the logged predictions, the
+ * champion run's rolling-origin backtest against the baselines (clause b), its feature-group
+ * ablation (clause c), calibration and SHAP summary, and the registry's champion decisions, one
+ * target at a time. Every figure is a row of model/registry.json or model/runs/<runId>/*.csv.
  */
-export function AuditSuite() {
+export function Models() {
   const { data, error, isLoading } = useModels()
   const meta = useMeta().data
   const [picked, setPicked] = useState<string | null>(null)
@@ -37,9 +38,7 @@ export function AuditSuite() {
     <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-3">
-          <h1 className="font-mono text-sm font-medium tracking-wider text-fg-base uppercase">
-            Transparency & Audit Suite
-          </h1>
+          <h1 className="font-mono text-sm font-medium tracking-wider text-fg-base uppercase">Models</h1>
           <span className="font-mono text-[11px] tracking-widest text-fg-muted font-medium">VERIFY</span>
         </div>
         {runId && (
@@ -72,6 +71,7 @@ export function AuditSuite() {
               python -m pipeline.run score.
             </div>
           )}
+          <LiveAccuracyCard live={data.liveAccuracy} />
           <Tabs value={target} onValueChange={setPicked}>
             <TabsList>
               {targets.map((t) => (
@@ -86,7 +86,15 @@ export function AuditSuite() {
             champion={data.champions[target]?.model}
             runId={runId}
           />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+            <CalibrationChart bins={data.calibration.filter((r) => targetKey(r) === target)} runId={runId} />
+            <ShapSummary rows={data.shapSummary} runId={runId} />
+          </div>
           <AblationTable rows={data.ablation.filter((r) => targetKey(r) === target)} runId={runId} />
+          <RegistryHistory
+            decisions={data.decisions.filter((d) => targetKey(d) === target)}
+            entries={data.registry.filter((e) => targetKey(e) === target)}
+          />
         </>
       )}
     </div>

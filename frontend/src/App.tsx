@@ -10,7 +10,7 @@ const Home = lazy(() => import('@/views/Home').then(m => ({ default: m.Home })))
 const CommandCenter = lazy(() => import('@/views/CommandCenter').then(m => ({ default: m.CommandCenter })))
 const ProjectStudio = lazy(() => import('@/views/ProjectStudio').then(m => ({ default: m.ProjectStudio })))
 const ExternalFactors = lazy(() => import('@/views/ExternalFactors').then(m => ({ default: m.ExternalFactors })))
-const AuditSuite = lazy(() => import('@/views/AuditSuite').then(m => ({ default: m.AuditSuite })))
+const Models = lazy(() => import('@/views/Models').then(m => ({ default: m.Models })))
 const Login = lazy(() => import('@/views/Login').then(m => ({ default: m.Login })))
 const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ default: m.WorkerConsole })))
 const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ default: m.ApprovalInbox })))
@@ -62,8 +62,9 @@ export default function App() {
               {/* External Evidence Radar (guide §6.2) */}
               <Route path="/radar" element={<RequireRole><Radar /></RequireRole>} />
 
-              {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) */}
-              <Route path="/audit" element={<RequireRole><AuditSuite /></RequireRole>} />
+              {/* Route 4: Models — registry, backtest, calibration, live accuracy (PROVE); was /audit */}
+              <Route path="/models" element={<RequireRole><Models /></RequireRole>} />
+              <Route path="/audit" element={<Navigate to="/models" replace />} />
 
               {/* Route 5: Worker Console — IPMD analyst + ministry official only */}
               <Route

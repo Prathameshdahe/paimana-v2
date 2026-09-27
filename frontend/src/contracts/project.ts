@@ -272,3 +272,28 @@ export interface ProjectSignals {
   lastScoutAt: string | null
   items: Signal[]
 }
+
+/**
+ * GET /api/projects/{key}/brief, status 200: two paragraphs from the local LLM whose every number
+ * was traced to payload (the facts it was given). 422 carries BriefRejected, 503 LM Studio down.
+ */
+export interface BriefOut {
+  status: 'ok'
+  key: string
+  asof: string
+  modelVersion: string
+  text: string
+  paragraphs: string[]
+  cached: boolean
+  generatedAt: string | null
+  nNumbersChecked: number | null
+  attempts: number | null
+  payload: Record<string, unknown>
+}
+
+/** the 422 body: numbers in the text that are not in the payload */
+export interface BriefRejected {
+  status: 'rejected'
+  reasons: string[]
+  attempts: number
+}

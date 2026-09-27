@@ -21,6 +21,7 @@ import type {
   SignalFeed,
 } from '@/contracts/portfolio'
 import type {
+  BriefOut,
   Flag,
   Forecast,
   ProjectDetail,
@@ -111,6 +112,19 @@ export function useSignals(key: string | null) {
     queryKey: ['project', key, 'signals'],
     queryFn: () => apiGet<ProjectSignals>(`/api/projects/${enc(key ?? '')}/signals`),
     enabled: !!key,
+  })
+}
+
+/**
+ * The validated LLM brief; only fetched once asked for (it can take a while). Errors: 422 with a
+ * BriefRejected body, 503 when LM Studio is not running, 404 when the project is not scored.
+ */
+export function useBrief(key: string | null, requested: boolean) {
+  return useQuery({
+    queryKey: ['project', key, 'brief'],
+    queryFn: () => apiGet<BriefOut>(`/api/projects/${enc(key ?? '')}/brief`),
+    enabled: !!key && requested,
+    staleTime: Infinity,
   })
 }
 

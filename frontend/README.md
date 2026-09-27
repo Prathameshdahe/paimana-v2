@@ -40,8 +40,15 @@ with `LIVE_JOBS=0` on the backend it says the loops are off.
 ## Where things are
 
 Routes are in `src/App.tsx`: `/`, `/login`, `/command`, `/external`,
-`/projects/:key`, `/audit`, `/workers` and `/approvals`. The `@` import alias
-points to `src/`.
+`/bottlenecks`, `/agencies`, `/radar`, `/projects/:key`, `/models` (`/audit`
+redirects there), `/workers` and `/approvals`. The top bar
+(`src/components/ui/navigation-menu-05.tsx`) shows the first four and the rest
+under MORE. The `@` import alias points to `src/`.
 
-The Audit Suite (`/audit`) reads `/api/models`: the champion run's backtest
-and ablation tables. The role picker behind `/login` is in `src/lib/auth/`.
+Models (`/models`) reads `/api/models`: live accuracy of the logged
+predictions, the champion run's backtest, calibration, SHAP summary and
+ablation tables, and the registry's champion decisions. Bottlenecks, Agencies
+and Radar read `/api/bottlenecks`, `/api/agencies/matrix` and
+`/api/signals/feed` + `/api/radar/summary`. The project page's Brief card calls
+`/api/projects/{key}/brief` only when asked; 503 means LM Studio is not
+running. The role picker behind `/login` is in `src/lib/auth/`.

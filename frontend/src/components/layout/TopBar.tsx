@@ -78,7 +78,7 @@ export function TopBar() {
 
           {role ? (
             <div className="flex items-center gap-2 font-mono text-[11px]">
-              {/* the role only from 2xl, the name always in the tooltip: six nav labels, the bell and this fit 1024px */}
+              {/* the role only from 2xl, the name always in the tooltip: four nav labels, MORE, the bell and this fit 1024px */}
               <span className="hidden 2xl:inline whitespace-nowrap text-fg-muted" title={displayName}>
                 {ROLE_LABELS[role]}
               </span>

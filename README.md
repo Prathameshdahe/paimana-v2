@@ -76,8 +76,13 @@ picker, there's no auth. Public can't open the Approval Inbox, and the Worker
 Console is for IPMD Analyst and Ministry Official only.
 
 Pages: `/` (map, live status, alert inbox), `/command` (triage), `/external`
-(external factors and news evidence), `/projects/:key`, `/audit`, `/workers`,
-`/approvals` and `/login`.
+(external factors and news evidence), `/bottlenecks` (projects sharing an open
+land or clearance issue), `/agencies` (agency schedule and cost bias),
+`/radar` (news evidence feed, state heat map, "Run scout now"),
+`/projects/:key` (with the validated LLM brief), `/models` (registry,
+backtest, calibration, live accuracy; `/audit` redirects there), `/workers`,
+`/approvals` and `/login`. The top bar shows the first four and puts the rest
+under MORE.
 
 To feed a new report, drop a portal `Projects_Report.csv` export or a PAIMANA
 flash PDF into `dataset/raw/inbox/`. The watcher picks it up within a minute, or
