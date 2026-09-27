@@ -5,7 +5,7 @@ Pipeline entry point:  python -m pipeline.run <step>
   silver     identity, then the silver build (pipeline/silver.py)
   gold       features and labels from silver (pipeline/gold.py)
   train      backtest, refit and register the models (ml/backtest.py, ml/registry.py)
-  score      score the current portfolio with the champions (ml/score.py)
+  score      score the current portfolio, then analogues and scenarios (ml/score.py, ml/analogues.py)
   all        silver, gold, train and score in order
 """
 import argparse
@@ -42,8 +42,9 @@ def main(argv=None):
         from ml import registry
         registry.main()
     if "score" in steps:
-        from ml import score
+        from ml import analogues, score
         score.main()
+        analogues.main()
     print(f"{args.step}: {time.time() - t0:.1f}s")
 
 
