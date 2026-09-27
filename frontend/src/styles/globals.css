@@ -71,14 +71,14 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   scroll-behavior: smooth;
-  font-size: 15px;                         /* Increased base size for better readability */
+  font-size: 16.5px; /* Scaled up from 15px to automatically boost all rem-based padding/spacing/text across the app */
 }
 
 body {
   background-color: hsl(var(--color-surface-base));
   color: hsl(var(--color-fg-base));
   min-height: 100dvh;
-  line-height: 1.6;                        /* Looser leading for readability */
+  line-height: 1.65; /* Slightly looser leading for improved paragraph readability */
 }
 
 /* Telemetry figures: monospace tabular-nums — enforced globally on .mono */

@@ -40,17 +40,17 @@ export default function App() {
               {/* Prototype role picker */}
               <Route path="/login" element={<Login />} />
 
-              {/* Route 1: Executive Command Center (DETECT) */}
-              <Route path="/command" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><CommandCenter /></RequireRole>} />
+              {/* Route 1: Executive Command Center (DETECT) — read-only for public */}
+              <Route path="/command" element={<CommandCenter />} />
 
-              {/* Route 2: Project Deep-Dive Studio (DIAGNOSE) */}
-              <Route path="/projects/:id" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><ProjectStudio /></RequireRole>} />
+              {/* Route 2: Project Deep-Dive Studio (DIAGNOSE) — read-only for public */}
+              <Route path="/projects/:id" element={<ProjectStudio />} />
 
               {/* Route 3: Prescriptive What-If Sandbox (PRESCRIBE) */}
-              <Route path="/sandbox" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><PrescriptiveSandbox /></RequireRole>} />
+              <Route path="/sandbox" element={<RequireRole roles={['ipmd_analyst', 'ministry_official']}><PrescriptiveSandbox /></RequireRole>} />
 
-              {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) */}
-              <Route path="/audit" element={<RequireRole roles={['ipmd_analyst', 'ministry_official', 'agency_official']}><AuditSuite /></RequireRole>} />
+              {/* Route 4: MoSPI Compliance & Audit Suite (PROVE) — read-only for public */}
+              <Route path="/audit" element={<AuditSuite />} />
 
               {/* Route 5: Worker Console — IPMD analyst + ministry official only */}
               <Route

@@ -41,4 +41,23 @@
   .divider-v {
     @apply w-px h-full bg-border-subtle;
   }
+
+  /* ==========================================================================
+     GLOBAL TYPOGRAPHY & SPACING STANDARDIZATION
+     Overrides for tiny hardcoded classes to improve readability 
+     ========================================================================== */
+  
+  /* 1. Eliminate illegible tiny text globally */
+  .text-\[10px\] { font-size: 0.75rem !important; line-height: 1.1rem !important; } /* 12px */
+  .text-\[11px\] { font-size: 0.8125rem !important; line-height: 1.2rem !important; } /* 13px */
+  .text-\[12px\] { font-size: 0.875rem !important; line-height: 1.25rem !important; } /* 14px */
+  
+  /* 2. Standardize font weights for better hierarchy */
+  .font-semibold { font-weight: 600 !important; }
+  .font-medium { font-weight: 500 !important; }
+
+  /* 3. Utilize horizontal space better by expanding hardcoded cramped containers */
+  .max-w-\[1100px\] { max-width: 1400px !important; } /* Used in Approval Inbox */
+  .max-w-\[1400px\] { max-width: 90vw !important; } /* Used in Home Page */
+  .max-w-\[1600px\] { max-width: 95vw !important; } /* Used in TopBar */
 }

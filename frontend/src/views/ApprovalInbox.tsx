@@ -44,6 +44,12 @@ export function ApprovalInbox() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
 
+  // Agency officials only see memos addressed to them;
+  // IPMD analysts and ministry officials see everything.
+  const visible = role === 'agency_official'
+    ? sorted.filter((d) => d.recommendedRecipientRole === 'agency_official')
+    : sorted
+
   return (
     <div className="mx-auto max-w-[1100px] px-4 py-4 space-y-4">
       <h1 className="font-mono text-sm font-medium uppercase tracking-wider text-fg-base">
@@ -58,7 +64,7 @@ export function ApprovalInbox() {
         </p>
       )}
 
-      {isError || sorted.length === 0 ? (
+      {isError || visible.length === 0 ? (
         <Card>
           <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
             {isError
@@ -68,7 +74,7 @@ export function ApprovalInbox() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {sorted.map((draft) => {
+          {visible.map((draft) => {
             const canDecide = draft.status === 'pending' && role === draft.recommendedRecipientRole
             const isPending = decide.isPending && decide.variables?.draftId === draft.id
 

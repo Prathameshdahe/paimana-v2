@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatINRShort, formatMonths } from '@/lib/formatters'
+import { useRole } from '@/lib/auth/RoleContext'
 
 /**
  * Action-oriented alert feed — distinct from the Triage Table (which is a
@@ -18,6 +19,8 @@ import { formatINRShort, formatMonths } from '@/lib/formatters'
  */
 export function EarlyWarningInbox() {
   const navigate = useNavigate()
+  const { role } = useRole()
+  const isInternal = !!role && role !== 'public'
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set())
 
   const alerts = useMemo(() => {
@@ -51,9 +54,11 @@ export function EarlyWarningInbox() {
                   {p.code} · {p.sector} · {p.state} · {p.actionableRunwayDays}d runway · {formatMonths(p.predictedDelayMonths)} delay · {formatINRShort(p.overrunForecastCr)} overrun
                 </div>
               </button>
-              <Button size="sm" variant="ghost" onClick={() => setAcknowledged((s) => new Set(s).add(p.id))}>
-                Acknowledge
-              </Button>
+              {isInternal && (
+                <Button size="sm" variant="ghost" onClick={() => setAcknowledged((s) => new Set(s).add(p.id))}>
+                  Acknowledge
+                </Button>
+              )}
             </div>
           ))}
         </div>

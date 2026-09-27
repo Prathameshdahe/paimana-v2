@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { KPIRibbon } from '@/views/command-center/KPIRibbon'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
+import { useRole } from '@/lib/auth/RoleContext'
 
 /**
  * Landing page. Overview + geography + action inbox — the "what does the
@@ -9,6 +10,9 @@ import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
  * Deep triage/sort/filter work lives in Command Center (/command).
  */
 export function Home() {
+  const { role } = useRole()
+  const isInternal = !!role && role !== 'public'
+
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 space-y-4">
       <div className="flex items-end justify-between">
