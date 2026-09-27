@@ -26,4 +26,12 @@ temp/*
 .idea/
 .DS_Store
 Thumbs.db
-dataset/
+# large data: shared via the team drive, not git
+Dataset drive folder/
+dataset.zip
+dataset/clean/_parts/
+dataset/clean/performance/performance_detail.csv
+dataset/clean/projects/project_summaries.csv
+dataset/clean/projects/projects_monthly.csv
+dataset/clean/projects/projects_quarterly.csv
+mlruns/
