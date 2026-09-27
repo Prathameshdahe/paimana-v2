@@ -51,15 +51,15 @@ export function TopBar() {
               <span className="font-mono tabular-nums">{formatDate(m.asof)}</span>
               <span className="text-border-strong">·</span>
               <span className="font-mono tabular-nums">{m.nCurrent.toLocaleString()}</span>
-              <span className="font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
+              <span className="hidden xl:inline font-sans text-[10px] uppercase tracking-wider text-fg-dimmed">projects</span>
             </span>
             {p && (
-              <span className="font-mono text-[11px] tabular-nums">
+              <span className="hidden xl:inline font-mono text-[11px] tabular-nums">
                 <span className="text-critical font-semibold">{tierN('Critical')}</span> crit ·{' '}
                 <span className="text-warning font-semibold">{tierN('High')}</span> high
               </span>
             )}
-            <span className="font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
+            <span className="hidden 2xl:inline font-mono text-[10px] text-fg-dimmed" title={Object.values(m.models).join(' · ')}>
               {m.modelVersion}
             </span>
           </div>
