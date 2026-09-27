@@ -352,6 +352,12 @@ def composite_summary(cur, comp):
             "by_coverage": by, "top_fc_la": json.loads(top.to_json(orient="records"))}
 
 
+def evidence_of(ev_lines, dim, keys):
+    """The flagged evidence line of dimension dim for each of keys, null where it is not flagged (also when no
+    project has dim flagged: the four-quarter expiry of remark flags can leave a factor with none)."""
+    return ev_lines[ev_lines.index.get_level_values("dimension") == dim].droplevel("dimension").reindex(keys)
+
+
 def build_risk_profile(asof=None):
     """Write gold/risk_profile_<asof>.parquet and gold/external_summary.json; returns (rows, summary)."""
     t0 = time.time()
@@ -378,7 +384,7 @@ def build_risk_profile(asof=None):
         for name in names:
             dim = FACTORS[name]
             if dim in DIMENSIONS:
-                e = ev_lines.xs(dim, level="dimension").reindex(cur["project_key"]).set_axis(cur.index)
+                e = evidence_of(ev_lines, dim, cur["project_key"]).set_axis(cur.index)
             else:
                 e = event_info(cur, ev, dim, remarks_last)[2]
             parts.append((name + ": " + e).where(flags[name]))

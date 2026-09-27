@@ -141,3 +141,12 @@ def test_external_composite_clear_needs_both_halves_known_and_unflagged():
     assert r.loc[("P1", "land_acquisition"), "state"] == "flagged"
     assert r.loc[("P1", "external_composite"), "state"] == "unknown"
     assert r.loc[("P1", "external_composite"), "evidence"].endswith("not rated clear: the land row is flagged")
+
+
+def test_evidence_of_a_dimension_no_project_flags_is_null():
+    ev = pd.Series(["land line"], index=pd.MultiIndex.from_tuples([("P1", "land_acquisition")],
+                                                                   names=["project_key", "dimension"]))
+    keys = pd.Series(["P1", "P2"])
+    got = R.evidence_of(ev, "land_acquisition", keys)
+    assert got.iloc[0] == "land line" and pd.isna(got.iloc[1])
+    assert R.evidence_of(ev, "litigation", keys).isna().all()
