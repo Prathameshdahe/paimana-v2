@@ -1,0 +1,538 @@
+raw,n_projects,sector,canonical,method
+NHAI,1221,Roads & Highways,NHAI,alias
+NATIONAL HIGHWAYS AUTHORITY OF INDIA,948,Roads & Highways,NHAI,alias
+MoRTH,801,Roads & Highways,MORTH,alias
+National Highways Authority of India [NHAI],572,Roads & Highways,NHAI,bracket
+MINISTRY OF ROAD TRANSPORT AND HIGHWAYS (STATE PWDs),518,Roads & Highways,MORTH,alias
+NHIDCL,327,Roads & Highways,NHIDCL,alias
+NATIONAL HIGHWAYS AND INFRASTRUCTURE DEVELOPMENT CORPORATION Ltd.,259,Roads & Highways,NHIDCL,alias
+PGCIL,226,Power,POWERGRID,alias
+POWER GRID CORPORATION OF INDIA LIMITED,217,Power,POWERGRID,alias
+INDIAN OIL CORPORATION LIMITED,147,Petroleum & Natural Gas,IOCL,alias
+IOCL,121,Petroleum & Natural Gas,IOCL,alias
+MINISTRY OF ROAD TRANSPORT AND HIGHWAYS,99,Roads & Highways,MORTH,alias
+OIL & NATURAL GAS CORPORATION LIMITED,96,Petroleum & Natural Gas,ONGC,alias
+ONGC,90,Petroleum & Natural Gas,ONGC,alias
+PUBLIC WORKS DEPT OF STATE,90,Roads & Highways,STATE PWD,alias
+Power Grid Corporation of India Limited [POWERGRID],73,Power,POWERGRID,bracket
+NTPC,71,Power,NTPC,alias
+CENTRAL PUBLIC WORKS DEPARTMENT,66,Urban Development & Housing,CPWD,alias
+BSNL,60,Telecommunications,BSNL,alias
+NATIONAL THERMAL POWER CORPORATION,60,Power,NTPC,alias
+Ministry of Petroleum & Natural Gas,54,Petroleum & Natural Gas,MOPNG,alias
+AAI,53,Civil Aviation,AAI,alias
+BHARAT PETROLEUM CORPORATION LIMITED,53,Petroleum & Natural Gas,BPCL,alias
+BHARAT SANCHAR NIGAM LIMITED,51,Telecommunications,BSNL,alias
+BPCL,49,Petroleum & Natural Gas,BPCL,alias
+ER,48,Railways,ER,alias
+RVNL,46,Railways,RVNL,alias
+WESTERN COAL FIELDS LIMITED,46,Coal,WCL,alias
+HPCL,45,Petroleum & Natural Gas,HPCL,alias
+HINDUSTAN PETROLEUM CORPORATION LIMITED,44,Petroleum & Natural Gas,HPCL,alias
+WR,44,Railways,WR,alias
+GAIL,43,Petroleum & Natural Gas,GAIL,alias
+GAS AUTHORITY OF INDIA LIMITED,43,Petroleum & Natural Gas,GAIL,alias
+SAIL,42,Steel,SAIL,alias
+EASTERN RAILWAYS,41,Railways,ER,alias
+RAIL VIKAS NIGAM LTD.,41,Railways,RVNL,alias
+WCL,40,Coal,WCL,alias
+AIRPORT AUTHORITY OF INDIA LIMITED,39,Civil Aviation,AAI,alias
+CPWD,39,Urban Development & Housing,CPWD,alias
+ECR,39,Railways,ECR,alias
+EAST CENTRAL RAILWAYS,37,Railways,ECR,alias
+NORTH EAST FRONTIER RAILWAY,36,Railways,NFR,alias
+SECL,34,Coal,SECL,alias
+SOUTH-EASTERN COAL FIELDS LIMITED,33,Coal,SECL,alias
+WESTERN RAILWAY,33,Railways,WR,alias
+Indian Oil Corporation Limited [IOCL],32,Petroleum & Natural Gas,IOCL,bracket
+SR,32,Railways,SR,alias
+STEEL AUTHORITY OF INDIA LIMITED (SAIL),32,Steel,SAIL,bracket
+WCL - CIL,32,Coal,WCL,alias
+Western Coalfields Limited [WCL],32,Coal,WCL,bracket
+MinistryofPetroleumNaturalGas,31,Petroleum & Natural Gas,MOPNG,alias
+NR,31,Railways,NR,alias
+SOUTHERN RAILWAY,31,Railways,SR,alias
+SWR,30,Railways,SWR,alias
+Airport Authority of India [AAI],27,Civil Aviation,AAI,bracket
+"Medical Education, Ministry of Health and Family Welfare",27,Health,MOHFW,alias
+SINGARENI COLLIERS COMPANY LIMITTED,27,Coal,SCCL,alias
+NATIONAL HIGHWAYS DEVELOPMENT PROJECT,26,Roads & Highways,NHAI,alias
+NEFR,26,Railways,NFR,alias
+SOUTH WESTERN RAILWAY,26,Railways,SWR,alias
+SOUTH CENTRAL RAILWAY,25,Railways,SCR,alias
+SOUTH EASTERN RAILWAY,25,Railways,SER,alias
+CCL,24,Coal,CCL,alias
+CENTRAL COAL FIELDS LIMITED,24,Coal,CCL,alias
+CPWD OF HIGHER EDUCATION,24,Education,CPWD,prefix
+Ministry of Coal,24,Coal,MINISTRY OF COAL,normalised
+Ministry of Housing & Urban Affairs,24,Urban Development & Housing,MOHUA,alias
+NORTHERN RAILWAY,24,Railways,NR,alias
+NWR,24,Railways,NWR,alias
+SCCL,24,Coal,SCCL,alias
+NHPC,23,Power,NHPC,alias
+HOSPITAL SERVICES CONSULTANCY CORPORATION LTD,22,Health,HSCC,alias
+MCL,22,Coal,MCL,alias
+Oil and Natural Gas Corporation Limited [ONGC],22,Petroleum & Natural Gas,ONGC,bracket
+SECR,22,Railways,SECR,alias
+Bharat Petroleum Corporation Limited [BPCL],21,Petroleum & Natural Gas,BPCL,bracket
+Department of Telecommunications,21,Telecommunications,DOT,alias
+ECOR,21,Railways,ECOR,alias
+SER,21,Railways,SER,alias
+South Central Railway [SCR] - II,21,Railways,SCR,bracket
+ECL,20,Coal,ECL,alias
+East Central Railway [ECR] - I,20,Railways,ECR,bracket
+MAHANADI COAL FIELDS LIMITED,20,Coal,MCL,alias
+NER,20,Railways,NER,alias
+NORTH EASTERN RAILWAY,20,Railways,NER,alias
+CPWD EDUCATION,19,Education,CPWD,prefix
+CR,19,Railways,CR,alias
+East Coast Railway [ECoR] - II,19,Railways,ECOR,bracket
+NATIONAL HYDRO-ELECTRIC POWER CORPORATION,19,Power,NHPC,alias
+NLC,19,Coal,NLC,alias
+NORTH WESTERN RAILWAY,19,Railways,NWR,alias
+North Western Railway [NWR],19,Railways,NWR,bracket
+SECL - CIL,19,Coal,SECL,alias
+EAST COAST RAILWAY,18,Railways,ECOR,alias
+South Eastern Coalfields Limited [SECL],18,Coal,SECL,bracket
+CENTRAL RAILWAYS,17,Railways,CR,alias
+PCE/WR,17,Railways,WR,railway_office
+OIL INDIA LIMITED,16,Petroleum & Natural Gas,OIL,alias
+RASTRIYA ISPAT NIGAM LIMITED,16,Steel,RINL,alias
+SCR,16,Railways,SCR,alias
+SHIPP.,16,Shipping & Ports,SHIPP,normalised
+South Western Railway [SWR] - II,16,Railways,SWR,bracket
+Steel Authority of India Limited [SAIL],16,Steel,SAIL,bracket
+CAOCWR WR mor,15,Railways,WR,railway_office
+EASTERN COAL FIELDS LIMITED,15,Coal,ECL,alias
+Employee's State Insurance Company [ESIC],15,Health,ESIC,bracket
+HINDUSTAN STEELWORK CONSTRUCTION LIMITED,15,Steel,HSCL,alias
+PORT TRUST,15,Shipping & Ports,PORT TRUST,normalised
+RINL,15,Steel,RINL,alias
+RVNL - II,15,Railways,RVNL,alias
+Western Railway [WR] - II,15,Railways,WR,bracket
+BRO,14,Roads & Highways,BRO,normalised
+BUIDCO,14,Water Resources,BUIDCO,alias
+Bihar Urban Infrastructure Development Corporation Ltd,14,Water Resources,BUIDCO,alias
+CAO/C/ECOR ECoR mor,14,Railways,ECOR,railway_office
+Department of water resources-MH - II,14,Water Resources,DEPARTMENT OF WATER RESOURCES MH,normalised
+NCR,14,Railways,NCR,alias
+NEYVELI LIGNITE CORPORATION,14,Coal,NLC,alias
+NFR,14,Railways,NFR,alias
+P.GRID,14,Power,POWERGRID,alias
+Eastern Coal Fields Limited [ECL],13,Coal,ECL,bracket
+Hindustan Petroleum Corporation Limited,13,Petroleum & Natural Gas,HPCL,alias
+NCL,13,Coal,NCL,alias
+NORTHERN COAL FIELDS LIMITED,13,Coal,NCL,alias
+National Thermal Power Corporation [NTPC],13,Power,NTPC,bracket
+SATLUJ JAL VIDYUT NIGAM LIMITED,13,Power,SJVN,alias
+Uttar Pradesh Jal Nigam,13,Water Resources,UP JAL NIGAM,alias
+(SCR),12,Railways,SCR,alias
+KMDA,12,Water Resources,KMDA,alias
+Kolkata Metropolitan Development Authority,12,Water Resources,KMDA,alias
+NLC India Limited [NLCIL],12,Coal,NLC,bracket
+OIL,12,Petroleum & Natural Gas,OIL,alias
+UPJalNigam,12,Water Resources,UP JAL NIGAM,alias
+CAO/C/SCoR SCoR mor,11,Railways,SCOR,railway_office
+Central Railway [CR] - II,11,Railways,CR,bracket
+DEPT OF ROAD TRANSPORT & HIGHWAYS,11,Roads & Highways,MORTH,alias
+ECL - CIL,11,Coal,ECL,alias
+Gas Authority of India Limited [GAIL],11,Petroleum & Natural Gas,GAIL,bracket
+Ministry of Railways,11,Railways,INDIAN RAILWAYS,alias
+SAUTH COST RAILWAY,11,Railways,SCOR,alias
+SJVN,11,Power,SJVN,alias
+CAOC/CR CR mor,10,Railways,CR,railway_office
+CAOC/NWR NWR mor,10,Railways,NWR,railway_office
+CAOC/SECR SECR mor,10,Railways,SECR,railway_office
+CCL - CIL,10,Coal,CCL,alias
+Department of Telecommunications [DoT],10,Telecommunications,DOT,bracket
+METROPOLITAN RAPID TRANSPORT PROJECTS,10,Railways,MRTP,alias
+MRTP,10,Railways,MRTP,alias
+National Highways & Infrastructure Development Corporation Ltd. [NHIDCL],10,Power,NHIDCL,bracket
+Northeast Frontier Railway [NFR],10,Railways,NFR,bracket
+ONGCL,10,Petroleum & Natural Gas,ONGC,alias
+SHIPPING CRP. OF INDIA,10,Shipping & Ports,SCI,alias
+Singareni Collieries Company Limited [SCCL],10,Coal,SCCL,bracket
+BCCL,9,Coal,BCCL,alias
+CAOC/SWR SWR mor,9,Railways,SWR,railway_office
+CHENNAI PETROLEUM CORPORATION LIMITED,9,Petroleum & Natural Gas,CPCL,alias
+CONTAINER CORPORATION OF INDIA,9,Railways,CONCOR,alias
+EDTK[MC]/RB,9,Railways,INDIAN RAILWAYS,alias
+MCL - CIL,9,Coal,MCL,alias
+NALCO,9,Mines & Metals,NALCO,alias
+NATIONAL ALUMINUM COMPANY LIMITED (NALCO),9,Mines & Metals,NALCO,bracket
+National Industrial Corridor Development Corporation,9,Industry & Commerce,NICDC,alias
+Steel Authority of India Limited (SAIL),9,Steel,SAIL,bracket
+BHARAT COKING COAL LIMITED,8,Coal,BCCL,alias
+CAO/Con/South/MHX ECR mor,8,Railways,ECR,railway_office
+MANGALORE REFINERY AND PETROCHEMICALS LIMITED,8,Petroleum & Natural Gas,MRPL,alias
+NATIONAL FERTILISER LIMITED,8,Fertilizers & Chemicals,NFL,alias
+National Hydroelectric Power Corporation Limited [NHPC],8,Power,NHPC,bracket
+National Mission for Clean Ganga,8,Water Resources,NMCG,alias
+PMSSY AND Institute of NATIONAL Importance,8,Health,PMSSY AND INSTITUTE OF NATIONAL IMPORTANCE,normalised
+CAO/C/SER SER mor,7,Railways,SER,railway_office
+CAO/Con/North/MHX ECR mor,7,Railways,ECR,railway_office
+CPWD FOR HEALTH,7,Health,CPWD,prefix
+CPWD FOR MHA,7,Home Affairs,CPWD,prefix
+"Department of Water Resources, River Development & GR",7,Water Resources,DEPARTMENT OF WATER RESOURCES RIVER DEVELOPMENT AND GR,normalised
+Indian Railway Construction International Limited [IRCON],7,Railways,IRCON,bracket
+Irrigation and CAD-TG,7,Water Resources,IRRIGATION AND CAD TG,normalised
+MTNL,7,Telecommunications,MTNL,alias
+NATIONAL MINERAL DEVELOPMENT CORPORATION (NMDC),7,Steel,NMDC,bracket
+NMDC,7,Steel,NMDC,alias
+NORTH CENTRAL RAILWAY,7,Railways,NCR,alias
+NPCIL,7,Atomic Energy,NPCIL,alias
+North Central Railway,7,Railways,NCR,alias
+North Eastern Railway [NER],7,Railways,NER,bracket
+SHIPPING crp. of india,7,Shipping & Ports,SCI,alias
+SOUTH EAST CENTRAL RAILWAY,7,Railways,SECR,alias
+Satluj Jal Vidyut Nigam [SJVN] Thermal Limited,7,Power,SJVN,bracket
+Western Railway (WR) - II,7,Railways,WR,bracket
+ministry of housing and urban affairs,7,Urban Development & Housing,MOHUA,alias
+Adani Transmission Limited,6,Power,ADANI TRANSMISSION,normalised
+CAO/C/NCR NCR mor,6,Railways,NCR,railway_office
+MAHANAGAR TELEPHONE NIGAM LIMITED,6,Telecommunications,MTNL,alias
+MANGALORE REFIN,6,Petroleum & Natural Gas,MRPL,alias
+MEGA,6,Urban Development & Housing,MEGA,normalised
+Mahanadi Coalfields Limited [MCL],6,Coal,MCL,bracket
+Maharashtra Metro Rail Corporation Limited [MMRCL],6,Urban Development & Housing,MMRCL,bracket
+NEEPCO,6,Power,NEEPCO,alias
+NUCLEAR POWER CORPORATION OF INDIA LIMITED,6,Atomic Energy,NPCIL,alias
+Numaligarh Refinery Limited,6,Petroleum & Natural Gas,NRL,alias
+"PMAY, Ministry of Housing and Urban Affairs",6,Urban Development & Housing,MOHUA,alias
+RASHTRIYA CHEMICAL & FERTILISER LIMITED,6,Fertilizers & Chemicals,RCF,alias
+Railway,6,Railways,INDIAN RAILWAYS,alias
+South Eastern Railway [SER] - I,6,Railways,SER,bracket
+THDC INDIA LIMITED,6,Power,THDC,alias
+AHMEDABAD METRO RAIL,5,Urban Development & Housing,AHMEDABAD METRO RAIL,normalised
+AMR,5,Urban Development & Housing,AMR,normalised
+CAOC/NER NER mor,5,Railways,NER,railway_office
+CAOC/NR NR mor,5,Railways,NR,railway_office
+CPCL,5,Petroleum & Natural Gas,CPCL,alias
+Central Railway,5,Railways,CR,alias
+DELHI METRO RAIL CORPORATION,5,Urban Development & Housing,DMRC,alias
+DJB,5,Water Resources,DJB,alias
+DMRC,5,Urban Development & Housing,DMRC,alias
+Delhi Jal Board,5,Water Resources,DJB,alias
+Eastern Railway [ER] - I,5,Railways,ER,bracket
+GC,5,Railways,GC,normalised
+KAMARAJAR PORT LIMITED,5,Shipping & Ports,KPL,alias
+NCL - CIL,5,Coal,NCL,alias
+NFL,5,Fertilizers & Chemicals,NFL,alias
+NORTH EAST ELECTRIC POWER CORPORATION,5,Power,NEEPCO,alias
+NRL,5,Petroleum & Natural Gas,NRL,alias
+National Aluminium Company Limited [NALCO],5,Mines & Metals,NALCO,bracket
+National Mineral Development Corporation Limited [NMDC],5,Steel,NMDC,bracket
+Northern Coalfields Limited [NCL],5,Coal,NCL,bracket
+WCR,5,Railways,WCR,alias
+CAO/C/SER,4,Railways,SER,railway_office
+CAOC/ER ER mor,4,Railways,ER,railway_office
+Damodar Valley Corporation,4,Power,DVC,alias
+Delhi Metro Rail Corporation Limited [DMRC],4,Urban Development & Housing,DMRC,bracket
+HLL Infra Tech Services Limited,4,Health,HLL INFRA TECH SERVICES,normalised
+Mahanadi Coalfields Limited (MCL),4,Coal,MCL,bracket
+Ministry of Petroleum and Natural Gas,4,Petroleum & Natural Gas,MOPNG,alias
+NATIONAL BUILDING CONSTRUCION CORPORATION LTD,4,Urban Development & Housing,NBCC,alias
+NICDC,4,Industry & Commerce,NICDC,alias
+NUMALIGARH REFINERY LIMITED,4,Petroleum & Natural Gas,NRL,alias
+National Hydroelectric Power Corporation Limited (NHPC),4,Power,NHPC,bracket
+Oil India Limited,4,Petroleum & Natural Gas,OIL,alias
+P.GR.,4,Power,POWERGRID,alias
+RAILWAY ELECTRIFICATION,4,Railways,CORE,alias
+South East Central Railway [SECR] - II,4,Railways,SECR,bracket
+WEST CENTRAL RAILWAY,4,Railways,WCR,alias
+(NR),3,Railways,NR,alias
+BCCL - CIL,3,Coal,BCCL,alias
+Bengaluru Metro Rail,3,Urban Development & Housing,BMRCL,alias
+CAO/C-II/NFR NFR mor,3,Railways,NFR,railway_office
+CAO/C-II/NR NR mor,3,Railways,NR,railway_office
+CAO/C/NCR,3,Railways,NCR,railway_office
+CAO/C/NR,3,Railways,NR,railway_office
+CAO/CN/ERS SR mor,3,Railways,SR,railway_office
+CAOC/SR SR mor,3,Railways,SR,railway_office
+CHENAB VELLEY POWER PROJECTS [P] LIMITED,3,Power,CHENAB VELLEY POWER PROJECTS P,normalised
+CMD / RVNL RVNL mor,3,Railways,RVNL,railway_office
+CVPPPL,3,Power,CVPPPL,normalised
+Central Public Works Department [CPWD],3,Mines & Metals,CPWD,bracket
+Deendayal Port Trust [DPT],3,Shipping & Ports,DPT,bracket
+GM/C/ NFR,3,Railways,NFR,railway_office
+Gujarat Metro Rail Corporation Limited [GMRCL],3,Urban Development & Housing,GMRCL,bracket
+HITES,3,Health,HITES,normalised
+HSCL FOR RURAL,3,Rural Development,HSCL,prefix
+Hindustan Copper Limited [HCL],3,Mines & Metals,HCL,bracket
+Hindustan Petroleum Corporation Limited [HPCL],3,Petroleum & Natural Gas,HPCL,bracket
+INDIAN STRATEGIC PETROLEUM RESERVES LTD,3,Petroleum & Natural Gas,ISPRL,alias
+ISPRL,3,Petroleum & Natural Gas,ISPRL,alias
+"Indian Institute of Technology, Kharagpur",3,Education,IIT KHARAGPUR,alias
+Indian Railway,3,Railways,INDIAN RAILWAYS,alias
+Indian Railway Construction Company Limited,3,Railways,IRCON,alias
+Irrigation & Water Resources-UP,3,Water Resources,IRRIGATION AND WATER RESOURCES UP,normalised
+Jaipur Metro Rail Corporation,3,Urban Development & Housing,JMRC,alias
+KMRCL,3,Urban Development & Housing,KMRCL,alias
+Karnataka Rail Infrastructure Development Company Limited [K-RIDE],3,Railways,KRIDE,bracket
+LD,3,Railways,LD,normalised
+LUCKNOW METRO RAIL CORPORATION LIMITED,3,Urban Development & Housing,UPMRC,alias
+MMRC,3,Urban Development & Housing,MMRC,alias
+Mangalore Refin,3,Petroleum & Natural Gas,MRPL,alias
+Ministry of Education,3,Education,MINISTRY OF EDUCATION,normalised
+Mumbai Rail Vikas Corporation Ltd.[MRVC],3,Railways,MRVC,bracket
+NBCC,3,Urban Development & Housing,NBCC,alias
+NCRTC,3,Railways,NCRTC,alias
+NL,3,Railways,NL,normalised
+NLC India Limited,3,Coal,NLC,alias
+North Eastern Electric Power Corporation Limited,3,Power,NEEPCO,alias
+Northen Railway [NR],3,Railways,NR,bracket
+RAIL INDIA TECHNICAL AND ECONOMIC SERVICE,3,Railways,RITES,alias
+RCF,3,Fertilizers & Chemicals,RCF,alias
+RE,3,Railways,CORE,alias
+RVNL - I,3,Railways,RVNL,alias
+Rail Land Development Authority,3,Railways,RLDA,alias
+Southern Railway [SR] - II,3,Railways,SR,bracket
+THDC India Limited,3,Power,THDC,alias
+THDCIL,3,Power,THDC,alias
+THDCL,3,Power,THDC,alias
+Uttar Pradesh metro rail corporation [UPMRC],3,Urban Development & Housing,UPMRC,bracket
+WPO/Patna,3,Railways,WPO PATNA,normalised
+Water Resources-AP,3,Water Resources,WATER RESOURCES AP,normalised
+Western Railway,3,Railways,WR,alias
+Western Railway WR - II,3,Railways,WR,alias_prefix
+Adani Airport Holdings Limited,2,Civil Aviation,ADANI AIRPORT HOLDINGS,normalised
+BANGALORE METRO RAIL CORPORATION LIMITED,2,Urban Development & Housing,BMRCL,alias
+BCPL,2,Fertilizers & Chemicals,BCPL,alias
+BHEL,2,Power,BHEL,alias
+BMRCL,2,Urban Development & Housing,BMRCL,alias
+BRPL,2,Petroleum & Natural Gas,BRPL,alias
+Bharat Coking Coal Limited (BCCL),2,Coal,BCCL,bracket
+Bharat Coking Coal Limited [BCCL],2,Coal,BCCL,bracket
+CAO/C-1/NFR NFR mor,2,Railways,NFR,railway_office
+CAO/C-III/NFR NFR mor,2,Railways,NFR,railway_office
+CAO/C/ECoR,2,Railways,ECOR,railway_office
+CAOCON/SCR SCR mor,2,Railways,SCR,railway_office
+CCOI,2,Railways,CCOI,normalised
+CHENNAI METRO RAIL LTD,2,Urban Development & Housing,CMRL,alias
+CIL,2,Coal,CIL,normalised
+CMRL,2,Urban Development & Housing,CMRL,alias
+CPWD FOR FINANC,2,Finance,CPWD,prefix
+CPWD FOR FINANCE,2,Finance,CPWD,prefix
+Central Railways,2,Railways,CR,alias
+CentralRailway,2,Railways,CR,alias
+Chennai Petroleum Corporation Limited [CPCL],2,Petroleum & Natural Gas,CPCL,bracket
+DAMODAR VALLEY CORPORATION,2,Power,DVC,alias
+DEDICATED FREIGHT CORRIDOR CORPORATION OF INDIA LTD,2,Railways,DFCCIL,alias
+DELHI METRO RAIL CORPORATION LTD,2,Urban Development & Housing,DMRC,alias
+DEPARTMENT OF TELECOMMUNICATION,2,Telecommunications,DOT,alias
+DFCC,2,Railways,DFCCIL,alias
+Department of Water Resources-PB,2,Water Resources,DEPARTMENT OF WATER RESOURCES PB,normalised
+ENNORE PORT LTD,2,Shipping & Ports,KPL,alias
+ENNORE PORT LTD.,2,Shipping & Ports,KPL,alias
+GAIL Gas,2,Petroleum & Natural Gas,GAIL GAS,alias
+GOA SHIPYARD LIMITED,2,Defence,GOA SHIPYARD,normalised
+HPOIL(JV),2,Petroleum & Natural Gas,HPOIL JV,normalised
+HSCC,2,Health,HSCC,alias
+"Haldia Dock Complex, Syama Prasad Mookerjee Port Authority",2,Shipping & Ports,SMPK,alias
+INDIAN INSTITUTE OF TECHNOLOGY PALAKKAD,2,Education,INDIAN INSTITUTE OF TECHNOLOGY PALAKKAD,normalised
+INVALID CO.,2,Coal,,invalid
+IRCON,2,Railways,IRCON,alias
+"Indian Institute of Technology, Bombay",2,Education,INDIAN INSTITUTE OF TECHNOLOGY BOMBAY,normalised
+Inland Waterways Authority of India [IWAI],2,Shipping & Ports,IWAI,bracket
+KOCHI METRO RAIL CORPORATION LTD,2,Urban Development & Housing,KMRL,alias
+KOMRCL,2,Railways,KOMRCL,normalised
+LMRCL,2,Urban Development & Housing,UPMRC,alias
+MIS MoCoal Integration Logins,2,Coal,MIS MOCOAL INTEGRATION LOGINS,normalised
+MPMRCL,2,Urban Development & Housing,MPMRCL,alias
+Madhya Pradesh Metro Rail Co Limited,2,Urban Development & Housing,MPMRCL,alias
+Madhya Pradesh Metro Rail Co Limited [MPMRCL],2,Urban Development & Housing,MPMRCL,bracket
+Mangalore Refinery and Petrochemicals Limited,2,Petroleum & Natural Gas,MRPL,alias
+Ministry of Health & Family Welfare,2,Health,MOHFW,alias
+Mumbai Port Trust [MPT],2,Shipping & Ports,MBPT,bracket
+NAGPUR METRO RAIL CORPORATION LTD,2,Urban Development & Housing,MMRCL,alias
+"Narmada and Water Resources, Water Supply and Kalpsar Department-GJ",2,Water Resources,NARMADA AND WATER RESOURCES WATER SUPPLY AND KALPSAR DEPARTMENT GJ,normalised
+Northeast Frontier Railway (NFR) - II,2,Railways,NFR,bracket
+Northeast Frontier Railway [NFR] - II,2,Railways,NFR,bracket
+Northern Railways,2,Railways,NR,alias
+PWD,2,Roads & Highways,STATE PWD,alias
+RCIL,2,Railways,RCIL,normalised
+RITES,2,Railways,RITES,alias
+Rail Vikas Nigam Limited,2,Railways,RVNL,alias
+South East Central Railway,2,Railways,SECR,alias
+South Eastern Railway - JH,2,Railways,SER,alias_prefix
+Southern Railway [SR] - I,2,Railways,SR,bracket
+TEHRI HYDRO DEVELOPMENT CORPORATION LIMITED,2,Power,THDC,alias
+UKJalNigam,2,Water Resources,UK JAL NIGAM,alias
+Uttarakhand Pey Jal Nigam,2,Water Resources,UTTARAKHAND PEY JAL NIGAM,normalised
+WORKSHOPS & PRODUCTION UNIT,2,Railways,WORKSHOPS AND PRODUCTION UNIT,alias
+WS&PU,2,Railways,WORKSHOPS AND PRODUCTION UNIT,alias
+Water Resources-MP,2,Water Resources,WATER RESOURCES MP,normalised
+BHARAT HEAVY ELECTRICALS LIMITED,1,Industry & Commerce,BHEL,alias
+BOKARO STEEL PL,1,Steel,SAIL,alias
+BONGAIGAON REFINERY PETROLEUM LIMITED,1,Petroleum & Natural Gas,BRPL,alias
+BPB,1,Water Resources,BPB,normalised
+BRAHMAPUTRA BOARD,1,Water Resources,BRAHMAPUTRA BOARD,normalised
+BRAHMAPUTRA CRECKER & POLYMER LTD.,1,Fertilizers & Chemicals,BCPL,alias
+BVFC,1,Fertilizers & Chemicals,BVFC,normalised
+Banaras Hindu University,1,Education,BANARAS HINDU UNIVERSITY,normalised
+CAO/C/II/NR,1,Railways,NR,railway_office
+CAO/C/SECR,1,Railways,SECR,railway_office
+CE/C-4/WCR WCR mor,1,Railways,WCR,railway_office
+CERL,1,Railways,CERL,normalised
+CGM/CIVIL ECR mor,1,Railways,ECR,railway_office
+CPM/GS/SBC SWR mor,1,Railways,SWR,railway_office
+CPM/ICF,1,Railways,CPM ICF,normalised
+CPWD FOR DEFENC,1,Defence,CPWD,prefix
+CPWD FOR DEFENCE,1,Defence,CPWD,prefix
+CPWD FOR RENEWABLE ENERGY,1,Power,CPWD,prefix
+CPWD FOR RURAL,1,Rural Development,CPWD,prefix
+CPWD FOR TELECO,1,Telecommunications,CPWD,prefix
+CPWD FOR TELECOM,1,Telecommunications,CPWD,prefix
+CPWD R ENERGY,1,Power,CPWD,prefix
+CSPCC Projects,1,Urban Development & Housing,CSPCC PROJECTS,normalised
+Central Coalfields Limited [CCL],1,Coal,CCL,bracket
+Central Organisation for Railway Electrification [CORE],1,Railways,CORE,bracket
+Central Public Works Department (CPWD),1,Mines & Metals,CPWD,bracket
+Central Public Works Department - CPWD,1,Urban Development & Housing,CPWD,alias_prefix
+Central Tribal University of Andhra Pradesh,1,Education,CENTRAL TRIBAL UNIVERSITY OF ANDHRA PRADESH,normalised
+Central University of Gujarat,1,Education,CENTRAL UNIVERSITY OF GUJARAT,normalised
+Central University of Punjab,1,Education,CENTRAL UNIVERSITY OF PUNJAB,normalised
+"Central University, Himachal Pradesh",1,Education,CENTRAL UNIVERSITY HIMACHAL PRADESH,normalised
+Chennai Metro Rail Limited [CMRL],1,Urban Development & Housing,CMRL,bracket
+Cochin Shipyard,1,Shipping & Ports,COCHIN SHIPYARD,normalised
+Construction NER,1,Railways,NER,fuzzy
+DFCCIL,1,Railways,DFCCIL,alias
+DMIC FOR DPIIT,1,Industry & Commerce,DMIC,prefix
+DMRCL,1,Urban Development & Housing,DMRC,alias
+DOT,1,Telecommunications,DOT,alias
+Deendayal Port Trust,1,Shipping & Ports,DPT,alias
+Delhi Mumbai Industrial Corridor,1,Industry & Commerce,DMIC,alias
+Delhi University,1,Education,DELHI UNIVERSITY,normalised
+Department of Sports & Youth Affairs,1,Education,DEPARTMENT OF SPORTS AND YOUTH AFFAIRS,normalised
+"Department of Water Resources, River Development,",1,Water Resources,DEPARTMENT OF WATER RESOURCES RIVER DEVELOPMENT AND GR,fuzzy
+Department of Water Resources-JH,1,Water Resources,DEPARTMENT OF WATER RESOURCES JH,normalised
+Department of Water Resources-MH,1,Water Resources,DEPARTMENT OF WATER RESOURCES MH,normalised
+EDCIL,1,Education,EDCIL,alias
+EDCIL(India) Limited,1,Education,EDCIL,alias
+ENNORE TANK,1,Shipping & Ports,ETTPL,alias
+ENNORE TANK TERMINAL PVT.LTD.,1,Shipping & Ports,ETTPL,alias
+East Central Railway (ECR) - II,1,Railways,ECR,bracket
+Eastern Railway [ER] - II,1,Railways,ER,bracket
+GM IRCON KATNI WCR mor,1,Railways,IRCON,railway_office
+Gujarat,1,Education,GUJARAT,normalised
+Gurugram Metro Rail Limited [GMRL],1,Urban Development & Housing,GMRL,bracket
+H&FW,1,Health,MOHFW,alias
+HEAVY INDUSTRIES AND PUBLIC ENTERPRISES,1,Industry & Commerce,HEAVY INDUSTRIES AND PUBLIC ENTERPRISES,normalised
+HINDUSTAN COPPER LIMITED,1,Mines & Metals,HCL,alias
+HOSPITAL SERVICES CONSULTANCY CORPORATION,1,Health,HSCC,alias
+HPCLRRL(JV),1,Petroleum & Natural Gas,HPCLRRL JV,normalised
+HSCL FOR DONER,1,North Eastern Region,HSCL,prefix
+HSCL FOR WATER,1,Water Resources,HSCL,prefix
+IGGL,1,Petroleum & Natural Gas,IGGL,alias
+IICC FOR DPIIT,1,Industry & Commerce,IICC,prefix
+IISC Bangalore,1,Education,IISC BANGALORE,normalised
+IITKGP,1,Education,IIT KHARAGPUR,alias
+INDIAN IRON STEEL COMPANY,1,Petroleum & Natural Gas,INDIAN IRON STEEL COMPANY,normalised
+INDIAN TELEPHONE INDUSTRY,1,Telecommunications,INDIAN TELEPHONE INDUSTRY,normalised
+INDRADHANUSH GAS GRID LTD,1,Petroleum & Natural Gas,IGGL,alias
+IWAI,1,Shipping & Ports,IWAI,alias
+India International Convention & Expo Centre,1,Industry & Commerce,IICC,alias
+India International Convention and Expo Centre,1,Industry & Commerce,IICC,alias
+"Indian Institute of Management, Jammu",1,Education,INDIAN INSTITUTE OF MANAGEMENT JAMMU,normalised
+"Indian Institute of Management, Sirmaur",1,Education,INDIAN INSTITUTE OF MANAGEMENT SIRMAUR,normalised
+"Indian Institute of Technology, Bhilai",1,Education,INDIAN INSTITUTE OF TECHNOLOGY BHILAI,normalised
+"Indian Institute of Technology, Bhubaneshwar",1,Education,INDIAN INSTITUTE OF TECHNOLOGY BHUBANESHWAR,normalised
+"Indian Institute of Technology, Hyderabad",1,Education,INDIAN INSTITUTE OF TECHNOLOGY HYDERABAD,normalised
+"Indian Institute of Technology, Indore",1,Education,INDIAN INSTITUTE OF TECHNOLOGY INDORE,normalised
+"Indian Institute of Technology, Mandi",1,Education,INDIAN INSTITUTE OF TECHNOLOGY MANDI,normalised
+"Indian Institutes of Science Education and Research, Behrampur",1,Education,INDIAN INSTITUTES OF SCIENCE EDUCATION AND RESEARCH BEHRAMPUR,normalised
+Indian Oil Corporation Limited (IOCL),1,Petroleum & Natural Gas,IOCL,bracket
+Indian Port Rail & Ropeway Corporation Ltd. [IPRCL],1,Shipping & Ports,IPRCL,bracket
+Indian Railways,1,Railways,INDIAN RAILWAYS,alias
+"Indian intitue of Management, Amritsar",1,Education,INDIAN INTITUE OF MANAGEMENT AMRITSAR,normalised
+Indradhanush Gas Grid Limited,1,Petroleum & Natural Gas,IGGL,alias
+Inland Waterways Authority of India,1,Shipping & Ports,IWAI,alias
+Irrigation-UK,1,Water Resources,IRRIGATION UK,normalised
+JAWAHAR LAL NEHRU NATIONAL URBAN RENEWAL MISSION,1,Urban Development & Housing,JAWAHAR LAL NEHRU NATIONAL URBAN RENEWAL MISSION,normalised
+Jawaharlal Nehru Port Authority [JNPA],1,Shipping & Ports,JNPA,bracket
+KOLKATA METRO RAIL CORPORATION LIMITED,1,Railways,KMRCL,alias
+KSPPL(JV),1,Petroleum & Natural Gas,KSPPL JV,normalised
+M.D/KRIDE SWR mor,1,Railways,KRIDE,railway_office
+M/S SRC company Infra Private Limited,1,Railways,M S SRC COMPANY INFRA,normalised
+MAHARASTRA METRO RAIL CORPORATION LTD.,1,Urban Development & Housing,MMRCL,alias
+MINISTRY OF WATER RESOURCES,1,Water Resources,MOWR,alias
+MMRCL,1,Urban Development & Housing,MMRCL,alias
+MOWR,1,Water Resources,MOWR,alias
+MRIDC,1,Railways,MRIDC,normalised
+MRVC,1,Railways,MRVC,alias
+MUMBAI METRO RAIL CORPORATION LTD,1,Urban Development & Housing,MMRC,alias
+MUMBAI PORT TRU,1,Shipping & Ports,MBPT,alias
+MUMBAI PORT TRUST,1,Shipping & Ports,MBPT,alias
+Mangalore Refinary and Petrochemicals Limited,1,Petroleum & Natural Gas,MRPL,alias
+"Metro Railway, Kolkata",1,Railways,METRO RAILWAY KOLKATA,alias
+Ministry of Health and Family Welfare,1,Health,MOHFW,alias
+Ministry of Mines,1,Mines & Metals,MINISTRY OF MINES,normalised
+Ministry of Railways-,1,Railways,INDIAN RAILWAYS,alias
+MoWR,1,Water Resources,MOWR,alias
+Mumbai Metro Rail Corporation Limited [MMRC],1,Urban Development & Housing,MMRC,bracket
+NATIONAL CAPITAL REGION TRANSPORT CORP,1,Urban Development & Housing,NCRTC,alias
+NATIONAL HYDRO- ELECTRIC POWER CORPORATION,1,Power,NHPC,alias
+NATIONAL PROJECTS CONSTRUCTION CORPORATION LIMITED,1,Finance,NPCC,alias
+NATIS,1,Industry & Commerce,NATIS,normalised
+NATRIP IMPLEMENTATION SOCITY,1,Industry & Commerce,NATRIP IMPLEMENTATION SOCITY,normalised
+NBCC FOR COMMER,1,Industry & Commerce,NBCC,prefix
+NBCC FOR COMMERCE,1,Industry & Commerce,NBCC,prefix
+NBCC FOR HEALTH,1,Health,NBCC,prefix
+NEW LINE,1,Railways,NEW LINE,normalised
+NHSRCL,1,Railways,NHSRCL,alias
+NIT Mizoram,1,Education,NIT MIZORAM,normalised
+NIT Nagaland,1,Education,NIT NAGALAND,normalised
+NIT Patna,1,Education,NIT PATNA,normalised
+NIT Rourkela,1,Education,NIT ROURKELA,normalised
+NIT Sikkim,1,Education,NIT SIKKIM,normalised
+NMCG1,1,Water Resources,NMCG,alias
+NMRCL,1,Urban Development & Housing,NMRCL,normalised
+NPCC,1,Finance,NPCC,alias
+National Buildings Construction Corporation [NBCC],1,Urban Development & Housing,NBCC,bracket
+National Capital Region Transport Corporation [NCRTC],1,Urban Development & Housing,NCRTC,bracket
+National Communication Academy - Finance (Erstwhile NICF),1,Telecommunications,NATIONAL COMMUNICATION ACADEMY FINANCE NICF,normalised
+National Communication Academy - Finance [Erstwhile NICF],1,Telecommunications,NICF,bracket
+National High Speed Rail Corporation Limited,1,Railways,NHSRCL,alias
+National High Speed Rail Corporation [NHSRC],1,Railways,NHSRCL,bracket
+National Institute of Technology Delhi,1,Education,NATIONAL INSTITUTE OF TECHNOLOGY DELHI,normalised
+National Institute of Technology Uttarakhand,1,Education,NATIONAL INSTITUTE OF TECHNOLOGY UTTARAKHAND,normalised
+"National Institute of Technology, Arunachal Pradesh",1,Education,NATIONAL INSTITUTE OF TECHNOLOGY ARUNACHAL PRADESH,normalised
+"National Institute of Technology, Meghalaya",1,Education,NATIONAL INSTITUTE OF TECHNOLOGY MEGHALAYA,normalised
+"National Institute of Technology, Puducherry",1,Education,NATIONAL INSTITUTE OF TECHNOLOGY PUDUCHERRY,normalised
+New Mangalore Port Authority,1,Shipping & Ports,NEW MANGALORE PORT AUTHORITY,normalised
+Noida Metro Rail Corporation Ltd. [NMRCL],1,Urban Development & Housing,NMRCL,bracket
+North Central Railway (NCR) - II,1,Railways,NCR,bracket
+North Central Railway [NCR] - II,1,Railways,NCR,bracket
+P.Gr.,1,Power,POWERGRID,alias
+PATNA METRO RAI,1,Urban Development & Housing,PMRCL,alias
+PATNA METRO RAIL CORPORATION,1,Urban Development & Housing,PMRCL,alias
+PCE/NCR,1,Railways,NCR,railway_office
+PPA,1,Water Resources,PPA,normalised
+Paradip Port Trust [PPT],1,Shipping & Ports,PPT,bracket
+Patna Metro Rail Corporation Ltd. [PMRCL],1,Urban Development & Housing,PMRCL,bracket
+Polavaram Project Authority,1,Water Resources,POLAVARAM PROJECT AUTHORITY,normalised
+RITES OF HIGHER,1,Education,RITES,prefix
+RITES OF HIGHER EDUCATION,1,Education,RITES,prefix
+Reliance Industries Ltd,1,Shipping & Ports,RELIANCE INDUSTRIES,normalised
+SJVNL,1,Power,SJVN,alias
+SR-ERS,1,Railways,SR,fuzzy
+Sikkim Universi,1,Education,SIKKIM UNIVERSITY,alias
+Sikkim University,1,Education,SIKKIM UNIVERSITY,alias
+South Central Railway [SCR] - I,1,Railways,SCR,bracket
+South Eastern Central Railway,1,Railways,SECR,alias
+Southern Railway (SR) - I,1,Railways,SR,bracket
+Southern Railways [SR] - construction,1,Railways,SR,bracket
+Sterlite Power,1,Power,STERLITE POWER,normalised
+Syama Prasad Mookerjee Port Kolkata,1,Shipping & Ports,SMPK,alias
+THDC,1,Power,THDC,alias
+Tezpur University,1,Education,TEZPUR UNIVERSITY,normalised
+UCIL,1,Atomic Energy,UCIL,alias
+URANIUM CORPORATION OF INDIA LIMITED,1,Atomic Energy,UCIL,alias
+Water Resources Department-MN,1,Water Resources,WATER RESOURCES DEPARTMENT MN,normalised
+Water Resources-BR,1,Water Resources,WATER RESOURCES BR,normalised
+Water Resources-CT,1,Water Resources,WATER RESOURCES CT,normalised
+Water Resources-KA,1,Water Resources,WATER RESOURCES KA,normalised
+Water Resources-OR,1,Water Resources,WATER RESOURCES OR,normalised
+Water resource-mp,1,Water Resources,WATER RESOURCES MP,fuzzy
+West Central Railway WCR I,1,Railways,WCR,alias_prefix
+West Central Railway [WCR] - II,1,Railways,WCR,bracket
