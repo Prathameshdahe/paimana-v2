@@ -187,8 +187,12 @@ FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha\b|hect\w*)\.?\s*(?:of\s+)?(?:(?!(?:and|or
 VIOLATION = (r"violat\w*|post[\s-]*facto|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC"
              r"|environment\w*\s+clearance|clearance)")
 # a mention that reports the matter done ('EC received on 31.07.23') and names no hold-up is resolved
-DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed|achieved|approved|done|removed|resolved|vacated"
-        r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available)\b")
+DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed\w*|achieved|approved|done|removed|resolved|vacated"
+        r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available"
+        r"|(?:is|are|was|were|has\s+been|have\s+been)\s+(?:made|paid|acquired|taken))\b")
+# land reported as a share acquired: 'Land Acquisition (Hect.):(Scope=1597/Physical progress=1583)=99.16%'
+LAND_PCT = r"land\s+acqui\w*[^%]{0,80}?(\d+(?:\.\d+)?)\s*%"
+LAND_DONE_PCT = 95
 BLOCKED = (r"\b(?:await\w*|pending|delay\w*|yet\s+to|not|non|no|hold|held\s+up|stopp\w*|stalled|hamper\w*|affect\w*"
            r"|problems?|issues?|constraints?|balance|slow|obstruct\w*|disput\w*|ban|banned|under\s+process"
            r"|in\s+progress|expected|anticipated|likely|shortly)\b"
@@ -246,8 +250,10 @@ def tag(text):
     fe = m["category"].eq("forest_env")
     m["forest_area_ha"] = forest_area(m["sentence"]).where(fe)
     m["violation"] = fe & m["sentence"].str.contains(VIOLATION, case=False, regex=True)
-    m["resolved"] = (m["sentence"].str.contains(DONE, case=False, regex=True)
-                     & ~m["sentence"].str.contains(BLOCKED, case=False, regex=True))
+    land_pct = pd.to_numeric(m["sentence"].str.extract(LAND_PCT, flags=re.IGNORECASE)[0], errors="coerce")
+    done = (m["sentence"].str.contains(DONE, case=False, regex=True)
+            | (m["category"].eq("land") & land_pct.ge(LAND_DONE_PCT)))
+    m["resolved"] = done & ~m["sentence"].str.contains(BLOCKED, case=False, regex=True)
     return m
 
 

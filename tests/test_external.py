@@ -70,6 +70,19 @@ def test_subtype_authority_area_and_resolved():
     assert (lit.subtype, lit.authority) == ("court", "High Court")
 
 
+def test_land_done_by_share_acquired_or_payment_made():
+    m = X.tag(pd.Series([
+        "Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.)",
+        "Land Acquisition (Hect):(Scope:795.734 /Physical progress : 795.734)=100% Earthwork(Lakh cum): 50%",
+        "Payment of compensation is made",
+        "Possession of land has been taken",
+        "Land Acquisition (Hect.):(Scope=500/Physical progress=300)=60%",
+        "Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress",
+    ]))
+    land = m[m.category.eq("land")].drop_duplicates("text_id").sort_values("text_id")
+    assert land.resolved.tolist() == [True, True, True, True, False, False]
+
+
 def test_forest_area_skips_non_forest_and_other_clauses():
     s = pd.Series(["Forest land of 111.89 Ha and non-forest land of 648.86 Ha are under process of possession",
                    "Total land of 155.16 Ha is required to be acquired(PVT-152.059 Ha and Forest - 3.101)",
