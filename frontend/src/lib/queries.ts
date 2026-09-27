@@ -30,6 +30,7 @@ import type {
   Timeline,
 } from '@/contracts/project'
 import type { ModelsOut } from '@/contracts/audit'
+import type { AgencyMatrix } from '@/contracts/intel'
 import type { Role } from '@/lib/auth/RoleContext'
 
 export type PortfolioFilters = {
@@ -115,6 +116,25 @@ export function useSignals(key: string | null) {
 /** Champion registry + the champion run's backtest and ablation tables (a few dozen rows). */
 export function useModels() {
   return useQuery({ queryKey: ['models'], queryFn: () => apiGet<ModelsOut>('/api/models') })
+}
+
+/** includeHidden: also the agencies with n < 5 */
+export function useAgencyMatrix(includeHidden: boolean) {
+  return useQuery({
+    queryKey: ['agencies', 'matrix', includeHidden],
+    queryFn: () => apiGet<AgencyMatrix>('/api/agencies/matrix', { include_hidden: includeHidden || undefined }),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** Current projects of one canonical agency, riskiest first. */
+export function useAgencyProjects(agency: string | null, page: number, size = 20) {
+  return useQuery({
+    queryKey: ['agencies', agency, 'projects', page, size],
+    queryFn: () => apiGet<ProjectPage>(`/api/agencies/${enc(agency ?? '')}/projects`, { page, size }),
+    placeholderData: keepPreviousData,
+    enabled: !!agency,
+  })
 }
 
 export function useExternalSummary() {
