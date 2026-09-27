@@ -1,0 +1,52 @@
+{
+  "run_id": "RUN-20260927-112819",
+  "runtime_seconds": 18.1,
+  "rows": 167280,
+  "entities": 8429,
+  "entity_status": {
+    "accepted": 7887,
+    "review": 542
+  },
+  "rows_by_report_type": {
+    "monthly_flash": 90434,
+    "quarterly_qpisr": 52093,
+    "paimana_flash": 22978,
+    "portal": 1775
+  },
+  "keys": 6253,
+  "clean_keys": 8429,
+  "clean_keys_split_across_prj_keys": 0,
+  "prj_keys_holding_several_clean_keys": 1569,
+  "status": {
+    "accepted": 154884,
+    "review": 12396
+  },
+  "review_share": 0.0741,
+  "method": {
+    "new": 147760,
+    "name_attrs": 19520
+  },
+  "rerun": {
+    "minted_this_run": 0,
+    "method_this_run": {
+      "alias_cache": 8429
+    },
+    "rows_in_previous_run": 167280,
+    "keys_changed_vs_previous": 0
+  },
+  "checks": {
+    "keys_exist": {
+      "known_keys": 6253,
+      "missing": 0
+    },
+    "no_merged_keys": {
+      "merged_keys": 0,
+      "in_use": 0
+    },
+    "portal_one_to_one": {
+      "portal_rows": 1775,
+      "accepted": 1767,
+      "review": 8
+    }
+  }
+}

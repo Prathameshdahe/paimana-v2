@@ -57,7 +57,7 @@ def fuzzy_jaccard(a: frozenset[str] | set[str], b: frozenset[str] | set[str]) ->
     if not a or not b:
         return 0.0
     exact = a & b
-    ra, rb = list(a - exact), list(b - exact)
+    ra, rb = sorted(a - exact), sorted(b - exact)  # sorted: set order depends on the hash seed
     matched = len(exact)
     used: set[int] = set()
     for ta in ra:
@@ -244,12 +244,14 @@ class IdentityMap:
             idf[tok] = math.log(n_active / len(keys)) + 1e-3
             shared.update(keys)  # C-speed
         th = self.cfg.thresholds.min_shared_tokens
-        top = [k for k, c in shared.most_common(PRE_RANK) if c >= th]
+        # ties break on key so a cold build gives the same result under any hash seed
+        ranked = sorted(shared.items(), key=lambda kc: (-kc[1], kc[0]))[:PRE_RANK]
+        top = [k for k, c in ranked if c >= th]
         # re-rank the top slice by IDF-weighted overlap so rare tokens dominate
         def weight(k: str) -> float:
             name_toks = self._projects[k]["_tokens"]
             return sum(w for t, w in idf.items() if t in name_toks)
-        top.sort(key=weight, reverse=True)
+        top.sort(key=lambda k: (-weight(k), k))
         cands.update(top[:MAX_CANDIDATES])
         return {k for k in cands if self._projects[k].get("status", "active") == "active"}
 
@@ -274,6 +276,9 @@ class IdentityMap:
             parts.append((w.year, max(0.0, 1.0 - abs(row["year"] - _num(cand["sanction_year"])) / 3.0)))
         total_w = sum(p[0] for p in parts)
         score = sum(p[0] * p[1] for p in parts) / total_w if total_w else 0.0
+        if code_match == 0.0:
+            # Two different vetted codes are two projects: never link, not even for review.
+            score = min(score, self.cfg.thresholds.review - 1e-3)
         method = "code_exact" if code_match == 1.0 else "name_attrs"
         code_conflict = code_match == 1.0 and name_sim < self.cfg.thresholds.code_conflict_name_sim
         return score, method, code_conflict
@@ -355,7 +360,7 @@ class IdentityMap:
         th = self.cfg.thresholds
         best_key, best_score, best_method, best_conflict = None, -1.0, "", False
         code_key, code_score, code_conflict = None, -1.0, False
-        for k in self._candidates(row["tokens"], row["code"]):
+        for k in sorted(self._candidates(row["tokens"], row["code"])):
             score, method, conflict = self._score(row, self._projects[k])
             if score > best_score:
                 best_key, best_score, best_method, best_conflict = k, score, method, conflict
