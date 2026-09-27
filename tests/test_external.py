@@ -92,6 +92,121 @@ def test_forest_area_skips_non_forest_and_other_clauses():
     assert X.forest_area(s).fillna(-1).tolist() == [111.89, 3.101, 71.72, -1, -1, 323.49]
 
 
+def test_land_share_short_of_done_keeps_land_open_whatever_the_verb():
+    # the % before 'land acquisition' is the land share, not the earthwork % after it
+    m = X.tag(pd.Series(["91.58 % land acquistion completed. 95.9 % earthwork",
+                         "Out of total 129.58 Ha land, 76.99 Ha land acquired",
+                         "Out of total 1339 Ha land required, 1324.48 Ha land is under possession"]))
+    land = m[m.category.eq("land")].drop_duplicates("text_id").sort_values("text_id")
+    assert land.resolved.tolist() == [False, False, True]
+
+
+def test_got_is_done_and_a_letter_number_or_work_in_progress_is_no_hold_up():
+    m = X.tag(pd.Series(["Stage-II FC got from MoEF on 12.05.2019",
+                         "Stage II FC issued by MoEF vide letter no. 8-12/2019-FC dated 03.05.2021",
+                         "Land acquisition completed and work is in progress",
+                         "Land acquisition is in progress", "No forest clearance received yet"]))
+    first = m.drop_duplicates("text_id").sort_values("text_id")
+    assert first.resolved.tolist() == [True, True, True, False, False]
+
+
+LA_PCT_CASES = {   # the remark research's self-check sentences (scratch extract_la.py), share of land acquired
+    "Out of total 129.58 Ha land, 76.99 Ha land acquired": 59.4,
+    "91.58 % land acquistion completed. 95.9 % earthwork": 91.58,
+    "For complete project, Out of Total 2072.883 Ha land in complete Wardha- Nanded section, land acquired is "
+    "1907.271 Ha and Balance land to be acquired =165.612 Ha.": 92.0,
+    "Total land required 111.7798 Ha. out of which 75.8171 ha. acquired (incl. 4.55 Ha forest & 0.4375 Ha Govt.)": 67.8,
+    "Out of 1257 Ha forest land required, 1056 Ha is in possession and clearance of balance 201 Ha is under process":
+        84.0,
+    "a.180.429 Ha out of 286.35 Ha tenancy land has been possessed. b.42.805 Ha out of 81.65 Ha Govt. land": 63.0,
+    "208 superstructure of major bridges , 63.96% land acquisition , 97.52% track linking": 63.96,
+    "Out of total 1339 Ha land required, 1324.48 Ha land is under possession.Balance 14.52Ha of tenancy land": 98.9,
+    "Acquisition of Land (245 Acre): 129.03 Acre (53%) out of 245 Acre land registered": 52.7,
+    "Kudachi (83 Km) - 633.95 Acres of land out of 1395.92 Acres yet to be handed over": 54.6,
+    "28% land out of 840 ha required is yet to be acquired.": 72.0,
+    "34.32 Ha of Land were handed over, out of the total requirement of 274.01 Ha": 12.5,
+    "Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.)": 99.16,
+    "acquired 450 ha, balance 50 ha": 90.0,
+}
+
+
+@pytest.mark.parametrize("text,want", list(LA_PCT_CASES.items()))
+def test_land_share_patterns(text, want):
+    assert X.la_progress(text)["la_pct"] == pytest.approx(want, abs=1)
+
+
+def test_land_share_skips_other_percentages_and_steps():
+    assert "la_pct" not in X.la_progress("Earthwork 95.9 % completed")
+    assert "la_pct" not in X.la_progress("50% compensation for land acquisition released")
+    assert X.la_progress("3D notification for land issued in 12 villages")["la_step"] == "declaration"
+    assert X.la_progress("Compensation disbursed and land handed over")["la_step"] == "possession"
+    assert X.la_progress("Earthwork in progress") == {}
+
+
+FC_STAGE_CASES = {   # real remark sentences
+    "Forest Land (244.536 Ha): Tree enumeration has been completed": "applied",
+    "Balance demand awaited from Forest Deptt": "state_level",
+    "Stage-I forest clearance awaited and ROW problem.": "stage1_pending",
+    "Forest permission, file is pending with IRO Panchkula": "regional_iro",
+    "Placing of proposal for 354.258 Ha FL before FAC.MP State forwarded the proposal to MoEF on 18.01.2022":
+        "central_fac_moef",
+    "353.76 Ha MP Forest land: Stage I FC was issued by MoEF on 13.01.2020": "stage1_granted",
+    "Project constraints Stage-II forest clearance awaited.": "stage2_pending",
+    "Working permission in forest in Assam received in Feb'19": "working_permission",
+    "Stage-II forest clearance (297 Ha) for Dharamjaygarh -Jabalpur line received in Feb 15.": "stage2_granted",
+    "Forest clearance received in Oct 15 after cabinet meeting": "approved_generic",
+    "Delay in forest land diversion": "fc_awaited",
+    "Forest Land (631.39 Ha): FAC rejected the proposal with reduced forest area from 631 Ha to 326 Ha": "rejected",
+    "Appeal against the decision of FAC is to be submitted and Revised Mining Plan for additional 142 Ha forest land "
+    "is under preparation.": "rejected",
+    "No forest land is involved in the project": "not_applicable",
+    "Land acquisition pending": None, "non forest area": None,
+}
+
+
+@pytest.mark.parametrize("text,want", list(FC_STAGE_CASES.items()))
+def test_forest_stage_patterns(text, want):
+    assert X.fc_stage(text) == want
+
+
+def test_stage_dash_is_rejoined_before_the_sentence_split():
+    s = X.sentences(pd.Series(["Work slow. Stage - I forest clearance awaited", "FC - II received"]))
+    assert s.tolist() == ["Work slow", "Stage-I forest clearance awaited", "FC-II received"]
+    assert [X.fc_stage(x) for x in s[1:]] == ["stage1_pending", "stage2_granted"]
+
+
+def test_forest_area_of_a_proposal_or_diversion_without_the_word_forest():
+    s = pd.Series(["In one proposal No FP/MP/RAIL/39172/2019 of 66.69 ha of section Vijaysota to Beohari, DFO/Shahdol "
+                   "has given conditional permission",
+                   "One proposal (FP/MP/RAIL/41734/2019) now pending is that for diversion of 72.83 ha land with a "
+                   "stretch of 27.5 km length falling under Sanjay Tiger Forest Reserve Area",
+                   "diversion of 12 ha of non-forest land"])
+    assert X.forest_area(s).fillna(-1).tolist() == [66.69, 72.83, -1]
+
+
+def test_quarter_facts_and_latest_status():
+    q = pd.date_range("2022-01-01", periods=3, freq="QS").astype("datetime64[us]")
+    rows = pd.DataFrame({"project_key": ["P1", "P1", "P1", "P2"], "period": [q[0], q[1], q[2], q[0]],
+                         "remarks": ["Stage-I forest clearance awaited. Out of 410 Ha, 205 Ha land is in possession",
+                                     "Stage-I FC granted by MoEF. 3D notification for land issued; 91.58 % land "
+                                     "acquisition completed. Proposal no. FP/JH/MIN/44804/2020 for 133.69 Ha "
+                                     "forest land",
+                                     "Work going on at site",
+                                     "Land acquisition (Hect.):(Scope=500/Physical progress=300)=60%; 80 % land "
+                                     "acquisition in Bihar"]})
+    qf = X.quarter_facts(rows)
+    assert qf[["project_key", "period"]].values.tolist() == [["P1", q[0]], ["P1", q[1]], ["P2", q[0]]]
+    assert qf["fc_stage"].tolist()[:2] == ["stage1_pending", "stage1_granted"]
+    assert qf["la_pct"].tolist() == [50.0, 91.58, 70.0]            # two shares with no hectares: their median
+    assert qf["la_step"].tolist()[:2] == ["possession", "declaration"]
+    assert qf["proposal_no"].isna().tolist() == [True, False, True]
+    assert qf["proposal_no"].iloc[1] == "FP/JH/MIN/44804/2020"
+    st = X.remark_status(qf).set_index("project_key")
+    assert (st.loc["P1", "fc_stage"], st.loc["P1", "fc_stage_as_of"]) == ("stage1_granted", q[1])
+    assert (st.loc["P1", "la_pct"], st.loc["P1", "la_pct_as_of"]) == (91.58, q[1])
+    assert pd.isna(st.loc["P2", "fc_stage"]) and pd.isna(st.loc["P2", "fc_stage_as_of"])
+
+
 def test_a_recommendation_tor_or_request_for_approval_is_not_done():
     s = pd.Series(["WBCZMA issued recommendation to Secretary, MoEF & CC for CRZ Approval",
                    "Environmental Clearance: ToR issued on 14.02.2022",

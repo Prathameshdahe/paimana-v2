@@ -8,8 +8,9 @@ Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
          raw/external/land_acquisition_*.csv (stretch tables, Maharashtra so far) and raw/external/bhoomi_rashi/
          (raw Bhoomi Rashi state exports, parsed by pipeline/bhoomi_rashi.py)
-Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/external_fc.parquet,
-         gold/external_land.parquet, gold/external_land_pairs.parquet, gold/external_composite.parquet
+Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/remark_status.parquet,
+         gold/external_fc.parquet, gold/external_land.parquet, gold/external_land_pairs.parquet,
+         gold/external_composite.parquet
 
 Remarks are free text only in 2014-2023 reports; later reports print templates ('start: 2025-04',
 'Milestones achieved/total: 0/7'). Templates are stripped first, the rest is split into sentences and tagged
@@ -23,6 +24,14 @@ Remarks come from typed_rows (every accepted clean report row), not observations
 it finds every observations mention plus 6% more key-quarter-category mentions and 16% more events, and the
 first mention keeps its own document and page. project_mentions keeps the per-quarter timeline (every
 remark-observed quarter and the categories it mentions) so gold can tell what was open at any earlier t.
+
+Remark facts (quarter_facts): every sentence is also read for a forest-clearance stage (FC_STAGES: seven levels from
+applied to Stage-II, plus FC awaited, rejected / in appeal and not applicable), the share of land acquired ('91.58 %
+land acquisition', 'X ha out of Y ha', 'acquired X ha, balance Y ha'), the furthest land step it mentions
+(notification to possession; a mention, not proof the step is done) and Parivesh proposal numbers
+(FP/<state>/<category>/<n>/<year>). project_mentions carries the quarter's values on each of its rows, and
+remark_status the latest value per project with the quarter it is as of: free text ends in 2023-Q2, so these are
+evidence for the risk profile, not model features (they add no backtest lift).
 
 Forest clearance: each project gets a profile (linear or not, mining, violation, forest hectares from its
 events) and is matched to the Parivesh scenarios it can fall under. The form (A-H) is never known, so every
@@ -175,6 +184,8 @@ BOILERPLATE = (r"milestones achieved/total:\s*\d+/\d+|start:\s*\d{4}-\d{2}|doc r
                r"|this project was approved on \w+ \d+ with capital investment of rs\.? [\d.,]+ crores?"
                r"(?: with schedule completion date \w+ \d+)?|under progress(?: \(p\))?|work in progress")
 SENTENCE = r"\s*(?:[;•\n\r]|\.\s+(?=[A-Z(])|\s-\s*(?=[A-Z])|(?:^|(?<=\s))\(?(?:[ivx]{1,4}|\d{1,2})\)\s)\s*"
+# SENTENCE splits 'Stage - I forest clearance' at ' - ' and the fragment loses its stage: rejoined to 'Stage-I' first
+STAGE_DASH = r"\b([Ss]tage|STAGE|FC)\s+[-–]\s*(?=(?:II|I|1|2)(?![A-Za-z0-9]))"
 # forest hectares: '12.5 ha of reserved forest', 'forest land of 30 ha', 'Forest land-71.72 hect', 'Forest - 3.101)',
 # 'FC (323.49 Ha)'; not 'non-forest land of 648 ha', '3.2 hect and forest land ...' or '1426 Ha including forest and
 # nonforest land'
@@ -183,16 +194,21 @@ FOREST_HA = (r"(\d+(?:\.\d+)?)\s*(?:ha\b|hect\w*)\.?\s*(?:of\s+)?(?:(?!(?:and|or
              + _NOT_NON + r"forest(?!\s*(?:and|&|or|/)\s*non)"
              r"|" + _NOT_NON + r"forest\s*(?:land|area)?\s*(?:(?:of|\(|measuring|admeasuring)?\s*(\d+(?:\.\d+)?)\s*"
              r"(?:ha\b|hect)|[-:]\s*(\d+(?:\.\d+)?)(?:\s*(?:ha\b|hect)|(?=\s*[)\];,]|\s*$)))"
-             r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha\b|hect)")
+             r"|(?-i:\bFC\b)\s*\(\s*(\d+(?:\.\d+)?)\s*(?:ha\b|hect)"
+             # the area of a Parivesh proposal or a diversion names no 'forest': 'proposal No FP/MP/RAIL/39172/2019 of
+             # 66.69 ha', 'for diversion of 72.83 ha land' (only forest_env sentences are read)
+             r"|(?-i:\bFP/[A-Z]{2}/[A-Z]+/\d+/\d{4})\)?\s*(?:of|for)\s+(\d+(?:\.\d+)?)\s*(?:ha\b|hect)"
+             r"|diversion\s+of\s+(\d+(?:\.\d+)?)\s*(?:ha\b|hect\w*)\.?(?!\s*(?:of\s+)?non)")
 VIOLATION = (r"violat\w*|post[\s-]*facto|without\s+(?:prior\s+|obtaining\s+|the\s+)?(?:forest\s+clearance|FC|EC"
              r"|environment\w*\s+clearance|clearance)")
 # a mention that reports the matter done ('EC received on 31.07.23') and names no hold-up is resolved
-DONE = (r"\b(?:obtained|received|granted|accorded|issued|completed\w*|achieved|approved|done|removed|resolved|vacated"
-        r"|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available"
+DONE = (r"\b(?:obtained|received|got|granted|accorded|issued|completed\w*|achieved|approved|done|removed|resolved"
+        r"|vacated|settled|cleared|finali[sz]ed|disbursed|handed\s+over|in\s+(?:physical\s+)?possession|available"
         r"|(?:is|are|was|were|has\s+been|have\s+been)\s+(?:made|paid|acquired|taken))\b")
-# land reported as a share acquired: 'Land Acquisition (Hect.):(Scope=1597/Physical progress=1583)=99.16%'
-LAND_PCT = r"land\s+acqui\w*[^%]{0,80}?(\d+(?:\.\d+)?)\s*%"
-LAND_DONE_PCT = 95
+LAND_DONE_PCT = 95        # a land mention with a share acquired is done at this share, whatever its verbs say
+# not hold-ups, removed before BLOCKED is read: a reference number ('vide letter no. 12', 'proposal No FP/...') and
+# work going on ('work is in progress')
+NOT_HOLDUP = r"\bno\.|\b(?:letter|file|order|ref|proposal)\s+no\b|\bworks?\s+(?:is\s+|are\s+)?(?:in|under)\s+progress"
 BLOCKED = (r"\b(?:await\w*|pending|delay\w*|yet\s+to|not|non|no|hold|held\s+up|stopp\w*|stalled|hamper\w*|affect\w*"
            r"|problems?|issues?|constraints?|balance|slow|obstruct\w*|disput\w*|ban|banned|under\s+process"
            r"|in\s+progress|expected|anticipated|likely|shortly)\b"
@@ -233,11 +249,16 @@ def free_text(remarks):
     return rest.where(rest.str.count(r"[A-Za-z]{3,}") >= MIN_FREE_WORDS)
 
 
+def sentences(text):
+    """Free texts -> one row per sentence (index: the text's), original case, 'Stage - I' rejoined first."""
+    sent = text.str.replace(STAGE_DASH, r"\1-", regex=True).str.split(SENTENCE, regex=True).explode().str.strip()
+    return sent[sent.str.len() > 3]
+
+
 def tag(text):
     """Free-text remarks (unique) -> one row per (text, category) with its shortest matching sentence, subtype,
     authority and forest hectares. Sentences keep their original case for the acronym patterns."""
-    sent = text.str.split(SENTENCE, regex=True).explode().str.strip()
-    sent = sent[sent.str.len() > 3]
+    sent = sentences(text)
     parts = []
     for cat in TAXONOMY:
         hit = sent[sent.str.contains(category_regex(cat), case=False, regex=True)]
@@ -250,10 +271,13 @@ def tag(text):
     fe = m["category"].eq("forest_env")
     m["forest_area_ha"] = forest_area(m["sentence"]).where(fe)
     m["violation"] = fe & m["sentence"].str.contains(VIOLATION, case=False, regex=True)
-    land_pct = pd.to_numeric(m["sentence"].str.extract(LAND_PCT, flags=re.IGNORECASE)[0], errors="coerce")
-    done = (m["sentence"].str.contains(DONE, case=False, regex=True)
-            | (m["category"].eq("land") & land_pct.ge(LAND_DONE_PCT)))
-    m["resolved"] = done & ~m["sentence"].str.contains(BLOCKED, case=False, regex=True)
+    # '91.58 % land acquisition completed' is 8% short: a land share decides, not the verb
+    pct = m["sentence"].where(m["category"].eq("land")).map(lambda s: la_progress(s).get("la_pct"), na_action="ignore")
+    pct = pct.astype("float64")
+    done = m["sentence"].str.contains(DONE, case=False, regex=True).mask(pct.notna(), pct.ge(LAND_DONE_PCT))
+    held = m["sentence"].str.replace(NOT_HOLDUP, " ", case=False, regex=True).str.contains(BLOCKED, case=False,
+                                                                                           regex=True)
+    m["resolved"] = done & ~held
     return m
 
 
@@ -265,6 +289,326 @@ def snippet(sentence, category):
     start = max(0, (hit.start() if hit else 0) - 60)
     start = sentence.rfind(" ", 0, start) + 1 if start else 0
     return sentence[start:start + SNIPPET].strip()
+
+
+# ---- remark facts: forest-clearance stage, land acquisition %, land step and Parivesh proposal numbers ----
+# Ported from the 2026-09 remark research (hand-checked on fresh 40-sentence samples: forest stage 33/40, land %
+# 38/40, land step 19/24). Remarks carry free text only up to 2023-Q2, so every value is as of its quarter.
+# Forest stage, least to most advanced (the quarter keeps its most advanced sentence). The seven levels:
+# 1 applied (application, enumeration, DGPS, CA land), 2 state level (DFO, CF, PCCF, nodal officer, state govt, FRA;
+# 'stage1_pending' names no office), 3 regional office (IRO, RO, REC), 4 FAC / MoEFCC / NBWL, 5 Stage-I granted
+# (awaiting Stage-II 'stage2_pending' or working permission 'wp_pending'), 6 working permission, 7 Stage-II or final
+# ('approved_generic' names no stage). 'fc_awaited' is a clearance awaited with no stage, 'not_applicable' no forest
+# land involved, and 'rejected' (rejected, returned, deferred, in appeal) outranks every stage of its quarter.
+FC_STAGES = ["not_applicable", "fc_awaited", "applied", "stage1_pending", "state_level", "regional_iro",
+             "central_fac_moef", "stage1_granted", "wp_pending", "stage2_pending", "working_permission",
+             "approved_generic", "stage2_granted", "rejected"]
+LA_STEPS = ["notification", "declaration", "award", "compensation_paid", "possession"]   # mentioned, not done
+REMARK_FACTS = ["fc_stage", "la_pct", "la_step", "proposal_no"]
+PROPOSAL_NO = r"(?-i:\bFP\s*/\s*([A-Z]{2})\s*/\s*([A-Z]+)\s*/\s*(\d+)\s*/\s*(\d{4})\b)"   # 'FP/MP/RAIL/39172/2019'
+
+_I = re.IGNORECASE
+_FC_CTX = re.compile(r"(?<!non-)(?<!non )(?<!non)forest|(?<![A-Z])FC\b|wild\s*life|\bNBWL\b|\bSBWL\b|\bFAC\b"
+                     r"|\bNTCA\b|tiger\s+reserve|sanctuary|compensatory\s+afforest|\bCAMPA\b"
+                     r"|stage\s*[-–?¿]*\s*(?:II|I|1|2)\s+(?:clear\w*|approval)|(?<![A-Z])FC[-\s]*(?:II|I|1|2)\b", _I)
+_FC_DONE = r"(?:received|recd|obtained|granted|accorded|issued|approved|given|cleared|achieved|got|done|in\s+place)"
+_FC_PEND = (r"(?:await\w*|pending|yet\s+to|under\s+(?:process|consideration|examination|scrutiny)|in\s+process"
+            r"|to\s+be\s+(?:obtained|issued|granted|accorded|received|sought)|expected|not\s+(?:yet\s+)?(?:been\s+)?"
+            r"(?:received|obtained|granted|issued)|delay\w*|applied|sought|required|procedure|being\s+processed"
+            r"|for\s+(?:grant|issuance|issue|obtaining)|obtaining|subject\s+to|affect\w*|hamper\w*|held\s+up"
+            r"|constraint)")
+_FC_CUE = re.compile(r"\b(?:stage|stg|stag)\s*[-–—?¿.:]*\s*(II|I|1|2|one|two)(?![A-Za-z0-9])"
+                     r"|\b(1st|first|2nd|second|final)\s+stage\b"
+                     r"|\b(final)\s+(?:forest\w*\s+)?(?:clearance|approval|FC)"
+                     r"|(?<![A-Z])FC\s*[-–]?\s*(II|I|1|2)(?![A-Za-z0-9])"
+                     r"|\b(in[\s-]*princip\w*)\s+(?:\w+\s+){0,2}(?:approval|clearance|nod)", _I)
+_FC_BOTH = re.compile(r"(?:stage|FC)\s*[-–?¿]*\s*(?:I|1)\s*(?:&|and|,)\s*(?:stage\s*[-–]?\s*)?(?:II|2)\b", _I)
+_FC_NA = re.compile(r"no\s+forest\s+(?:land\s+)?(?:is\s+)?involv|(?:does\s+not|doesn.t)\s+involve\s+(?:any\s+)?forest"
+                    r"|forest\s+clearance\s+(?:is\s+)?not\s+(?:required|applicable)|without\s+forest\s+land", _I)
+_FC_MINISTRY = re.compile(r"ministry\s+of\s+environment[\s,]*(?:forests?)?(?:\s*(?:and|&)\s*climate\s+change)?"
+                          r"|moe\s*f\s*(?:&|and)?\s*(?:cc)?", _I)
+_FC_COMPLY2 = re.compile(r"compliance\s+(?:\w+\s+){0,2}(?:FC|stage)[\s-]*(?:II|2)\s+conditions|FC[\s-]*II\s+conditions",
+                         _I)
+_FC_OK_AFTER = re.compile(r"^.{0,45}?(?:clear\w*|clerance|clearacne|approv\w*|\bFC\b|forest\w*|permission|diversion"
+                          r"|compliance|in\s+principle|\bnod\b)", _I)
+_FC_OK_BEFORE = re.compile(r"(?:forest\w*|\bFC\b)\W+(?:\w+\W+){0,3}$", _I)
+_FC_WP = re.compile(r"(?:working|work)\s+permission|permission\s+(?:to|for)\s+(?:start\s+)?work"
+                    r"|tree\s+felling\s+permission|permission\s+for\s+(?:tree\s+)?felling", _I)
+_FC_REGIONAL = re.compile(
+    r"(?-i:\bIRO\b)|integrated\s+regional\s+office|regional\s+office|(?-i:\bREC\b)|regional\s+empowered"
+    r"|(?-i:\bRO\b)\W+(?:of\s+)?MoE|MoE\w*\s*(?:&\s*CC)?[\s,-]+(?:regional|RO\b|Lucknow|Bhopal|Nagpur|Bhubaneswar|BBSR"
+    r"|Ranchi|Shillong|Dehradun|Chandigarh|Bengaluru|Bangalore|Chennai|Raipur|Gandhinagar|Jaipur|Vijayawada)"
+    r"|regional\s+(?:EAC|MoE)", _I)
+_FC_CENTRAL = re.compile(
+    r"(?-i:\bFAC\b)|forest\s+advisory|(?-i:\bNBWL\b)|national\s+board\s+(?:of|for)\s+wild\s*life|standing\s+committee"
+    r"|(?-i:\bNTCA\b)|(?-i:\bCEC\b)|central\s+empowered|(?-i:\bAIG\b)"
+    r"|(?:pending|awaited|lying|submitted|forwarded|sent|referred|placed|recommended)\s+(?:\w+\s+){0,4}"
+    r"(?:to|with|at|before|by|from)\s+(?:the\s+)?(?:\bmoe\s*f\w*|ministry\s+of\s+environment)"
+    r"|(?:\bmoe\s*f\w*|ministry\s+of\s+environment)[\w\s&,]{0,12}\s(?:has\s+)?(?:raised|sought|asked|is\s+to"
+    r"|to\s+issue|returned|query|queries)", _I)
+_FC_STATE = re.compile(
+    r"(?-i:\bDFOs?\b)|divisional\s+forest|(?-i:\b(?:A?P?CCF|CF|APCCF|PCCF)\b)|conservator|nodal\s+off"
+    r"|forest\s+(?:dept|deptt|department|division|officials?|authorit\w*)|state\s+(?:govt|government)"
+    r"|(?-i:\bSBWL\b)|state\s+(?:board|wild\s*life\s+board)|(?-i:\bFRA\b)|forest\s+rights|(?-i:\bRoFR\b)"
+    r"|gram\s+sabha|collector|(?-i:\bDC\b)", _I)
+_FC_APPLIED = re.compile(
+    r"application|proposal\s+(?:\w+\s+){0,3}(?:submitted|uploaded|sent|filed|prepared|forwarded)"
+    r"|(?:submitted|uploaded|filed)\s+(?:\w+\s+){0,4}(?:proposal|application)|online|enumeration"
+    r"|\bDGPS\b|joint\s+(?:inspection|verification|survey)|site\s+inspection|(?-i:FP/[A-Z]{2}/)"
+    r"|\bCA\s+(?:land|scheme|area)|identified", _I)
+# 'appeal' added to the research pattern: an appeal against an FAC decision was missed
+_FC_REJECT = re.compile(r"reject\w*|returned|\bclosed\b|deferred|appeal\w*|not\s+(?:been\s+)?(?:recommended|agreed"
+                        r"|approved)", _I)
+_FC_WORD = (r"(?:forest\w*\s+(?:clear\w*|clerance|approval|permission|diversion|land\s+(?:clearance|diversion))"
+            r"|\bFC\b|diversion\s+of\s+forest)")
+_FC_GEN_DONE = re.compile(_FC_WORD + r"[^.;]{0,60}?\b" + _FC_DONE + r"\b|\b" + _FC_DONE + r"\b[^.;]{0,30}?" + _FC_WORD,
+                          _I)
+_FC_GEN_PEND = re.compile(_FC_WORD + r"[^;]{0,60}?\b" + _FC_PEND + r"|\b" + _FC_PEND + r"[^;]{0,40}?" + _FC_WORD
+                          + r"|involvement\s+of\s+(?:\w+\s+){0,2}forest|forest\s+(?:issue|problem|hurdle)", _I)
+_FC_LOCATION = {1: "applied", 2: "state_level", 3: "regional_iro", 4: "central_fac_moef"}
+
+
+def _fc_cue_state(after, before):
+    """'done', 'pending' or 'mention' for a stage cue: the first verb after it, else a done verb just before it."""
+    p = re.search(r"\b" + _FC_PEND, after, _I)
+    d = re.search(r"\b" + _FC_DONE + r"\b", after, _I)
+    if d and (not p or d.start() < p.start()):
+        return "done"
+    if p:
+        return "pending"
+    return "done" if re.search(r"\b" + _FC_DONE + r"\b\W+(?:\w+\W+){0,2}$", before, _I) else "mention"
+
+
+def fc_stage(text):
+    """A sentence's forest-clearance stage (a FC_STAGES label), null when it is not about a clearance stage."""
+    if not _FC_CTX.search(_FC_MINISTRY.sub(" ", text)):
+        return None
+    if _FC_NA.search(text):
+        return "not_applicable"
+    stage = _fc_stage(text)
+    rejected = _FC_REJECT.search(text) and re.search(r"forest|FC|FAC|proposal", text, _I)
+    return "rejected" if stage is not None and rejected else stage
+
+
+def _fc_stage(text):
+    """fc_stage of a forest sentence, before the rejected check."""
+    text = re.sub(r"^(II|I)\s+(?=forest|FC|clear)", r"Stage-\1 ", text)
+    found = []                                            # (level, label)
+    if _FC_COMPLY2.search(text):
+        found.append((7, "stage2_granted"))
+    b = _FC_BOTH.search(text)
+    if b and _fc_cue_state(text[b.end():b.end() + 90], "") == "done":
+        found.append((7, "stage2_granted"))
+    cues = list(_FC_CUE.finditer(text))
+    for i, m in enumerate(cues):
+        tok = next((g for g in m.groups() if g), "").lower()
+        tok = "i" if tok.startswith("in") else tok
+        fcx = m.group(4) is not None or m.group(5) is not None
+        two = tok in ("ii", "2", "two", "2nd", "second", "final")
+        after = text[m.end(): cues[i + 1].start() if i + 1 < len(cues) else m.end() + 90][:90]
+        before = text[max(0, m.start() - 40): m.start()]
+        if tok == "final" and m.group(3) is None and not _FC_OK_AFTER.search(after):
+            continue
+        if m.group(3) is None and not fcx and not (_FC_OK_AFTER.search(after) or _FC_OK_BEFORE.search(before)):
+            continue
+        # 'stage I & II approval given': the verb after the second cue is shared
+        if not re.search(r"\w{3,}", re.sub(r"(?i)\b(?:and|&|stage|forest\w*|FC|clearance)\b|[-&,\s]", " ", after)):
+            after = text[m.end(): m.end() + 90]
+        state = _fc_cue_state(after, before)
+        if two:
+            found.append((7, "stage2_granted") if state == "done" else (5, "stage2_pending"))
+        else:
+            found.append((5, "stage1_granted") if state == "done" else (2, "stage1_pending"))
+    w = _FC_WP.search(text)
+    if w:
+        after, before = text[w.end(): w.end() + 70], text[max(0, w.start() - 40): w.start()]
+        p = re.search(r"\b" + _FC_PEND, after, _I)
+        d = (re.search(r"\b" + _FC_DONE + r"\b", after, _I)
+             or re.search(r"\b" + _FC_DONE + r"\b\W+(?:\w+\W+){0,2}$", before, _I))
+        found.append((6, "working_permission") if d and not (p and p.start() < d.start()) else (5, "wp_pending"))
+    loc = next((lv for lv, rx in [(3, _FC_REGIONAL), (4, _FC_CENTRAL), (2, _FC_STATE), (1, _FC_APPLIED)]
+                if rx.search(text)), None)
+    top = max(found)[0] if found else None
+    generic_done = bool(_FC_GEN_DONE.search(text)) and not _FC_GEN_PEND.search(text)
+    # an office named says where a proposal not yet granted sits
+    if loc is not None and (top is None or (top == 2 and loc > 2)):
+        if top is None and generic_done and loc >= 2 and not re.search(r"recommend|forward", text, _I):
+            return "approved_generic"
+        return _FC_LOCATION[loc]
+    if found:
+        return next(lab for lv, lab in found if lv == top)
+    if generic_done:
+        return "approved_generic"
+    if _FC_GEN_PEND.search(text) or re.search(r"forest\s+clear\w*|\bFC\b|forest\s+land", text, _I):
+        return "fc_awaited"
+    return None
+
+
+_NUM = r"(\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+_NU = _NUM + r"\s*(ha\b|hac\w*|hect\w*|hec\b|acres?|ac\b)\.?"
+_NO_NU = r"(?:(?!\d[\d.,]*\s*(?:ha\b|hac|hect|hec\b|acre|ac\b)).)"          # a character that does not start an area
+_LA_ACQ = (r"acquired|possess\w*|handed\s+over|hand\s*over|received|registered|available|taken\s+over|transferred"
+           r"|purchased|made\s+available")
+_LA_REM = (r"yet\s+to\s+be|balance|remaining|to\s+be\s+acquired"
+           r"|not\s+(?:yet\s+)?(?:been\s+)?(?:acquired|handed|possessed)")
+_LA_CTX = re.compile(r"\bland|(?-i:\bLA\b)|(?-i:\bLAQ\b)|acqui|possession|PR\s+provision", _I)
+# the % written just before 'land acquisition' wins over one after it: '91.58 % land acquisition completed. 95.9 %
+# earthwork' is 91.58, and an after-% never crosses a sentence end
+_LA_PCT_BEFORE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:of\s+)?(?:(?-i:LA\b)|land\s*(?:acqu?i\w*|has|have|is|was|handed"
+                            r"|made|in\s+possession|possessed|available)|(?:acqu?i\w*|possession)\s+of\s+land)", _I)
+_LA_PCT_AFTER = re.compile(r"land\s+acqu?i\w*(?:(?!\.\s)[^%]){0,80}?(\d+(?:\.\d+)?)\s*%", _I)
+_LA_PCT_REMAIN = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:of\s+)?land\s+(?:\w+\s+){0,6}yet\s+to\s+be\s+acqu", _I)
+_LA_PCT_BAD = re.compile(r"compensation|development|boundary|free\s+of\s+cost|cost\s+shar|only\s+(?:on|after)"
+                         r"|after\s+acquiring|on\s+completion\s+of|\bRoR\b|return|release\s+of", _I)
+_LA_OUT_WHICH = re.compile(_NU + _NO_NU + r"{0,80}?out\s+of\s+(?:which|this|these|it)\W+(?:\w+\W+){0,4}?" + _NU, _I)
+_LA_OUT_PART = re.compile(_NU + r"(" + _NO_NU + r"{0,90}?)out\s+of\s+(?:the\s+)?(?:total\s+)?(?:\w+\s+){0,3}?" + _NU,
+                          _I)
+_LA_OUT_TOTAL = re.compile(r"out\s+of\s+(?:the\s+)?(?:total\s+)?(?:\w+\s+){0,4}?" + _NU + _NO_NU + r"{0,140}?" + _NU,
+                           _I)
+_LA_ACQ_BAL = re.compile(r"(?:acquired|possess\w*)\s+(?:is\s+)?" + _NU + _NO_NU + r"{0,40}?balance\s+(?:\w+\s+){0,5}?"
+                         + _NU, _I)
+_LA_STEP_RX = [
+    r"\b3\s*[-(]?\s*A\b\)?|\b3\s*\(\s*1\s*\)|sec\w*\.?\s*(?:4|11)\s*(?:\(\s*1\s*\))?\b|\b20\s*A\b|\b4\s*\(\s*1\s*\)"
+    r"|preliminary\s+notification|notification\s+u/?s|(?-i:\bCBA\b)",
+    r"\b3\s*[-(]?\s*D\b|sec\w*\.?\s*(?:6|19)\b|\b20\s*E\b|\b9\s*\(\s*1\s*\)|declaration",
+    r"\b3\s*[-(]?\s*G\b|\bawards?\s+(?:\w+\s+){0,3}(?:declared|passed|published|announced|made|pronounced|stage)"
+    r"|\bfinal\s+award|\b20\s*F\b|sec\w*\.?\s*23\b",
+    r"compensation\s+(?:\w+\s+){0,4}(?:disbursed|paid|deposited|distributed)"
+    r"|(?:disburs\w*|payment|deposit\w*)\s+(?:of\s+)?(?:\w+\s+){0,3}compensation|\b3\s*[-(]?\s*H\b",
+    r"possession|handed\s+over|hand\s*over|\b3\s*[-(]?\s*E\b",
+]
+
+
+def _ha(v, u):
+    return float(v.replace(",", "")) * (0.4047 if u.lower().startswith("ac") else 1.0)
+
+
+def _same_unit(a, b):
+    return a.lower().startswith("ac") == b.lower().startswith("ac")
+
+
+def _first_verb(s):
+    """'acq' or 'rem' for whichever verb comes first in s, None when neither."""
+    a, r = re.search(_LA_ACQ, s, _I), re.search(_LA_REM, s, _I)
+    if a and (not r or a.start() < r.start()):
+        return "acq"
+    return "rem" if r else None
+
+
+def _la_ratio(text):
+    """Land share from hectares: 'X ha out of Y ha', 'Y ha ... out of which X ha', 'out of Y ha, X ha in
+    possession', 'acquired X ha, balance Y ha' (acres in hectares). {} when none."""
+    if re.search(r"\bFC\b|forest\s+clear|stage|application", text, _I) and not re.search(
+            r"acqui|possess|handed|registered", text, _I):
+        return {}
+    for rx in (_LA_OUT_WHICH, _LA_OUT_PART, _LA_OUT_TOTAL):
+        m = rx.search(text)
+        if not m:
+            continue
+        if rx is _LA_OUT_WHICH:
+            (tot, tu), (part, pu) = m.group(1, 2), m.group(3, 4)
+            verb, pre_bal = _first_verb(text[m.end(): m.end() + 60]), False
+        elif rx is _LA_OUT_PART:
+            (part, pu), mid, (tot, tu) = m.group(1, 2), m.group(3), m.group(4, 5)
+            verb = _first_verb(mid + " " + text[m.end(): m.end() + 60])
+            pre_bal = bool(re.search(r"balance\s+(?:\w+\s+){0,3}$", text[max(0, m.start() - 30): m.start()], _I))
+        else:
+            (tot, tu), (part, pu) = m.group(1, 2), m.group(3, 4)
+            verb = _first_verb(text[m.end(2): m.start(3)]) or _first_verb(text[m.end(): m.end() + 60])
+            pre_bal = bool(re.search(r"balance\s+(?:\w+\s+){0,3}$", text[max(0, m.start(3) - 30): m.start(3)], _I))
+        if not _same_unit(tu, pu) or re.search(r"compensation|sanctioned|application", text[m.start(): m.end() + 60],
+                                               _I):
+            continue
+        t, p = _ha(tot, tu), _ha(part, pu)
+        if t <= 0 or p > t:
+            continue
+        if pre_bal or verb == "rem":
+            return {"la_pct": 100 * (1 - p / t), "la_total_ha": t}
+        if verb == "acq":
+            return {"la_pct": 100 * p / t, "la_total_ha": t}
+    m = _LA_ACQ_BAL.search(text)
+    if m and _same_unit(m.group(2), m.group(4)):
+        a, b = _ha(*m.group(1, 2)), _ha(*m.group(3, 4))
+        return {"la_pct": 100 * a / (a + b), "la_total_ha": a + b}
+    return {}
+
+
+def la_progress(text):
+    """A sentence's land acquisition: la_pct (share acquired, 0-100), la_total_ha (the land the share is of, when
+    given in hectares) and la_step (the furthest LA_STEPS step it mentions); keys absent when not stated."""
+    out = {}
+    if not _LA_CTX.search(text):
+        return out
+    m = _LA_PCT_REMAIN.search(text)
+    if m:
+        out["la_pct"] = 100 - float(m.group(1))
+    else:
+        for rx in (_LA_PCT_BEFORE, _LA_PCT_AFTER):
+            m = rx.search(text)
+            if m and not _LA_PCT_BAD.search(text[max(0, m.start() - 60): m.end() + 30]) and float(m.group(1)) <= 100:
+                out["la_pct"] = float(m.group(1))
+                break
+    if "la_pct" not in out:
+        out.update(_la_ratio(text))
+    steps = [i for i, rx in enumerate(_LA_STEP_RX) if re.search(rx, text, _I)]
+    if steps and re.search(r"land|acqui|notif|award|compensation|possession", text, _I):
+        out["la_step"] = LA_STEPS[max(steps)]
+    return out
+
+
+def remark_facts(text):
+    """Free texts (unique) -> one row per sentence that states a forest stage, land share or land step (index: the
+    text's): fc_stage, la_pct, la_total_ha, la_step."""
+    sent = sentences(text)
+    u = pd.Series(sent.unique())
+    f = pd.DataFrame([la_progress(s) for s in u], index=u.index, columns=["la_pct", "la_total_ha", "la_step"])
+    f["fc_stage"] = u.map(fc_stage)
+    f = f.set_index(u)
+    x = f.reindex(sent.to_numpy()).set_index(sent.index)
+    return x[x.notna().any(axis=1)]
+
+
+def quarter_facts(rows):
+    """Remark rows -> one row per (project_key, period) whose free text states something: fc_stage (its most
+    advanced sentence), la_pct (of the sentence naming the largest land total, else the median of its percentages),
+    la_step (the furthest mentioned) and proposal_no (the Parivesh numbers named, ;-joined)."""
+    pk = ["project_key", "period"]
+    rows = rows.assign(free=free_text(rows["remarks"].fillna("")))
+    rows = rows.loc[rows["free"].notna(), pk + ["free"]].drop_duplicates()
+    uniq = pd.Series(rows["free"].unique())
+    f = remark_facts(uniq)
+    f["free"] = uniq.to_numpy()[f.index]
+    x = rows.merge(f, on="free")
+    g = x.groupby(pk)
+    rank = {s: i for i, s in enumerate(FC_STAGES)}
+    out = pd.DataFrame({"fc_stage": g["fc_stage"].agg(lambda s: max(s.dropna(), key=rank.get, default=None)),
+                        "la_step": g["la_step"].agg(lambda s: max(s.dropna(), key=LA_STEPS.index, default=None))})
+    la = x[x["la_pct"].notna()]
+    best = la.assign(_tot=la["la_total_ha"].fillna(-1)).sort_values(["_tot", "la_pct"]).drop_duplicates(pk, keep="last")
+    best = best.set_index(pk)
+    pct_only = la[la["la_total_ha"].isna()].groupby(pk)["la_pct"].median()
+    out["la_pct"] = best["la_pct"].where(best["_tot"] > 0, pct_only.reindex(best.index)).round(2)
+    no = uniq.str.extractall(PROPOSAL_NO)
+    no = ("FP/" + no[0] + "/" + no[1] + "/" + no[2] + "/" + no[3]).groupby(level=0).agg(joined)
+    p = rows.assign(proposal_no=rows["free"].map(pd.Series(no.to_numpy(), index=uniq.to_numpy()[no.index])))
+    out = out.join(p[p["proposal_no"].notna()].groupby(pk)["proposal_no"].agg(split_joined), how="outer")
+    out = out.reset_index()
+    for c in ["fc_stage", "la_step", "proposal_no"]:
+        out[c] = out[c].astype("str")
+    out = out[out[REMARK_FACTS].notna().any(axis=1)]
+    return out[pk + REMARK_FACTS].sort_values(pk, ignore_index=True)
+
+
+def remark_status(qf):
+    """Quarter facts -> per project the latest forest stage, land share and land step, each with the quarter it is
+    as of (remarks end in 2023-Q2), and every proposal number named."""
+    out = pd.DataFrame(index=pd.Index(sorted(qf["project_key"].unique()), name="project_key"))
+    for c in ["fc_stage", "la_pct", "la_step"]:
+        last = qf[qf[c].notna()].drop_duplicates("project_key", keep="last").set_index("project_key")
+        out[c], out[f"{c}_as_of"] = last[c], last["period"]
+    out["proposal_no"] = qf[qf["proposal_no"].notna()].groupby("project_key")["proposal_no"].agg(split_joined)
+    out["proposal_no"] = out["proposal_no"].astype("str")
+    return out.reset_index()
 
 
 def load_rows(source="typed_rows", silver=SILVER):
@@ -517,6 +861,11 @@ def joined(v):
     return ";".join(sorted(set(v)))
 
 
+def split_joined(v):
+    """;-joined values -> their union, ;-joined."""
+    return joined(n for s in v for n in s.split(";"))
+
+
 def nh_from_text(s):
     """NH ids named in each text (Series index -> sorted ;-joined ids, null when none)."""
     up = s.fillna("").str.upper()
@@ -676,13 +1025,24 @@ def main(out=GOLD, silver=SILVER):
     master = pd.read_parquet(silver / "project_master.parquet")
     obs = pd.read_parquet(silver / "observations.parquet", columns=["project_key", "period", "is_completed"])
     cur = current_keys(obs, master)
-    seen, m = mentions(load_rows("typed_rows", silver))
+    rows = load_rows("typed_rows", silver)
+    seen, m = mentions(rows)
     ev = events(seen, m, master)
+    qf = quarter_facts(rows)
     out.mkdir(parents=True, exist_ok=True)
     ev.to_parquet(out / "project_events.parquet", index=False)
-    quarter_mentions(seen, m).to_parquet(out / "project_mentions.parquet", index=False)
+    quarter_mentions(seen, m).merge(qf, on=["project_key", "period"], how="left").to_parquet(
+        out / "project_mentions.parquet", index=False)
+    rs = remark_status(qf)
+    rs.to_parquet(out / "remark_status.parquet", index=False)
     print(f"project_events: {len(ev)} events from {len(m)} mentions over {ev['project_key'].nunique()} projects, "
           f"{time.time() - t0:.1f}s")
+    rc = rs[rs["project_key"].isin(cur)]
+    print(f"remark facts, as of {qf['period'].max():%Y-%m} at the latest (projects / key-quarters; current "
+          f"portfolio of {len(cur)}):")
+    print(pd.DataFrame({"projects": rs[REMARK_FACTS].notna().sum(), "key_quarters": qf[REMARK_FACTS].notna().sum(),
+                        "current": rc[REMARK_FACTS].notna().sum()}).to_string())
+    print(qf["fc_stage"].value_counts().to_string())
     ev_cur = ev[ev["project_key"].isin(cur)]
     print(pd.concat({"all": pd.crosstab(ev["category"], ev["status"], margins=True),
                      f"current ({len(cur)})": pd.crosstab(ev_cur["category"], ev_cur["status"], margins=True)},
