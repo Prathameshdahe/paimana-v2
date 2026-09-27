@@ -149,6 +149,9 @@ def test_brief_is_503_quickly_when_the_llm_is_down(client, top_key, monkeypatch)
     r = client.get(f"/api/projects/{top_key}/brief")
     assert r.status_code == 503 and r.json()["status"] == "llm_unavailable"
     assert time.time() - t0 < 10
+    t0 = time.time()                                   # remembered: the next ask does not wait again
+    assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and time.time() - t0 < 1
+    brief._down_at = -brief.DOWN_S                     # forget the outage for the next tests
 
 
 def test_brief_accepts_caches_and_rejects(client, top_key, monkeypatch):

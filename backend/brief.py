@@ -8,16 +8,21 @@ in the payload: a text number matches a payload number written to its precision 
 written as a percent (0.87 -> 87%) or a percent written as a fraction (18 -> 0.18); signs are ignored. A rejected
 draft is retried once with the offending numbers named; a second rejection returns the reasons. Accepted briefs are
 cached per (project, asof, model_version) in the app database; LM Studio down is 'llm_unavailable' (connect timeout
-llm.client.CONNECT_TIMEOUT).
+llm.client.CONNECT_TIMEOUT; Windows retries a refused connection, so about 5 s), remembered for DOWN_S seconds so a
+page that asks again does not wait again.
 """
 import json
 import math
 import re
+import time
 from datetime import date, datetime, timezone
 
 from llm import client
 
 from . import db, serving
+
+DOWN_S = 30
+_down_at = -DOWN_S  # time.monotonic() of the last unreachable LM Studio
 
 ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})(?:-(\d{2}))?\b")
 NUMBER = re.compile(r"(?<![\w.,])(\d{1,3}(?:,\d{2,3})+|\d+)(\.\d+)?(\s*%)?")
@@ -157,6 +162,9 @@ def generate(key: str) -> dict:
     hit = db.cached_brief(key, asof, mv)
     if hit:
         return {**hit, "paragraphs": paragraphs(hit["text"]), "status": "ok", "cached": True, "payload": facts}
+    global _down_at
+    if time.monotonic() - _down_at < DOWN_S:
+        return {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {DOWN_S} s"}
     reasons, attempts = [], 0
     try:
         for attempt in range(2):
@@ -166,6 +174,7 @@ def generate(key: str) -> dict:
             if ok:
                 break
     except client.LLMConnectionError as e:
+        _down_at = time.monotonic()
         return {"status": "llm_unavailable", "detail": str(e)[:300]}
     if not ok:
         return {"status": "rejected", "reasons": reasons, "attempts": attempts}
