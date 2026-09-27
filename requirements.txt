@@ -13,3 +13,9 @@ lightgbm>=4.3
 shap>=0.45
 pdfplumber>=0.11
 shapely>=2.0
+
+# silver/gold layers + identity resolution
+duckdb>=1.1
+pyarrow>=17
+rapidfuzz>=3.9
+pymupdf>=1.24
