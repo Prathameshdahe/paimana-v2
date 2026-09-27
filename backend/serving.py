@@ -377,14 +377,6 @@ def forecast(s, key):
     }
 
 
-@cached
-def last_remarks(s, key):
-    """Most recent free-text remark (reports before 2024) for one project, or None."""
-    return _one(s, """SELECT period, remarks, source_doc_id, source_page FROM obs
-        WHERE project_key = ? AND period < DATE '2024-01-01' AND length(trim(remarks)) > 0
-        ORDER BY period DESC LIMIT 1""", [key])
-
-
 # ------------------------------------------------------------ external, models
 
 @cached

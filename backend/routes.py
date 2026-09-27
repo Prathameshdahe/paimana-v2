@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile
 from llm import worker
 
 from . import db, serving, store
-from .live import watcher
+from .live import scout, watcher
 from .schemas import (
     Alert,
     AlertKind,
@@ -27,6 +27,7 @@ from .schemas import (
     ProjectSignals,
     Role,
     RoleBody,
+    SignalFeed,
     Sort,
     Tier,
     Timeline,
@@ -156,9 +157,39 @@ def post_watch(background: BackgroundTasks, role: Role | None = None):
     return {"started": True, "detail": f"{n} inbox file(s) to ingest", "pending": n}
 
 
+@router.post("/jobs/scout", response_model=JobStarted)
+def post_scout(background: BackgroundTasks, project_key: str | None = Query(None, max_length=32),
+               role: Role | None = None):
+    """Scout one current project now (and return its counts), or start a batch run in the background."""
+    if scout.busy():
+        return {"started": False, "detail": "a scout run is already in progress"}
+    if project_key:
+        k = _key(project_key)
+        if k not in scout.index()["projects"]:
+            raise HTTPException(status_code=404, detail=f"project {project_key} is not in the current portfolio")
+        db.audit(role, "jobs.scout", k)
+        out = scout.run([k], pib=False)
+        return {"started": not out.get("busy"), "detail": f"scouted {k}", "summary": out}
+    keys = scout.batch_keys()
+    db.audit(role, "jobs.scout", "batch", f"{len(keys)} projects")
+    background.add_task(scout.run, keys)
+    return {"started": True, "detail": f"scouting {len(keys)} projects in the background", "pending": len(keys)}
+
+
+@router.get("/signals/feed", response_model=SignalFeed)
+def get_signal_feed(since: datetime | None = None, category: str | None = Query(None, max_length=40),
+                    state: str | None = Query(None, max_length=60), severity: int | None = Query(None, ge=1, le=3),
+                    linked: bool | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100)):
+    """External Evidence Radar: one page of signals (severity = at least) and the state heat."""
+    return scout.feed(since and since.isoformat(), category, state, severity, linked, page, size)
+
+
 @router.get("/projects/{key}/signals", response_model=ProjectSignals)
 def get_project_signals(key: str):
-    return db.project_signals(_key(key))
+    out = db.project_signals(_key(key))
+    for s in out["items"]:
+        s.update(scout.lead_time(out["key"], s["published_at"]))
+    return out
 
 
 # ---------- worker cell (JSON store) ----------

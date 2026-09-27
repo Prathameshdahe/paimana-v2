@@ -35,10 +35,13 @@ CREATE TABLE IF NOT EXISTS watchlist (
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT UNIQUE, url_hash TEXT, title TEXT, source TEXT,
     published_at TEXT, fetched_at TEXT, summary TEXT, category TEXT, severity INTEGER, text_hash TEXT);
+CREATE INDEX IF NOT EXISTS signals_text ON signals (text_hash);
+CREATE INDEX IF NOT EXISTS signals_published ON signals (published_at);
 CREATE TABLE IF NOT EXISTS signal_projects (
     signal_id INTEGER NOT NULL REFERENCES signals (id), project_key TEXT NOT NULL, link_score REAL, method TEXT,
     PRIMARY KEY (signal_id, project_key));
 CREATE INDEX IF NOT EXISTS signal_projects_key ON signal_projects (project_key);
+CREATE TABLE IF NOT EXISTS scouted (project_key TEXT PRIMARY KEY, scouted_at TEXT NOT NULL, n_items INTEGER);
 CREATE TABLE IF NOT EXISTS audit_log (at TEXT NOT NULL, role TEXT, action TEXT NOT NULL, target TEXT, detail TEXT);
 """
 
@@ -220,13 +223,13 @@ def record_source(row: dict) -> None:
 
 
 def project_signals(project_key: str, limit=100) -> dict:
-    """Linked signals for one project, newest first, and when the scout last ran (None: never searched)."""
+    """Linked signals for one project, newest first, and when the scout last searched it (None: never)."""
     with closing(connect()) as con:
         items = [dict(r) for r in con.execute("""
             SELECT s.*, sp.link_score, sp.method FROM signal_projects sp JOIN signals s ON s.id = sp.signal_id
             WHERE sp.project_key = ? ORDER BY s.published_at DESC, s.id DESC LIMIT ?""", [project_key, limit])]
-        last = con.execute("SELECT max(finished_at) FROM job_runs WHERE job = 'scout' AND status = 'ok'").fetchone()[0]
-    return {"key": project_key, "last_scout_at": last, "items": items}
+        last = con.execute("SELECT scouted_at FROM scouted WHERE project_key = ?", [project_key]).fetchone()
+    return {"key": project_key, "last_scout_at": last and last[0], "items": items}
 
 
 def audit(role, action, target, detail=None) -> None:

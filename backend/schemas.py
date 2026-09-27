@@ -383,12 +383,21 @@ class Ingested(CamelModel):
 
 
 class JobStarted(CamelModel):
+    """summary: the run's counts when it ran inside the request (the scout on one project)."""
     started: bool
     detail: str
     pending: int | None = None
+    summary: dict[str, Any] | None = None
 
 
-class Signal(CamelModel):
+class LeadTime(CamelModel):
+    """The first report period after the signal date whose CUF row changed (completion pushed or cost revised) and
+    the gap in days; None while no report has changed since."""
+    cuf_change_period: date | None = None
+    lead_days: int | None = None
+
+
+class Signal(LeadTime):
     id: int
     url: str
     title: str | None
@@ -403,10 +412,47 @@ class Signal(CamelModel):
 
 
 class ProjectSignals(CamelModel):
-    """last_scout_at None means the scout never ran: no signals is then unknown, not clear."""
+    """last_scout_at None means the scout never searched this project: no signals is then unknown, not clear."""
     key: str
     last_scout_at: str | None
     items: list[Signal]
+
+
+class FeedProject(LeadTime):
+    key: str
+    name: str | None
+    state: str | None
+    tier: str | None
+    link_score: float | None
+    method: str | None
+
+
+class FeedItem(CamelModel):
+    """A stored signal; projects is empty for the unlinked pool (ambiguous or weak matches)."""
+    id: int
+    url: str
+    title: str | None
+    source: str | None
+    published_at: str | None
+    fetched_at: str | None
+    summary: str | None
+    category: str | None
+    severity: int | None
+    projects: list[FeedProject]
+
+
+class StateHeat(CamelModel):
+    state: str | None
+    n: int
+
+
+class SignalFeed(CamelModel):
+    """state_heat: signals of severity >= 2 in the last 90 days per state of their linked projects."""
+    total: int
+    page: int
+    size: int
+    items: list[FeedItem]
+    state_heat: list[StateHeat]
 
 
 # ---------- worker cell persistence ----------

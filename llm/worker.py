@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend import serving, store
+from backend import db, serving, store
 from backend.schemas import (
     AnalystOutput,
     AuditorQuery,
@@ -20,6 +20,7 @@ from backend.schemas import (
 from .client import LLM_MODEL, call_llm
 
 TOP_N = 10  # Scout only runs on the top-priority projects
+SCOUT_EVIDENCE = 10  # report events and news signals given to the scout, each
 STALE_MONTHS, DQ_MIN = 3, 0.7  # same thresholds as the data-staleness row in ml/risk_profile.py
 
 
@@ -88,28 +89,31 @@ def forecaster(project_key: str) -> dict:
 
 # ---------- 3. Scout ----------
 
-def scout(project_row: dict) -> ScoutOutput:
-    """LLM call. Extracts cause tags from the project's last free-text report remark.
-
-    Note: this is the project's own reported remarks text (free text only in
-    reports up to 2023), not a live news fetch. RSS ingestion isn't built yet.
-    """
+def scout(project_row: dict) -> tuple[ScoutOutput, list[dict]]:
+    """LLM call over the project's own evidence only: the delay events found in its report remarks
+    (gold/project_events, with document and page) and the news signals the scout linked to it (SQLite).
+    Returns the tags and those signals. With neither there is no LLM call and no tag: nothing is made up."""
     key = project_row["project_key"]
-    remark = serving.last_remarks(key) or {}
-    events = serving.project(key)["external"]["events"]
-    open_events = sorted({e["category"] for e in events if e["status"] == "open"})
+    events = sorted(serving.project(key)["external"]["events"], key=lambda e: e["status"] != "open")[:SCOUT_EVIDENCE]
+    signals = db.project_signals(key, limit=SCOUT_EVIDENCE)["items"]
+    if not events and not signals:
+        return ScoutOutput(tags=[]), []
+    lines = [f"- report remark, {e['category']} ({e['status']}, {e['first_seen']} to {e['last_seen']}): "
+             f"\"{e['evidence']}\" [{e['source_doc_id']} p.{e['source_page']}]" for e in events]
+    lines += [f"- news, {(s['published_at'] or 'undated')[:10]}, {s['source']}: \"{s['title']}\" "
+              f"(category {s['category'] or 'none'}, severity {s['severity']})" for s in signals]
     system = (
-        "You are extracting delay-cause tags from a government project status note. "
-        "Only use categories: land, clearance, litigation, contractor, funds, utility_shifting."
+        "You are extracting delay-cause tags from evidence about a government project. "
+        "Only use categories: land, clearance, litigation, contractor, funds, utility_shifting. "
+        "Use only the evidence lines given; if none supports a category, return no tags."
     )
     user = (
         f"Project: {project_row.get('project_name', '')}\n"
         f"Sector: {project_row.get('sector', '')}\n"
-        f"Open delay events in reports: {', '.join(open_events) or 'none recorded'}\n"
-        f"Remarks ({remark.get('period', 'none')}): {remark.get('remarks', '')}\n"
-        "Extract 1-3 cause tags with a confidence (0-1) and a short source_note quoting the remark."
+        "Evidence:\n" + "\n".join(lines) + "\n"
+        "Extract 1-3 cause tags with a confidence (0-1) and a short source_note quoting one evidence line."
     )
-    return call_llm(system, user, ScoutOutput)
+    return call_llm(system, user, ScoutOutput), signals
 
 
 # ---------- 4. Analyst ----------
@@ -182,12 +186,12 @@ def run_worker_cycle() -> dict:
             alerts_raised += 1
 
         fc = forecaster(project_row["project_key"])
-        sc = scout(project_row)
+        sc, signals = scout(project_row)
         an = analyst(fc, sc)
         draft = dispatcher(an, project_row)
         draft.evidence = [
             EvidenceItem(tag=t.category, source_url=None, note=t.source_note) for t in sc.tags
-        ]
+        ] + [EvidenceItem(tag=s["category"] or "news", source_url=s["url"], note=s["title"]) for s in signals[:5]]
         new_drafts.append(draft)
         processed += 1
 
@@ -208,9 +212,9 @@ def run_worker_cycle() -> dict:
         },
         {
             "id": str(uuid.uuid4()), "worker": "scout", "timestamp": ts,
-            "model_version": LLM_MODEL, "dataset": "silver report remarks, free text up to 2023 (no live news fetch yet)",
+            "model_version": LLM_MODEL, "dataset": "gold/project_events (report remarks) + linked news signals (SQLite)",
             "projects_processed": processed, "alerts_raised": 0,
-            "summary": f"Extracted delay-cause tags for {processed} projects from their last report remarks (no live news fetch yet).",
+            "summary": f"Extracted delay-cause tags for {processed} projects from their report-remark events and linked news signals.",
         },
         {
             "id": str(uuid.uuid4()), "worker": "analyst", "timestamp": ts,
