@@ -110,7 +110,7 @@ def test_labels_exact_horizon_and_null_inputs():
     assert list(lab.index) == [("PRJ-000001", QUARTERS[q]) for q in (0, 1, 2)] + [("PRJ-000002", QUARTERS[1])]
     rows = lab[["y_date_push", "y_cost_rev", "y_any"]].astype("float64").to_numpy().tolist()
     nan = float("nan")
-    assert np.array_equal(rows, [[nan, 0, nan], [1, 1, 1], [nan, 1, 1], [0, 0, 0]], equal_nan=True)
+    assert np.array_equal(rows, [[nan, 0, nan], [1, 1, 1], [nan, 1, nan], [0, 0, 0]], equal_nan=True)
     assert lab["y_months"].tolist()[1] == 5 and lab["y_cost_pct"].iloc[0] == pytest.approx(4.0)
     assert (lab["target_period"] == [QUARTERS[q] for q in (2, 3, 4, 3)]).all()
 

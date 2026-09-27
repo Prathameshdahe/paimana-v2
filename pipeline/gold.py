@@ -170,7 +170,8 @@ def expected_progress(d, curves):
 def build_labels(obs, h):
     """Outcome h quarters after each row, from the same key's observation at exactly t + h quarters.
     Rows completed at t and rows without an observation at t + h are dropped; a target whose inputs are
-    null stays null. y_any is true if either flag is true, false only when both are false."""
+    null stays null. y_any is labelled only when both flags are known: were it true whenever one known flag
+    is true, rows missing one input would be labelled only when positive and the model would learn the gap."""
     cols = ["project_key", "anticipated_cost_cr", "anticipated_completion"]
     q = qindex(obs["period"])
     now = obs.loc[~obs["is_completed"], cols + ["period"]].assign(_q=q + h)
@@ -181,9 +182,10 @@ def build_labels(obs, h):
     date_push = pd.Series(slip >= DATE_STEP, dtype="boolean").mask(slip.isna())
     cost_rev = pd.Series(m["anticipated_cost_cr_h"] >= COST_STEP * m["anticipated_cost_cr"],
                          dtype="boolean").mask(cost_pct.isna())
+    any_slip = (date_push | cost_rev).mask(date_push.isna() | cost_rev.isna())
     out = pd.DataFrame({"project_key": m["project_key"], "period": m["period"],
                         "target_period": m["target_period"], "y_date_push": date_push.astype("Int8"),
-                        "y_cost_rev": cost_rev.astype("Int8"), "y_any": (date_push | cost_rev).astype("Int8"),
+                        "y_cost_rev": cost_rev.astype("Int8"), "y_any": any_slip.astype("Int8"),
                         "y_months": slip.astype("float64"), "y_cost_pct": cost_pct})
     return out.sort_values(PK, kind="mergesort", ignore_index=True)
 
