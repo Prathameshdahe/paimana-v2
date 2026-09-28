@@ -661,6 +661,11 @@ def public_page(page: dict) -> dict:
                                "top_reason": r.get("top_check")} for r in page["items"]]}
 
 
+def public_portfolio(p: dict) -> dict:
+    """portfolio() for the public: the top list's reason from the flagged checks, never a driver (public_page)."""
+    return {**p, "top": [{**r, "top_reason": r.get("top_check")} for r in p["top"]]}
+
+
 def public_map(page: dict) -> dict:
     """projects_map() for the public: the top reason from the flagged checks, never a driver (public_page)."""
     return {**page, "items": [{**r, "top_reason": r.get("top_check")} for r in page["items"]]}

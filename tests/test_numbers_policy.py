@@ -374,6 +374,10 @@ def test_map_rows_and_top_reason(client, world):
     assert all(r["topReason"] is None or r["topReason"] in checks for r in public)
     rows = client.get("/api/projects", headers=ipmd, params={"size": 50}).json()["items"]
     assert all(r["topReason"] == words[r["key"]]["top_reason"] for r in rows)
+    top = client.get("/api/portfolio", headers=pub).json()["top"]   # the public's top list: a check, never a driver
+    assert top and all(r["topReason"] == words[r["key"]]["top_check"] for r in top)
+    top = client.get("/api/portfolio", headers=ipmd).json()["top"]
+    assert all(r["topReason"] == words[r["key"]]["top_reason"] for r in top)
     assert client.get("/api/projects/map", params={"tier": "Severe"}).status_code == 422
 
 
@@ -406,7 +410,7 @@ def test_memo_in_words():
 def test_dispatch_memos_in_words(client, world, tmp_path, monkeypatch):
     ipmd = client.get("/api/dispatch", headers=headers(client, world, "ipmd")).json()
     dev = client.get("/api/dispatch", headers=headers(client, world, "developer")).json()
-    assert len(ipmd) == len(dev) and any("probability of 0." in d["draftMemo"] for d in dev)   # the developer's as stored
+    assert len(ipmd) == len(dev) and any("probability of 0." in d["draftMemo"] for d in dev)   # the developer: stored
     assert not text_leaks(ipmd)
     k = world["key"]["ministry"]
     drafts = [{"id": "m", "project_id": k, "project_name": "X", "draft_memo": MEMO,

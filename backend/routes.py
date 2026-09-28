@@ -104,6 +104,7 @@ def get_portfolio(ministry: str | None = Query(None, max_length=NAME_MAX),
                   state: str | None = Query(None, max_length=SECTOR_MAX), tier: Tier | None = None,
                   v: Viewer = Anyone):
     out = serving.portfolio(ministry, sector, state, tier, scope=v.scope)
+    out = out if v.can("insights") else serving.public_portfolio(out)
     return out if v.can("numbers") else serving.plain_portfolio(out)
 
 
