@@ -282,6 +282,22 @@ def test_approve_can_correct_the_role_and_scope_and_reject_needs_a_note(client, 
     assert client.post(f"/api/admin/signups/{a}/approve", json={"role": "developer"}, headers=h).status_code == 422
 
 
+def test_a_review_by_the_developer_names_no_reviewer_to_administrators(client, coal):
+    """Review finding (unit B, round 1): reviewedBy of a request the hidden developer reviewed is empty for anyone
+    else (an id that no account list shows would give the account away); the developer sees its own id."""
+    a = client.post("/api/auth/signup", json=signup_body(coal)).json()["id"]
+    b = client.post("/api/auth/signup", json=signup_body(coal, email="other@coal.gov.in")).json()["id"]
+    h = as_role(client, "developer")
+    dev_id = client.get("/api/auth/me").json()["userId"]
+    assert client.post(f"/api/admin/signups/{a}/approve", json={}, headers=h).status_code == 200
+    assert client.post(f"/api/admin/signups/{b}/reject", json={"note": "no"}, headers=h).json()["reviewedBy"] == dev_id
+    assert [r["reviewedBy"] for r in client.get("/api/admin/signups", params={"status": "approved"}).json()] == [dev_id]
+    as_role(client, "ipmd", admin=True)
+    for status in ("approved", "rejected"):
+        rows = client.get("/api/admin/signups", params={"status": status}).json()
+        assert [r["reviewedBy"] for r in rows] == [None] and rows[0]["reviewedAt"], status
+
+
 @pytest.mark.parametrize("change, status", [
     ({"ministry": "Ministry of Nothing"}, 400), ({"role": "developer"}, 422), ({"password": "password1234"}, 422),
     ({"password": "new.officer rules ok"}, 422), ({"justification": "x" * 501}, 422), ({"email": "not-an-email"}, 422),

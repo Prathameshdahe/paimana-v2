@@ -215,7 +215,10 @@ def _account(v: Viewer, user_id: int) -> dict:
 
 @router.get("/admin/signups", response_model=list[SignupRow])
 def get_signups(status: SignupStatus | None = "pending", v: Viewer = Admin):
-    return accounts.signups(status)
+    """Sign-up requests, newest first; a request the hidden developer reviewed shows no reviewer to anyone else."""
+    rows = accounts.signups(status)
+    hidden = {u["id"] for role in _hidden(v) for u in accounts.with_role(role)}
+    return [{**r, "reviewed_by": None} if r["reviewed_by"] in hidden else r for r in rows]
 
 
 @router.post("/admin/signups/{signup_id}/approve", response_model=User,
