@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 
 def _to_camel(name: str) -> str:
@@ -694,6 +694,35 @@ class RoleBody(CamelModel):
 class WatchRequest(CamelModel):
     role: Role | None = None
     project_key: str = Field(max_length=32)
+
+
+CHAT_TEXT_MAX = 1000
+
+
+class ChatMessage(CamelModel):
+    """One turn. A question is 1-1000 characters; an earlier answer the client sends back may run longer (a streamed
+    answer can pass 1000 characters) and only its first 1000 are read (backend/routes.py)."""
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4 * CHAT_TEXT_MAX)
+
+    @model_validator(mode="after")
+    def _question_length(self):
+        if self.role == "user" and not 1 <= len(self.content.strip()) <= CHAT_TEXT_MAX:
+            raise ValueError(f"a question is 1 to {CHAT_TEXT_MAX} characters")
+        return self
+
+
+class ChatRequest(CamelModel):
+    """POST /api/chat: the conversation so far (1-12 turns, the last one the user's question) and the project open in
+    the app (its key; it must be in the viewer's scope)."""
+    messages: list[ChatMessage] = Field(min_length=1, max_length=12)
+    project_key: str | None = Field(None, max_length=32)
+
+    @model_validator(mode="after")
+    def _ends_with_a_question(self):
+        if self.messages[-1].role != "user":
+            raise ValueError("the last message must be the user's question")
+        return self
 
 
 class WatchItem(CamelModel):

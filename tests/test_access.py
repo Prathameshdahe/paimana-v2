@@ -127,6 +127,8 @@ def test_policy_403s(client, scopes, role, allowed):
         assert client.get(path, headers=h).status_code == (200 if path in allowed else 403), path
     for path in ("/api/jobs/watch", "/api/jobs/scout", "/api/worker-runs/trigger"):
         assert client.post(path, headers=h).status_code == 403, path
+    # the assistant is open to every role (its tools cut what each one reads): a bad body is 422, never 403
+    assert client.post("/api/chat", headers=h, json={"messages": []}).status_code == 422
     if role != "ministry_official":
         assert client.post("/api/alerts/1/ack", headers=h).status_code == 403
     # the stream takes the viewer as query parameters: the public may not open it, a role without its scope is 400

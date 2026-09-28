@@ -19,9 +19,10 @@ from . import serving
 ROLES = ("public", "agency_official", "ministry_official", "ipmd_analyst")
 _INTERNAL = {"insights", "alerts", "watchlist", "bottlenecks", "agencies", "radar", "approvals", "live"}
 POLICY = {
-    # redacted project page (no drivers, analogues, intervals or provenance), no alerts, no internal pages
-    "public": {"scope": None, "features": set()},
-    "agency_official": {"scope": "agency", "features": _INTERNAL},
+    # redacted project page (no drivers, analogues, intervals or provenance), no alerts, no internal pages; the
+    # assistant answers from the same public outputs (llm/tools.py decides per tool what each viewer reads)
+    "public": {"scope": None, "features": {"chat"}},
+    "agency_official": {"scope": "agency", "features": _INTERNAL | {"chat"}},
     "ministry_official": {"scope": "ministry", "features": _INTERNAL | {"ack", "models", "chat"}},
     "ipmd_analyst": {"scope": None, "features": _INTERNAL | {"ack", "models", "chat", "jobs", "workers",
                                                              "unlinked_signals"}},
@@ -32,7 +33,8 @@ FEATURES = {
     "alerts": "alert feed, bell and live stream", "ack": "acknowledge an alert",
     "watchlist": "per-role watchlist", "bottlenecks": "Bottleneck Intelligence", "agencies": "Agency matrix",
     "radar": "External Evidence Radar", "approvals": "approval inbox (memos addressed to the role)",
-    "live": "live job status", "models": "Models page", "chat": "project assistant (frontend only)",
+    "live": "live job status", "models": "Models page",
+    "chat": "AI assistant (POST /api/chat; each tool reads only what the role may see, docs/AI_ASSISTANT.md)",
     "jobs": "run the inbox watcher, news scout, research agent, portal refreshes and uploads",
     "workers": "worker console and trigger",
     "unlinked_signals": "news items not linked to any project",

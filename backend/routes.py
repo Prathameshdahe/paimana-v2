@@ -1,12 +1,16 @@
+import asyncio
+import json
+import math
+import threading
 from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from llm import worker
+from llm import agent, worker
 
-from . import brief, db, serving, store
+from . import brief, db, ratelimit, serving, store
 from .access import Viewer, in_scope, need, stream_viewer, viewer
 from .live import portals, research, scheduler, scout, watcher
 from .schemas import (
@@ -17,7 +21,9 @@ from .schemas import (
     ApprovalRequest,
     BottleneckDetail,
     BottleneckPage,
+    CHAT_TEXT_MAX,
     BriefOut,
+    ChatRequest,
     DispatchDraft,
     ExternalSummary,
     Flag,
@@ -382,6 +388,76 @@ def get_project_signals(key: str, v: Viewer = Depends(need("insights"))):
     for s in out["items"]:
         s.update(scout.lead_time(out["key"], s["published_at"]))
     return out
+
+
+# ---------- assistant (llm/agent.py; docs/AI_ASSISTANT.md) ----------
+
+KEEPALIVE_S = 15.0
+
+
+def _sse(ev: dict) -> str:
+    data = json.dumps(ev["data"], ensure_ascii=False, separators=(",", ":"), default=str)
+    return f"event: {ev['event']}\ndata: {data}\n\n"
+
+
+async def _chat_events(v: Viewer, messages: list[dict], key: str | None):
+    """The agent's events as server-sent events. The agent runs in a thread of its own (it blocks on the LLM) and
+    hands each event over as it comes; when the client goes away (the response task is cancelled) cancel is set,
+    the agent stops at its next step and releases the LLM. A comment line every KEEPALIVE_S seconds while the model
+    is thinking keeps proxies from closing the stream."""
+    loop = asyncio.get_running_loop()
+    q: asyncio.Queue = asyncio.Queue()
+    cancel = threading.Event()
+
+    def put(item):
+        try:
+            loop.call_soon_threadsafe(q.put_nowait, item)
+        except RuntimeError:  # the event loop is gone (shutdown)
+            cancel.set()
+
+    def work():
+        gen = agent.run(v, messages, key, cancel=cancel)
+        try:
+            for ev in gen:
+                put(ev)
+                if cancel.is_set():
+                    break
+        finally:
+            gen.close()
+            put(None)
+
+    threading.Thread(target=work, name="chat-answer", daemon=True).start()
+    try:
+        while True:
+            try:
+                ev = await asyncio.wait_for(q.get(), KEEPALIVE_S)
+            except TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            if ev is None:
+                break
+            yield _sse(ev)
+    finally:
+        cancel.set()
+
+
+@router.post("/chat", responses={
+    200: {"content": {"text/event-stream": {}}, "description": "events status, tool, card, token, retry, done, error"},
+    404: {"description": "projectKey unknown or outside the viewer's scope"},
+    422: {"description": "messages: 1-12 turns, the last the user's question of 1-1000 characters"},
+    429: {"description": "rate limit (per client IP and role); detail says when to ask again"}})
+async def post_chat(body: ChatRequest, request: Request, v: Viewer = Depends(need("chat"))):
+    """The assistant (every role): a stream of server-sent events answering the last question from the tools this
+    viewer may use (llm/tools.py), cut to their scope. Rate limited per client IP and role before streaming starts
+    (backend/ratelimit.py). Nothing is stored and the question is not logged."""
+    wait = ratelimit.check(request.client.host if request.client else "unknown", v.role)
+    if wait is not None:
+        return JSONResponse(status_code=429, content={"detail": ratelimit.message(v.role, wait)},
+                            headers={"Retry-After": str(math.ceil(wait))})
+    key = _key(body.project_key, v) if body.project_key else None
+    messages = [{"role": m.role, "content": m.content[:CHAT_TEXT_MAX]} for m in body.messages]
+    return StreamingResponse(_chat_events(v, messages, key), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ---------- worker cell (JSON store) ----------
