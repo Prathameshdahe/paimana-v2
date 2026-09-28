@@ -151,6 +151,36 @@ def test_research_and_knowledge(keys, monkeypatch):
     assert kn.sources[1]["url"] == "https://example.org/n"
 
 
+def source_date(f: dict) -> str | None:
+    """A research fact's date at its precision, as the sources card must show it."""
+    d = f.get("event_date") or f.get("published_date")
+    prec = f.get("date_precision") if f.get("event_date") is not None else None
+    return d and (str(d)[:4] if prec == "year" else str(d)[:7] if prec == "month" else str(d)[:10])
+
+
+def test_research_sources_keep_the_dates_precision(keys):
+    """A month-precise fact is stored as the first of its month; the sources card gets '2026-07', not a day the
+    source never gave (Segment 8 review, contract lens). _src takes the precision; the facts already used it."""
+    from datetime import date
+    assert tools._src("research", "t", "s", when=date(2026, 7, 1), precision="month")["date"] == "2026-07"
+    assert tools._src("research", "t", "s", when=date(2026, 7, 1), precision="year")["date"] == "2026"
+    assert tools._src("research", "t", "s", when=date(2026, 7, 1))["date"] == "2026-07-01"
+    assert tools._src("research", "t", "s", when=None, precision="month")["date"] is None
+    s = serving.state()
+    row = serving._one(s, "SELECT project_key AS k FROM rfacts WHERE date_precision = 'month' ORDER BY 1 LIMIT 1")
+    key = row["k"] if row else keys["researched"]
+    r = tools.run(PUBLIC, "project_research", {"key": key})
+    facts = {f["url"]: f for f in serving.public_research(serving.research(key))["facts"]}
+    research = [x for x in r.sources if x["kind"] == "research"]
+    assert research and all(x["date"] == source_date(facts[x["url"]]) for x in research)
+    whole = tools.run(PUBLIC, "project_research", {})
+    blockers = {b["url"]: b for b in serving.research_summary(scope=None)["top_recent_blockers"]}
+    for x in whole.sources[1:]:
+        assert x["date"] == source_date(blockers[x["url"]])
+    months = [x for x in research + whole.sources[1:] if x["date"] and len(x["date"]) == 7]
+    assert months or row is None      # the month-precise ones came out without a day
+
+
 def test_knowledge_search_never_shows_a_research_agent_headline(tmp_path, monkeypatch):
     """The real index (every real chunk, TF-IDF) with one research-agent fact whose raw feed headline names a
     private person: search_knowledge finds the fact for the public and an official, and neither the sources card

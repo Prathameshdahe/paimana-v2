@@ -20,7 +20,8 @@ A ToolResult has
            otherwise shortens to 'next quarter'), money in Rs crore, dates as 'June 2028', small lists capped;
            a dict item with "cite": i points at the i-th of the result's own sources (1-based; the agent renumbers),
            the whole block at its first source unless it says otherwise,
-  sources  what the answer may cite, {kind, title, source, url, date, projectKey},
+  sources  what the answer may cite, {kind, title, source, url, date, projectKey}; date is ISO at the precision
+           the source gives ('2026', '2026-07' or a day: _src),
   keys     the projects the result is about (follow-up questions, the second planning round),
   found    False when there is nothing to show (unknown or out-of-scope project, no match).
 Outside text (report remarks, headlines, research notes and status lines, PARIVESH and register lines, search hits that
@@ -194,8 +195,14 @@ def _official(viewer) -> bool:
     return viewer.can("insights")
 
 
-def _src(kind: str, title: str, source: str, url: str | None = None, when=None, key: str | None = None) -> dict:
-    return {"kind": kind, "title": title, "source": source, "url": url, "date": _iso(when), "projectKey": key}
+def _src(kind: str, title: str, source: str, url: str | None = None, when=None, key: str | None = None,
+         precision: str | None = None) -> dict:
+    """A source for the sources card; its date is ISO at the precision the source gives (precision 'year' 'YYYY',
+    'month' 'YYYY-MM', else the day), so a month-precise research fact, stored as the first of its month, never
+    shows a day the source did not give ('Jul 2026', not '1 Jul 2026')."""
+    d = _iso(when)
+    d = d and (d[:4] if precision == "year" else d[:7] if precision == "month" else d)
+    return {"kind": kind, "title": title, "source": source, "url": url, "date": d, "projectKey": key}
 
 
 def _resolve(viewer, key: str | None) -> str | None:
@@ -634,6 +641,11 @@ def _fact_date(f: dict) -> str | None:
     return str(d)[:4] if prec == "year" else _month(d) if prec == "month" else str(d)[:10]
 
 
+def _precision(f: dict) -> str | None:
+    """The precision of the fact's source date: its event date's, or None (a day) for the published date."""
+    return f.get("date_precision") if f.get("event_date") is not None else None
+
+
 def _research_one(viewer, k: str) -> ToolResult:
     d, row = _bundle(viewer, k)
     name = _name(d, row)
@@ -647,7 +659,7 @@ def _research_one(viewer, k: str) -> ToolResult:
     for f in ranked:
         sources.append(_src("research", quote(f["headline"], 160) or quote(f["summary"], 90) or f["source"],
                             quote(f["source"], 80) or "web research", f["url"], f["event_date"] or f["published_date"],
-                            k))
+                            k, _precision(f)))
         items.append(_compact({"cite": len(sources), "date": _fact_date(f),
                                "category": rag.CATEGORY_WORDS.get(f["category"], f["category"]),
                                "direction": f["direction"], "severity": f["severity"], "status": quote(f["status"], 40),
@@ -696,7 +708,8 @@ def _research_all(viewer) -> ToolResult:
     for b in r["top_recent_blockers"][:5]:
         sources.append(_src("research", quote(b["headline"], 160) or quote(b.get("summary"), 90) or "web research",
                             quote(b.get("source"), 80) or "web research", b["url"],
-                            b["event_date"] or b["published_date"], b.get("project_key") if official else None))
+                            b["event_date"] or b["published_date"], b.get("project_key") if official else None,
+                            _precision(b)))
         blockers.append(_compact({"cite": len(sources), "date": _fact_date(b), "headline": quote(b["headline"], 160),
                                   **({"project": _short(b["project_name"], 10), "key": b["project_key"],
                                       "tier": b["tier"], "category": rag.CATEGORY_WORDS.get(b["category"]),
