@@ -98,6 +98,7 @@ EMBED_BATCH = 32
 CHECK_S = 60.0                  # fingerprint checks at most this often
 EMBED_RETRY_S = 300.0           # a failed build or embedding run waits this long before the next try
 QUERY_RETRY_S = 30.0            # a failed query embedding: keywords only for this long
+QUERY_TIMEOUT_S = 5.0           # a query embedding takes about 0.6 s; a server that holds it longer is not waited for
 WAIT_S = 15.0                   # a search with no index yet waits this long for the first one
 CHAT_PAUSE_S = 600.0            # the embedding run waits at most this long for a chat request to finish
 DENSE_MIN_SHARE = 0.9           # rank by meaning only once this share of the chunks has a vector
@@ -878,14 +879,18 @@ class Index:
 
 
 def _query_vector(q: str, dim: int) -> np.ndarray | None:
-    """The query's embedding, or None (keywords only) while LM Studio is down or the last try failed."""
+    """The query's embedding, or None (keywords only) while LM Studio is down or the last try failed. It waits at most
+    QUERY_TIMEOUT_S (a server that accepts the connection but does not answer, loading a model, would otherwise hold
+    every search for EMBED_TIMEOUT); a refused connection marks LM Studio down for the chat as well."""
     global _query_failed_at
     if client.down_recently() or time.monotonic() - _query_failed_at < QUERY_RETRY_S:
         return None
     try:
-        v = np.asarray(client.embed([QUERY_PREFIX + q]), dtype=np.float32)
+        v = np.asarray(client.embed([QUERY_PREFIX + q], timeout=QUERY_TIMEOUT_S), dtype=np.float32)
     except Exception as e:  # noqa: BLE001 - any embedder failure means keywords only, never a failed search
         _query_failed_at = time.monotonic()
+        if getattr(e, "down", False):  # refused, not a missing model or a slow answer
+            client.mark_down()
         log.warning("rag: query embedding failed, keywords only for %.0f s: %s", QUERY_RETRY_S, e)
         return None
     return v[0] if v.shape == (1, dim) else None
@@ -927,6 +932,8 @@ def embed_missing(idx: Index) -> Index:
                 raise ValueError(f"embedding shape {v.shape}, expected ({part.size}, {emb.shape[1]})")
         except Exception as e:  # noqa: BLE001 - LM Studio down or a bad reply: keep what we have
             _embed_failed_at = time.monotonic()
+            if getattr(e, "down", False):
+                client.mark_down()
             log.warning("rag: embedding stopped after %d of %d chunks: %s", start, todo.size, e)
             break
         emb[part] = v.astype(np.float16)

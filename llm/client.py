@@ -279,11 +279,13 @@ def chat_stream(messages: list[dict], *, max_tokens: int = 400, temperature: flo
         raise _unreachable(e) from e
 
 
-def embed(texts: list[str], *, model: str | None = None, batch: int = 64) -> np.ndarray:
-    """(len(texts), dim) float32, each row L2-normalised, from the embedding model in requests of `batch` texts;
-    LLMConnectionError when LM Studio is unreachable, fails or returns the wrong number of vectors."""
+def embed(texts: list[str], *, model: str | None = None, batch: int = 64,
+          timeout: float = EMBED_TIMEOUT) -> np.ndarray:
+    """(len(texts), dim) float32, each row L2-normalised, from the embedding model in requests of `batch` texts, each
+    answered within `timeout` seconds; LLMConnectionError when LM Studio is unreachable, fails or returns the wrong
+    number of vectors."""
     parts = []
-    with _http(EMBED_TIMEOUT) as c:
+    with _http(timeout) as c:
         for i in range(0, len(texts), batch):
             chunk = [t if t.strip() else " " for t in texts[i:i + batch]]  # an empty input is a 400
             try:

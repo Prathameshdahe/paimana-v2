@@ -208,6 +208,29 @@ def test_meaning_match_needs_embeddings(env, monkeypatch):
     assert time.monotonic() - rag._query_failed_at < rag.QUERY_RETRY_S
 
 
+def test_query_embedding_waits_briefly_and_marks_a_refusal_down(env, monkeypatch):
+    rag.ensure_index(background=False)
+    calls = []
+
+    def embed(texts, **kw):
+        calls.append(kw)
+        return hash_vectors(texts)
+    monkeypatch.setattr(client, "embed", embed)
+    rag.search("frozen works", PUBLIC)
+    assert calls[-1]["timeout"] == rag.QUERY_TIMEOUT_S <= 10
+
+    for err, down in [(client.LLMConnectionError("no model loaded (HTTP 404)"), False),
+                      (client.LLMTimeoutError("slow"), False),
+                      (client.LLMConnectionError("refused", down=True), True)]:
+        def failing(texts, err=err, **kw):
+            raise err
+        monkeypatch.setattr(client, "embed", failing)
+        monkeypatch.setattr(client, "_down_at", -1e9)
+        monkeypatch.setattr(rag, "_query_failed_at", -1e9)
+        assert "help:0" in ids(rag.search("Watch tier", PUBLIC))   # keywords only, never a failed search
+        assert client.down_recently() == down, err
+
+
 def test_lexical_fallback_when_embeddings_fail(env, monkeypatch):
     def down(texts, **kw):
         raise client.LLMConnectionError("LM Studio unreachable")
