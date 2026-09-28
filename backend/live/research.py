@@ -26,9 +26,11 @@ recently researched first, per the `researched` table):
      (signal_projects, method 'llm');
   5. a new live negative fact of severity >= 2 raises a 'signal' alert with its URL as source, unless the project
      already has one from that URL (the scout alerts on its own severe links);
-  6. before each LLM call the job waits while a chat answer holds or waits for the LLM (client.chat_active), up to
-     PAUSE_MAX_S, and takes the LLM gate; a gate still busy, a pause that runs out or LM Studio down ends the run
-     early (status 'partial', or 'error' when nothing was judged). Projects finished before keep their rows.
+  6. before each LLM call (a batch, a half of one, a retry) the job waits while a chat answer holds or waits for the
+     LLM (client.chat_active) and takes the LLM gate; a gate taken meanwhile (a chat that started after the wait)
+     sends it back to waiting. PAUSE_MAX_S of waiting in all, or LM Studio down, ends the run early (status
+     'partial', or 'error' when nothing was judged). Projects finished before keep their rows, and so do the batch's
+     first verdicts when its retry is the call that stops (the retried items come back next run).
 One run at a time (a module lock: a second call returns busy); a run with projects records db.record_job.
 
 Limits: Google News feeds carry no article text, so a verdict rests on a headline; match is 'high' only for a scout
@@ -110,7 +112,7 @@ class LLMBusy(Exception):
 
 
 class StopRun(Exception):
-    """End the run early: a chat answer kept the LLM busy past PAUSE_MAX_S."""
+    """End the run early: a chat answer kept the LLM busy past PAUSE_MAX_S (_ask_llm)."""
 
 
 class Verdict(BaseModel):
@@ -227,14 +229,28 @@ def _judge_llm(messages: list[dict], max_tokens: int) -> str:
         return _chat(messages, max_tokens)
 
 
-def _wait_idle() -> bool:
-    """Wait while a chat answer is using the LLM; False when it is still active after PAUSE_MAX_S."""
-    t0 = time.monotonic()
+def _wait_idle(max_s: float | None = None) -> bool:
+    """Wait while a chat answer is using the LLM; False when it is still active after max_s (PAUSE_MAX_S)."""
+    t0, max_s = time.monotonic(), PAUSE_MAX_S if max_s is None else max_s
     while _chat_active():
-        if time.monotonic() - t0 >= PAUSE_MAX_S:
+        if time.monotonic() - t0 >= max_s:
             return False
         time.sleep(PAUSE_POLL_S)
     return True
+
+
+def _ask_llm(messages: list[dict], max_tokens: int) -> str:
+    """_judge_llm once the LLM is free: wait while a chat answer uses it, and wait again when the gate was taken
+    between the wait and the call (LLMBusy); StopRun when PAUSE_MAX_S of waiting runs out."""
+    deadline = time.monotonic() + PAUSE_MAX_S
+    while True:
+        if not _wait_idle(deadline - time.monotonic()):
+            raise StopRun("a chat answer kept the LLM busy")
+        try:
+            return _judge_llm(messages, max_tokens)
+        except LLMBusy:
+            if time.monotonic() >= deadline:
+                raise StopRun(f"the LLM stayed busy for {PAUSE_MAX_S:.0f} s (a chat answer)") from None
 
 
 # ------------------------------------------------------------ candidates, prompt, verdicts
@@ -335,15 +351,18 @@ def _cut_off(raw: str | None) -> bool:
     return bool(raw) and (raw.count("{") > raw.count("}") or raw.count("[") > raw.count("]"))
 
 
-def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict | None, list[str], dict]]:
-    """{signal id: (verdict or None, reasons, raw entry)} for the items the LLM answered; a relevant verdict that
-    fails check(), or an entry that is not a valid verdict (a summary over MAX_SUMMARY_WORDS, a category outside the
-    list, a relevant entry without its fields), is asked again once with what was wrong named, then kept rejected."""
+def judge(p: dict, items: list[dict], stats: Counter) -> tuple[dict[int, tuple[Verdict | None, list[str], dict]],
+                                                                Exception | None]:
+    """({signal id: (verdict or None, reasons, raw entry)} for the items the LLM answered, the StopRun or
+    LLMConnectionError that ended the retry or None); a relevant verdict that fails check(), or an entry that is not a
+    valid verdict (a summary over MAX_SUMMARY_WORDS, a category outside the list, a relevant entry without its
+    fields), is asked again once with what was wrong named, then kept rejected. When the retry cannot run the first
+    verdicts are returned without the retried items (they are judged next run, not stored as rejected)."""
     def call(its, bad=None):
         """{item number: result}, or None for a malformed reply, and whether the reply was cut off."""
         t0, raw = time.monotonic(), None
         try:
-            raw = _judge_llm(messages(p, its, bad), max_tokens(len(its)))
+            raw = _ask_llm(messages(p, its, bad), max_tokens(len(its)))
             return parse(raw, its, p["places"]), False
         except (ValueError, TypeError):
             stats["malformed"] += 1
@@ -372,10 +391,15 @@ def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict
             ["a summary named a private person"] if "names a private person" in reasons else []) + (
             ["a summary described another item"] if "the summary describes another item" in reasons else []) + (
             ["a summary said what its item does not"] if UNGROUNDED in reasons else [])
-        for n, r in ask(again, bad).items():
+        try:
+            answers = ask(again, bad)
+        except (StopRun, client.LLMConnectionError) as e:
+            retried = {s["id"] for s in again}
+            return {sid: r for sid, r in out.items() if sid not in retried}, e
+        for n, r in answers.items():
             if r[0] is not None:
                 out[again[n - 1]["id"]] = r
-    return out
+    return out, None
 
 
 def fact_row(key: str, s: dict, v: Verdict, asof, model: str, judged_at: str) -> dict:
@@ -403,7 +427,8 @@ def fact_row(key: str, s: dict, v: Verdict, asof, model: str, judged_at: str) ->
 # ------------------------------------------------------------ the job
 
 def research_project(key: str, idx: dict, stats: Counter, get=None, refresh: bool = True) -> dict:
-    """Steps 1-5 for one project; returns its counts. Raises LLMBusy, client.LLMConnectionError or StopRun."""
+    """Steps 1-5 for one project; returns its counts. Raises client.LLMConnectionError or StopRun (after storing
+    what the stopped batch had judged)."""
     if refresh:   # when a scout run is going this returns busy: judge what is stored
         stats["scout_errors"] += len(scout.run([key], pib=False, get=get).get("errors") or [])
     p = idx["projects"][key]
@@ -420,9 +445,7 @@ def research_project(key: str, idx: dict, stats: Counter, get=None, refresh: boo
         items = [s for s in items if s not in private]
     for b in range(0, len(items), BATCH):
         batch = items[b:b + BATCH]
-        if not _wait_idle():
-            raise StopRun("a chat answer kept the LLM busy")
-        verdicts, judged_at = judge(p, batch, stats), _now()
+        (verdicts, stop), judged_at = judge(p, batch, stats), _now()
         judgements, facts, links = [], [], []
         by_id = {s["id"]: s for s in batch}
         for sid, (v, reasons, raw) in verdicts.items():
@@ -446,6 +469,8 @@ def research_project(key: str, idx: dict, stats: Counter, get=None, refresh: boo
              "detail": f"{f['summary']} ({f['source']}, {f['event_date'] or f['published_date'] or 'undated'})",
              "asof": str(asof), "model_version": mv, "source": f["url"]}
             for f in facts if f["fact_id"] in new and f["live"] and f["severity"] >= 2])
+        if stop is not None:
+            raise stop
     db.mark_researched(key, len(items) + len(private), n_relevant)
     return {"candidates": len(items) + len(private), "relevant": n_relevant}
 

@@ -269,6 +269,40 @@ def test_busy_paused_and_down(agent_db, monkeypatch):
     assert out["stopped"].startswith("LM Studio unreachable") and rows("SELECT * FROM signal_judgements") == []
 
 
+def test_busy_llm_on_the_retry_waits_and_keeps_the_first_verdicts(agent_db, monkeypatch):
+    """A chat taking the LLM gate before the retry sends the job back to waiting, not out of the run; LM Studio
+    going down on the retry stores the batch's first verdicts and leaves the retried item for the next run."""
+    fake, n = FakeJudge(), []
+
+    def taken_once(messages, max_tokens):
+        n.append(1)
+        if len(n) == 2:     # the retry: a chat answer took the gate after the wait
+            raise research.LLMBusy("taken")
+        return fake(messages, max_tokens)
+    monkeypatch.setattr(research, "_judge_llm", taken_once)
+    out = research.run([KEY], refresh=False)
+    assert out["stopped"] is None and (out["judged"], out["relevant"], out["rejected"]) == (4, 2, 1)
+    assert len(fake.calls) == 2 and job()["status"] == "ok"
+
+
+def test_llm_down_on_the_retry_keeps_the_first_verdicts(agent_db, monkeypatch):
+    fake = FakeJudge()
+
+    def down_on_retry(messages, max_tokens):
+        if fake.calls:
+            raise client.LLMConnectionError("connection refused")
+        return fake(messages, max_tokens)
+    monkeypatch.setattr(research, "_judge_llm", down_on_retry)
+    out = research.run([KEY], refresh=False)
+    assert out["stopped"].startswith("LM Studio unreachable") and job()["status"] == "partial"
+    judged = {r["signal_id"]: r["relevant"] for r in rows("SELECT * FROM signal_judgements")}
+    ids = agent_db
+    assert judged == {ids["landslide"]: 1, ids["shares"]: 0, ids["tunnel"]: 1}      # "Work stopped" comes back
+    assert {r["signal_id"] for r in rows("SELECT signal_id FROM research_facts")} == {ids["landslide"], ids["tunnel"]}
+    assert rows("SELECT * FROM researched") == []    # stopped mid-project: still first in the rotation
+    assert [c["id"] for c in research.candidates(KEY, scout.index())] == [ids["stopped"]]
+
+
 def test_llm_shims_work_with_and_without_the_new_client(monkeypatch):
     calls = []
 
