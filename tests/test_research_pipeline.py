@@ -29,16 +29,25 @@ def committed():
     return paths, [json.loads(ln) for p in paths for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
+def strings(x):
+    """Every string value in a parsed JSON value, however deep."""
+    if isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for v in x.values():
+            yield from strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from strings(v)
+
+
 def test_committed_sweep_names_no_private_person():
-    """The privacy floor over every committed line: no honorific + name outside an organisation or place."""
+    """The privacy floor over every string of every committed line (the queries and URLs are committed too, though
+    they never reach gold): no honorific + name outside an organisation or place."""
     _, lines = committed()
-    hits = []
-    for r in lines:
-        texts = [r.get("latest_status")] + [f.get(k) for f in r["facts"] for k in ("summary", "headline", "source",
-                                                                                   "match_reason")]
-        texts += [v for e in (r.get("external") or {}).values() if e for v in e.values() if isinstance(v, str)]
-        hits += [(r["project_key"], n) for t in texts for n in R.private_names(t)]
+    hits = [(r.get("project_key"), n) for r in lines for t in strings(r) for n in R.private_names(t)]
     assert hits == []
+    assert list(strings({"q": ["a", {"b": "Mr Rao"}], "n": 1})) == ["a", "Mr Rao"]
 
 
 def test_committed_sweep_validates_without_drops():
