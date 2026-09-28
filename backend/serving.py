@@ -697,6 +697,7 @@ HIDDEN_PRIOR = ("extra_months", "extra_months_lo", "extra_months_hi", "extra_pus
                 "holm_months", "holm_push", "garvit_band")
 HIDDEN_COMPOSITE = ("external_factor_score", "fc_component", "la_component")
 COMPOSITE_STATS = ("mean", "min", "25%", "50%", "75%", "max")
+HIDDEN_JOB = ("realised",)   # the ingest job's live accuracy (backend/live/watcher.accuracy)
 LIFTS = ("lift", "lift_within_sector_year")
 BACKTEST_RATES = ("slip_rate_with", "slip_rate_without")   # the lift is their ratio: hidden with it
 LINK_CI = ("ci_lo", "ci_hi")   # the land-link accuracy check's bootstrap interval (landCoverage.link_check)
@@ -978,6 +979,20 @@ def plain_signal(s: dict) -> dict:
     """A news signal (or a feed item's linked project) without the linker's match score."""
     return {**s, "link_score": None, **({"projects": [plain_signal(p) for p in s["projects"]]}
                                         if "projects" in s else {})}
+
+
+def plain_job(j: dict | None) -> dict | None:
+    """A job run (schemas.JobRun) without the live accuracy the ingest job's summary counts (HIDDEN_JOB: realised,
+    slipped, flagged and flagged-and-slipped, from which the precision of High / Critical follows; the models page's,
+    the developer's only)."""
+    s = j and j.get("summary")
+    return j and {**j, "summary": _none(s, HIDDEN_JOB) if isinstance(s, dict) else s}
+
+
+def plain_live_status(st: dict) -> dict:
+    """scheduler.status() with each job's last run through plain_job."""
+    return {k: {**v, "last_run": plain_job(v["last_run"])} if isinstance(v, dict) and "last_run" in v else v
+            for k, v in st.items()}
 
 
 def _memo_chance(m: re.Match) -> str:

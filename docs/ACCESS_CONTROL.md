@@ -220,13 +220,14 @@ cost quantiles (`monthsP05/50/95`, `costPctP05/50/95`) and the completion dates 
 `distance` and outcome figures (`yMonths`, `yCostPct`, `yAny`, `yDatePush`, `yCostRev`); the external composite's scores
 and score distribution; the notice backtest's lifts and the slip rates with and without a flag they are the ratio of
 (its counts stay); the land-link check's bootstrap interval (`ci_lo`, `ci_hi`; its counts stay); the measured
-hidden-delay priors' months, shares, intervals and p-values; the news linker's `linkScore`. Text is cut too: the
-checklist's evidence lines (`P = 0.87 (High-tier cut 0.85)`, the agency's timeline statistics, a composite score, a
-measured hidden delay with its interval) and the alert feed and stream (a tier alert's `P(date push or cost revision,
-2q) = 0.91`) are rewritten in words. The developer's brief and second opinion keep the numbers; everyone else's are made
-from a payload that has none, so their text, checked against it, cannot carry one; each view is cached on its own. The
-search index keeps the docs that report the model's evaluation statistics for the developer. Report facts stay numeric:
-cost, spend, progress, dates, months of delay to date, counts, parcels, hectares, months in a stage.
+hidden-delay priors' months, shares, intervals and p-values; the news linker's `linkScore`; the ingest job's live
+accuracy counts (`summary.realised` in `/api/jobs` and `/api/live/status`). Text is cut too: the checklist's evidence
+lines (`P = 0.87 (High-tier cut 0.85)`, the agency's timeline statistics, a composite score, a measured hidden delay
+with its interval) and the alert feed and stream (a tier alert's `P(date push or cost revision, 2q) = 0.91`) are
+rewritten in words. The developer's brief and second opinion keep the numbers; everyone else's are made from a payload
+that has none, so their text, checked against it, cannot carry one; each view is cached on its own. The search index
+keeps the docs that report the model's evaluation statistics for the developer. Report facts stay numeric: cost, spend,
+progress, dates, months of delay to date, counts, parcels, hectares, months in a stage.
 
 Words, for every viewer (the developer too, so the UI reads one field):
 

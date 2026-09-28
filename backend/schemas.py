@@ -1000,6 +1000,8 @@ class Watchlist(CamelModel):
 
 
 class JobRun(CamelModel):
+    """A job's run; summary is the job's own JSON. Without `numbers` the ingest job's summary.realised (the live
+    accuracy counts) is null (serving.plain_job)."""
     id: int
     job: str
     started_at: str | None

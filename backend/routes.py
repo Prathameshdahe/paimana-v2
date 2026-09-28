@@ -344,7 +344,8 @@ def _scrubbed_run(run: dict | None, v: Viewer) -> dict | None:
 
 @router.get("/jobs", response_model=list[JobRun])
 def get_jobs(v: Viewer = Depends(need("live"))):
-    return [_scrubbed_run(r, v) for r in db.latest_jobs()]
+    out = [_scrubbed_run(r, v) for r in db.latest_jobs()]
+    return out if v.can("numbers") else [serving.plain_job(j) for j in out]   # no live accuracy
 
 
 # the upload's body as OpenAPI shows it: post_ingest reads the form itself (below), so FastAPI does not describe it
@@ -507,7 +508,8 @@ def _scrubbed_job(x: dict, v: Viewer) -> dict:
 @router.get("/live/status", response_model=LiveStatus)
 def get_live_status(v: Viewer = Depends(need("live"))):
     out = scheduler.status()
-    return {k: _scrubbed_job(x, v) if isinstance(x, dict) else x for k, x in out.items()}
+    out = {k: _scrubbed_job(x, v) if isinstance(x, dict) else x for k, x in out.items()}
+    return out if v.can("numbers") else serving.plain_live_status(out)
 
 
 @router.get("/stream")

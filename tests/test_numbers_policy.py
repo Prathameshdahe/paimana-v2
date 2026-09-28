@@ -438,6 +438,21 @@ def test_dispatch_memos_in_words(client, world, tmp_path, monkeypatch):
     assert json.loads(path.read_text(encoding="utf-8"))[0]["draft_memo"] == MEMO   # stored as written
 
 
+def test_job_summaries_carry_no_live_accuracy(client, world):
+    """The ingest job's summary counts the live accuracy (realised, slipped, flagged, flagged_and_slipped: the
+    precision of High / Critical follows): the models page's, the developer's only."""
+    live = {"realised": 120, "slipped": 50, "flagged": 30, "flagged_and_slipped": 21}
+    db.record_job("ingest", "2026-09-28T00:00:00+00:00", "ok", {"rows": 10, "realised": live})
+    for role in OFFICIALS:
+        h = headers(client, world, role)
+        run = {j["job"]: j for j in client.get("/api/jobs", headers=h).json()}["ingest"]
+        assert run["summary"]["realised"] is None and run["summary"]["rows"] == 10
+        last = client.get("/api/live/status", headers=h).json()["watch"]["lastRun"]
+        assert last["id"] == run["id"] and last["summary"]["realised"] is None
+    dev = {j["job"]: j for j in client.get("/api/jobs", headers=headers(client, world, "developer")).json()}
+    assert dev["ingest"]["summary"]["realised"] == live
+
+
 def test_alert_stream_sends_words(fresh_db, monkeypatch):
     monkeypatch.setattr(scheduler, "POLL_S", 0.05)
     db.init()
