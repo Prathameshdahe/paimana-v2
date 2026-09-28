@@ -146,10 +146,9 @@ def champion(reg, key, man):
     """(feature list, categoricals, params) of the target's registry champion, else the manifest's full feature set
     with LGB_PARAMS."""
     e = next((r for r in reg["runs"] if r["entry_id"] == reg["champions"].get(key, {}).get("entry_id")), None)
-    if e is None or e["model"] != "lightgbm":
-        cols = [f for _, gs in bt.ABLATION[-1:] for g in gs for f in man["features"][g]]
-        return cols, man["categorical"], dict(bt.LGB_PARAMS)
-    return e["feature_list"], e["categorical"], {**bt.LGB_PARAMS, **e["params"]}
+    if e is None or registry.family(e["model"]) != "lightgbm":
+        return bt.model_cols(man["features"]), man["categorical"], dict(bt.LGB_PARAMS)
+    return e["feature_list"], e["categorical"], dict(e["params"])
 
 
 def cached(tag, make):

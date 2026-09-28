@@ -195,8 +195,9 @@ def fit_logreg(tr, cols, cats, y):
     return m, lambda d: m.predict_proba(X(d))[:, 1]
 
 
-def fit_lgbm(tr, cols, cats, y):
-    m = lgb.LGBMClassifier(**LGB_PARAMS).fit(lgb_X(tr, cols, cats), tr[y])
+def fit_lgbm(tr, cols, cats, y, params=None):
+    """LightGBM with LGB_PARAMS, or with params (a registry entry's own, ml/registry.py fitter)."""
+    m = lgb.LGBMClassifier(**(params or LGB_PARAMS)).fit(lgb_X(tr, cols, cats), tr[y])
     return m, lambda d: m.predict_proba(lgb_X(d, cols, cats))[:, 1]
 
 
@@ -359,13 +360,22 @@ def deltas(summary):
     return pd.concat(out, ignore_index=True)
 
 
-def run(run_dir):
-    """Backtest every target in TARGETS and write the tables into run_dir. Returns what the registry needs."""
+def model_cols(groups):
+    """The model's feature list: every group of the ABLATION step that ABLATION_MODEL maps to "lightgbm"."""
+    return [f for step, gs in ABLATION if ABLATION_MODEL[step] == "lightgbm" for g in gs for f in groups[g]]
+
+
+def run(run_dir, extra=None):
+    """Backtest every target in TARGETS and write the tables into run_dir. extra = {target key: {name: (fit_fn, cols,
+    cats)}} adds models to a target's main table (the registry's re-scored incumbent). Returns what the registry
+    needs."""
+    extra = extra or {}
     t0 = time.time()
     feats, labels, coverage, manifest = load()
     groups, cats = manifest["features"], manifest["categorical"]
     step_cols = {ABLATION_MODEL[step]: [f for g in gs for f in groups[g]] for step, gs in ABLATION}
     cols = step_cols["lightgbm"]
+    assert cols == model_cols(groups)
     main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
             "lightgbm": (fit_lgbm, cols, cats)}
     ablation = {name: (fit_lgbm, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
@@ -377,17 +387,19 @@ def run(run_dir):
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
         val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
-        pv, fv, fitted = backtest(d, y, val, {**main, **ablation})
-        splits = {"val": (pv[pv.model.isin(MAIN)], fv[fv.model.isin(MAIN)]), "test": backtest(d, y, test, main)[:2]}
+        models, names = {**main, **extra.get(key, {})}, MAIN + list(extra.get(key, {}))
+        pv, fv, fitted = backtest(d, y, val, {**models, **ablation})
+        splits = {"val": (pv[pv.model.isin(names)], fv[fv.model.isin(names)]),
+                  "test": backtest(d, y, test, models)[:2]}
         if len(flash):
-            splits["flash"] = backtest(d, y, flash, main)[:2]
+            splits["flash"] = backtest(d, y, flash, models)[:2]
         method = "none"
         if (y, h) in CALIBRATED:
             method = f"platt_k{PLATT_FOLDS}"
             done = {c for p, _ in splits.values() for c in p.cutoff}
             want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
-            extra = sorted(c for c in want - done if (d.period == c).any())
-            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, extra, main)[0]] if extra else []))
+            more = sorted(c for c in want - done if (d.period == c).any())
+            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, more, models)[0]] if more else []))
             pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # val and flash can share cutoffs
             for split, (p, f) in splits.items():
                 cp = calibrate(p, pool, h)
@@ -402,11 +414,11 @@ def run(run_dir):
             all_folds.append(f)
             s = pooled(p, f, h).assign(target=y, horizon=h, split=split, calibration=method)
             summary.append(s)
-            for name in MAIN:
+            for name in names:
                 fold_metrics[key, split, name] = {"pooled": s[s.model == name].iloc[0].drop(
                     ["target", "horizon", "split", "model"]).to_dict(), "folds": f[f.model == name].to_dict("records")}
         # the ablation compares raw LightGBM scores; the calibration table shows the served (calibrated) ones
-        all_folds.append(fv[~fv.model.isin(MAIN)].assign(target=y, horizon=h, split="val"))
+        all_folds.append(fv[~fv.model.isin(names)].assign(target=y, horizon=h, split="val"))
         s, prev = pooled(pv, fv, h).assign(target=y, horizon=h), None
         for step, gs in ABLATION:
             r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
@@ -415,7 +427,7 @@ def run(run_dir):
             prev = r
             abl.append(r)
         pc = splits["val"][0]
-        for name in MAIN:
+        for name in names:
             q = pc[pc.model == name]
             calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
         contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
@@ -453,8 +465,8 @@ def run(run_dir):
             "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt}
 
 
-def main(run_id=None):
+def main(run_id=None, extra=None):
     run_id = run_id or time.strftime("ML-%Y%m%d-%H%M%S", time.gmtime())
-    res = run(RUNS / run_id)
+    res = run(RUNS / run_id, extra)
     print(f"backtest {run_id}: {RUNS / run_id}")
     return run_id, res

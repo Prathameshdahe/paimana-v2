@@ -8,19 +8,19 @@ Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, 
 Outputs  gold/predictions_<model_version>_<asof YYYY-MM>.parquet, gold/predictions_latest.json,
          gold/prediction_log.parquet (appended, idempotent on project_key + asof + model_version)
 
-At asof (default: the latest period) the current projects are those in the latest report with a feature row at
-asof that are not completed. Each target's champion type from the registry is refitted on every label row realised
-by asof (t + h <= asof, from backtest.TRAIN_FROM where a target has one) and scores them; a target in
-backtest.CALIBRATED goes through the Platt calibrator the champion's train run stored (backtest.PLATT_FILE, fitted on
-the folds realised by that run's latest period). LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
-the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
-by rank of p_any_2q, not by threshold. The stagnation rule (no progress for 2+ quarters, not at >= 95% progress) is
-only a flag, stagnation_override, shown as a badge: it used to lift the tier, but flagged projects slipped at or below
-the base rate in the backtest and every lifted tier got less precise. A score whose model never saw one of the row's
-null features in training is left null (see unseen_missing): today that is the date-based scores of projects with no
-anticipated completion date (no_completion_date). Those projects are in the Watch tier, outside the rank shares; the
-API orders them by flagged checklist rows, then p_cost_rev_2q, an order no backtest has validated (their slip label
-needs a date).
+At asof (default: the latest period) the current projects are those in the latest report with a feature row at asof
+that are not completed. Each target's champion from the registry is refitted (its type, feature list and own params,
+registry.fitter) on every label row realised by asof (t + h <= asof, from backtest.TRAIN_FROM where a target has
+one) and scores them; a target in backtest.CALIBRATED goes through the Platt calibrator the champion's train run
+stored (backtest.PLATT_FILE, fitted on the folds realised by that run's latest period). LightGBM quantile regressors
+(5/50/95) trained on the same h=2 rows give the slip-months and cost-% intervals. SHAP top-5 (log-odds
+contributions) come from the p_any_2q model. Tiers go by rank of p_any_2q, not by threshold. The stagnation rule (no
+progress for 2+ quarters, not at >= 95% progress) is only a flag, stagnation_override, shown as a badge: it used to
+lift the tier, but flagged projects slipped at or below the base rate in the backtest and every lifted tier got less
+precise. A score whose model never saw one of the row's null features in training is left null (see unseen_missing):
+today that is the date-based scores of projects with no anticipated completion date (no_completion_date). Those
+projects are in the Watch tier, outside the rank shares; the API orders them by flagged checklist rows, then
+p_cost_rev_2q, an order no backtest has validated (their slip label needs a date).
 """
 import json
 import sys
@@ -137,7 +137,7 @@ def main(asof=None):
     cur = current(feats, obs, master, asof)
 
     lead = champion(reg, "y_any", 2)
-    mv = f"{SHORT[lead['model']]}-any2q-{lead['run_id'].removeprefix('ML-')}"
+    mv = f"{SHORT[registry.family(lead['model'])]}-any2q-{lead['run_id'].removeprefix('ML-')}"
     out = cur[["project_key"]].assign(asof=asof, model_version=mv, gold_version=man["gold_version"],
                                       silver_version=man["silver_version"])
     fitted = {}
@@ -145,7 +145,7 @@ def main(asof=None):
         e = champion(reg, y, h)
         d = backtest.frame(feats, labels[h], y, h)
         d = d[d.target_period <= asof]
-        fitted[col], predict = registry.CANDIDATES[e["model"]](d, e["feature_list"], e["categorical"], y)
+        fitted[col], predict = registry.fitter(e)(d, e["feature_list"], e["categorical"], y)
         skip = unseen_missing(d, cur, e["feature_list"])
         cal = calibrator(e) if (y, h) in backtest.CALIBRATED else None
         out[col] = np.where(skip, np.nan, backtest.platt_apply(cal, predict(cur)))
@@ -171,7 +171,7 @@ def main(asof=None):
     out = pd.concat([out, tiers(out.p_any_2q, stagnant(cur), out.no_completion_date)], axis=1)
     m = fitted["p_any_2q"]
     # ponytail: SHAP only for a LightGBM champion; a logistic champion leaves the column null
-    out["shap_top5_json"] = shap_top5(m.booster_, Xc) if lead["model"] == "lightgbm" else None
+    out["shap_top5_json"] = shap_top5(m.booster_, Xc) if registry.family(lead["model"]) == "lightgbm" else None
     out["shap_top5_json"] = out.shap_top5_json.where(out.p_any_2q.notna(), None)
     out = pd.concat([out, cur[["stagnation_quarters", "elapsed_ratio"] + DISPLAY]], axis=1)
 

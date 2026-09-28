@@ -7,10 +7,17 @@ One train run backtests every target (ml/backtest.py), refits logistic regressio
 label, saves them into the run folder and registers one entry per (model, target, horizon). Promotion: a challenger
 replaces the champion of its (target, horizon) only when both were scored on the same validation and flash folds of
 the same gold version, its pooled PR-AUC is not lower on either block (validation, flash) and higher on at least one
-by NOISE_SDS seed standard deviations, and its validation ECE is at most the champion's + ECE_SLACK. When the folds
-differ, only a fresh entry of the champion's own model type may take over (the same model re-scored on the new
-folds). Every decision and its reason is recorded in registry.json.
+by NOISE_SDS seed standard deviations, and its validation ECE is at most the champion's + ECE_SLACK (rule).
+
+A new gold version (new data, new or changed features) makes the champion's metrics incomparable. The run then also
+backtests the champion's own configuration (model type, feature list, categoricals, params: config) on the new gold
+and folds as the incumbent, named <type>_incumbent, unless a candidate of the run already has that configuration.
+The re-scored champion configuration takes over first (the same model on the new folds; nothing else may take over
+across gold versions or folds), and every new configuration then has to beat it under the rule. A champion whose
+features are no longer in the gold is retired and the run starts from no champion. Every decision and its reason is
+recorded in registry.json. Scoring refits each champion with its entry's own params (fitter).
 """
+import functools
 import json
 import sys
 import time
@@ -33,6 +40,7 @@ SEED_SD = {"y_any_h2": 0.0038, "y_date_push_h2": 0.0025, "y_cost_rev_h2": 0.0022
 NOISE_SDS = 2
 BLOCKS = {"val": ("pooled", "folds"), "flash": ("flash", "flash_folds")}    # block -> (pooled key, folds key)
 CANDIDATES = {"logreg": backtest.fit_logreg, "lightgbm": backtest.fit_lgbm}   # logistic is the first-run incumbent
+INCUMBENT = "_incumbent"    # model-name suffix of the champion configuration re-scored in a run
 
 
 def load(path=REGISTRY):
@@ -53,6 +61,24 @@ def jsonable(o):
     if isinstance(o, float) and np.isnan(o):
         return None
     return o
+
+
+def family(model):
+    """Model type of a model name: lightgbm_incumbent is a lightgbm."""
+    return model.removesuffix(INCUMBENT)
+
+
+def fitter(entry):
+    """The backtest fit function of a registry entry: its model type, a LightGBM with the entry's own params."""
+    fam = family(entry["model"])
+    if fam == "lightgbm" and entry.get("params"):
+        return functools.partial(backtest.fit_lgbm, params=entry["params"])
+    return CANDIDATES[fam]
+
+
+def config(entry):
+    """What a model is apart from its data: type, feature list, categoricals and params."""
+    return family(entry["model"]), entry.get("feature_list"), entry.get("categorical"), jsonable(entry.get("params"))
 
 
 def fold_ids(entry):
@@ -88,9 +114,10 @@ def promote(reg, entry):
     if cur is None:
         ok, why = True, "no champion yet"
     elif fold_ids(cur) != fold_ids(entry) or cur["gold_version"] != entry["gold_version"]:
-        ok = cur["model"] == entry["model"]
-        why = ("folds or gold_version differ; same model type re-scored on the new folds" if ok else
-               "folds or gold_version differ from the champion's; not comparable, champion kept")
+        ok = config(cur) == config(entry)
+        why = ("folds or gold_version differ; the champion's configuration re-scored on the new folds" if ok else
+               "folds or gold_version differ from the champion's and so does the configuration; not comparable, "
+               "champion kept")
     else:
         old = cur["metrics"]["pooled"]
         ok, why = rule(pr_auc_gains(entry, cur), NOISE_SDS * SEED_SD.get(key, 0.0), new["ece"], old["ece"])
@@ -105,48 +132,58 @@ def promote(reg, entry):
     return decision
 
 
-def main():
-    t0 = time.time()
-    run_id, res = backtest.main()
+def incumbents(reg, man, configs):
+    """target key -> the champion entry to re-score in this run: it was scored on another gold version and no
+    candidate of the run (configs: name -> config tuple) has its configuration. A champion with a feature that the
+    gold no longer has cannot be re-scored: it is retired (a recorded decision) and the target has no champion."""
+    have = {f for fs in man["features"].values() for f in fs}
+    out = {}
+    for y, h in backtest.TARGETS:
+        key = f"{y}_h{h}"
+        cur_id = reg["champions"].get(key, {}).get("entry_id")
+        cur = next((r for r in reg["runs"] if r["entry_id"] == cur_id), None)
+        if cur is None or cur["gold_version"] == man["gold_version"] or config(cur) in configs.values():
+            continue
+        missing = sorted(set(cur.get("feature_list") or []) - have)
+        if missing:
+            reg["champions"].pop(key)
+            reg["decisions"].append({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "target": y,
+                                     "horizon": h, "challenger": None, "champion_before": cur_id,
+                                     "decision": "retired", "reason": f"features no longer in gold: {missing}"})
+            continue
+        out[key] = cur
+    return out
+
+
+def register(reg, run_id, res, params, inc, created):
+    """Final fit, model file, entry and promotion decision for every (target, candidate), the re-scored incumbent
+    first where there is one. params: model name -> params; inc: incumbents(). Returns the decisions."""
     run_dir = backtest.RUNS / run_id
     man, cols, cats = res["manifest"], res["features"], res["categorical"]
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    params = {"lightgbm": backtest.LGB_PARAMS, "logreg": {**backtest.LOGREG_PARAMS, "onehot_min_frequency":
-              backtest.ONEHOT_MIN, "numeric": "median impute + missing flags + standardise"},
-              "windows": {"reliable_min": backtest.RELIABLE, "n_val": backtest.N_VAL, "n_test": backtest.N_TEST,
-                          "min_rows": backtest.MIN_ROWS},
-              "final_fit": "all label rows (every realised outcome), completed projects excluded, rows before "
-                           "train_from dropped",
-              "train_from": {f"{y}_h{h}": t for (y, h), t in backtest.TRAIN_FROM.items()},
-              "calibration": {"method": f"platt_k{backtest.PLATT_FOLDS}", "file": backtest.PLATT_FILE,
-                              "targets": sorted(f"{y}_h{h}" for y, h in backtest.CALIBRATED),
-                              "rule": "each cutoff c: Platt on the model's predictions at c - h .. c - h - "
-                                      f"{backtest.PLATT_FOLDS - 1} quarters (labels realised by c); the served "
-                                      "calibrator uses the folds realised by the latest period"},
-              "targets": [f"{y}_h{h}" for y, h in backtest.TARGETS], "features": cols, "categorical": cats,
-              "feature_groups": res["groups"], "gold_version": man["gold_version"],
-              "silver_version": man["silver_version"], "ece_slack": ECE_SLACK,
-              "promotion": {"seed_sd": SEED_SD, "noise_sds": NOISE_SDS, "flash_from": backtest.FLASH_FROM}}
-    (run_dir / "params.json").write_text(json.dumps(jsonable(params), indent=2), encoding="utf-8")
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
                                                       "calibration.csv", "shap_summary.csv", "windows.json",
                                                       "params.json", backtest.PLATT_FILE]}
-    reg = load()
+    out = []
     for (y, h), d in res["frames"].items():
         key = f"{y}_h{h}"
-        champ = reg["champions"].get(key, {}).get("model")
-        for name in sorted(CANDIDATES, key=lambda n: n != champ):    # the champion's own type goes first
-            m, _ = CANDIDATES[name](d, cols, cats, y)
-            if name == "lightgbm":
-                model_file = f"lightgbm_{key}.txt"
+        champ = family(reg["champions"].get(key, {}).get("model", ""))
+        spec = {name: {"model": name, "feature_list": cols, "categorical": cats, "params": params[name]}
+                for name in sorted(CANDIDATES, key=lambda n: n != champ)}     # the champion's own type goes first
+        if key in inc:
+            cur, name = inc[key], family(inc[key]["model"]) + INCUMBENT
+            spec = {name: {"model": name, "feature_list": cur["feature_list"], "categorical": cur["categorical"],
+                           "params": cur["params"], "rescored_from": cur["entry_id"]}, **spec}
+        for name, e in spec.items():
+            m, _ = fitter(e)(d, e["feature_list"], e["categorical"], y)
+            if family(name) == "lightgbm":
+                model_file = f"{name}_{key}.txt"
                 m.booster_.save_model(run_dir / model_file)
             else:
-                model_file = f"logreg_{key}.joblib"
+                model_file = f"{name}_{key}.joblib"
                 joblib.dump(m, run_dir / model_file)
             flash = res["metrics"].get((key, "flash", name), {})
-            entry = {"entry_id": f"{run_id}/{name}/{key}", "run_id": run_id, "model": name, "target": y,
-                     "horizon": h, "gold_version": man["gold_version"], "silver_version": man["silver_version"],
-                     "params": params[name], "feature_list": cols, "categorical": cats,
+            entry = {"entry_id": f"{run_id}/{name}/{key}", "run_id": run_id, "target": y, "horizon": h,
+                     "gold_version": man["gold_version"], "silver_version": man["silver_version"], **e,
                      "metrics": {"pooled": res["metrics"][key, "val", name]["pooled"],
                                  "folds": res["metrics"][key, "val", name]["folds"],
                                  "test": res["metrics"][key, "test", name]["pooled"],
@@ -157,6 +194,43 @@ def main():
             entry = jsonable(entry)
             reg["runs"].append(entry)
             dec = promote(reg, entry)
+            out.append(dec)
             print(f"  {key} {name}: {dec['decision']} ({dec['reason']})")
+    return out
+
+
+def main():
+    t0 = time.time()
+    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    man = json.loads((backtest.GOLD / "manifest.json").read_text(encoding="utf-8"))
+    cols, cats = backtest.model_cols(man["features"]), man["categorical"]
+    params = {"lightgbm": backtest.LGB_PARAMS, "logreg": {**backtest.LOGREG_PARAMS, "onehot_min_frequency":
+              backtest.ONEHOT_MIN, "numeric": "median impute + missing flags + standardise"}}
+    reg = load()
+    inc = incumbents(reg, man, {n: config({"model": n, "feature_list": cols, "categorical": cats, "params": p})
+                                for n, p in params.items()})
+    run_id, res = backtest.main(extra={k: {family(e["model"]) + INCUMBENT: (fitter(e), e["feature_list"],
+                                                                            e["categorical"])}
+                                       for k, e in inc.items()})
+    assert res["features"] == cols and res["manifest"]["gold_version"] == man["gold_version"]
+    info = {**params,
+            "windows": {"reliable_min": backtest.RELIABLE, "n_val": backtest.N_VAL, "n_test": backtest.N_TEST,
+                        "min_rows": backtest.MIN_ROWS},
+            "final_fit": "all label rows (every realised outcome), completed projects excluded, rows before "
+                         "train_from dropped",
+            "train_from": {f"{y}_h{h}": t for (y, h), t in backtest.TRAIN_FROM.items()},
+            "calibration": {"method": f"platt_k{backtest.PLATT_FOLDS}", "file": backtest.PLATT_FILE,
+                            "targets": sorted(f"{y}_h{h}" for y, h in backtest.CALIBRATED),
+                            "rule": "each cutoff c: Platt on the model's predictions at c - h .. c - h - "
+                                    f"{backtest.PLATT_FOLDS - 1} quarters (labels realised by c); the served "
+                                    "calibrator uses the folds realised by the latest period"},
+            "targets": [f"{y}_h{h}" for y, h in backtest.TARGETS], "features": cols, "categorical": cats,
+            "feature_groups": res["groups"], "gold_version": man["gold_version"],
+            "silver_version": man["silver_version"], "ece_slack": ECE_SLACK,
+            "promotion": {"seed_sd": SEED_SD, "noise_sds": NOISE_SDS, "flash_from": backtest.FLASH_FROM},
+            "incumbents": {k: {"rescored_from": e["entry_id"], "model": family(e["model"]) + INCUMBENT,
+                               "n_features": len(e["feature_list"]), "params": e["params"]} for k, e in inc.items()}}
+    (backtest.RUNS / run_id / "params.json").write_text(json.dumps(jsonable(info), indent=2), encoding="utf-8")
+    register(reg, run_id, res, params, inc, created)
     REGISTRY.write_text(json.dumps(jsonable(reg), indent=2), encoding="utf-8")
     print(f"train {run_id}: {time.time() - t0:.0f}s, registry {REGISTRY}")
