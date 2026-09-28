@@ -11,12 +11,16 @@ embedding model in batches. extract_json() reads the first JSON object or array 
 dict) an object only): qwen2.5-coder has no native tool calls here, so JSON comes back as text, sometimes fenced or
 with prose around it; a reply cut off by max_tokens raises instead of returning one of its parts.
 
-The local model generates one answer at a time (about 4 tokens/s on a laptop), so every generation goes through
+The local model generates one answer at a time (about 4 tokens/s on a laptop), so a generation should go through
 LLM_GATE: the caller wraps one call, or the calls of one task, in `with gate(wait_s) as ok:` and does not call when ok
 is False (the wait timed out). The gate is not re-entrant, and chat(), chat_stream() and complete() never take it
-themselves. A chat request passes chat=True: chat_active() is True while one holds or waits for the gate, and
-background jobs check it between items and pause (wait_chat_idle), so the person waiting for an answer goes first.
-Embeddings take no gate (short requests to another model).
+themselves; backend/brief.py and llm/worker.py do not take it yet (to wrap when the chat is integrated), so until
+then a brief can generate alongside a chat answer. A chat request passes chat=True: chat_active() is True while one
+holds or waits for the gate. A background take (chat=False) first waits while a chat request is active (at most its
+wait_s, or CHAT_YIELD_S when it waits without limit), because a semaphore lets the thread that just released it take
+it again before a woken waiter runs; background jobs also check chat_active() between items and pause
+(wait_chat_idle), so the person waiting for an answer goes first. Embeddings take no gate (short requests to another
+model).
 
 An unreachable server is remembered the way backend/brief.py does it: the caller calls mark_down() after an
 LLMConnectionError whose `down` is True (refused, or no connection within CONNECT_TIMEOUT), and down_recently() is True
@@ -50,6 +54,7 @@ TIMEOUT = 120.0  # local 14B model can be slow (a streamed reply: the longest ga
 CONNECT_TIMEOUT = 3.0  # but a server that is not running fails fast
 EMBED_TIMEOUT = 60.0
 DOWN_S = 30
+CHAT_YIELD_S = 300.0  # a background gate() without a time limit waits at most this long for chat requests to finish
 
 _transport: httpx.BaseTransport | None = None  # tests put an httpx.MockTransport here
 _down_at = -1e9  # time.monotonic() of the last unreachable LM Studio (mark_down)
@@ -83,13 +88,20 @@ class LLMOutputError(Exception):
 def gate(wait_s: float | None = None, *, chat: bool = False) -> Iterator[bool]:
     """`with gate(wait_s) as ok:` holds LLM_GATE for the block; ok is False when it was not free within wait_s
     seconds (None: wait as long as it takes), and then the block must not generate. chat=True marks a chat request
-    (chat_active) while it waits and while it holds the gate."""
+    (chat_active) while it waits and while it holds the gate; any other take lets active chat requests go first,
+    waiting while chat_active() within the same wait_s (at most CHAT_YIELD_S when wait_s is None)."""
     global _chat_n
     if chat:
         with _chat_lock:
             _chat_n += 1
     got = False
     try:
+        if not chat and chat_active():
+            end = time.monotonic() + (CHAT_YIELD_S if wait_s is None else wait_s)
+            while chat_active() and time.monotonic() < end:
+                time.sleep(0.02)
+            if wait_s is not None:
+                wait_s = max(0.0, end - time.monotonic())
         got = LLM_GATE.acquire(timeout=wait_s)
         yield got
     finally:

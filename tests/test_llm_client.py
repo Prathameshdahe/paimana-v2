@@ -337,6 +337,44 @@ def test_chat_active_while_holding_or_waiting():
     assert not client.chat_active()
 
 
+def test_a_waiting_chat_goes_before_the_next_background_take():
+    order, held, release = [], threading.Event(), threading.Event()
+
+    def background():
+        with client.gate(5) as ok:
+            order.append("bg1" if ok else "bg1 busy")
+            held.set()
+            release.wait(5)
+        with client.gate(5) as ok:  # straight back for its next item: a semaphore would let it barge in
+            order.append("bg2" if ok else "bg2 busy")
+
+    def chat_request():
+        with client.gate(5, chat=True) as ok:
+            order.append("chat" if ok else "chat busy")
+            time.sleep(0.05)
+    bg = threading.Thread(target=background)
+    bg.start()
+    held.wait(5)
+    ch = threading.Thread(target=chat_request)
+    ch.start()
+    deadline = time.monotonic() + 5
+    while not client.chat_active() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    release.set()
+    bg.join(10)
+    ch.join(10)
+    assert order == ["bg1", "chat", "bg2"]
+
+    with client.gate(1, chat=True):          # a background take gives up within its own wait_s
+        t0 = time.monotonic()
+        with client.gate(0.1) as ok:
+            assert not ok
+        assert 0.09 <= time.monotonic() - t0 < 1
+    t0 = time.monotonic()
+    with client.gate(0) as ok:               # and does not wait at all when no chat is active
+        assert ok and time.monotonic() - t0 < 0.05
+
+
 def test_circuit_breaker(monkeypatch):
     monkeypatch.setattr(client, "_down_at", -1e9)
     assert not client.down_recently()
