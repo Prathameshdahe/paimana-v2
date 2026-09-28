@@ -51,8 +51,8 @@ of 10 tuning replies and each cost a retry. check() rejects a reply unless:
   - every number and date in the headline, narrative and gaps is in the items the prompt shows (backend/brief.validate
     against the project name and citable(), citations taken out first: a figure from the context it never saw, the
     status line's progress or the model's probabilities, is rejected), each one in a narrative claim is in the items
-    that claim cites (claims(): the text before a citation, from the start of its sentence), and it names no private
-    person;
+    that claim cites (claims(): the text before a citation, from the start of its sentence, and the rest of the
+    sentence after its last citation), and it names no private person;
   - the concern level fits the evidence (allowed()): 'concern' cites a current negative item of severity >= 2;
     'watch' cites some negative item, and every current hold-up when there are any (a 'watch' says each one is being
     solved: one that cited only a minor issue and some progress passed without a word on the hold-ups); 'none' is not
@@ -120,6 +120,7 @@ CITE = re.compile(r"\[\s*(E\d+(?:\s*[,;]\s*E\d+)*)\s*\]", re.I)
 BARE_ID = re.compile(r"\bE\d+\b")
 BRACKET = re.compile(r"\[[^\]]*\]")
 MARKER_RX = re.compile(r"<{3,}|>{3,}")
+SENTENCE, SENTENCE_END = re.compile(r"(?<=[.!?])\s+"), re.compile(r"[.!?](?:\s|$)")
 GROUPS = ("Current hold-ups (negative, recent, severity 2 or 3)", "Minor current issues (negative, severity 1)",
           "Progress and neutral items (recent)",
           "Old items (dated over a year before the reports, or marked resolved; not known to be solved either)",
@@ -495,13 +496,21 @@ def facts(p: dict, items: list[dict] | None = None) -> dict:
 
 
 def claims(text: str) -> list[tuple[str, list[str]]]:
-    """(claim, the ids cited after it) for each citation in text, in order; the claim is the text since the previous
-    citation, from the start of its sentence (an uncited sentence before it is not its claim)."""
-    out, at = [], 0
-    for m in CITE.finditer(text or ""):
-        claim = re.split(r"(?<=[.!?])\s+", text[at:m.start()].strip())[-1]
-        out.append((claim, [x.upper() for x in re.split(r"\s*[,;]\s*", m[1])]))
-        at = m.end()
+    """(claim, the ids cited after it) for each citation in text, in order. The claim is the text since the previous
+    citation, from the start of its sentence (an uncited sentence before it is not its claim), and, when no citation
+    follows in the same sentence, the rest of that sentence ('overdue [E1], with 91% odds.' is all E1's); a citation
+    written after the full stop ('Work stopped. [E1]') closes the sentence before it."""
+    text, out = text or "", []
+    ms = list(CITE.finditer(text))
+    for i, m in enumerate(ms):
+        before = text[ms[i - 1].end() if i else 0:m.start()].strip()
+        claim = SENTENCE.split(before)[-1]
+        if not before.endswith((".", "!", "?")):
+            after = text[m.end():ms[i + 1].start() if i + 1 < len(ms) else len(text)]
+            end = SENTENCE_END.search(after)
+            if end or i + 1 == len(ms):   # the sentence ends before the next citation, or there is none
+                claim += after[:end.start()] if end else after
+        out.append((" ".join(claim.split()), [x.upper() for x in re.split(r"\s*[,;]\s*", m[1])]))
     return out
 
 

@@ -217,7 +217,12 @@ def test_a_claims_numbers_must_be_in_the_items_it_cites(opinion_db):
     num = NUM.search(neg["text"])[0]                                              # a number in that item
     other = number_only_in(p, [it for it in shown if it is not neg], [neg])       # in another item the LLM saw
     assert other is not None
-    assert so.claims("A [E1]. B 5 km, C [E2, E3]; D.") == [("A", ["E1"]), ("B 5 km, C", ["E2", "E3"])]
+    assert so.claims("A [E1]. B 5 km, C [E2, E3]; D.") == [("A", ["E1"]), ("B 5 km, C; D", ["E2", "E3"])]
+    assert so.claims("Overdue [E1], with 91% odds [E2] and 122 months late. X 5.") == [
+        ("Overdue", ["E1"]), (", with 91% odds and 122 months late", ["E2"])]     # the rest of the sentence: E2's
+    assert so.claims("Work stopped. [E1] Then 5 more.") == [("Work stopped.", ["E1"])]   # cited after the stop
+    after = {**good, "narrative": f"Work stopped after a protest [{neg['id']}], with {other} of the work done."}
+    assert so.check(after, p)[0] == [f"'{other}' is not in {neg['id']}: cite the item it comes from, or leave it out"]
     wrong = {**good, "narrative": f"Work stopped after a protest with {other} of the work done [{neg['id']}]."}
     assert so.check(wrong, p)[0] == [f"'{other}' is not in {neg['id']}: cite the item it comes from, or leave it out"]
     for fine in (f"Work was reported stopped at {num} on the site [{neg['id']}].",
