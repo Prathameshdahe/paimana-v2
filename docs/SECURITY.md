@@ -8,8 +8,8 @@ promise: where a control is missing it says so. The plan's own advice stands: la
 no encryption everywhere, no zero trust.
 
 Sections: **Data** (the pipeline, identity, external sources), **Model** (the registry, the scores, what the LLM may
-not touch) and **AI** (the assistant, the second opinion, the jobs). The sign-in unit adds **API** (sessions, roles,
-what a request must carry) and the ops unit adds **Deployment** (TLS, headers, rate limits, backups).
+not touch), **AI** (the assistant, the second opinion, the jobs), **API** (sign-in, sessions, roles, what a request
+must carry, the api's own protections) and **Deployment** (TLS, headers, rate limits, backups).
 
 ## Data
 
@@ -162,10 +162,11 @@ the reasons, then replaced by a deterministic answer or stored as rejected (`doc
 the search index tags every chunk with a visibility and a project and filters both before ranking, so a public
 question never retrieves an official chunk and an official never one outside their scope (`llm/rag.py`;
 `tests/test_rag.py::test_public_never_sees_official_chunks`, `test_agency_scope_filters_project_chunks`). The model
-runs locally in LM Studio; no text leaves the machine and the frontend holds no key. Not done: `GET /api/jobs` and
-`GET /api/live/status` return the job summaries, which list the project keys a research or second-opinion run
-processed, to every official whatever their scope (a Segment 8 review finding left for the sign-in unit's route
-pass).
+runs locally in LM Studio; no text leaves the machine and the frontend holds no key. The research and second-opinion
+runs record counts only in their job summaries (the projects they covered go to the log), and `GET /api/jobs` and
+`GET /api/live/status` strip every per-project field for a viewer with a scope, so an official never learns of
+another scope's projects from them (Segment 8 review finding [0];
+`tests/test_access.py::test_job_summaries_never_show_a_scoped_official_another_scopes_project`).
 
 **One model, fairly shared.** A single gate serialises generations; a chat request goes before any background take,
 including ones already waiting; the worker cell, the brief, the research agent and the second opinion hold it per
@@ -182,6 +183,68 @@ the public page redacted) and `tests/test_input_validation.py`; modified or dupl
 recorded `tests/test_parivesh.py`, `tests/test_research_pipeline.py`; quarantined rows stay out
 `tests/test_silver.py`; model version verified before use: added with the checksum (above). Not done: the raw
 archive's own hash manifest.
+
+## API
+
+What every request goes through, outermost first (`backend/auth/middleware.py`, `backend/auth/sessions.py`,
+`backend/main.py`), and what the sign-in holds (`backend/auth/`, [ACCESS_CONTROL.md](ACCESS_CONTROL.md)).
+
+**Who is asking (plan 17, 18).** Real accounts in `app.users` with argon2id password hashes (argon2-cffi defaults,
+RFC 9106 low-memory profile). A session is a 256-bit random cookie token (`paimana_session`: HttpOnly, SameSite=Lax,
+Secure in production); the database keeps only its sha256. Sessions end after 12 idle hours or 7 days, at sign-out,
+when the account is disabled, and when the password changes. Roles and scope are read from the account on every
+request, so a change or a disabled account takes effect at once. The public is simply no cookie, and a cookie that
+names no live session gets 401. The prototype's trusted role headers are gone from the backend, the frontend
+and the tests. The administrator is an IPMD analyst with the admin flag. The developer account (every feature,
+including raw model numbers, job controls and the audit log) is created only by the bootstrap from `.env.db` and is
+invisible to administrators. Tests: `tests/test_auth.py`, `tests/test_access.py`, `tests/test_bootstrap.py`.
+
+**What a write must carry.** Every non-GET request passes `sessions.guard`, an app-wide dependency. An `Origin`
+header, when present, must be one of `ALLOWED_ORIGINS`. A request with a live session must carry the session's CSRF
+token in `X-CSRF-Token`, compared in constant time. The token comes from `GET /api/auth/me`; SameSite=Lax is the
+second line. Cookie-less writes (the public's chat, sign-in, sign-up, reset) carry no token.
+
+**Guessing passwords.** One generic 401 covers an unknown email, a wrong password and a disabled account, with the
+same argon2 cost. Five failures within 15 minutes lock the email for 15 minutes (423). Unknown emails lock too, so a
+lock does not reveal an account. Twenty failures a minute from one address are refused (429). Sign-up allows three
+requests an hour per address and one pending request per email, enforced by a unique index. A reset allows ten
+attempts a minute per address. The password policy is at least 12 characters, not a common password, and not the
+email's local part. A wrong current password on a password change counts toward the lock. Nothing writes a password
+or a token to the audit log, the access log or a response other than the one that issued it.
+
+**Audit (plan 20).** Every write records who did it: the account id, the email, the client address (`app.audit_log`),
+role, action, target and detail. That covers alert acks, watchlist changes, memo decisions, job starts, uploads, the
+worker trigger, sign-in, sign-out, password changes, resets, sign-up requests, approvals, rejections, account
+changes, reset tokens and bootstrap runs. Failed sign-ins are recorded in `app.login_attempts`. The audit log is
+read by the developer only (`GET /api/admin/audit`, newest first, filtered by date, account or action).
+
+**Client address.** Behind nginx the api believes `X-Forwarded-For` and `X-Forwarded-Proto` only from a peer inside
+`TRUSTED_PROXIES` (the compose network), and takes the right-most hop that is not a proxy. uvicorn runs with
+`--no-proxy-headers`, so a client cannot choose its own address for the limits or the audit trail. The chat limit
+keys on the account when signed in and on that address for the public.
+
+**Hardening.** Security headers go on every api response: `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+`Permissions-Policy`, HSTS when `SECURE_COOKIES=1`, and `Cache-Control: no-store` on `/api/auth` and `/api/admin`.
+CORS allows only `ALLOWED_ORIGINS`, with credentials. The Host header must match `ALLOWED_HOSTS`; `/healthz` and
+`/readyz` answer for any host so the container probe works. JSON bodies are capped at 1 MiB and the report upload
+at 110 MiB (413). Requests time out after 30 s (504); the streams, the upload and the routes that wait on the local
+LLM or the web are exempt. A route's exception becomes `{"detail": "internal error", "requestId"}`, with the
+traceback in the log under that request id and never in the response. A 422 names the field, never the value sent,
+so an oversized password is not echoed back. Request bodies refuse unknown fields. Each request gets a request id
+(nginx's `X-Request-ID` when it sent one) and one JSON access-log line, without the query strings of `/api/auth`
+and `/api/admin`. `/docs` and `/openapi.json` are off in production (`API_DOCS=0`). On shutdown the research and
+second-opinion jobs get their stop flags, including a run started from the API, and the process waits up to 30 s
+for them.
+
+**Not done.** No email verification and no email of any kind: an administrator checks a sign-up request by other
+means and hands reset tokens over in person. No multi-factor sign-in, no single sign-on, no password expiry and no
+breached-password lookup (the common-password list is short). Sessions are not bound to an address or a browser. An
+administrator cannot end another account's sessions except by disabling it or issuing a reset. A signed-in session
+can change its password with the current one, so a stolen live session plus the password is enough. The sign-up
+answer (409) says that a request or an account exists for an email: rate-limited, but an enumeration signal. The
+api's in-memory chat and reset limits reset when it restarts (the sign-in limits do not). The 30 s time limit
+cannot stop a synchronous route's thread; the database's 15 s statement timeout bounds its queries. The watchlist
+is still one list per role, cut to each viewer's scope.
 
 ## Deployment
 
@@ -219,7 +282,8 @@ five nginx needs, 256 MB. migrate and backup: read-only, short-lived or idle. Th
 **Secrets.** `.env` and `.env.db` are git-ignored and never enter an image (`.dockerignore`); the compose files pass
 them through `env_file` only. `scripts/first-run.*` generates the database password (32 alphanumeric characters
 from the OS random generator, file mode 600 on Linux). The administrator's password is typed at the bootstrap's
-prompt and never written to a file, an argument or a log. Rotation of the database password: DEPLOYMENT.md.
+prompt and never written to a file, an argument or a log. The developer account's email and password live in
+`.env.db` with the database credentials, and the api re-applies them at every start. Rotation of the database password: DEPLOYMENT.md.
 
 **Backups.** A daily `pg_dump -Fc` with 14 days kept; on Linux the files belong to root with mode 600. They hold the
 user rows (emails, argon2 hashes), sessions and the audit log, so `backups/` needs the same protection as the

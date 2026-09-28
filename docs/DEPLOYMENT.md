@@ -61,7 +61,8 @@ powershell -ExecutionPolicy Bypass -File scripts\first-run.ps1 -Dev
 The script is idempotent; it skips what already exists. It writes `.env` from `.env.production.example` and
 `.env.db` with a generated 32-character password, makes a self-signed certificate (`scripts/gen-dev-cert.*`) when
 `deploy/certs/` is empty, runs `docker compose build`, starts postgres, runs `migrate`, starts the whole stack,
-creates the first administrator (`python -m backend.auth.bootstrap` asks for the password itself), loads the
+creates the first administrator (`python -m backend.auth.bootstrap` asks for the password itself; it never takes
+one on the command line), loads the
 serving tables (`python -m pipeline.run serve`) and prints the URL. Options: `--dev` / `-Dev` (laptop ports),
 `--skip-admin`, `--skip-serve`.
 
@@ -92,6 +93,13 @@ docker compose run --rm --no-deps api python -m backend.auth.bootstrap --email <
 docker compose run --rm --no-deps api python -m pipeline.run serve
 docker compose run --rm --no-deps api python -m alembic current
 ```
+
+The bootstrap refuses when an administrator exists; `--force-reset` resets the password of the account with
+`--email` (and makes it an active administrator), ending its sessions. The api container also runs
+`python -m backend.auth.bootstrap --developer-only` at every start (`deploy/api-entrypoint.sh`): with
+`PAIMANA_DEVELOPER_EMAIL` and `PAIMANA_DEVELOPER_PASSWORD` in `.env.db` it creates or updates the hidden developer
+account (docs/ACCESS_CONTROL.md), without them it does nothing. It never prompts or prints a password, and a failure
+is logged without stopping the api.
 
 `run` (not `exec`) on purpose: it starts the image's entrypoint (`deploy/api-entrypoint.sh`), which points
 `DATABASE_URL` at the stack's postgres; `.env.db`'s own `DATABASE_URL` is the host-side one (the port

@@ -52,8 +52,9 @@ Then open **http://localhost:3000** in your browser.
 | Public | Everything above, read-only; the assistant (chat) answers from the public data only |
 | Agency | Only their own projects shown, plus the alerts bell and the assistant on those projects |
 | Ministry | Only their ministry's projects, plus the alerts bell and the assistant on those projects |
-| IPMD Analyst | Everything, plus jobs, the worker console and the assistant on every project |
-| IPMD Administrator | Everything an analyst sees, plus Administration (`/admin`): access requests, users, the audit log |
+| IPMD Analyst | Every project, plus the assistant on every project |
+| IPMD Administrator | Everything an analyst sees, plus Administration (`/admin`): access requests and users |
+| Developer (hidden) | Everything, plus the models page, the worker console, the job controls and the audit log |
 
 **Key stat to know:** The risk bar updates automatically every time a new report is processed.
 

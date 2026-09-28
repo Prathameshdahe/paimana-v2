@@ -20,7 +20,7 @@ the process environment; `DATABASE_URL` wins, else it is built from `POSTGRES_*`
 | Schema | Tables | Written by | Read by |
 |---|---|---|---|
 | `app` | `alerts`, `watchlist`, `signals`, `signal_projects`, `scouted`, `job_runs`, `sources`, `audit_log`, `briefs`, `research_facts`, `researched`, `signal_judgements`, `second_opinions` | `backend/db` (the API, the scheduler's jobs, the LLM modules) | the same, `llm/rag.py`, `pipeline/bottlenecks.py` |
-| `app` | `users`, `sessions`, `signup_requests`, `login_attempts` | `backend/auth` (Segment 9 unit B) | `backend/access.py` |
+| `app` | `users`, `sessions`, `signup_requests`, `login_attempts`, `password_resets` | `backend/auth` through `backend/db/accounts.py` | `backend/access.py`, `backend/auth` |
 | `app` | `rag_chunks` (pgvector, HNSW cosine index), `rag_meta` | the assistant's index builder | the assistant's search |
 | `ingest` | `source_documents`, `load_runs`, `staging_project_observations` | the report watcher (a document and an INGEST run per accepted report), `pipeline/serve.py` (a SERVING run per load); staging is Manamrit's silver-CSV flow, unused by the app | lineage queries |
 | `core` | `projects`, `project_keys`, `project_timeline` | `pipeline/serve.py` from silver | serving copies (the API keeps reading DuckDB) |
@@ -28,7 +28,11 @@ the process environment; `DATABASE_URL` wins, else it is built from `POSTGRES_*`
 
 `app` mirrors the Segment 8 SQLite tables column for column, with PostgreSQL types: `timestamptz` for every `*_at`,
 `date` for `asof` and the fact dates, `boolean` for the 0/1 flags, `jsonb` for the JSON columns, `bigserial` ids.
-`audit_log` has an id and the `user_id` / `email` / `ip` columns the authenticated routes fill.
+`audit_log` has an id and the `user_id` / `email` / `ip` columns every write fills (`db.audit(..., actor=)`).
+Migration `5b7c9d1e4f80` lets `users.role` be `developer` (the bootstrap's hidden account; sign-up requests keep the
+three official roles), keeps one pending sign-up request per email (a partial unique index) and adds
+`password_resets` (the sha256 of each one-time reset token, who issued it, its expiry and use). Emails are `citext`.
+Session ids and reset tokens are stored as sha256, never as the token.
 
 The `backend/db` package is the only code that runs SQL against the database: `engine.py` (one pooled engine over
 psycopg 3, `connect()` a transaction, `read()` autocommit, `healthy()` the readiness probe with a 2 s timeout),

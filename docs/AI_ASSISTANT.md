@@ -72,7 +72,8 @@ Code: `llm/router.py` (routing), `llm/tools.py` (tools), `llm/agent.py` (planner
 ## Endpoint and events
 
 `POST /api/chat` with `{messages: [{role: 'user' | 'assistant', content}] (1-12, the last the user's question of
-1-1000 characters), projectKey?}` and the usual `X-Paimana-*` headers answers `text/event-stream`:
+1-1000 characters), projectKey?}` (the viewer is the session cookie's, the public without one; a signed-in
+request sends its `X-CSRF-Token`) answers `text/event-stream`:
 `event: <name>` and `data: <JSON, camelCase>`, a `: keep-alive` comment every 15 s while the model thinks.
 
 | Event | Data |

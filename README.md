@@ -175,12 +175,15 @@ loop off; the tests do.
 
 ### Access by role
 
-The sign-in page picks a role: public (no sign-in needed), agency official (one
-canonical agency), ministry official (one ministry) or IPMD analyst. Every page
-and API answer is cut to that role's projects, and the public gets a simple
-project page without model internals. The role goes to the backend in
-`X-Paimana-*` headers that it trusts: a prototype, not authentication. The
-role-by-page table is in `docs/ACCESS_CONTROL.md`.
+Officials sign in with an email and a password: agency official (one canonical
+agency), ministry official (one ministry) or IPMD analyst. They request access on
+`/signup`, and an IPMD administrator approves the request. The public needs no
+sign-in. Every page and API answer is cut to the signed-in account's projects, and
+the public gets a simple project page without model internals. Sessions are
+HttpOnly cookies, every write carries a CSRF token, and sign-in failures lock an
+email. The first administrator comes from `python -m backend.auth.bootstrap`. The
+role-by-page table and the sign-in rules are in `docs/ACCESS_CONTROL.md`, and the
+API's protections in `docs/SECURITY.md` (API).
 
 ## Run in production
 

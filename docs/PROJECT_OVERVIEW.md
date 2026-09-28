@@ -414,10 +414,10 @@ Built with **React + Vite + TypeScript**, served at `http://localhost:3000`.
 /bottlenecks        Shared blockers
 /radar              News feed + state heat map
 /external           Land, forest, clearance panel
-/models             Model history + calibration
-/workers            AI worker control (IPMD only)
+/models             Model history + calibration (developer only)
+/workers            AI worker control (developer only)
 /approvals          Approve AI-drafted notices (IPMD only)
-/admin              Access requests, users, audit (administrators)
+/admin              Access requests and users (administrators); the audit log (developer)
 ```
 
 ### Project Detail Drawer
@@ -562,10 +562,13 @@ the endpoint matrix) and `docs/SECURITY.md`.
 | Home page | Yes | Own projects only | Own ministry | All |
 | Project detail | Limited | Own only | Own ministry | All |
 | AI assistant (chat) | Yes (public tools and outputs only, rate-limited) | Yes (scoped) | Yes (scoped) | Yes |
-| Models page | No | No | Read-only | Full |
-| Worker Console | No | No | No | Yes |
+| Models page | No | No | No | No |
+| Worker Console | No | No | No | No |
 | Approve notices | No | No | No | Yes |
 | Administration | No | No | No | Administrators |
+
+The models page, the worker console, the job controls, the raw model numbers and the audit log belong to the hidden
+developer account alone (created by the bootstrap from `.env.db`, never listed to administrators).
 
 A project outside your scope returns **404 Not Found** (not 403) — no information leaks about its existence.
 
