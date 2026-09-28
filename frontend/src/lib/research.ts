@@ -33,11 +33,24 @@ const GREY = '#9a968c'
 /** pipeline/research.py TAXONOMY_OF where the name changes; every other category is its own taxonomy name */
 const TAXONOMY_OF: Record<string, string> = { funds: 'funding', natural_event: 'weather' }
 
+/**
+ * The web research's own categories, which the report-remark taxonomy (riskPalette EVENT_CATEGORY) does not have.
+ * Kept apart from it: the Radar lists EVENT_CATEGORY as its filter, and scout signals never carry these.
+ */
+const RESEARCH_ONLY: Record<string, { label: string; color: string }> = {
+  approvals_other: { label: 'Other approvals', color: '#1f9bb5' },
+  design_scope: { label: 'Design or scope', color: '#9b6a3c' },
+  progress: { label: 'Progress', color: '#6f9a2e' },
+  other: { label: 'Other', color: GREY },
+}
+
 /** a research category's label and dot colour: the taxonomy's colour where it maps, its own label */
 export function researchCategory(category: string, taxonomy?: string | null): { label: string; color: string } {
-  const ev = EVENT_CATEGORY[taxonomy ?? TAXONOMY_OF[category] ?? category] ?? EVENT_CATEGORY[category]
+  const key = taxonomy ?? TAXONOMY_OF[category] ?? category
+  const own = RESEARCH_ONLY[key] ?? RESEARCH_ONLY[category]
+  const ev = EVENT_CATEGORY[key] ?? EVENT_CATEGORY[category] ?? own
   // natural_event maps to the weather taxonomy, but a landslide or a tunnel inflow is not weather
-  const label = category === 'natural_event' ? 'Natural event' : categoryLabel(taxonomy ?? TAXONOMY_OF[category] ?? category)
+  const label = category === 'natural_event' ? 'Natural event' : own?.label ?? categoryLabel(key)
   return { label, color: ev?.color ?? GREY }
 }
 
