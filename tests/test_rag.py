@@ -169,6 +169,10 @@ def test_meaning_match_needs_embeddings(env, monkeypatch):
     assert rag.current().dense_ready
     # no word of the question is in any chunk: only the embedder can find the Stalled badge
     assert ids(rag.search("frozen works", PUBLIC, k=1)) == ["help:1"]
+    f32 = rag.current()._emb32                     # one float32 copy of the matrix, made once per index
+    assert f32.dtype == np.float32 and f32.shape == rag.current().emb.shape
+    rag.search("frozen works", IPMD, k=1)
+    assert rag.current()._emb32 is f32
 
     def down(texts, **kw):
         raise client.LLMConnectionError("LM Studio unreachable")
@@ -406,6 +410,25 @@ def test_research_chunks_from_the_sweep_and_the_agent(tmp_path, monkeypatch):
     assert "Water Power, 2026-08-19" in f1["text"] and out[agent_id]["date"] == "2026-09-01"
     assert out["research:f2"]["title"] == "Land handed over." and "None" not in out["research:f2"]["text"]
     assert "Unit-1 in 2027." in out["research:PRJ-A:status"]["text"]
+
+
+def test_news_chunks_keep_the_newest_per_project(tmp_path, monkeypatch):
+    import sqlite3
+    dbp = tmp_path / "app.db"
+    with sqlite3.connect(dbp) as con:
+        con.execute("CREATE TABLE signals (id INTEGER PRIMARY KEY, title, source, published_at, category, severity, "
+                    "url)")
+        con.execute("CREATE TABLE signal_projects (signal_id, project_key)")
+        con.executemany("INSERT INTO signals VALUES (?, ?, 'Paper', ?, 'land', 2, 'https://x.org')", [
+            (1, "Oldest headline", "2024-01-01"), (2, "Newest headline", "2026-09-01"), (3, "", "2026-09-20"),
+            (4, "Middle headline", "2025-06-01"), (5, "Undated headline", None), (6, "Beta headline", "2020-01-01")])
+        con.executemany("INSERT INTO signal_projects VALUES (?, ?)", [
+            (1, "PRJ-A"), (2, "PRJ-A"), (3, "PRJ-A"), (4, "PRJ-A"), (5, "PRJ-A"), (6, "PRJ-B")])
+    monkeypatch.setenv("PAIMANA_DB", str(dbp))
+    monkeypatch.setattr(rag, "NEWS_PER_PROJECT", 2)
+    out = rag.news_chunks({})
+    assert [c["id"] for c in out] == ["news:2:PRJ-A", "news:4:PRJ-A", "news:6:PRJ-B"]  # an empty title never counts
+    assert all(c["visibility"] == "official" for c in out)
 
 
 # ------------------------------------------------------------------ the real chunks

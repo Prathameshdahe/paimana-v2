@@ -14,7 +14,8 @@ every project it mentions are in scope. Kinds, and who may read them:
   event     one per report-remark event with its quote; officials also get its document and page ......... public
   research  web research facts (gold/research_facts.parquet from the sweep, the agent's SQLite research_facts,
             one per project and URL) and the latest status per project (gold/research_projects.parquet) ... public
-  news      scout headlines linked to a project: headline, publisher, date, category, never article text . official
+  news      scout headlines linked to a project (the newest NEWS_PER_PROJECT per project): headline, publisher,
+            date, category, never article text ..................................................... official
   external  land-register and forest-rulebook evidence per current project .......................... public;
             PARIVESH proposal evidence .............................................................. official
   glossary  tiers, the risk checks in plain words, delay categories, model feature labels, caveats ...... public;
@@ -101,6 +102,7 @@ DENSE_MIN_SHARE = 0.9           # rank by meaning only once this share of the ch
 TITLE_RANK = True               # a third ranking: TF-IDF over the titles alone (a name finds its project card)
 TITLE_KINDS = {"project", "help", "doc", "glossary"}
 EMBED = os.environ.get("RAG_EMBED", "1") != "0"  # 0: keywords only, the embedding model is never called
+NEWS_PER_PROJECT = 30           # the newest linked headlines per project are indexed; older ones stay in the database
 
 CATEGORY_WORDS = {
     "land": "land acquisition", "forest_env": "forest or environment clearance", "litigation": "court case or dispute",
@@ -517,9 +519,12 @@ def news_chunks(names: dict) -> list[dict]:
     with closing(con):
         if not {"signals", "signal_projects"} <= _tables(con):
             return []
-        rows = [dict(r) for r in con.execute("""SELECT s.id, s.title, s.source, s.published_at, s.category,
-                s.severity, s.url, sp.project_key FROM signal_projects sp JOIN signals s ON s.id = sp.signal_id
-            ORDER BY s.id, sp.project_key""")]
+        rows = [dict(r) for r in con.execute("""SELECT id, title, source, published_at, category, severity, url,
+                project_key FROM (
+                SELECT s.id, s.title, s.source, s.published_at, s.category, s.severity, s.url, sp.project_key,
+                    row_number() OVER (PARTITION BY sp.project_key ORDER BY s.published_at DESC, s.id DESC) AS n
+                FROM signal_projects sp JOIN signals s ON s.id = sp.signal_id WHERE coalesce(s.title, '') != '')
+            WHERE n <= ? ORDER BY id, project_key""", [NEWS_PER_PROJECT])]
     out = []
     for r in rows:
         if not r["title"]:
@@ -791,6 +796,7 @@ class Index:
         self.public = np.array([r["visibility"] == "public" for r in self.rows], dtype=bool)
         self.pkey = np.array([r["project_key"] or "" for r in self.rows], dtype=object)
         self.named = {i: frozenset(r["mentions"].split()) for i, r in enumerate(self.rows) if r.get("mentions")}
+        self._emb32 = None  # a float32 copy of emb, made at the first dense ranking
 
     @property
     def dense_ready(self) -> bool:
@@ -819,7 +825,12 @@ class Index:
         ok = cand[self.has_emb[cand]]
         if not ok.size:
             return []
-        s = self.emb[ok].astype(np.float32) @ qv
+        if self._emb32 is None:
+            # one float32 copy per index (float16 has no BLAS matmul): scoring every row and then picking the
+            # candidates allocates one score vector per query, where copying the candidates' rows took about 26 MB
+            # of temporaries per query at 5.7k chunks
+            self._emb32 = self.emb.astype(np.float32)
+        s = (self._emb32 @ qv)[ok]
         return ok[np.argsort(-s, kind="stable")[:POOL]].tolist()
 
     def hit(self, i: int, score: float, official: bool) -> dict:
