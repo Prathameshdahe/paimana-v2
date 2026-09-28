@@ -296,12 +296,15 @@ def post_user(user_id: int, body: UserUpdate, v: Viewer = Admin):
 
 
 @router.post("/admin/users/{user_id}/reset-password", response_model=ResetToken)
-def post_reset_token(user_id: int, v: Viewer = Admin):
+def post_reset_token(user_id: int, request: Request, v: Viewer = Admin):
     """A one-time token (valid RESET_TTL) the administrator hands to the person, who sets a new password with it on
-    /reset; shown once, only its sha256 is kept, and an earlier unused token stops working."""
+    /reset; shown once, only its sha256 is kept, and an earlier unused token stops working. Every session of the
+    account ends now (the one this request comes from stays, when administrators reset their own)."""
     u = _account(v, user_id)
     token, expires = sessions.new_token(), now() + RESET_TTL
-    accounts.create_reset(u["id"], sessions.token_hash(token), expires, v.actor, v.role)
+    mine = sessions.session_of(request)
+    accounts.create_reset(u["id"], sessions.token_hash(token), expires, v.actor, v.role,
+                          keep_session=mine["session_id"] if mine and mine["id"] == u["id"] else None)
     return {"token": token, "expires_at": expires.isoformat(timespec="seconds")}
 
 

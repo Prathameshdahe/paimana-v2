@@ -47,8 +47,9 @@ limits sign-up to official domains.
 
 **Resets.** There is no email sending. An administrator issues a one-time reset token
 (`POST /api/admin/users/{id}/reset-password`). The token is shown once and valid for 24 hours; only its sha256 is
-stored, and a newer token replaces an older one. The person sets a new password on `/reset`
-(`POST /api/auth/reset`), which ends every session of the account.
+stored, and a newer token replaces an older one. Issuing it ends every session of the account at once (an
+account reset to lock someone out is signed out). The person sets a new password on `/reset`
+(`POST /api/auth/reset`), which ends every session of the account again.
 
 **The first administrator and the developer.** `python -m backend.auth.bootstrap --email <e> --name <n>` creates the
 first administrator. The password comes from `PAIMANA_ADMIN_PASSWORD` or a hidden prompt, never from the command line.

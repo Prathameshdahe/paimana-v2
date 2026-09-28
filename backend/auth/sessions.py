@@ -3,7 +3,8 @@
 A session is a 256-bit random token in the `paimana_session` cookie (HttpOnly, SameSite=Lax, Path=/, Secure when
 settings.secure_cookies); the database keeps only its sha256 (app.sessions.id) with the session's CSRF token. It
 ends after settings.session_idle_h idle hours or settings.session_max_d days, at sign-out, when its account is
-disabled, and when its account's password changes (every session but the one that changed it).
+disabled, when an administrator issues its account a reset token, and when its account's password changes (every
+session but the one that changed it).
 
 current() resolves the request's cookie once per request (cached on request.state): None without a cookie, the
 session joined with its account when it is live, 401 with the cookie cleared when it is not. guard() is an

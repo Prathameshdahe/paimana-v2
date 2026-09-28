@@ -416,6 +416,24 @@ def test_reset_token_is_one_time_and_expires(client, coal):
     assert reset("nonsense").status_code == 400
 
 
+def test_issuing_a_reset_token_signs_the_account_out(client, coal):
+    """Review finding (unit B, round 1): issuing a reset token (a forgotten password, or an account to lock out)
+    ends every session of the account at once, not only when the token is used; an administrator resetting their own
+    account keeps the session they did it from."""
+    u, email = official(ministry=coal)
+    with TestClient(app) as theirs:
+        login(theirs, email)
+        assert theirs.get("/api/auth/me").status_code == 200
+        h = as_role(client, "ipmd", admin=True)
+        assert client.post(f"/api/admin/users/{u['id']}/reset-password", headers=h).status_code == 200
+        assert theirs.get("/api/auth/me").status_code == 401
+    me = client.get("/api/auth/me").json()["userId"]
+    with TestClient(app) as mine_elsewhere:
+        login(mine_elsewhere, email_for("ipmd_analyst", admin=True))
+        assert client.post(f"/api/admin/users/{me}/reset-password", headers=h).status_code == 200
+        assert client.get("/api/auth/me").status_code == 200 and mine_elsewhere.get("/api/auth/me").status_code == 401
+
+
 def test_every_admin_write_is_audited_with_who_and_where(client, coal):
     u, _ = official(ministry=coal)
     h = as_role(client, "ipmd", admin=True)

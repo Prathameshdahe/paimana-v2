@@ -193,7 +193,7 @@ What every request goes through, outermost first (`backend/auth/middleware.py`, 
 **Who is asking (plan 17, 18).** Real accounts in `app.users` with argon2id password hashes (argon2-cffi defaults,
 RFC 9106 low-memory profile). A session is a 256-bit random cookie token (`paimana_session`: HttpOnly, SameSite=Lax,
 Secure in production); the database keeps only its sha256. Sessions end after 12 idle hours or 7 days, at sign-out,
-when the account is disabled, and when the password changes. Roles and scope are read from the account on every
+when the account is disabled, when an administrator issues it a reset token, and when the password changes. Roles and scope are read from the account on every
 request, so a change or a disabled account takes effect at once; an open alert stream checks its session again
 before it sends alerts and at every heartbeat, and ends when the session no longer holds or the account's role or
 scope changed. The public is simply no cookie, and a cookie that
@@ -244,7 +244,8 @@ for them.
 **Not done.** No email verification and no email of any kind: an administrator checks a sign-up request by other
 means and hands reset tokens over in person. No multi-factor sign-in, no single sign-on, no password expiry and no
 breached-password lookup (the common-password list is short). Sessions are not bound to an address or a browser. An
-administrator cannot end another account's sessions except by disabling it or issuing a reset. A signed-in session
+administrator ends another account's sessions by disabling it or by issuing it a reset token (which signs it out
+at once); there is no separate sign-out-everywhere action. A signed-in session
 can change its password with the current one, so a stolen live session plus the password is enough. The sign-up
 answer (409) says that a request or an account exists for an email: rate-limited, but an enumeration signal. The
 api's in-memory chat and reset limits reset when it restarts (the sign-in limits do not). The 30 s time limit

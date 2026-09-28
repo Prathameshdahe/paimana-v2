@@ -319,11 +319,14 @@ def reject_signup(signup_id: int, reviewer_id: int, note: str, actor: Mapping, a
 
 # ---------------------------------------------------------------- one-time password resets
 
-def create_reset(user_id: int, token_hash: str, expires_at: datetime, actor: Mapping, actor_role: str) -> None:
-    """A reset token for the account (earlier unused ones stop working) and the audit row."""
+def create_reset(user_id: int, token_hash: str, expires_at: datetime, actor: Mapping, actor_role: str,
+                 keep_session: str | None = None) -> None:
+    """A reset token for the account (earlier unused ones stop working), every session of the account but
+    keep_session ended (an account reset to lock someone out is signed out at once), and the audit row."""
     with connect() as con:
         con.execute(sa.text("UPDATE app.password_resets SET used_at = :at WHERE user_id = :uid AND used_at IS NULL"),
                     {"at": now(), "uid": user_id})
+        _revoke_all(con, user_id, keep=keep_session)
         con.execute(sa.text("""INSERT INTO app.password_resets (user_id, token_hash, created_by, created_at, expires_at)
             VALUES (:uid, :hash, :by, :at, :exp)"""),
                     {"uid": user_id, "hash": token_hash, "by": actor.get("user_id"), "at": now(), "exp": expires_at})
