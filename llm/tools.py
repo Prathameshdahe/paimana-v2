@@ -313,6 +313,7 @@ class KnowledgeArgs(Args):
 
 class AgencyArgs(Args):
     agency: Agency | None = None
+    sort: Literal["capital", "schedule_overrun", "cost_overrun"] = "capital"
     limit: int = Field(8, ge=1, le=15)
 
 
@@ -982,12 +983,17 @@ def _agency_fact(p: dict) -> dict:
 @tool("agency_scorecard", "Reading the agency matrix",
       "implementing agencies' track record: how far their projects run over planned time and cost (agency?)",
       AgencyArgs, public=False, feature="agencies")
-def agency_scorecard(viewer, agency=None, limit=8) -> ToolResult:
+def agency_scorecard(viewer, agency=None, sort="capital", limit=8) -> ToolResult:
     m = serving.agency_matrix(scope=viewer.scope)
     pts = m["points"]
-    if agency is None and viewer.scope and viewer.scope[0] == "agency":
+    if agency is None and viewer.scope and viewer.scope[0] == "agency" and sort == "capital":
         agency = viewer.scope[1]
-    chosen = [p for p in pts if p["agency"] == agency] if agency else [p for p in pts if not p["hidden"]][:limit]
+    if agency:
+        chosen = [p for p in pts if p["agency"] == agency]
+    else:  # the matrix comes largest capital first; an overrun order ranks the shown (n >= 5) agencies by it
+        col = {"schedule_overrun": "schedule_bias", "cost_overrun": "cost_bias"}.get(sort)
+        shown = [p for p in pts if not p["hidden"] and (col is None or p[col] is not None)]
+        chosen = (sorted(shown, key=lambda p: -p[col]) if col else shown)[:limit]
     if not chosen:
         return ToolResult(summary=f"No agency record for {quote(agency, 60)}.", facts={"agency": quote(agency, 60)},
                           found=False)
@@ -1006,9 +1012,12 @@ def agency_scorecard(viewer, agency=None, limit=8) -> ToolResult:
             f", {what} {_pct(p[col])}%" for col, what in (("schedule_bias", "median schedule overrun"),
                                                           ("cost_bias", "cost overrun")) if p[col] is not None) + "."
     else:
-        summary = (f"The {_plural(len(chosen), 'largest agency')} by capital, led by {p['agency']} with "
+        order = {"capital": "largest agency", "schedule_overrun": "agency", "cost_overrun": "agency"}[sort]
+        by = {"capital": "by capital", "schedule_overrun": "with the largest schedule overrun",
+              "cost_overrun": "with the largest cost overrun"}[sort]
+        summary = (f"The {_plural(len(chosen), order)} {by}, led by {p['agency']} with "
                    f"{_plural(p['n_open'], 'open project')}.")
-    title = f"Agency {p['agency']}" if agency else "Agencies by capital"
+    title = f"Agency {p['agency']}" if agency else f"Agencies {by}"
     return ToolResult(summary=summary, facts=facts,
                       cards=[{"type": "stats", "title": title, "groupBy": "agency", "rows": rows}],
                       sources=[_src("agency", "Agency performance matrix", "PAIMANA agency matrix", when=m["asof"])])
