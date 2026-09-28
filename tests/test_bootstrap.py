@@ -91,3 +91,16 @@ def test_the_admin_run_also_brings_the_developer(env):
     env.update(PAIMANA_DEVELOPER_EMAIL=DEV, PAIMANA_DEVELOPER_PASSWORD=DEV_PW)
     assert run("--email", ADMIN) == 0
     assert accounts.user(email=DEV)["role"] == "developer" and len(accounts.admins()) == 1   # it is not an admin
+
+
+def test_the_bootstrap_accounts_ignore_the_sign_up_domain_list(env, monkeypatch, capsys):
+    """Review finding (unit B, round 1): ALLOWED_EMAIL_DOMAINS limits sign-up only; the bootstrap's own accounts (the
+    first administrator, the developer) are made whatever it says, so the developer always exists. The address's
+    shape is still checked."""
+    import dataclasses
+    monkeypatch.setattr(cfg, "settings", dataclasses.replace(cfg.settings, allowed_email_domains=("gov.in",)))
+    env.update(PAIMANA_DEVELOPER_EMAIL=DEV, PAIMANA_DEVELOPER_PASSWORD=DEV_PW)
+    assert run("--email", ADMIN) == 0, capsys.readouterr().err
+    assert accounts.user(email=DEV)["role"] == "developer" and accounts.user(email=ADMIN)["is_admin"]
+    env["PAIMANA_DEVELOPER_EMAIL"] = "not an email"
+    assert run("--developer-only") == 1 and "email address" in capsys.readouterr().err

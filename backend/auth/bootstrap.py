@@ -12,7 +12,8 @@ session it had ends. --email may be left out when ADMIN_EMAIL is set.
 Both forms then create or update the developer from PAIMANA_DEVELOPER_EMAIL and PAIMANA_DEVELOPER_PASSWORD when both
 are set (they live in .env.db): active, every feature, no scope; its password is set again only when it changed
 (which ends its sessions), and any other developer account is disabled, so the variables name the one developer.
-An email that belongs to an official's account is refused, never promoted. The api container runs the second form at
+An email that belongs to an official's account is refused, never promoted. ALLOWED_EMAIL_DOMAINS does not apply to
+either account (it limits sign-up only); the address's shape is checked. The api container runs the second form at
 every start (deploy/api-entrypoint.sh), so the account always exists. Every change writes an audit row (role
 'bootstrap'). Nothing prints a password, nor the developer's email (the account is hidden, and the container logs
 are read by operators). Exit status 0 when done or nothing to do, 1 when refused.
@@ -55,7 +56,7 @@ def _password(env: dict, email: str) -> str:
 def admin(email: str, name: str, force_reset: bool, env: dict) -> str:
     """Create (or with force_reset, reset) the administrator; returns what was done."""
     try:
-        email = passwords.normal_email(email)
+        email = passwords.normal_email(email, domains_apply=False)
     except ValueError as e:
         raise Refused(f"{email!r}: {e}") from None
     existing = accounts.user(email=email)
@@ -84,7 +85,7 @@ def developer(env: dict) -> str:
     if not email or not pw:
         return "no developer configured (PAIMANA_DEVELOPER_EMAIL and PAIMANA_DEVELOPER_PASSWORD)"
     try:
-        email = passwords.normal_email(email)
+        email = passwords.normal_email(email, domains_apply=False)
         passwords.check(pw, email)
     except ValueError as e:
         raise Refused(f"the developer account: {e}") from None

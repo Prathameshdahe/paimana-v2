@@ -7,7 +7,7 @@ when that is 3 characters or more. The password itself is kept as typed (nothing
 
 verify() never raises: a wrong password, a malformed hash or None is False. dummy_verify() spends the same time
 on nothing, so a sign-in with an unknown email takes as long as one with a known email and a wrong password.
-normal_email() trims an address and checks its shape (and settings.allowed_email_domains when set).
+normal_email() trims an address and checks its shape (and, for a sign-up, settings.allowed_email_domains when set).
 """
 from __future__ import annotations
 
@@ -95,11 +95,15 @@ def check(password: str, email: str | None = None) -> None:
         raise ValueError("the password does not meet the rules: " + "; ".join(bad))
 
 
-def normal_email(raw: str) -> str:
-    """The address trimmed; ValueError when it does not look like one or its domain is not allowed."""
+def normal_email(raw: str, domains_apply: bool = True) -> str:
+    """The address trimmed; ValueError when it does not look like one or (domains_apply: a sign-up) its domain is not
+    in settings.allowed_email_domains. The bootstrap's own accounts pass domains_apply=False: the list limits
+    sign-up only."""
     out = (raw or "").strip()
     if len(out) > EMAIL_MAX or not EMAIL_RX.fullmatch(out):
         raise ValueError("that does not look like an email address")
+    if not domains_apply:
+        return out
     domains = {d.lower().lstrip("@") for d in cfg.settings.allowed_email_domains}
     if domains and out.rsplit("@", 1)[1].lower() not in domains:
         raise ValueError("accounts are for official email addresses of " + ", ".join(sorted(domains)))

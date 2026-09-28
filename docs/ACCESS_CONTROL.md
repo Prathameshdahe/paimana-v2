@@ -47,7 +47,7 @@ characters and the account's password. Only the password's argon2 hash is kept. 
 one address, and one pending request per email. A second request for the same email, or one for an email that
 already has an account, gets 409. An administrator approves the request (the role and scope can be corrected first)
 or rejects it with a note. After approval the person signs in with the password they chose. `ALLOWED_EMAIL_DOMAINS`
-limits sign-up to official domains.
+limits sign-up to official domains (not the bootstrap's administrator and developer).
 
 **Resets.** There is no email sending. An administrator issues a one-time reset token
 (`POST /api/admin/users/{id}/reset-password`). The token is shown once and valid for 24 hours; only its sha256 is
