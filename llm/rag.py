@@ -98,7 +98,9 @@ RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "res
 KINDS = ("help", "doc", "project", "event", "research", "news", "external", "glossary")
 COLUMNS = ["id", "kind", "project_key", "visibility", "title", "text", "source", "official_source", "url", "date",
            "mentions"]
-VERSION = 2                     # the chunks' schema (2: mentions); a change rebuilds every index, vectors are reused
+# the chunks' schema (2: mentions; 3: the numbers policy, project cards in words and the 'numbers' visibility): a
+# change rebuilds every index, vectors are reused, and load() refuses an index of another version, so it is never served
+VERSION = 3
 PRJ_KEY = re.compile(r"\bPRJ-\d{6}\b")
 PROPOSAL_NO = re.compile(r"\bFP/[A-Z]{2}/[A-Z0-9]+/\d+/\d{4}\b")
 MIN_WORDS, MAX_WORDS = 180, 350

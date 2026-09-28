@@ -605,6 +605,17 @@ def test_worker_memo_input_has_no_model_numbers(monkeypatch):
     assert fc["drivers_plain"][0]["label"] in prompts[0]
 
 
+def test_an_index_saved_before_the_policy_is_never_served(tmp_path):
+    """The search index saved before the numbers policy (chunk VERSION 2) has the public project cards with the chance
+    of a slip in percent and the model-statistics docs open to officials: load() refuses it, so _refresh() does not
+    serve it while the new one is built; _rebuild() still reuses its vectors (load(any_version=True))."""
+    rag.save(rag.build_index([rag._chunk("help:1", "help", "public", "Help", "what the tiers mean", "PAIMANA help")],
+                             "before"), tmp_path)
+    meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
+    (tmp_path / "meta.json").write_text(json.dumps({**meta, "version": 2}), encoding="utf-8")
+    assert rag.load(tmp_path) is None and rag.load(tmp_path, any_version=True) is not None
+
+
 def test_model_statistics_docs_only_for_the_developer():
     rows = [rag._chunk("doc:a", "doc", "official", "Method", "how the tiers are cut", "docs/A.md"),
             rag._chunk("doc:b", "doc", "numbers", "Backtest", "validation results", "docs/MODEL_UPGRADES_2026-09.md"),
