@@ -7,13 +7,22 @@
  * events, `:` lines are comments (heartbeats) and `\r\n` line ends are read like `\n`. Unknown event names and
  * undecodable data are skipped, so a newer backend cannot break an older page.
  *
- * Errors, as ApiError (lib/api.ts): status 0 the backend is not reachable (or the stream broke); 429 the rate limit,
- * its message the backend's JSON `detail` (which says when to ask again; else built from Retry-After); any other
- * status with the detail when there is one. Aborting the signal
- * rejects with the fetch AbortError; the caller tells a stop from a failure by `signal.aborted`.
+ * Errors, as ApiError (lib/api.ts): status 0 the backend is not reachable; 429 the rate limit, its message the
+ * backend's JSON `detail` (which says when to ask again; else built from Retry-After); any other status with the
+ * detail when there is one. A stream that breaks after the answer began is a StreamBroken (the backend was reached,
+ * so it is not "offline"). Aborting the signal rejects with the fetch AbortError; the caller tells a stop from a
+ * failure by `signal.aborted`.
  */
 import { API_BASE, ApiError, url, viewerHeaders } from '@/lib/api'
 import type { ChatEvent, ChatEventName, ChatRequest, ChatTurn } from '@/contracts/assistant'
+
+/** the connection broke after the answer began streaming: the backend is up, the answer is cut short */
+export class StreamBroken extends Error {
+  constructor(message = 'The connection broke off mid-answer; ask again.') {
+    super(message)
+    this.name = 'StreamBroken'
+  }
+}
 
 /** SPEC 4: at most 12 turns of at most 1000 characters */
 export const MAX_TURNS = 12
@@ -148,7 +157,7 @@ export async function streamChat(
       chunk = await reader.read()
     } catch (e) {
       if (signal?.aborted) throw e
-      throw new ApiError(0, 'the connection to the backend broke off mid-answer')
+      throw new StreamBroken()
     }
     if (chunk.done) break
     emit(parser.push(decoder.decode(chunk.value, { stream: true })))

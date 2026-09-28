@@ -3,7 +3,7 @@ import { matchPath, useLocation } from 'react-router-dom'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Bot, ChevronRight, Crosshair, Eraser, Send, ShieldCheck, Sparkles, Square, X } from 'lucide-react'
 import { ApiError, isOffline, START_BACKEND } from '@/lib/api'
-import { MAX_CHARS, chatMessages, streamChat } from '@/lib/chatStream'
+import { MAX_CHARS, StreamBroken, chatMessages, streamChat } from '@/lib/chatStream'
 import { usePortfolio, useProject } from '@/lib/queries'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { TIER_LABEL, tierKey } from '@/lib/riskPalette'
@@ -78,6 +78,7 @@ function applyEvent(t: AssistantTurn, e: ChatEvent): AssistantTurn {
 }
 
 function problemOf(e: unknown): Problem {
+  if (e instanceof StreamBroken) return { kind: 'cut', message: e.message }
   if (isOffline(e)) return { kind: 'offline', message: e instanceof Error ? e.message : String(e) }
   if (e instanceof ApiError && e.status === 429) return { kind: 'limit', message: e.message }
   return { kind: 'failed', message: e instanceof ApiError ? `${e.message} (error ${e.status})` : String(e) }
