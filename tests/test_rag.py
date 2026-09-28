@@ -4,6 +4,7 @@ embedder is a fake (hashed bag of words); LM Studio is never called."""
 import hashlib
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,8 +14,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from backend import serving  # noqa: E402
 from backend.access import Viewer  # noqa: E402
 from llm import client, rag  # noqa: E402
+
+REAL_STATE = serving.state
 
 DIM = 64
 SYNONYMS = {"frozen": "stalled", "works": "progress"}  # what the fake embedder "understands" and TF-IDF does not
@@ -60,14 +64,19 @@ class ScopedViewer:  # an agency or ministry official without the serving lookup
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    """The real fingerprint over a fake served state (env["served"]; bump its version to change the data), fake
+    chunks (env["chunks"]) and a fake embedder; no app database."""
     rag.reset()
     monkeypatch.setattr(rag, "RAG_DIR", tmp_path / "rag")
     monkeypatch.setattr(client, "_down_at", -1e9)
-    state = {"fp": "fp1", "chunks": CHUNKS, "builds": 0, "embedded": []}
-    monkeypatch.setattr(rag, "fingerprint", lambda: state["fp"])
+    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "absent.db"))
+    state = {"served": {"version": (1,), "gold_version": "g1", "model_version": "m1", "asof": "2026-07-01"},
+             "chunks": CHUNKS, "builds": 0, "built_from": [], "embedded": []}
+    monkeypatch.setattr(serving, "state", lambda: state["served"])
 
-    def build_chunks():
+    def build_chunks(s=None):
         state["builds"] += 1
+        state["built_from"].append(s)
         return [dict(c) for c in state["chunks"]]
 
     def embed(texts, **kw):
@@ -173,7 +182,7 @@ def test_rag_embed_off_never_calls_the_embedder(env, monkeypatch):
 
 
 def test_search_never_raises_without_an_index(env, monkeypatch):
-    def broken():
+    def broken(s=None):
         raise RuntimeError("gold files missing")
     monkeypatch.setattr(rag, "build_chunks", broken)
     monkeypatch.setattr(rag, "WAIT_S", 5)
@@ -201,18 +210,44 @@ def test_fingerprint_staleness_and_embedding_reuse(env, monkeypatch):
 
     changed = [dict(c) for c in CHUNKS]
     changed[3]["text"] = "Alpha bridge in Karnataka. Land acquisition complete; work resumed."
-    env["chunks"], env["fp"] = changed, "fp2"
+    env["chunks"], env["served"] = changed, {**env["served"], "version": (2,)}
     idx = rag.ensure_index(background=False)
-    assert env["builds"] == 2 and idx.fingerprint == "fp2"
+    fp2 = rag.fingerprint()
+    assert env["builds"] == 2 and idx.fingerprint == fp2 and env["built_from"][-1] is env["served"]
     assert len(env["embedded"]) == len(CHUNKS) + 1          # only the changed chunk was embedded again
     assert "resumed" in rag.search("work resumed", IPMD, k=1)[0]["text"]
 
     rag.reset()                                  # a restart: the saved index is current, so it is only loaded
     monkeypatch.setattr(rag, "CHECK_S", 0)
     idx = rag.ensure_index(background=False)
-    assert env["builds"] == 2 and idx.fingerprint == "fp2" and idx.dense_ready
+    assert env["builds"] == 2 and idx.fingerprint == fp2 and idx.dense_ready
     assert idx.rows[0]["project_key"] is None and idx.rows[6]["official_source"].endswith("p. 12")
     assert idx.emb.dtype == np.float16
+
+
+def test_fingerprint_follows_the_served_state_not_the_files(env, monkeypatch):
+    """The report watcher pins the served version while an ingest rewrites the files: an index built meanwhile is
+    built from, and stamped with, the pinned version, and is rebuilt once the new version is served."""
+    old = {"version": (1,), "gold_version": "g1", "model_version": "m1", "asof": "2026-04-01"}
+    new = {"gold_version": "g2", "model_version": "m2", "asof": "2026-07-01"}
+    monkeypatch.setattr(serving, "state", REAL_STATE)       # the real pin and reload logic over fake data
+    monkeypatch.setattr(serving, "_state", old)
+    monkeypatch.setattr(serving, "_pinned", threading.Event())
+    monkeypatch.setattr(serving, "_failed_at", -1e9)
+    monkeypatch.setattr(serving, "_version", lambda: (2,))  # the ingest has rewritten the files already
+    monkeypatch.setattr(serving, "_load", lambda: dict(new))
+    serving.pin(True)
+    idx = rag.ensure_index(background=False)
+    assert env["built_from"] == [old] and idx.fingerprint == rag.fingerprint() == rag.fingerprint(old)
+    monkeypatch.setattr(rag, "CHECK_S", 0)
+    rag.ensure_index(background=False)
+    assert env["builds"] == 1                       # still pinned: the index is current for what is served
+    serving.pin(False)                              # the ingest is done: the next check sees the new version
+    idx = rag.ensure_index(background=False)
+    assert env["builds"] == 2 and env["built_from"][-1]["gold_version"] == "g2"
+    assert idx.fingerprint == rag.fingerprint() != rag.fingerprint(old)
+    changed = rag.fingerprint({**new, "version": (2,), "asof": "2026-10-01"})
+    assert changed != idx.fingerprint               # every part of the served version counts
 
 
 def test_background_build_serves_when_done(env):

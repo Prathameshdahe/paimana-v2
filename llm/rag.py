@@ -32,10 +32,14 @@ computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-
 raises for an LLM outage.
 
 Artifacts in dataset/rag/ (gitignored): chunks.parquet, embeddings.npy (float16, row i for chunk i, zeros where
-missing), meta.json with the input fingerprint: chunker VERSION, embedding model, gold and model version, asof, the
-serving data version (external_summary.json mtime), the docs and research file mtimes, and the max signal id and
-link and agent-fact counts of the app database. ensure_index() serves the saved index and, when the fingerprint
-moved (checked at most every CHECK_S seconds), rebuilds in a background thread: the new chunks are served on TF-IDF
+missing), meta.json with the input fingerprint: chunker VERSION, embedding model, the served data state (its version,
+the external_summary.json mtime, and its gold and model version and asof), the docs and research file mtimes, and the
+max signal id and link and agent-fact counts of the app database. The data part is read from the same
+serving.state() the chunks are built from, never from the files: while the report watcher pins the old version
+during an ingest, or a failed reload keeps it, the files are newer than what is served, and an index built then
+carries the served version's fingerprint, so it is rebuilt once the new version is served. ensure_index() serves the
+saved index and, when the fingerprint moved (checked at most every CHECK_S seconds), rebuilds in a background
+thread: the new chunks are served on TF-IDF
 as soon as they are built, then the chunks whose text changed are embedded (the rest keep their vectors, by content
 hash), pausing while a chat request waits for the LLM (client.chat_active). A failed embedding run is retried after
 EMBED_RETRY_S; a failed query embedding falls back to TF-IDF for QUERY_RETRY_S.
@@ -621,9 +625,10 @@ def glossary_chunks() -> list[dict]:
     return out
 
 
-def build_chunks() -> list[dict]:
-    """Every chunk of the current inputs (module docstring), ids unique."""
-    s = serving.state()
+def build_chunks(s: dict | None = None) -> list[dict]:
+    """Every chunk of the current inputs (module docstring), ids unique; s is the served data state (serving.state()
+    by default)."""
+    s = serving.state() if s is None else s
     names = _names(s)
     out = (help_chunks() + doc_chunks() + project_chunks(s) + event_chunks(s, names) + research_chunks(names)
            + news_chunks(names) + external_chunks(s, names) + glossary_chunks())
@@ -661,11 +666,13 @@ def _app_marks() -> dict:
         return {"error": str(e)}
 
 
-def fingerprint() -> str:
-    """Hash of everything the chunks are built from (module docstring); a change means the index is stale."""
-    ptr = json.loads(serving.POINTER.read_text(encoding="utf-8"))
-    parts = {"version": VERSION, "embed_model": client.LLM_EMBED_MODEL, "gold": ptr.get("gold_version"),
-             "model": ptr.get("model_version"), "asof": ptr.get("asof"), "data": _mtime(serving.EXTERNAL_SUMMARY),
+def fingerprint(s: dict | None = None) -> str:
+    """Hash of everything the chunks are built from (module docstring); a change means the index is stale. The data
+    part comes from s, the served data state (serving.state() by default) that build_chunks(s) reads, not from the
+    files on disk, which run ahead of it while serving is pinned or a reload failed."""
+    s = serving.state() if s is None else s
+    parts = {"version": VERSION, "embed_model": client.LLM_EMBED_MODEL,
+             "data": [s.get("version"), s.get("gold_version"), s.get("model_version"), s.get("asof")],
              "files": {f: _mtime(ROOT / f) for f in (HELP, *DOCS, FEATURE_LABELS)},
              "research": [_mtime(RESEARCH_FACTS), _mtime(RESEARCH_PROJECTS)], "app": _app_marks()}
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
@@ -909,12 +916,14 @@ def _stale(idx: Index | None, fp: str) -> bool:
             and not client.down_recently())
 
 
-def rebuild(embed: bool = True, previous: Index | None = None) -> Index:
-    """Build from the current inputs now, reusing the vectors of unchanged chunks, then serve and save it."""
+def rebuild(embed: bool = True, previous: Index | None = None, s: dict | None = None) -> Index:
+    """Build from the current inputs now, reusing the vectors of unchanged chunks, then serve and save it. s is the
+    served data state both the chunks and the fingerprint are taken from (serving.state() by default)."""
     t0 = time.monotonic()
-    fp = fingerprint()
+    s = serving.state() if s is None else s
+    fp = fingerprint(s)
     previous = previous or _index or load()
-    rows = build_chunks()
+    rows = build_chunks(s)
     t1 = time.monotonic()
     idx = build_index(rows, fp, previous)
     t2 = time.monotonic()
@@ -943,7 +952,8 @@ def _refresh(raise_errors: bool = False) -> None:
             idx = load()
             if idx is not None:
                 _publish(idx)
-        fp = fingerprint()
+        s = serving.state()            # once: the fingerprint and the chunks describe the same data version
+        fp = fingerprint(s)
         if not _stale(idx, fp):
             return
         if idx is not None and idx.fingerprint == fp:
@@ -951,7 +961,7 @@ def _refresh(raise_errors: bool = False) -> None:
             _publish(idx)
             save(idx)
         else:
-            rebuild(previous=idx)
+            rebuild(previous=idx, s=s)
     except Exception:
         _build_failed_at = time.monotonic()
         log.exception("rag: index build failed")
@@ -996,8 +1006,11 @@ def search(query: str, viewer, k: int = 6, kinds: set[str] | None = None,
 
 
 def reset() -> None:
-    """Forget the served index and every retry timer (tests)."""
+    """Forget the served index and every retry timer (tests); a background refresh still running (a search starts
+    one) is waited for first, so it cannot publish into the next test."""
     global _index, _checked_at, _build_failed_at, _embed_failed_at, _query_failed_at
+    with _build_lock:
+        pass
     _index = None
     _ready.clear()
     _building.clear()
