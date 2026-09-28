@@ -102,19 +102,38 @@ characters; only its first 1000 are read.
 |---|---|---|---|---|---|
 | `search_projects` | the project list: name words, tier, sector, state, ministry, agency, flag, near completion, sort | ✓ | scoped | scoped | ✓ |
 | `portfolio_stats` | counts, capital, tier counts by state, sector, ministry or tier | ✓ | scoped | scoped | ✓ |
-| `get_project` | tier, chance of a slip, progress, cost, dates, top risks in plain words | public page | + intervals, flagged checks | + intervals, flagged checks | full |
-| `project_history` | report timeline and what changed between the last reports | timeline | + tier alerts, prediction log | + tier alerts, prediction log | full |
+| `get_project` | tier, the outlook in words (developer: the chance of a slip), progress, cost, dates, top risks in plain words | public page | + flagged checks | + flagged checks | + flagged checks |
+| `project_history` | report timeline and what changed between the last reports | timeline | + tier alerts (in words), tier history | + tier alerts (in words), tier history | + tier alerts (in words), tier history |
 | `compare_projects` | 2-4 projects side by side | ✓ | scoped | scoped | ✓ |
 | `project_research` | web research facts; portfolio blockers without a key | no match reasons, no agent headlines | + linked news | + linked news | + linked news |
 | `external_factors` | land, forest, court, contractor, utility, inter-agency; per project or across the portfolio | factor names, public evidence strings | + check evidence, PARIVESH detail | + check evidence, PARIVESH detail | full |
 | `search_knowledge` | help, glossary, docs and record text (`llm/rag.py`) | public chunks (no research-agent headlines) | scoped | scoped | ✓ |
-| `explain_prediction` | the five SHAP drivers in plain labels with direction words, flagged checks with evidence | – | scoped | scoped | ✓ |
+| `explain_prediction` | the five drivers in plain words with direction and strength (developer: values and SHAP contributions), flagged checks with evidence in words | – | scoped | scoped | ✓ |
 | `second_opinion` | the cached AI second opinion (`llm.second_opinion.cached`), never generated in chat | – | scoped | scoped | ✓ |
-| `agency_scorecard` | agency matrix: schedule and cost overrun, open projects, Critical / High counts (null when some of the agency's open projects are outside the scope) | – | all agencies, own by default | their ministry's agencies | ✓ |
+| `agency_scorecard` | agency matrix: schedule and cost words (developer: the overrun statistics), open projects, Critical / High counts (null when some of the agency's open projects are outside the scope); ranked by schedule or cost overrun on request | – | all agencies, own by default | their ministry's agencies | ✓ |
 | `bottlenecks` | clusters of projects held up by one open issue and place | – | scoped | scoped | ✓ |
 
 Public outputs are built from `serving.public_project`, `public_page`, `public_external`, `public_research` and
 `public_research_summary`, the same redaction as the public pages.
+
+### Model numbers
+
+The numbers policy of `docs/ACCESS_CONTROL.md` holds in the chat too: only a viewer with the `numbers` feature (the
+developer) reads the model's own numbers. For everyone else, officials included, every tool reads the project
+through `serving.plain_*`: no probability, quantile, SHAP value, rank, agency statistic, composite score or linker
+score reaches the facts or the cards. They carry words instead: `"outlook": {"delay": "likely", "cost_rise":
+"unlikely", "likely_slip": "6 to 12 months", "over": "the next two quarters"}` in the facts and the Outlook block
+(`outlook: {delay, cost, slip, horizon}`) on the `project`, `projects` and `explain` cards (whose `pAny2q`,
+`pDatePush2q`, `pCostRev2q` and `monthsP50` are null; the `explain` card's `drivers` is empty and `driversPlain`
+holds `{label, direction, strength}`), the drivers as `{input, effect, strength}`, the agencies' `schedule` and
+`cost` words, tier alerts rewritten in words, and checklist evidence in words (`serving.plain_text`). The writer's
+prompt adds `agent.NO_NUMBERS` (repeat the outlook's words, never a probability), the answer check rejects model
+internals (SHAP, log-odds, quantile ...) for any such viewer, and since the facts hold no probability the number
+check refuses one. The cached second opinion is the viewer's view (`second_opinion.cached(key, numbers)`). The
+search index keeps the docs that report the model's evaluation statistics (`rag.NUMBERS_DOCS`: PR-AUC,
+calibration, lifts) at visibility `numbers`, read by the developer only, and its project cards state the outlook
+in words. The developer gets everything as before, the words as well. `tests/test_numbers_policy.py` runs every
+tool as the public, an agency, a ministry and an IPMD viewer and scans the facts and cards for hidden keys.
 
 ## Guardrails
 
@@ -131,6 +150,8 @@ Public outputs are built from `serving.public_project`, `public_page`, `public_e
   the wrong thing; it does not check words such as a tier or a cause.
 - **The public prompt** talks about tiers, chances, progress, cost and dates and never mentions model internals;
   public tools carry no drivers, intervals or evidence lines, and a public answer naming one is rejected.
+- **No model numbers but for the developer** (Model numbers above): the facts hold the outlook in words, the
+  prompt says so, and an answer naming a model internal is rejected for every viewer without `numbers`.
 - **One LLM call at a time.** The answer holds `client.gate(chat=True)` from its first LLM call to its end;
   background jobs that take the gate (the research agent, the second-opinion job) and the search index's embedding
   refresh pause while a chat is active. The project brief (waits up to 120 s, then says the LLM is busy) and the worker cell take the

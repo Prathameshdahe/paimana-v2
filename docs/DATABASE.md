@@ -50,7 +50,9 @@ byte-identical to his handoff (`001_core_identity` → `84b98df29a61` → `b704a
 → `005_ingestion_staging`); PAIMANA's continue the chain: `1f3a9c2d7b40` (the app state tables), `2c8d4e6f1a57`
 (users, sessions, sign-up requests, login attempts; `citext` for emails), `3e5f7a9b2c68` (`rag_chunks` with the
 `vector` extension and its HNSW index, `rag_meta`), `4a6b8c0d3e79` (the served scores as columns of
-`ml.predictions`, a CHECK on our tiers, `run_id` / `entry_id` / `feature_list_json` on `ml.model_registry`).
+`ml.predictions`, a CHECK on our tiers, `run_id` / `entry_id` / `feature_list_json` on `ml.model_registry`),
+`6c8e0a2b4d91` (`app.briefs.view`, `numbers` or `plain`, in its primary key: the numbers policy's two briefs of a
+project are cached apart; the briefs stored before are `numbers`).
 `migrations/env.py` creates the four schemas if missing and takes an advisory lock, so the compose `migrate` service
 and the API's own `db.init()` can both run.
 

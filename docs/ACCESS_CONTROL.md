@@ -202,3 +202,44 @@ exactly like an unknown key. The public writer prompt never mentions model inter
 names one is rejected. The rate limit keys on the account when signed in and on the client address for the public
 (`backend/ratelimit.py`). A refused request gets 429 before anything streams. Nothing about a question is stored or
 logged.
+
+
+## Model numbers (the `numbers` feature)
+
+Officials and the public read a project without statistics: the tier, the outlook and the reasons in words, the
+report facts, the evidence and the AI brief and second opinion. The model's own numbers go only to a viewer with
+the `numbers` feature, the hidden `developer` role (SPEC9_ui sections 6 and 7; the role and its features are
+unit B's `POLICY`). The backend cuts every response for everyone else (`backend/serving.py` `plain_*`, applied in
+`backend/routes.py` when `not v.can("numbers")`), not just the UI: a hidden number keeps its key and goes out as
+null (a list of SHAP values as `[]`), so the response shapes do not change.
+
+Hidden (null without `numbers`): the four probabilities (`pAny2q`, `pDatePush2q`, `pCostRev2q`, `pAny4q`), the slip
+and cost quantiles (`monthsP05/50/95`, `costPctP05/50/95`) and the completion dates derived from them
+(`p05/p50/p95`), `tierRankPct`, `tierByRank`, `shapTop5`; the bottlenecks' `meanPAny2q` and `meanMonthsP50`; the
+agency matrix's `scheduleBias*`, `costBias*`, `sectorScheduleBias`, `sectorCostBias`, `shrinkWeight` and `trend`;
+the analogues' `distance` and outcome figures (`yMonths`, `yCostPct`, `yAny`, `yDatePush`, `yCostRev`); the external
+composite's scores and score distribution; the notice backtest's lifts; the measured hidden-delay priors' months,
+shares, intervals and p-values; the news linker's `linkScore`. Text is cut too: the checklist's evidence lines
+(`P = 0.87 (High-tier cut 0.85)`, the agency's timeline statistics, a composite score, a measured hidden delay with
+its interval) and the alert feed and stream (a tier alert's `P(date push or cost revision, 2q) = 0.91`) are
+rewritten in words. The developer's brief and second opinion keep the numbers; everyone else's are made from a
+payload that has none, so their text, checked against it, cannot carry one; each view is cached on its own. The
+search index keeps the docs that report the model's evaluation statistics for the developer. Report facts stay
+numeric: cost, spend, progress, dates, months of delay to date, counts, parcels, hectares, months in a stage.
+
+Words, for every viewer (the developer too, so the UI reads one field):
+
+| Field | Where | Values |
+|---|---|---|
+| `outlook {delay, cost, slip, horizon}` | project scores, list and map rows, the portfolio's top list, bottleneck members, External Factors cards, chat cards | `delay` / `cost`: the chance of a completion-date push / a cost revision within the next two quarters, `very likely` (>= 0.75), `likely` (>= 0.5), `possible` (>= 0.25), `unlikely`; `slip`: the median further slip, `under 6 months`, `6 to 12 months`, `1 to 2 years`, `over 2 years`; null where the model gives none (the Watch tier); `horizon` always `next two quarters` |
+| `driversPlain [{label, direction, strength}]` | project scores, list rows (empty for the public) | the five SHAP drivers in plain labels (`backend/labels.py` `DRIVER_LABELS`, no digits or units), `raises` / `lowers`, `strong` / `moderate` / `slight` by tercile of the project's own drivers |
+| `topReason` | list and map rows, the portfolio's top list | the first driver that raises the risk, else the first flagged check; the public's is always the flagged check |
+| `scheduleWord`, `costWord` | agency matrix | `usually later` / `about on time` / `usually earlier` (median schedule bias beyond +-10%), `usually costs more` / `about as planned` / `usually costs less` (beyond +-5%), `too few projects` |
+| `extraMonthsWord` (`extra_months_word` in the summary's rows) | the project's hidden-delay priors, External Factors | `no measurable extra delay`, `a few months`, `about half a year`, `about a year`, `over a year`; null when too few projects to measure |
+| `completion.band`, analogues' `outcome` and `yearsAgo` | forecast | the slip band; `slipped` / `held` / `unknown` and whole years ago |
+
+`GET /api/projects/map` (every role; the filters of `/api/projects`, unpaged, at most 5,000 rows) serves the
+command centre's risk map with no model number for anyone. The forecast keeps the scenario curves and their band
+for everyone: the chart draws them and prints no value. `backend/schemas.py` documents every shape field by field;
+`tests/test_numbers_policy.py` scans every endpoint recursively for the hidden keys as the public, an agency, a
+ministry and an IPMD viewer, and checks that the developer still gets them.

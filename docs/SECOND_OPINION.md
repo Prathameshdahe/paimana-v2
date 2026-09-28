@@ -70,6 +70,15 @@ never as instructions.
 included. A new report, a new research fact or a new headline makes a new hash, so the opinion is asked again. Nothing
 in the pack depends on the clock.
 
+**Two views** (the numbers policy, `docs/ACCESS_CONTROL.md`). A viewer without the `numbers` feature (every official)
+gets the `plain` pack: the `model` item states the tier and the outlook in words ("Over the next two quarters: a
+completion-date push is likely; a cost revision is unlikely within the next two quarters; likely further slip 6 to
+12 months") and the checklist items quote their evidence in words (no `P = 0.87 (High-tier cut ...)`, no measured
+hidden-delay months). The developer gets the `numbers` pack, as before. The plain pack's hash also covers the view,
+so the two are stored and served apart (`view` on `SecondOpinionOut`); the numbers pack hashes as it did before the
+views, so the opinions stored earlier stay the developer's. The nightly job asks for the plain view; the
+developer's is asked on demand. The checks are the same, so a plain opinion cannot carry a model number either.
+
 ## The prompt
 
 - The LLM sees groups 1 to 4 only. The context items stay in the pack (for the officer, the API and the hash) but are
@@ -149,8 +158,9 @@ That is why the evaluation below includes a human review.
   client's breaker, shared with the chat and the brief, so the next ask returns at once (`down: true`); a slow answer
   does not trip it.
 
-**`llm.second_opinion.cached(key)`** returns the same dict as the 200 body (snake_case keys, `cached: True`) for the
-current evidence, or `None` (no accepted opinion, or not scored). It makes no LLM call.
+**`llm.second_opinion.cached(key, numbers=False)`** returns the same dict as the 200 body (snake_case keys,
+`cached: True`) for the current evidence in that view, or `None` (no accepted opinion, or not scored). It makes no
+LLM call.
 
 **`POST /api/jobs/second-opinion[?project_key=]`** (IPMD, `jobs`) runs the job now, in the background, for one
 project or the next batch. It returns `JobStarted {started, detail, pending}`; `started: false` while a run is going.
