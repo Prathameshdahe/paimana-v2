@@ -105,7 +105,7 @@ Deployment. Docker Compose with five containers (postgres, migrate, api, web, ba
 - `scripts/`: `first-run.sh|ps1`, `gen-dev-cert.sh|ps1`, `backup.*`, `restore.*`, `check.*`.
 - `tests/`: 46 `test_*.py` files with 530 test functions, `conftest.py`, `viewers.py`, `chat_eval.jsonl`, `stress_synthetic.py`.
 - `docs/`: the 16 Markdown documents listed in section 10.3; `docs/screenshots/` holds 11 PNGs for the teammate tour.
-- Root: `README.md`, `requirements.txt`, `pytest.ini`, `alembic.ini`, `docker-compose.yml`, `docker-compose.dev.yml`, `Dockerfile.api`, `Dockerfile.web`, `.env.example`, `.env.production.example`, `.github/workflows/check.yml`.
+- Root: `README.md`, `requirements.txt`, `pytest.ini`, `alembic.ini`, `docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.demo.yml`, `Dockerfile.api`, `Dockerfile.web`, `Dockerfile.demo` (with `Dockerfile.demo.dockerignore`), `.env.example`, `.env.production.example`, `.github/workflows/check.yml`.
 
 The branch holds 335 commits.
 
@@ -703,6 +703,8 @@ First run: `sh scripts/first-run.sh` on Linux, or `scripts\first-run.ps1 -Dev` o
 
 `.env.production.example` sets `SERVER_NAME`, `WEB_HTTP_PORT` 80, `WEB_HTTPS_PORT` 443, `PAIMANA_SUBNET`, `LM_STUDIO_URL=http://host.docker.internal:1234/v1`, `BACKUP_HOUR`, `BACKUP_KEEP_DAYS`, `PARIVESH_SNAPSHOT=1`, `PARIVESH_SNAPSHOT_INTERVAL_H=6`, `BHOOMI_PULL=0`, `BHOOMI_PULL_EVERY_D=91`, `SECURE_COOKIES=1`, `ALLOWED_ORIGINS=https://localhost`, `ALLOWED_HOSTS=localhost,127.0.0.1`, `TRUSTED_PROXIES=10.201.0.0/24`, `API_DOCS=0`. A real server changes `SERVER_NAME`, `ALLOWED_ORIGINS` and `ALLOWED_HOSTS`, puts a CA certificate (`fullchain.pem`, `privkey.pem`) in `deploy/certs/` (certbot standalone or DNS challenge, `docker compose restart web` after renewal), opens only 80 and 443, keeps port 1234 closed to the outside, and on Linux runs `chown -R 1000:1000 dataset database temp`. Updates: `git pull && docker compose build && docker compose up -d` (migrate runs first); rebuild monthly for base-image fixes. Password rotation: `ALTER USER paimana PASSWORD`, edit `.env.db`, `docker compose up -d`. Prerequisites: Docker Engine 24 or later with Compose v2, or Docker Desktop; about 8 GB of RAM for the stack; LM Studio on the host.
 
+The demo stack (`docker-compose.demo.yml`, project `paimana-demo`, network `10.202.0.0/24`; `docs/DEPLOYMENT.md`, Demo) runs the same app from one command with no setup files: `postgres`, a one-shot `init` (`deploy/demo-init.sh`: the extensions, `alembic upgrade head`, `pipeline.run serve`), `api` (`Dockerfile.demo` target `api`: the api image with `dataset/`, `model/` and the JSON stores inside it, `DEMO_LOGIN=1`, `API_DOCS=1`) and `web` (target `web`: plain-http nginx from `deploy/nginx.demo.conf` on `127.0.0.1:8080`). `scripts/demo-save.*` exports the three images to `paimana-demo-images.tar.gz`.
+
 ---
 
 ## 10. Team credit, glossary, the other documents
@@ -760,7 +762,7 @@ First run: `sh scripts/first-run.sh` on Linux, or `scripts\first-run.ps1 -Dev` o
 - `docs/EXTERNAL_DATA_CROSSCHECK.md`: Garvit's guide and mock files checked against the real data; what was implemented; link precision; the measured priors against the guessed bands (counts before the research sweep).
 - `docs/EXTERNAL_FACTORS_GUIDE.md`: Garvit's imported guide (Maharashtra only, mock outcomes); historical, the origin of the method.
 - `docs/EXTERNAL_RESEARCH_2026-09.md`: the September research on the external sources, access rules, linking precision, what did not help prediction and why, the measured priors, the two portal jobs, open gaps.
-- `docs/HELP.md`: the in-app help the assistant indexes (tiers, outlook words, Watch, Stalled, the checks, sources, data age, what the assistant can and cannot do, limitations). Its last bullet still calls the sign-in a role picker; the sign-in is real.
+- `docs/HELP.md`: the in-app help the assistant indexes (tiers, outlook words, Watch, Stalled, the checks, sources, data age, what the assistant can and cannot do, limitations). Its last bullet describes the real sign-in and the demo's one-click roles (corrected 2026-09-29).
 - `docs/IMPLEMENTATION_GUIDE_v2.md`: the v2 build decisions and the team guide to layers, silver, gold, models, backtest, registry, serving and pages. Its SQLite line is superseded by PostgreSQL.
 - `docs/MODEL_UPGRADES_2026-09.md`: the upgrade round, the harness, results per target, intervals, tuning, rejections, caveats, runtime, how to reproduce.
 - `docs/PROJECT_OVERVIEW.md`: a plain-English narrative of the whole system; its SQLite, "35 endpoints", "four jobs", checklist list, worker steps and metric figures are stale.
@@ -771,7 +773,7 @@ First run: `sh scripts/first-run.sh` on Linux, or `scripts\first-run.ps1 -Dev` o
 
 ### 10.4 Claims in older documents that the code has overtaken
 
-- "It's only a role picker, there's no auth"; "the role and its scope come from request headers" (README, HELP.md, AI_ASSISTANT guardrails): the sign-in is real (argon2id, HttpOnly cookie, CSRF, lockouts); the viewer is built from the session cookie.
+- "It's only a role picker, there's no auth"; "the role and its scope come from request headers" (README, AI_ASSISTANT guardrails; HELP.md said so until 2026-09-29): the sign-in is real (argon2id, HttpOnly cookie, CSRF, lockouts); the viewer is built from the session cookie.
 - "Worker Console for IPMD Analyst and Ministry Official"; "IPMD runs jobs"; "Check inbox now (IPMD)"; portal jobs "started by an IPMD analyst" (README, TEAMMATE_GUIDE, EXTERNAL_RESEARCH, SECOND_OPINION): `/workers`, `/models`, every `POST /api/jobs/*`, the worker trigger and the audit log belong to the developer alone; IPMD analysts see counts and approve memos.
 - "The top bar shows the first four" (README): five inline, the rest under More.
 - `python -m backend.test_smoke` (README): no such file; the tests are pytest under `tests/`.

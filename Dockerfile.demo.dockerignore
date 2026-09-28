@@ -1,0 +1,41 @@
+# What never enters the demo images (Dockerfile.demo; BuildKit reads this file instead of .dockerignore for that
+# Dockerfile). Unlike .dockerignore it lets dataset/, model/ and database/*.json in: the demo api carries the data.
+# Secrets, the git-ignored intermediates (rebuilt by the pipeline) and the raw PDF corpus of the team drive stay out.
+# docs/ goes in without its screenshots: the assistant indexes docs/HELP.md and the other documents (llm/rag.py).
+.git
+.gitignore
+.claude
+.vscode
+.idea
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.pytest_cache
+.env
+.env.*
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+database/*.db
+database/*.db-journal
+temp
+backups
+deploy/certs
+docs/screenshots
+tests
+mlruns
+*.tar
+*.tar.gz
+dataset.zip
+Dataset drive folder
+dataset/rag
+dataset/clean/_parts
+dataset/clean/performance/performance_detail.csv
+dataset/clean/projects/project_summaries.csv
+dataset/clean/projects/projects_monthly.csv
+dataset/clean/projects/projects_quarterly.csv
+dataset/silver/typed_rows.parquet
+dataset/silver/identity/resolved_rows.parquet
+dataset/raw/inbox/*
+!dataset/raw/inbox/README.md

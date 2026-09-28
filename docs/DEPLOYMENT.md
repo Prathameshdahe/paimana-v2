@@ -5,6 +5,35 @@ Docker Desktop, with LM Studio on the host next to it. The security properties o
 [SECURITY.md](SECURITY.md) (Deployment); the database in [DATABASE.md](DATABASE.md); sign-in and roles in
 [ACCESS_CONTROL.md](ACCESS_CONTROL.md).
 
+## Demo
+
+For showing the prototype on one laptop there is a second, self-contained stack, `docker-compose.demo.yml`, that
+needs no `.env`, no `.env.db`, no certificate and no first-run script:
+
+```
+docker compose -f docker-compose.demo.yml up -d --build
+```
+
+| Container | Image | Role | Published |
+|---|---|---|---|
+| `web` | `paimana-demo-web` (`Dockerfile.demo`, target `web`) | the dashboard and the `/api/` proxy on plain http (`deploy/nginx.demo.conf`: the production locations, headers and limits without TLS and HSTS, a looser sign-in limit, `/docs` reachable) | `127.0.0.1:8080` (`DEMO_PORT`) |
+| `api` | `paimana-demo-api` (`Dockerfile.demo`, target `api`) | the api of `Dockerfile.api` with `dataset/`, `model/` and the JSON stores copied into the image; `DEMO_LOGIN=1`, `API_DOCS=1`, `SECURE_COOKIES=0` | nothing |
+| `init` | `paimana-demo-api` | `deploy/demo-init.sh`: the `vector` and `citext` extensions, `alembic upgrade head`, the serving tables; runs to completion before the api starts, at every `up` (every step is idempotent) | nothing |
+| `postgres` | `pgvector/pgvector:pg16` | application truth (volume `pgdata` of the project `paimana-demo`) | nothing |
+
+`Dockerfile.demo.dockerignore` replaces `.dockerignore` for that Dockerfile: it lets the data in and keeps the
+secrets, the git-ignored intermediates (`dataset/clean/_parts`, the typed-row Parquet, `dataset/rag/`) and the raw
+PDFs out, so the image holds what a fresh clone holds. The api writes (the watcher's pipeline, the live jobs, memo
+decisions) go into the container; `docker compose -f docker-compose.demo.yml down` puts it back to the image and
+`down -v` also drops the database. LM Studio is reached as `host.docker.internal:1234` as in production
+(`LM_STUDIO_URL`, `LLM_MODEL`, `LLM_EMBED_MODEL` override it); `LIVE_JOBS=0` keeps the background loops off.
+`scripts/demo-save.*` writes the three images to `paimana-demo-images.tar.gz` for a machine without internet
+(`docker load -i`, then `up -d` without `--build`).
+
+What makes it a demo and not a deployment: the one-click sign-in opens every official role without a password, the
+database password is fixed in the compose file, and the traffic is plain http, bound to 127.0.0.1. Everything below
+is about the production stack.
+
 ## The stack
 
 `docker-compose.yml` starts five containers on a private network (`10.201.0.0/24`):
@@ -39,7 +68,8 @@ Files that never enter git or an image:
 - LM Studio on the host with the models named in `.env` loaded and its server on port 1234. On Linux it must serve on
   `0.0.0.0` (Settings, Developer, "Serve on local network"): the api reaches it as `host.docker.internal`, the host's
   address on the Docker bridge, which a `127.0.0.1` listener refuses. On Docker Desktop the default works.
-- The data: `dataset/` and `model/` from the team drive, as for a dev setup. The images contain code only.
+- The data: `dataset/` and `model/` as the repository has them (the raw PDFs on the team drive are only needed to
+  rebuild from scratch). The production images contain code only; the data is bind-mounted.
 - Git, to pull updates. Python and Node are not needed on the server: the images build the frontend and install the
   api.
 
