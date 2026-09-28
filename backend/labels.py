@@ -13,8 +13,9 @@ uses them so a driver or a flagged check reads the same in an answer as on the p
 DRIVER_LABELS are the plainer words of the numbers policy (docs/ACCESS_CONTROL.md, the `numbers` feature): what
 serving.drivers_plain() calls each driver for a viewer who reads words, not model numbers. They hold no digit, unit
 or statistic (no '%', 'pp', 'log', '2-quarter'), so a brief or a chat answer built from them cannot carry a number
-from a label; the backend sends them, so the frontend keeps no copy. driver_label() falls back to feature_label()
-with the units and digits taken out.
+from a label; the backend sends them, so the frontend keeps no copy. They cover every gold feature (pipeline/gold.py
+FEATURES, the ext_open_* / ext_ever_* ones from EXT_ISSUES); driver_label() falls back to feature_label() with the
+units and digits taken out for any other name.
 """
 import re
 
@@ -124,7 +125,22 @@ DRIVER_LABELS = {
     "la_parcels_by_t": "Land parcels notified",
     "la_notif_span_by_t": "Time over which land was notified",
 }
-_UNITS = re.compile(r"\([^)]*\)|%|\S*\d\S*")   # a unit in brackets, a percent sign, a token with a digit
+# the remark categories of the ext_open_<category> / ext_ever_<category> features (pipeline/external.py TAXONOMY,
+# every one of them a feature of the served champions), as the issue an officer reads
+EXT_ISSUES = {
+    "land": "land issue",
+    "forest_env": "forest or environment issue",
+    "litigation": "court case",
+    "contractor": "contractor problem",
+    "funding": "funding problem",
+    "utility_shifting": "utility shifting issue",
+    "inter_agency": "wait for another agency's approval",
+    "law_order": "law and order problem",
+    "weather": "weather problem",
+}
+DRIVER_LABELS |= {f"ext_open_{c}": f"Open {w} in the report remarks" for c, w in EXT_ISSUES.items()}
+DRIVER_LABELS |= {f"ext_ever_{c}": f"A {w} reported before" for c, w in EXT_ISSUES.items()}
+_UNITS =re.compile(r"\([^)]*\)|%|\S*\d\S*")   # a unit in brackets, a percent sign, a token with a digit
 
 # the 13 risk-profile dimensions (ml/risk_profile.py DIMENSIONS), as the checklist on the project page names them
 DIMENSION_LABELS = {

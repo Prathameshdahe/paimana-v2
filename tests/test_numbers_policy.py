@@ -22,6 +22,7 @@ from backend.live import scheduler  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.schemas import ScoutOutput, _to_camel  # noqa: E402
 from llm import agent, client as llm_client, rag, second_opinion as so, tools, worker  # noqa: E402
+from pipeline import gold  # noqa: E402
 from viewers import as_role  # noqa: E402
 
 HIDDEN = {_to_camel(k) for k in (
@@ -124,11 +125,15 @@ def test_drivers_in_words_by_tercile():
 
 
 def test_driver_labels_carry_no_number_or_unit():
-    names = list(labels.FEATURE_LABELS) + ["ext_open_utility_shifting", "ext_ever_forest_env", "sector_x_2q_pct"]
+    names = list(gold.FEATURES) + list(labels.FEATURE_LABELS) + ["ext_open_new_kind", "sector_x_2q_pct"]
     for f in names:
         label = labels.driver_label(f)
-        assert label and not re.search(r"\d|%|\(|\bpp\b|log", label), (f, label)
-    assert set(labels.DRIVER_LABELS) == set(labels.FEATURE_LABELS)   # every model feature has plain words
+        assert label and not re.search(r"\d|%|\(|\bpp\b|log|_", label), (f, label)
+    # every model feature (the champions' feature lists are drawn from gold.FEATURES) has words of its own
+    assert set(gold.FEATURES) <= set(labels.DRIVER_LABELS), set(gold.FEATURES) - set(labels.DRIVER_LABELS)
+    assert set(labels.FEATURE_LABELS) <= set(labels.DRIVER_LABELS)
+    assert labels.driver_label("ext_ever_inter_agency") == "A wait for another agency's approval reported before"
+    assert labels.driver_label("ext_open_forest_env") == "Open forest or environment issue in the report remarks"
 
 
 def test_agency_and_hidden_delay_words():
