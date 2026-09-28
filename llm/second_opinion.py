@@ -68,7 +68,7 @@ same evidence, it stays and the rejection is noted on it (last_rejected: prompt 
 nightly job does not ask again until the evidence or PROMPT_VERSION changes either way. Accepted and rejected replies
 go to SQLite second_opinions per (project, evidence_hash, LLM model) with the prompt version, asof and the pack items,
 so every opinion can later be compared with what happened (docs/SECOND_OPINION.md); a cached opinion is checked again
-when read.
+when read. The LLM model is client.LLM_MODEL, asked for by name (_model()): LLM_CHAT_MODEL changes only the chat.
 
 generate(key) returns {'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} like backend/brief.py; it
 takes the LLM gate (llm/client.py): a person asking (interactive) marks the gate as a chat request, so background
@@ -607,7 +607,10 @@ def parse(raw: str) -> dict:
 # ------------------------------------------------------------------ generate and cache
 
 def _model() -> str:
-    return client.LLM_CHAT_MODEL
+    """The LLM that writes and keys the opinions: client.LLM_MODEL, the model the prompt was tuned on. LLM_CHAT_MODEL
+    changes only the chat's planner and writer (docs/AI_ASSISTANT.md); following it here moved the opinion to the
+    smaller model, and every stored opinion stopped being served and was asked again under it."""
+    return client.LLM_MODEL
 
 
 def _now() -> str:
@@ -623,7 +626,8 @@ def _attempt(p: dict, reasons: list[str]) -> tuple[dict | None, list[str], int, 
         msgs = [msgs[0], {"role": "user", "content": msgs[1]["content"] + "\n\n" + STRICT.format(
             reasons="\n".join(f"- {r}" for r in reasons))}]
     t0 = time.monotonic()
-    raw = client.chat(msgs, max_tokens=MAX_TOKENS, temperature=RETRY_TEMPERATURE if reasons else TEMPERATURE)
+    raw = client.chat(msgs, max_tokens=MAX_TOKENS, temperature=RETRY_TEMPERATURE if reasons else TEMPERATURE,
+                      model=_model())
     ms, n = int(1000 * (time.monotonic() - t0)), 0
     try:
         op = parse(raw)

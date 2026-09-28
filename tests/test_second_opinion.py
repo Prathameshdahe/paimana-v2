@@ -66,7 +66,8 @@ class FakeLLM:
         self.replies, self.calls = list(replies), []
 
     def __call__(self, messages, max_tokens=400, temperature=0.2, model=None):
-        self.calls.append({"messages": messages, "max_tokens": max_tokens, "temperature": temperature})
+        self.calls.append({"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
+                           "model": model})
         r = self.replies[min(len(self.calls), len(self.replies)) - 1]
         return r(messages) if callable(r) else r
 
@@ -279,12 +280,24 @@ def test_generate_retries_once_naming_the_reasons_then_caches(opinion_db, monkey
     assert fake.calls[0]["max_tokens"] == so.MAX_TOKENS
     row = stored()[0]
     assert (row["project_key"], row["evidence_hash"], row["model"], row["prompt_version"]) == (
-        KEY, so.evidence_hash(p), client.LLM_CHAT_MODEL, so.PROMPT_VERSION)
+        KEY, so.evidence_hash(p), client.LLM_MODEL, so.PROMPT_VERSION)
     body = json.loads(row["json"])
     assert body["status"] == "ok" and body["evidence"] == p["items"] and body["tier"] == "Medium"
     again = so.generate(KEY)
     assert again["cached"] and again["narrative"] == out["narrative"] and len(fake.calls) == 2
     assert so.cached(KEY)["headline"] == out["headline"]
+
+
+def test_the_opinion_keeps_llm_model_when_the_chat_has_its_own(opinion_db, monkeypatch):
+    """LLM_CHAT_MODEL changes only the chat: the opinion asks for LLM_MODEL by name and is stored and found under
+    it, so the stored opinions stay served when the chat moves to a smaller model."""
+    monkeypatch.setattr(client, "LLM_MODEL", "big-14b")
+    monkeypatch.setattr(client, "LLM_CHAT_MODEL", "small-7b")
+    fake = FakeLLM(lambda msgs: reply(so.pack(KEY)))
+    monkeypatch.setattr(client, "chat", fake)
+    out = so.generate(KEY)
+    assert out["status"] == "ok" and out["model"] == "big-14b" and [c["model"] for c in fake.calls] == ["big-14b"]
+    assert stored()[0]["model"] == "big-14b" and so.cached(KEY)["model"] == "big-14b"
 
 
 def test_rejected_twice_is_stored_and_never_served(opinion_db, monkeypatch):
