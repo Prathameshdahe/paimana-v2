@@ -10,10 +10,13 @@ from ml import backtest, registry  # noqa: E402
 
 
 def entry(model, pr_auc, ece, folds=("2024-01-01", "2024-04-01"), gold="g1", run="R1", flash=None, features=None,
-          cats=None, params=None):
-    m = {"pooled": {"pr_auc": pr_auc, "ece": ece}, "folds": [{"cutoff": c} for c in folds]}
+          cats=None, params=None, pooled=None):
+    """pr_auc and flash are the within-cutoff PR-AUCs the rule compares (registry.GAIN); pooled PR-AUC is pr_auc
+    unless given."""
+    m = {"pooled": {registry.GAIN: pr_auc, "pr_auc": pr_auc if pooled is None else pooled, "ece": ece},
+         "folds": [{"cutoff": c} for c in folds]}
     if flash is not None:
-        m.update(flash={"pr_auc": flash, "ece": ece}, flash_folds=[{"cutoff": "2025-07-01"}])
+        m.update(flash={registry.GAIN: flash, "pr_auc": flash, "ece": ece}, flash_folds=[{"cutoff": "2025-07-01"}])
     return {"entry_id": f"{run}/{model}/y_any_h2", "run_id": run, "model": model, "target": "y_any", "horizon": 2,
             "gold_version": gold, "created_at": run, "metrics": m, "feature_list": features, "categorical": cats,
             "params": params}
@@ -48,6 +51,16 @@ def test_promotion_needs_both_blocks_and_a_noise_margin():
     assert "flash -0.0010" in reg["decisions"][2]["reason"]
     # a champion scored without the flash block has other folds: only its own model type may take over
     assert add(reg, entry("lightgbm", 0.99, 0.01, run="R5")) == "rejected"
+
+
+def test_promotion_compares_within_cutoff_pr_auc_not_pooled():
+    """A challenger with a higher pooled PR-AUC but a lower fold mean (it follows each fold's base rate, it does not
+    rank better inside a fold) is rejected; the reverse is promoted."""
+    reg = {"runs": [], "champions": {}, "decisions": []}
+    assert add(reg, entry("lightgbm", 0.88, 0.05, flash=0.87, pooled=0.869)) == "promoted"
+    assert add(reg, entry("lightgbm", 0.876, 0.05, flash=0.87, pooled=0.881, run="R2")) == "rejected"
+    assert "within-cutoff PR-AUC gain val -0.0040" in reg["decisions"][-1]["reason"]
+    assert add(reg, entry("lightgbm", 0.90, 0.05, flash=0.87, pooled=0.860, run="R3")) == "promoted"
 
 
 P = {**backtest.LGB_PARAMS, "n_estimators": 5, "n_jobs": 1}
@@ -107,9 +120,9 @@ def test_register_scores_the_incumbent_first_and_gates_the_new_configuration(tmp
     margin = registry.NOISE_SDS * registry.SEED_SD["y_any_h2"]
     metrics = {}
     for name, v in {"lightgbm_incumbent": 0.60, "lightgbm": 0.60 + margin / 2, "logreg": 0.50}.items():
-        metrics["y_any_h2", "val", name] = {"pooled": {"pr_auc": v, "ece": 0.05}, "folds": folds}
+        metrics["y_any_h2", "val", name] = {"pooled": {"pr_auc": v, registry.GAIN: v, "ece": 0.05}, "folds": folds}
         metrics["y_any_h2", "test", name] = {"pooled": {"pr_auc": v}}
-        metrics["y_any_h2", "flash", name] = {"pooled": {"pr_auc": v, "ece": 0.05},
+        metrics["y_any_h2", "flash", name] = {"pooled": {"pr_auc": v, registry.GAIN: v, "ece": 0.05},
                                               "folds": [{"cutoff": "2025-07-01"}]}
     man = {"gold_version": "g2", "silver_version": "s1", "features": {"state": ["a", "b", "c"]}}
     res = {"frames": {("y_any", 2): d}, "manifest": man, "features": ["a", "b", "c"], "categorical": [],

@@ -99,6 +99,7 @@ def test_harness_null_candidate_has_zero_deltas_and_fails(harness):
     _, tmp = harness
     t = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)
     assert set(t.block) == {"val", "flash"} and (t.delta_pr_auc == 0).all() and (t.ci_lo == 0).all()
+    assert (t.delta_fold_pr_auc == 0).all() and (t.pooled_ci_lo == 0).all() and (t.folds_up == 0).all()
     assert (t.decision == "fail").all() and (tmp / "null.csv").exists()
     assert t.set_index("block").loc["flash", "n_folds"] == 3                   # 2025-07 .. 2026-01
     again = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)   # from the cache
@@ -110,6 +111,7 @@ def test_harness_passes_an_informative_point_in_time_column(harness):
     cand = experiment.Candidate("x itself", extra=lambda ctx: ctx.feats[backtest.PK + ["x"]])
     t = experiment.run("x", cand, seeds=(0,), targets=["y_any_h2"], n_boot=50, out=tmp)
     assert (t.delta_pr_auc > 0.05).all() and (t.ci_lo > 0).all() and (t.decision == "pass").all()
+    assert (t.delta_fold_pr_auc > 0.05).all() and (t.folds_up == t.n_folds).all()
     assert '"identical": true' in t.point_in_time.iloc[0]
 
 
@@ -122,7 +124,7 @@ def test_harness_refuses_a_column_that_reads_the_future(harness):
 
 
 def test_ship_guard_needs_a_ci_above_zero_on_a_block_that_clears_the_margin():
-    b = lambda d, lo: {"delta_pr_auc": d, "ci_lo": lo}
+    b = lambda d, lo: {"delta_fold_pr_auc": d, "ci_lo": lo}
     assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)], 0.01)
     assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)], 0.01)   # the CI above 0 is under margin
     assert not experiment.robust(False, [b(0.02, 0.01)], 0.01)                     # the rule failed
@@ -165,3 +167,28 @@ def test_harness_refuses_a_column_that_reads_unrealised_labels(harness):
         ctx.labels[2][backtest.PK + ["y_any"]].rename(columns={"y_any": "own_y"}), on=backtest.PK, how="left"))
     with pytest.raises(AssertionError, match="change when the data are cut"):
         experiment.run("leak_y", leak, seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+
+
+def fold_panel(seed=5):
+    """Three folds whose base rates fall (0.8, 0.5, 0.2). The champion ranks well inside each fold at one score level;
+    the challenger ranks a little worse inside each fold but its level follows the fold's base rate."""
+    rng = np.random.default_rng(seed)
+    folds = np.repeat([0, 1, 2], 800)
+    y = (rng.random(len(folds)) < np.array([0.8, 0.5, 0.2])[folds]).astype(int)
+    z = y + rng.normal(0, 0.9, len(y))
+    champ = 1 / (1 + np.exp(-z))
+    chall = 1 / (1 + np.exp(-(z + rng.normal(0, 0.3, len(y)) + np.array([1.5, 0.0, -1.5])[folds])))
+    return y, folds, np.arange(len(y)) // 4, champ, chall
+
+
+def test_fold_mean_bootstrap_is_the_within_cutoff_pr_auc_and_sees_through_a_level_shift():
+    y, folds, groups, champ, chall = fold_panel()
+    fold_ap = lambda p: np.mean([average_precision_score(y[folds == f], p[folds == f]) for f in range(3)])
+    one = lambda f: experiment.ap_weighted(y[folds == f], chall[folds == f], np.ones((folds == f).sum()))
+    assert np.isclose(np.mean([one(f) for f in range(3)]), fold_ap(chall))
+    assert average_precision_score(y, chall) > average_precision_score(y, champ)      # pooled: a "gain"
+    assert fold_ap(chall) < fold_ap(champ)                                              # within cutoff: a loss
+    lo, hi = experiment.ci(experiment.paired_bootstrap(y, groups, [champ], [chall], n_boot=200, folds=folds))
+    assert hi < 0
+    same = experiment.paired_bootstrap(y, groups, [champ], [champ], n_boot=50, folds=folds)
+    assert np.allclose(same, 0)

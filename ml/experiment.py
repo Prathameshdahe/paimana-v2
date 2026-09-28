@@ -19,12 +19,17 @@ reproducible after a promotion); the CSV's champion_entry column names it. A cha
 changes one thing against it: extra columns joined on (project_key, period), which must be point-in-time (checked
 below), a different fit function (which may weight the training rows) or other columns. Both are backtested with
 backtest.backtest on the same rows and cutoffs, the validation and flash blocks of backtest.windows, once per seed
-in SEEDS (LightGBM random_state), so every comparison is paired. A block's PR-AUC delta is the mean over seeds of the
-pooled PR-AUC differences. Its CI is a paired project bootstrap: BOOT resamples of the block's projects with
-replacement (a project is drawn with all its fold rows), both models' seed-mean PR-AUC recomputed on each resample.
-The decision is registry.rule, the promotion rule: gain >= 0 on both blocks, >= NOISE_SDS x SEED_SD on at least one,
-validation ECE at most the champion's + ECE_SLACK. The scores are raw: the cost revision's served Platt calibrator is
-left out here, the train run's registry gate compares the calibrated ones.
+in SEEDS (LightGBM random_state), so every comparison is paired. The decision metric is the within-cutoff PR-AUC
+(registry.GAIN): each fold's own PR-AUC, averaged over the block's folds, because a served score is only ranked
+against the projects of its own as-of date. Pooled PR-AUC (all fold rows together) is reported beside it: it also
+rewards a score level that follows each fold's base rate, which is calibration, not ranking, and on y_any_h4 it showed
+a gain where the ranking got worse on 4 of 6 folds. A block's delta is the mean over seeds of the differences; the
+fold_deltas column has each fold's. Its CI is a paired project bootstrap: BOOT resamples of the block's projects with
+replacement (a project is drawn with all its fold rows), both models' seed-mean fold-mean PR-AUC recomputed on each
+resample (pooled_ci_* the same for pooled PR-AUC). The decision is registry.rule, the promotion rule: gain >= 0 on
+both blocks, >= NOISE_SDS x SEED_SD on at least one, validation ECE at most the champion's + ECE_SLACK. The scores are
+raw: the cost revision's served Platt calibrator is left out here, the train run's registry gate compares the
+calibrated ones (Platt is monotone within a cutoff, so the within-cutoff PR-AUC is the same up to ties).
 
 Point-in-time check: a candidate's extra columns at a cutoff c must be the same when built from the observations
 cut at c (CHECK_AT), else the run stops before any fit.
@@ -47,6 +52,7 @@ from typing import Callable
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from sklearn.metrics import average_precision_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml import backtest as bt, registry  # noqa: E402
@@ -80,18 +86,24 @@ def ap_weighted(y, p, W):
     return (np.diff(rec, axis=1, prepend=0) * prec).sum(axis=1)
 
 
-def paired_bootstrap(y, groups, champ, chall, n_boot=BOOT, seed=0):
+def paired_bootstrap(y, groups, champ, chall, n_boot=BOOT, seed=0, folds=None):
     """Resampled seed-mean PR-AUC deltas (challenger minus champion). y and groups (the project of each row) are
     shared; champ and chall are lists of score arrays, one per seed, on the same rows. Projects are drawn with
-    replacement, each with all its rows."""
+    replacement, each with all its rows. With folds (the cutoff of each row) the PR-AUC is the within-cutoff one,
+    each fold's own averaged over the folds (a fold left with no positive in a resample is skipped); without, it is
+    pooled over all rows."""
+    y = np.asarray(y, float)
     codes, uniq = pd.factorize(pd.Series(groups))
+    f = pd.Series(np.zeros(len(y)) if folds is None else folds)
+    parts = [np.flatnonzero(f.eq(v).to_numpy()) for v in f.unique()]
     rng = np.random.default_rng(seed)
     out = []
     for start in range(0, n_boot, CHUNK):
         b = min(CHUNK, n_boot - start)
         counts = rng.multinomial(len(uniq), np.full(len(uniq), 1 / len(uniq)), size=b)
         W = counts[:, codes]
-        mean = lambda ps: np.mean([ap_weighted(y, p, W) for p in ps], axis=0)
+        ap = lambda p: np.nanmean([ap_weighted(y[i], np.asarray(p)[i], W[:, i]) for i in parts], axis=0)
+        mean = lambda ps: np.mean([ap(p) for p in ps], axis=0)
         out.append(mean(chall) - mean(champ))
     return np.concatenate(out)
 
@@ -99,8 +111,9 @@ def paired_bootstrap(y, groups, champ, chall, n_boot=BOOT, seed=0):
 def robust(ok, blocks, margin):
     """The shipping guard on top of the promotion rule (ok): some block that clears the margin also has its paired
     bootstrap CI above 0. With a dozen candidates on four targets, and blocks as small as one fold (y_any_h4 flash,
-    335 rows), a pass inside the CI is too often luck. blocks: dicts with delta_pr_auc and ci_lo."""
-    return bool(ok and any(b["delta_pr_auc"] >= margin and b["ci_lo"] > 0 for b in blocks))
+    335 rows), a pass inside the CI is too often luck. blocks: dicts with delta_fold_pr_auc (the within-cutoff gain)
+    and ci_lo (its CI)."""
+    return bool(ok and any(b["delta_fold_pr_auc"] >= margin and b["ci_lo"] > 0 for b in blocks))
 
 
 def ci(deltas, level=0.95):
@@ -573,9 +586,15 @@ def check_point_in_time(cand, feats, labels, man, at=CHECK_AT):
 
 
 def block_metrics(p, h):
-    """Pooled metrics of one model's predictions on a block (folds recomputed from the rows)."""
+    """Pooled metrics of one model's predictions on a block (folds recomputed from the rows); pr_auc_fold_mean
+    (registry.GAIN) is the within-cutoff PR-AUC."""
     folds = pd.DataFrame([{"cutoff": c, "model": "m", **bt.score(g.y, g.p)} for c, g in p.groupby("cutoff")])
     return bt.pooled(p.assign(model="m"), folds, h).iloc[0]
+
+
+def fold_pr_auc(p):
+    """cutoff -> PR-AUC of one model's predictions on a block."""
+    return pd.Series({c: average_precision_score(g.y, g.p) for c, g in p.groupby("cutoff")})
 
 
 def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_cache=True, champion_run=None):
@@ -623,23 +642,33 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
             a, c = sel[:len(seeds)], sel[len(seeds):]
             ma, mc = [block_metrics(p, h) for p in a], [block_metrics(p, h) for p in c]
             mean = lambda ms, k: float(np.mean([m[k] for m in ms]))
-            deltas = [x.pr_auc - z.pr_auc for x, z in zip(mc, ma)]
-            boot = paired_bootstrap(a[0].y.to_numpy(), a[0].project_key.to_numpy(), [p.p.to_numpy() for p in a],
-                                    [p.p.to_numpy() for p in c], n_boot=n_boot)
-            lo, hi = ci(boot)
+            sd = lambda ms, k: float(np.std([m[k] for m in ms], ddof=1)) if len(seeds) > 1 else np.nan
+            deltas = {k: [x[k] - z[k] for x, z in zip(mc, ma)] for k in (registry.GAIN, "pr_auc")}
+            y, g, f = a[0].y.to_numpy(), a[0].project_key.to_numpy(), a[0].cutoff.to_numpy()
+            pa, pc = [p.p.to_numpy() for p in a], [p.p.to_numpy() for p in c]
+            boot = paired_bootstrap(y, g, pa, pc, n_boot=n_boot, folds=f)
+            (lo, hi), (plo, phi) = ci(boot), ci(paired_bootstrap(y, g, pa, pc, n_boot=n_boot))
+            by_fold = (pd.concat([fold_pr_auc(p) for p in c], axis=1).mean(axis=1)
+                       - pd.concat([fold_pr_auc(p) for p in a], axis=1).mean(axis=1))
             res[b] = {"candidate": name, "target": key, "block": b, "champion_entry": entry_id,
                       "n_rows": len(a[0]), "n_projects": a[0].project_key.nunique(), "n_folds": len(cs),
                       "seeds": len(seeds),
-                      "champion_pr_auc": mean(ma, "pr_auc"), "challenger_pr_auc": mean(mc, "pr_auc"),
-                      "delta_pr_auc": float(np.mean(deltas)), "ci_lo": lo, "ci_hi": hi,
+                      "champion_fold_pr_auc": mean(ma, registry.GAIN),
+                      "challenger_fold_pr_auc": mean(mc, registry.GAIN),
+                      "delta_fold_pr_auc": float(np.mean(deltas[registry.GAIN])), "ci_lo": lo, "ci_hi": hi,
                       "boot_share_le_0": float((boot <= 0).mean()),
-                      "seed_deltas": "/".join(f"{x:+.4f}" for x in deltas),
-                      "champion_seed_sd": float(np.std([m.pr_auc for m in ma], ddof=1)) if len(seeds) > 1 else np.nan,
-                      "challenger_seed_sd": float(np.std([m.pr_auc for m in mc], ddof=1)) if len(seeds) > 1 else np.nan,
+                      "seed_deltas": "/".join(f"{x:+.4f}" for x in deltas[registry.GAIN]),
+                      "fold_deltas": " ".join(f"{pd.Timestamp(k):%Y-%m}:{v:+.4f}" for k, v in by_fold.items()),
+                      "folds_up": int((by_fold > 0).sum()),
+                      "champion_seed_sd": sd(ma, registry.GAIN), "challenger_seed_sd": sd(mc, registry.GAIN),
+                      "champion_pr_auc": mean(ma, "pr_auc"), "challenger_pr_auc": mean(mc, "pr_auc"),
+                      "delta_pr_auc": float(np.mean(deltas["pr_auc"])), "pooled_ci_lo": plo, "pooled_ci_hi": phi,
+                      "pooled_seed_deltas": "/".join(f"{x:+.4f}" for x in deltas["pr_auc"]),
+                      "champion_pooled_seed_sd": sd(ma, "pr_auc"),
                       **{f"{who}_{k}": mean(ms, k) for k in ["ece", "precision_50", "nyd_pr_auc", "brier", "roc_auc"]
                          for who, ms in (("champion", ma), ("challenger", mc))}}
         margin = registry.NOISE_SDS * registry.SEED_SD.get(key, 0.0)
-        gains = {b: r["delta_pr_auc"] for b, r in res.items()}
+        gains = {b: r["delta_fold_pr_auc"] for b, r in res.items()}
         ok, why = registry.rule(gains, margin, res["val"]["challenger_ece"], res["val"]["champion_ece"])
         keep = robust(ok, res.values(), margin)
         for r in res.values():
@@ -647,8 +676,9 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
                          "ship": "keep" if keep else "reject", "n_features": len(ccols),
                          "runtime_s": round(time.time() - t1, 1)})
         print(f"  {key}: {'PASS' if ok else 'fail'}{' (robust)' if keep else ''}  " + "  ".join(
-            f"{b} {r['champion_pr_auc']:.4f} -> {r['challenger_pr_auc']:.4f} ({r['delta_pr_auc']:+.4f} "
-            f"[{r['ci_lo']:+.4f}, {r['ci_hi']:+.4f}])" for b, r in res.items())
+            f"{b} {r['champion_fold_pr_auc']:.4f} -> {r['challenger_fold_pr_auc']:.4f} "
+            f"({r['delta_fold_pr_auc']:+.4f} [{r['ci_lo']:+.4f}, {r['ci_hi']:+.4f}], {r['folds_up']}/{r['n_folds']} "
+            f"folds up; pooled {r['delta_pr_auc']:+.4f})" for b, r in res.items())
               + f"  val ECE {res['val']['champion_ece']:.4f} -> {res['val']['challenger_ece']:.4f}"
               + f"  {time.time() - t1:.0f}s", flush=True)
     table = pd.DataFrame(rows)
@@ -661,19 +691,20 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
 
 def summary_table(out=OUT, names=None):
     """Markdown tables of every experiment CSV (or the named ones): one table per target, one row per candidate,
-    champion -> challenger (seed means) and the deltas with their paired bootstrap CIs. Rule is the promotion rule,
-    Ship the robust guard on top of it."""
+    champion -> challenger within-cutoff PR-AUC (seed means), the deltas with their paired bootstrap CIs, the folds
+    where the challenger ranks better and the pooled deltas for reference. Rule is the promotion rule, Ship the robust
+    guard on top of it."""
     rows = []
     for path in sorted(out.glob("*.csv")):
         t = pd.read_csv(path, keep_default_na=False, na_values=[""])
-        if (names and path.stem not in names) or "delta_pr_auc" not in t:
+        if (names and path.stem not in names) or "delta_fold_pr_auc" not in t:
             continue
         for key, g in t.groupby("target", sort=False):
             b = g.set_index("block")
             v = b.loc["val"]
             rows.append((key, path.stem, v, b.loc["flash"] if "flash" in b.index else None,
                          robust(v.decision == "pass", [r for _, r in b.iterrows()], v.margin)))
-    fmt = lambda r: f"{r.delta_pr_auc:+.4f} [{r.ci_lo:+.4f}, {r.ci_hi:+.4f}]"
+    fmt = lambda r: f"{r.delta_fold_pr_auc:+.4f} [{r.ci_lo:+.4f}, {r.ci_hi:+.4f}]"
     arrow = lambda a, b, n=4: f"{a:.{n}f} -> {b:.{n}f}"
     lines = []
     for key in [f"{y}_h{h}" for y, h in bt.TARGETS]:
@@ -682,15 +713,18 @@ def summary_table(out=OUT, names=None):
             continue
         lines += [f"**{key}** (noise margin {mine[0][2].margin:.4f})", "",
                   "| Candidate | Val PR-AUC | Flash PR-AUC | Flash P@50 | Val ECE | Val delta [95% CI] | "
-                  "Flash delta [95% CI] | Rule | Ship |", "|---|---|---|---|---|---|---|---|---|"]
+                  "Flash delta [95% CI] | Val folds up | Pooled delta val / flash | Rule | Ship |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|"]
         for _, name, v, f, keep in mine:
-            lines.append(f"| {name} | {arrow(v.champion_pr_auc, v.challenger_pr_auc)} | "
-                         + (f"{arrow(f.champion_pr_auc, f.challenger_pr_auc)} | "
+            lines.append(f"| {name} | {arrow(v.champion_fold_pr_auc, v.challenger_fold_pr_auc)} | "
+                         + (f"{arrow(f.champion_fold_pr_auc, f.challenger_fold_pr_auc)} | "
                             f"{arrow(f.champion_precision_50, f.challenger_precision_50, 3)} | " if f is not None
                             else "- | - | ")
                          + f"{arrow(v.champion_ece, v.challenger_ece)} | {fmt(v)} | "
                          + (f"{fmt(f)} | " if f is not None else "- | ")
-                         + f"{v.decision} | {'keep' if keep else '-'} |")
+                         + f"{v.folds_up}/{v.n_folds} | {v.delta_pr_auc:+.4f} / "
+                         + (f"{f.delta_pr_auc:+.4f}" if f is not None else "-")
+                         + f" | {v.decision} | {'keep' if keep else '-'} |")
         lines.append("")
     return "\n".join(lines)
 

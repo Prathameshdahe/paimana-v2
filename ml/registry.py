@@ -6,8 +6,11 @@ Run from repo root after the gold build:  python -m pipeline.run train
 One train run backtests every target (ml/backtest.py), refits logistic regression and LightGBM on every realised
 label, saves them into the run folder and registers one entry per (model, target, horizon). Promotion: a challenger
 replaces the champion of its (target, horizon) only when both were scored on the same validation and flash folds of
-the same gold version, its pooled PR-AUC is not lower on either block (validation, flash) and higher on at least one
-by NOISE_SDS seed standard deviations, and its validation ECE is at most the champion's + ECE_SLACK (rule).
+the same gold version, its within-cutoff PR-AUC (GAIN, the mean of each fold's own PR-AUC) is not lower on either
+block (validation, flash) and higher on at least one by NOISE_SDS seed standard deviations, and its validation ECE is
+at most the champion's + ECE_SLACK (rule). The gain is within-cutoff because a served score is only ever ranked
+against the other projects of the same as-of date: pooled PR-AUC over several folds also rewards a model whose score
+level follows each fold's base rate, which is calibration, not ranking (ECE guards that).
 
 A new gold version (new data, new or changed features) makes the champion's metrics incomparable. The run then also
 backtests the champion's own configuration (model type, feature list, categoricals, params: config) on the new gold
@@ -33,9 +36,11 @@ from ml import backtest  # noqa: E402
 
 REGISTRY = backtest.ROOT / "model" / "registry.json"
 ECE_SLACK = 0.02
+GAIN = "pr_auc_fold_mean"      # the promotion metric: each fold's PR-AUC, averaged over the block's folds
 # sd of pooled validation PR-AUC over 5 LightGBM seeds of the unchanged champion (research audit 2026-09-27 on
 # ML-20260927-174106's features and folds; seed 0 was the luckiest of the 5). A single-seed gain inside NOISE_SDS of
-# these is noise. Re-measure when the features or folds change a lot.
+# these is noise. Re-measure when the features or folds change a lot. (Measured on pooled PR-AUC; they set the GAIN
+# margin until the within-cutoff metric's own are measured.)
 SEED_SD = {"y_any_h2": 0.0038, "y_date_push_h2": 0.0025, "y_cost_rev_h2": 0.0022, "y_any_h4": 0.0011}
 NOISE_SDS = 2
 BLOCKS = {"val": ("pooled", "folds"), "flash": ("flash", "flash_folds")}    # block -> (pooled key, folds key)
@@ -86,19 +91,20 @@ def fold_ids(entry):
 
 
 def pr_auc_gains(new, old):
-    """block -> challenger minus champion pooled PR-AUC, for the blocks both have a value on."""
-    get = lambda e, k: (e["metrics"].get(k) or {}).get("pr_auc")
+    """block -> challenger minus champion within-cutoff PR-AUC (GAIN), for the blocks both have a value on."""
+    get = lambda e, k: (e["metrics"].get(k) or {}).get(GAIN)
     return {b: get(new, k) - get(old, k) for b, (k, _) in BLOCKS.items()
             if get(new, k) is not None and get(old, k) is not None}
 
 
 def rule(gains, margin, ece_new, ece_old):
-    """The promotion rule on block -> PR-AUC gain: not lower on any block, at least margin on one, and validation
-    ECE at most ece_old + ECE_SLACK. Returns (ok, reason). Shared with the experiment harness (ml/experiment.py)."""
+    """The promotion rule on block -> within-cutoff PR-AUC gain: not lower on any block, at least margin on one, and
+    validation ECE at most ece_old + ECE_SLACK. Returns (ok, reason). Shared with the experiment harness
+    (ml/experiment.py)."""
     not_worse = all(g >= 0 for g in gains.values())
     better = any(g >= margin for g in gains.values())
     calibrated = ece_new <= ece_old + ECE_SLACK
-    why = ("PR-AUC gain " + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
+    why = ("within-cutoff PR-AUC gain " + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
            + f" ({'not lower on any block' if not_worse else 'lower on a block'}, "
            f"{'clears' if better else 'no block clears'} the noise margin {margin:.4f}); "
            f"ECE {ece_new:.4f} vs {ece_old:.4f} + {ECE_SLACK} ({'ok' if calibrated else 'too high'})")
@@ -121,7 +127,8 @@ def promote(reg, entry):
     else:
         old = cur["metrics"]["pooled"]
         ok, why = rule(pr_auc_gains(entry, cur), NOISE_SDS * SEED_SD.get(key, 0.0), new["ece"], old["ece"])
-        why = f"pooled PR-AUC {new['pr_auc']:.4f} vs champion {old['pr_auc']:.4f}; " + why
+        why = (f"validation PR-AUC fold mean {new[GAIN]:.4f} vs champion {old[GAIN]:.4f} (pooled {new['pr_auc']:.4f} "
+               f"vs {old['pr_auc']:.4f}); " + why)
     decision = {"at": entry["created_at"], "target": entry["target"], "horizon": entry["horizon"],
                 "challenger": entry["entry_id"], "champion_before": cur_id,
                 "decision": "promoted" if ok else "rejected", "reason": why}
@@ -231,7 +238,7 @@ def main():
             "targets": [f"{y}_h{h}" for y, h in backtest.TARGETS], "features": cols, "categorical": cats,
             "feature_groups": res["groups"], "gold_version": man["gold_version"],
             "silver_version": man["silver_version"], "ece_slack": ECE_SLACK,
-            "promotion": {"seed_sd": SEED_SD, "noise_sds": NOISE_SDS, "flash_from": backtest.FLASH_FROM},
+            "promotion": {"gain": GAIN, "seed_sd": SEED_SD, "noise_sds": NOISE_SDS, "flash_from": backtest.FLASH_FROM},
             "incumbents": {k: {"rescored_from": e["entry_id"], "model": family(e["model"]) + INCUMBENT,
                                "n_features": len(e["feature_list"]), "params": e["params"]} for k, e in inc.items()}}
     (backtest.RUNS / run_id / "params.json").write_text(json.dumps(jsonable(info), indent=2), encoding="utf-8")
