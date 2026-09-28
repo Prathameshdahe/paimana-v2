@@ -130,4 +130,6 @@ sources for anything that matters. Where the data is silent, the assistant says 
 - Remark-based issues stop in 2023, and unknown is not clear: a project with no flagged issue may still have one.
 - Land records cover national highway stretches only, and the PARIVESH list we read is not complete.
 - News is linked by place names and can be linked to the wrong project.
-- This is a prototype: choosing a role on the sign-in page separates views but is not a secure login.
+- This is a prototype. Officials sign in with an email and a password, and an administrator approves each account;
+  the public needs no account. The demo build adds one-click role buttons to the sign-in page, which skip the
+  password and are only for showing the prototype on one machine.
