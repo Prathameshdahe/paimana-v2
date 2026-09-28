@@ -3,11 +3,13 @@
  * the anticipated completion on a piecewise scale (an overdue strip, then due now, 6 mo, 1 yr, 2 yr, later; the near
  * term weighted wider); y is a lane per delay word, or per tier before the backend sends words. The reports give the
  * anticipated completion as a month, so a dot may sit anywhere inside its month's stretch of the axis: a month's
- * projects fill the columns (one dot wide) that fall inside that stretch, round robin in the order of a hash of the
- * project key, and each column stacks alternately up and down from the lane centre. A position therefore derives only
- * from the due date and the key, never from a hidden number, and the picture is the same on every load. A lane grows
- * with its tallest column up to LANE_MAX; a column taller than that folds the rest into a "+n" mark in a strip at the
- * lane's top, and the folded rows stay reachable: the mark lists them, a brush over their column selects them and the
+ * projects fill the columns (one dot wide) that fall inside that stretch, round robin with the most severe tier first
+ * (Critical, High, Medium, Low) and then in the order of a hash of the project key, and each column stacks in the same
+ * order alternately up and down from the lane centre. A position therefore derives only from the due date, the tier
+ * (public) and the key, never from a hidden number, and the picture is the same on every load. A lane grows with its
+ * tallest column up to LANE_MAX; a column taller than that folds its least severe rows (from the first that does not
+ * fit to its end) into a "+n" mark in a strip at the lane's top, so a Critical dot is drawn while any lower tier of its
+ * column is; the folded rows stay reachable: the mark lists them, a brush over their column selects them and the
  * keyboard walk visits them.
  */
 import type { Flag, MapRow, Outlook, OutlookWord, Tier } from '@/contracts/project'
@@ -42,6 +44,10 @@ export function hashKey(key: string): number {
   }
   return h >>> 0
 }
+
+/** a tier's place in a column's stack: Critical at the centre, then High, Medium, Low, and a row without a rank last */
+const TIER_RANK: Partial<Record<Tier, number>> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
+export const tierRank = (tier: Tier | null | undefined): number => (tier ? TIER_RANK[tier] : undefined) ?? 4
 
 /** whole months from as-of to the date (the reports give the anticipated completion as a month) */
 export function monthsFrom(asof: string, date: string): number {
@@ -283,23 +289,24 @@ export function layoutMap({ rows, asof, width, mode, specs, zoom, outlookOf }: L
     perLane[lane]?.push(d)
   }
 
-  // each lane's rows into columns: a month's rows round robin over its columns, in hash order
-  const byHash = (a: { row: MapRow }, b: { row: MapRow }) =>
-    hashKey(a.row.key) - hashKey(b.row.key) || (a.row.key < b.row.key ? -1 : 1)
+  // each lane's rows into columns: a month's rows round robin over its columns, most severe tier first, then in hash
+  // order; a column stacks the same way from its centre, so a crowded column folds its least severe rows first
+  const bySeverity = (a: { row: MapRow }, b: { row: MapRow }) => tierRank(a.row.tier) - tierRank(b.row.tier)
+    || hashKey(a.row.key) - hashKey(b.row.key) || (a.row.key < b.row.key ? -1 : 1)
   const laneCols = perLane.map((list) => {
     const byMonth = new Map<number, Array<{ row: MapRow; months: number }>>()
     for (const d of list) byMonth.set(d.months, [...(byMonth.get(d.months) ?? []), d])
     const cols = new Map<number, Placed[]>()
     for (const [m, ms] of byMonth) {
       const cs = colsOf(m)
-      ms.sort(byHash).forEach((d, i) => {
+      ms.sort(bySeverity).forEach((d, i) => {
         const col = cs[i % cs.length] as number
         const list2 = cols.get(col) ?? []
         list2.push({ ...d, r: radiusOf(d.row.anticipatedCostCr) })
         cols.set(col, list2)
       })
     }
-    for (const list2 of cols.values()) list2.sort(byHash)
+    for (const list2 of cols.values()) list2.sort(bySeverity)
     return cols
   })
 
@@ -338,7 +345,8 @@ export function layoutMap({ rows, asof, width, mode, specs, zoom, outlookOf }: L
       const keys: string[] = []
       list.forEach((p, i) => {
         const cy = mid + (offsets[i] ?? 0)
-        if (i > 0 && Math.abs(cy - mid) + p.r > half) {
+        // once a row folds, the rest of the column (less or as severe) folds with it, whatever their size
+        if (keys.length || (i > 0 && Math.abs(cy - mid) + p.r > half)) {
           keys.push(p.row.key)
           walk[li]?.push({ key: p.row.key, row: p.row, lane: li, x: cx, y: markY, r: 0, months: p.months, folded: true })
           return

@@ -132,10 +132,11 @@ animate nothing; elsewhere motion is one short fade and honours reduced motion.
 The command centre (`src/views/CommandCenter.tsx`) is the week's brief, one
 filter bar shared by the risk map (`command-center/RiskMap.tsx`, geometry in
 `riskMapLayout.ts`: every project by due date and delay outlook, a dot's spot
-from its due date and a hash of its key only; a month's projects fill the
-columns inside that month's stretch of the axis, and a column too tall for its
-lane folds into a "+n" mark that lists those projects on click, is taken by a
-brush and is visited by the keyboard walk), where the risk sits by sector,
+from its due date, its tier and a hash of its key only; a month's projects
+fill the columns inside that month's stretch of the axis, most severe tier
+first, and a column too tall for its lane folds its least severe projects into
+a "+n" mark that lists them on click, is taken by a brush and is visited by
+the keyboard walk), where the risk sits by sector,
 where the delays come from, and the project list. The side panel gives focus
 back to what opened it (`src/lib/useProjectPanel.ts`). The map reads
 `GET /api/projects/map`; against a backend without it, it shows the 100 most at

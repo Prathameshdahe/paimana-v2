@@ -123,9 +123,9 @@ const DotsLayer = memo(function DotsLayer({ dots, selection, openKey }: {
  * the hatched strip is overdue) and by lane: the delay outlook in words, or the tier until the backend sends words.
  * Size is the anticipated cost in three named steps; a red outer ring is early notice, a dashed ring stalled.
  * Hover shows a card, click opens the side panel, dragging on empty canvas selects the dots under it for the table
- * (Shift adds; on touch after a short hold), Escape clears. A month too crowded for its lane folds the rest into a
- * "+n" mark above the dots: clicking it lists those projects in the table, a brush over their column takes them too,
- * and the keyboard walk visits them. Keyboard: one tab stop per lane; Left and Right walk the
+ * (Shift adds; on touch after a short hold), Escape clears. A month too crowded for its lane folds its least severe
+ * projects (Low first, Critical last) into a "+n" mark above the dots: clicking it lists those projects in the table,
+ * a brush over their column takes them too, and the keyboard walk visits them. Keyboard: one tab stop per lane; Left and Right walk the
  * lane in due-date order, Up and Down change lane, Home and End jump, Enter opens, Space selects. The table below is
  * the full screen-reader path. No wheel zoom (the page must scroll): three presets set the window instead.
  */
