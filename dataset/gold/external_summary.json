@@ -5,9 +5,35 @@
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
-      "n_flagged": 135,
-      "capital_exposed_cr": 164353.2,
+      "n_flagged": 142,
+      "capital_exposed_cr": 193563.4,
       "top": [
+        {
+          "project_key": "PRJ-005616",
+          "project_name": "Bangalore Suburban Railway Project",
+          "sector": "Railways",
+          "state": "Karnataka",
+          "anticipated_cost_cr": 15767.0,
+          "tier": "Low",
+          "p_any_2q": 0.238,
+          "slip_to_date_months": 39.0,
+          "evidence": [
+            "land: Only one of the four Bengaluru suburban rail corridors has cleared its land hurdle. (The Hindu, 2026-08); no land data for non-road projects; no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005734",
+          "project_name": "Guwahati Ring Road in the State of Assam",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 5729.5,
+          "tier": "Low",
+          "p_any_2q": 0.073,
+          "slip_to_date_months": 0.0,
+          "evidence": [
+            "land: A dispute over land compensation in North Kamrup is weighing on the Guwahati Ring Road project. (The Assam Tribune, 2026-07); no NH number in the name to link land data; no free-text remarks in any report"
+          ]
+        },
         {
           "project_key": "PRJ-004265",
           "project_name": "6L of Thalikulam to Kodugallur section from km 369.015 to km 397.850 of NH - 66 old NH-17",
@@ -87,6 +113,19 @@
           ]
         },
         {
+          "project_key": "PRJ-004326",
+          "project_name": "4L Bangalore-Chennai Expressway from Km. 230.000 to Km. 261.705 of Kanchepuram to Sriperumbudur Section Phase-III/Package-IV",
+          "sector": "Roads & Highways",
+          "state": "Tamil Nadu",
+          "anticipated_cost_cr": 3605.7,
+          "tier": "Critical",
+          "p_any_2q": 0.957,
+          "slip_to_date_months": 27.0,
+          "evidence": [
+            "land: Centre told Lok Sabha the Kancheepuram-Sriperumbudur package was 83% done, deadline moved to 30 April 2026; land and crop compensation, tower relocation, earth shortage cited. (DT Next, 2025-12); no NH number in the name to link land data; not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
           "project_key": "PRJ-004269",
           "project_name": "6L of Taliparamba to Muzhappilangad from Km 134.650 to Km 170.6 of NH-66",
           "sector": "Roads & Highways",
@@ -98,51 +137,12 @@
           "evidence": [
             "land: NH-66 (km 134.65-170.6): 1,049 parcels over 3.6 years of notifications, complexity 4/5; not mentioned in report remarks up to Apr 2023; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
           ]
-        },
-        {
-          "project_key": "PRJ-005971",
-          "project_name": "Loha-Waranga Section of NH-361 from km 187.800 to km 244.369",
-          "sector": "Roads & Highways",
-          "state": "Maharashtra",
-          "anticipated_cost_cr": 3466.6,
-          "tier": "Medium",
-          "p_any_2q": 0.878,
-          "slip_to_date_months": 69.0,
-          "evidence": [
-            "land: NH-361 (km 187.8-244.369): 2,373 parcels over 7.1 years of notifications, complexity 5/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-          ]
-        },
-        {
-          "project_key": "PRJ-006177",
-          "project_name": "4L of Pathalgaon-Kunkuri-CG/JH Border section of NH-43 from Km. 00.000 to Km.104.250",
-          "sector": "Roads & Highways",
-          "state": "Chhattisgarh",
-          "anticipated_cost_cr": 3147.1,
-          "tier": "Low",
-          "p_any_2q": 0.069,
-          "slip_to_date_months": 0.0,
-          "evidence": [
-            "land: NH-43 (km 0-104.25): 5,927 parcels over 8.6 years of notifications, complexity 4/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-          ]
-        },
-        {
-          "project_key": "PRJ-005966",
-          "project_name": "4L of Urga - Pathalgaon from Km. 70.200 to km. 157.745 of NH-130A",
-          "sector": "Roads & Highways",
-          "state": "Chhattisgarh",
-          "anticipated_cost_cr": 2860.4,
-          "tier": "High",
-          "p_any_2q": 0.898,
-          "slip_to_date_months": 0.0,
-          "evidence": [
-            "land: NH-130A (km 70.2-157.745): 2,283 parcels over 4.3 years of notifications, complexity 5/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-          ]
         }
       ]
     },
     "forest_clearance": {
-      "n_flagged": 20,
-      "capital_exposed_cr": 49737.2,
+      "n_flagged": 23,
+      "capital_exposed_cr": 60162.3,
       "top": [
         {
           "project_key": "PRJ-005317",
@@ -155,6 +155,32 @@
           "slip_to_date_months": 75.0,
           "evidence": [
             "forest_clearance: open on PARIVESH past its rule limit; no free-text remarks in any report; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0); PARIVESH: FP/GJ/IRRIG/10623/2015 (sardar sarovar narmadanigam, contraction dhrangadhra branch..., 8.7 ha): filed Mar 2015, Stage-I Dec 2017, awaiting Stage-II for 102 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); last EDS or site-inspection entry 15 Jan 2018 (EDS Sought(State Government)); portal status on 2026-09-27: IN-PRINCIPLE | FP/GJ/IRRIG/14657/2015 (Sardar Sarovar Narmada Nigam LTD, 3.4 ha): filed Aug 2015, Stage-I Mar 2018, awaiting Stage-II for 99 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); last EDS or site-inspection entry 17 Feb 2018 (EDS Sought(State Government)); portal status on 2026-09-27: IN-PRINCIPLE | FP/GJ/IRRIG/12321/2015 (Sardar Sarovar Project Limbdi, 0.3 ha): filed Apr 2015, Stage-II May 2017; portal status on 2026-09-27: APPROVED | and 3 more"
+          ]
+        },
+        {
+          "project_key": "PRJ-005734",
+          "project_name": "Guwahati Ring Road in the State of Assam",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 5729.5,
+          "tier": "Low",
+          "p_any_2q": 0.073,
+          "slip_to_date_months": 0.0,
+          "evidence": [
+            "forest_clearance: The Guwahati ring road came under wildlife scrutiny following a High Court intervention. (The Economic Times, 2026-05); no free-text remarks in any report; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+          ]
+        },
+        {
+          "project_key": "PRJ-006160",
+          "project_name": "Wardha - Yavatmal Nanded Railway Line Project",
+          "sector": "Railways",
+          "state": "Maharashtra",
+          "anticipated_cost_cr": 4030.7,
+          "tier": "Watch",
+          "p_any_2q": null,
+          "slip_to_date_months": null,
+          "evidence": [
+            "forest_clearance: The Wardha-Yavatmal rail line is held up by forest red tape and incorrect forest land entries. (The Times of India, 2026-04); no free-text remarks in any report; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/MH/RAIL/49628/2020 (Construction of Wardha - Yavatmal -Pusad- Nanded new Broad..., 1.9 ha): filed Sep 2020, Stage-I May 2022, awaiting Stage-II for 50 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); portal status on 2026-09-27: Pending at RO for Stage-II | FP/MH/RAIL/6560/2014 (Wardha-Nanded New Railway Line, 19.1 ha): filed Aug 2014, Stage-II Oct 2022; portal status on 2026-09-27: APPROVED | FP/MH/RAIL/29809/2017 (Wardha-Yavatmal-Pusad -Nanded New B.G.Railway Line, 149.7 ha): filed Oct 2017, Stage-II Sep 2024; portal status on 2026-09-27: APPROVED"
           ]
         },
         {
@@ -180,7 +206,7 @@
           "p_any_2q": 0.912,
           "slip_to_date_months": 122.0,
           "evidence": [
-            "forest_clearance: open on PARIVESH past its rule limit; not mentioned in report remarks up to Apr 2023; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/KA/ROAD/33150/2018 (NH-66 Four laning between Goa-Karnataka Border to Kundapur, 2.5 ha): filed Apr 2018, no Stage-I after 98 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); last EDS or site-inspection entry 11 Dec 2025 (SIR Requested); portal status on 2026-09-27: Pending at DFO/DCF | FP/KA/ROAD/34601/2018 (Four laning of Goa-Karnataka Border - Kundapur Section of ..., 28.2 ha): filed Jul 2018, Stage-II May 2025; portal status on 2026-09-27: APPROVED | FP/KA/ROAD/45169/2020 (Construction of Kumta Bypass through Manaki, Kalkeri,..., 7.8 ha): filed Mar 2020, dropped without approval; portal status on 2026-09-27: DELISTED (due to non-reply of EDS by UA within 90 days)"
+            "forest_clearance: open on PARIVESH past its rule limit; not mentioned in report remarks up to Apr 2023; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/KA/ROAD/33150/2018 (NH-66 Four laning between Goa-Karnataka Border to Kundapur, 2.5 ha): filed Apr 2018, no Stage-I after 98 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); last EDS or site-inspection entry 11 Dec 2025 (SIR Requested); portal status on 2026-09-27: Pending at DFO/DCF | FP/KA/ROAD/34601/2018 (Four laning of Goa-Karnataka Border - Kundapur Section of ..., 28.2 ha): filed Jul 2018, Stage-II May 2025; portal status on 2026-09-27: APPROVED | FP/KA/ROAD/45169/2020 (Construction of Kumta Bypass through Manaki, Kalkeri,..., 7.8 ha): filed Mar 2020, dropped without approval; portal status on 2026-09-27: DELISTED (due to non-reply of EDS by UA within 90 days); web research: Concessionaire says the Forest Department has not allowed use of land at some places, and some compensated owners have not vacated. (Deccan Herald, 2026-09)"
           ]
         },
         {
@@ -247,44 +273,202 @@
           "evidence": [
             "forest_clearance: open on PARIVESH past its rule limit; no free-text remarks in any report; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/MN/ROAD/20773/2016 (Construction of 154m span Steel Superstructure Bridge at km..., 6.3 ha): filed Aug 2016, Stage-I Dec 2016, awaiting Stage-II for 114 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); portal status on 2026-09-27: IN-PRINCIPLE | FP/MN/ROAD/150856/2022 (Widening and improvement of Package- VII of Imphal-Jiribam..., 95.1 ha): filed Jan 2022, Stage-I Jan 2023, awaiting Stage-II for 41 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); last EDS or site-inspection entry 13 Feb 2024 (EDS Sought(State Government)); portal status on 2026-09-27: IN-PRINCIPLE"
           ]
-        },
-        {
-          "project_key": "PRJ-003074",
-          "project_name": "Widening and Up-gradation to 2- Lane with Paved Shoulder Configuration and geometric improvement from Km. 208. 000 to Km 250.000 Package-5 on Aizawl Tuipang Section of NH-54 in the State of Mizoram Package-5",
-          "sector": "Roads & Highways",
-          "state": "Mizoram",
-          "anticipated_cost_cr": 752.9,
-          "tier": "Medium",
-          "p_any_2q": 0.833,
-          "slip_to_date_months": 38.0,
-          "evidence": [
-            "forest_clearance: open on PARIVESH past its rule limit; not mentioned in report remarks up to Apr 2023; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/MZ/ROAD/23969/2017 (Widening and upgradation of NH-54 to 2-Lane with paved..., 0.5 ha): filed Feb 2017, Stage-I Jan 2020, awaiting Stage-II for 77 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); portal status on 2026-09-27: IN-PRINCIPLE | FP/MZ/ROAD/41893/2019 (Widening and upgradation of NH-54 to 2-Lane with paved..., 0.8 ha): filed Sep 2019, Stage-II Nov 2021; portal status on 2026-09-27: APPROVED | FP/MZ/ROAD/43622/2019 (Widening and upgradation of NH-54 to 2-Lane with paved..., 9.0 ha): filed Jan 2020, Stage-II Feb 2024; portal status on 2026-09-27: APPROVED"
-          ]
-        },
-        {
-          "project_key": "PRJ-005626",
-          "project_name": "Widening to 2LPS between Km 0/0 to 56/0 Khokhara Gujarat Border Vijayanagar Antrasuba Mathasur road of NH 58 in the State of Gujarat",
-          "sector": "Roads & Highways",
-          "state": "Gujarat",
-          "anticipated_cost_cr": 699.2,
-          "tier": "Low",
-          "p_any_2q": 0.145,
-          "slip_to_date_months": 0.0,
-          "evidence": [
-            "forest_clearance: open on PARIVESH past its rule limit; no free-text remarks in any report; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/GJ/ROAD/45072/2020 (39.5 ha): filed Mar 2020, no Stage-I after 76 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); portal status on 2026-09-27: Pending at Nodal Officer | FP/GJ/ROAD/50927/2020 (27.1 ha): filed Oct 2020, no Stage-I after 69 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); portal status on 2026-09-27: Pending at DFO/DCF | FP/GJ/ROAD/44919/2020 (23.2 ha): filed Mar 2020, dropped without approval; portal status on 2026-09-27: DELISTED (due to non-reply of EDS by UA within 90 days)"
-          ]
         }
       ]
     },
     "litigation": {
-      "n_flagged": 0,
-      "capital_exposed_cr": 0.0,
-      "top": []
+      "n_flagged": 4,
+      "capital_exposed_cr": 5582.0,
+      "top": [
+        {
+          "project_key": "PRJ-004207",
+          "project_name": "Kwar HE Project",
+          "sector": "Power",
+          "state": "Jammu & Kashmir",
+          "anticipated_cost_cr": 4526.1,
+          "tier": "Low",
+          "p_any_2q": 0.493,
+          "slip_to_date_months": 16.0,
+          "evidence": [
+            "litigation: The National Green Tribunal has placed the Kwar Hydro Project under environmental scrutiny. (Daily Excelsior, 2026-09); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'"
+          ]
+        },
+        {
+          "project_key": "PRJ-003531",
+          "project_name": "Construction of Permanent Campus for IIM Jammu Phase-1 at Jagti, Nagrota, Jammu, J&K",
+          "sector": "Education",
+          "state": "Jammu & Kashmir",
+          "anticipated_cost_cr": 500.9,
+          "tier": "Low",
+          "p_any_2q": 0.302,
+          "slip_to_date_months": 29.0,
+          "evidence": [
+            "litigation: Delhi High Court allowed IIM Jammu to be added as a party in an arbitration-linked dispute over its Jagti campus. (LiveLawBiz, 2026-01); not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
+          "project_key": "PRJ-003454",
+          "project_name": "Construction of 2-lane with hard shoulder of Kohima - Jessami road on NH-29 Old NH- 150 from existing Km 30.474 Near Kidwema road Chakahabama to existing Km 53.220 Near Kikruma Village Design Km 29.60 to Km 51.50 Design length-21.90 Km in the state of Nagaland Under Bharatmala Pariyojna on EPC Mode under NHO Package-II -Balance work",
+          "sector": "Roads & Highways",
+          "state": "Nagaland",
+          "anticipated_cost_cr": 355.8,
+          "tier": "Medium",
+          "p_any_2q": 0.847,
+          "slip_to_date_months": 11.0,
+          "evidence": [
+            "litigation: Chakhesang Public Organisation filed a PIL over the delayed NH-29 Package-II. (MorungExpress, 2026-08); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005745",
+          "project_name": "Construction of bypass around Chatra Town on NH-22 old NH-99 in the state of Jharkhand under EPC Mode",
+          "sector": "Roads & Highways",
+          "state": "Jharkhand",
+          "anticipated_cost_cr": 199.2,
+          "tier": "Low",
+          "p_any_2q": 0.132,
+          "slip_to_date_months": 0.0,
+          "evidence": [
+            "litigation: Construction of the Chatra bypass has been halted following the High Court stay. (Construction World India, 2026-09) (+1 more); no free-text remarks in any report"
+          ]
+        }
+      ]
     },
     "contractor": {
-      "n_flagged": 0,
-      "capital_exposed_cr": 0.0,
-      "top": []
+      "n_flagged": 13,
+      "capital_exposed_cr": 13770.2,
+      "top": [
+        {
+          "project_key": "PRJ-005927",
+          "project_name": "Vadodara Mumbai Expressway Karvad - Jujuwa from Km. 128.000 to Km. 154.600 Phase-I Package-IX",
+          "sector": "Roads & Highways",
+          "state": "Gujarat",
+          "anticipated_cost_cr": 2587.0,
+          "tier": "Low",
+          "p_any_2q": 0.471,
+          "slip_to_date_months": 21.0,
+          "evidence": [
+            "contractor: NHAI has invited fresh bids to complete pending work on Package 9 of the Delhi-Mumbai Expressway's Vadodara-Virar section. (deshgujarat.com, 2026-05); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-003147",
+          "project_name": "Roing-Hunli Road Greenfield Alignment Project",
+          "sector": "Roads & Highways",
+          "state": "Arunachal Pradesh",
+          "anticipated_cost_cr": 1718.6,
+          "tier": "Critical",
+          "p_any_2q": 0.95,
+          "slip_to_date_months": 55.0,
+          "evidence": [
+            "contractor: Road at 82.32% progress; Dibang Valley DC voiced concern over delay and told NHIDCL and the DRA-ITL JV to add manpower and machinery; light-vehicle opening expected by October. (Arunachal Observer, 2026-07); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004324",
+          "project_name": "Bangalore Chennai Expressway Phase-III Package III Arakkonam to Kancheepuram from Km 204.500 to Km 230.000",
+          "sector": "Roads & Highways",
+          "state": "Tamil Nadu",
+          "anticipated_cost_cr": 1525.1,
+          "tier": "Low",
+          "p_any_2q": 0.471,
+          "slip_to_date_months": 41.0,
+          "evidence": [
+            "contractor: NHAI ended the contract for the Arakkonam-Kancheepuram expressway stretch and issued a fresh Rs 633 crore tender. (Swarajya, 2026-09) (+2 more); not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
+          "project_key": "PRJ-003067",
+          "project_name": "Solan - Kaithlighat Section of NH-22 Now NH-5 from Km. 106.139 to Km.129.05",
+          "sector": "Roads & Highways",
+          "state": "Himachal Pradesh",
+          "anticipated_cost_cr": 1519.5,
+          "tier": "Medium",
+          "p_any_2q": 0.891,
+          "slip_to_date_months": 66.0,
+          "evidence": [
+            "contractor: NHAI labelled the contractor a non-performer as widening work on the Solan-Kaithlighat highway moved slowly. (The Tribune, 2026-08); not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
+          "project_key": "PRJ-005236",
+          "project_name": "Development of New Civil Enclave at Bihta",
+          "sector": "Civil Aviation",
+          "state": "Bihar",
+          "anticipated_cost_cr": 1413.0,
+          "tier": "Watch",
+          "p_any_2q": null,
+          "slip_to_date_months": null,
+          "evidence": [
+            "contractor: Russian contractor stopped terminal building work for about a month after withdrawing workers and machinery from May 2026; only 2% of the Rs 460 crore terminal built. (Ghamasan, 2026-08); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004417",
+          "project_name": "4L of HP/Punjab Border - Mo from km. 11.00 to km. 42.00 of Old NH-20 New NH-154 Package-IA",
+          "sector": "Roads & Highways",
+          "state": "Himachal Pradesh",
+          "anticipated_cost_cr": 1363.0,
+          "tier": "High",
+          "p_any_2q": 0.939,
+          "slip_to_date_months": 31.0,
+          "evidence": [
+            "contractor: Package-1 work sat idle for over a month amid an IRB-subcontractor dispute; after NHAI imposed a heavy delay penalty, IRB took back control from the sub-contractor and pledged to restart within a week. (The Tribune, 2025-08); not mentioned in report remarks up to Apr 2023"
+          ]
+        },
+        {
+          "project_key": "PRJ-003871",
+          "project_name": "Construction of New 2-Lane Bridge with its approaches from km 0000 to Km 4385 across River Brahmaputra on NH-17 at Jogighopa in Assam on EPC mode",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 746.8,
+          "tier": "High",
+          "p_any_2q": 0.932,
+          "slip_to_date_months": 25.0,
+          "evidence": [
+            "contractor: With work around 70% complete and still lagging, NHIDCL served a notice on S.P. Singla Construction to speed up. (The Sentinel, 2025-11); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005764",
+          "project_name": "Construction of Balance Work of 4-Laning of the Section from Jhanji to Demow of NH- 37 Old from Km 514.800 to Km 534.800 20.000 Km, under SARDP- NE under EPC Mode in the state of Assam Pkg-III Road Works",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 619.7,
+          "tier": "High",
+          "p_any_2q": 0.918,
+          "slip_to_date_months": 13.0,
+          "evidence": [
+            "contractor: After the October 2025 deadline was missed, NHIDCL issued cure notices for slow progress to two Jhanji-Demow contractors, one of them the Package-III firm. (The Sentinel Assam, 2025-12); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-005746",
+          "project_name": "Construction of Balance Work of 4-Laning of the Section from Jhanji to Demow of NH- 37 Old from Km 501.800 to Km 514.800 13.000 Km, under SARDP- NE under EPC Mode in the state of Assam Pkg-II Road Works",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 542.9,
+          "tier": "High",
+          "p_any_2q": 0.918,
+          "slip_to_date_months": 9.0,
+          "evidence": [
+            "contractor: After the October 2025 deadline was missed, NHIDCL issued a cure notice to Bharat Vanijya Eastern Pvt Ltd for slow progress on its Jhanji-Demow package. (The Sentinel Assam, 2025-12); no free-text remarks in any report"
+          ]
+        },
+        {
+          "project_key": "PRJ-004570",
+          "project_name": "Construction of Mangaldoi Bypass NH-15 starting at Ch 26400 and terminating at Ch 41505 under Rangia NH Division L 15.105 Km in the State of Assam. Job No. 15/AS/2021-22/234",
+          "sector": "Roads & Highways",
+          "state": "Assam",
+          "anticipated_cost_cr": 535.0,
+          "tier": "High",
+          "p_any_2q": 0.938,
+          "slip_to_date_months": 20.0,
+          "evidence": [
+            "contractor: Progress crept from 75.65% (2 June) to 76.82% (13 July 2026); district inspection team was dissatisfied with contractor Vensar despite all hindrances cleared; financial progress 63.05%. (The Sentinel, 2026-07-13); no free-text remarks in any report"
+          ]
+        }
+      ]
     },
     "utility_shifting": {
       "n_flagged": 0,
@@ -298,21 +482,21 @@
     }
   },
   "early_notice": {
-    "n_projects": 109,
-    "capital_exposed_cr": 171650.5,
+    "n_projects": 122,
+    "capital_exposed_cr": 207142.6,
     "by_factor": {
-      "land": 98,
-      "forest_clearance": 14,
-      "litigation": 0,
-      "contractor": 0,
+      "land": 103,
+      "forest_clearance": 16,
+      "litigation": 4,
+      "contractor": 4,
       "utility_shifting": 0,
       "inter_agency": 0
     },
-    "n_flagged_any": 151,
-    "capital_flagged_any_cr": 212180.5,
+    "n_flagged_any": 173,
+    "capital_flagged_any_cr": 261929.2,
     "no_slip_to_date": {
-      "n_projects": 22,
-      "capital_exposed_cr": 21273.8
+      "n_projects": 26,
+      "capital_exposed_cr": 28970.6
     },
     "top": [
       {
@@ -326,6 +510,46 @@
         "slip_to_date_months": 75.0,
         "evidence": [
           "forest_clearance: open on PARIVESH past its rule limit; no free-text remarks in any report; non-linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_main) (expected 3.0); PARIVESH: FP/GJ/IRRIG/10623/2015 (sardar sarovar narmadanigam, contraction dhrangadhra branch..., 8.7 ha): filed Mar 2015, Stage-I Dec 2017, awaiting Stage-II for 102 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); last EDS or site-inspection entry 15 Jan 2018 (EDS Sought(State Government)); portal status on 2026-09-27: IN-PRINCIPLE | FP/GJ/IRRIG/14657/2015 (Sardar Sarovar Narmada Nigam LTD, 3.4 ha): filed Aug 2015, Stage-I Mar 2018, awaiting Stage-II for 99 months at Jul 2026; rule limit about 60 months (Van Rules 2023 rule 11(10): Stage-I may be revoked after 5 years of pending compliance); last EDS or site-inspection entry 17 Feb 2018 (EDS Sought(State Government)); portal status on 2026-09-27: IN-PRINCIPLE | FP/GJ/IRRIG/12321/2015 (Sardar Sarovar Project Limbdi, 0.3 ha): filed Apr 2015, Stage-II May 2017; portal status on 2026-09-27: APPROVED | and 3 more"
+        ]
+      },
+      {
+        "project_key": "PRJ-005616",
+        "project_name": "Bangalore Suburban Railway Project",
+        "sector": "Railways",
+        "state": "Karnataka",
+        "anticipated_cost_cr": 15767.0,
+        "tier": "Low",
+        "p_any_2q": 0.238,
+        "slip_to_date_months": 39.0,
+        "evidence": [
+          "land: Only one of the four Bengaluru suburban rail corridors has cleared its land hurdle. (The Hindu, 2026-08); no land data for non-road projects; no free-text remarks in any report"
+        ]
+      },
+      {
+        "project_key": "PRJ-005734",
+        "project_name": "Guwahati Ring Road in the State of Assam",
+        "sector": "Roads & Highways",
+        "state": "Assam",
+        "anticipated_cost_cr": 5729.5,
+        "tier": "Low",
+        "p_any_2q": 0.073,
+        "slip_to_date_months": 0.0,
+        "evidence": [
+          "land: A dispute over land compensation in North Kamrup is weighing on the Guwahati Ring Road project. (The Assam Tribune, 2026-07); no NH number in the name to link land data; no free-text remarks in any report",
+          "forest_clearance: The Guwahati ring road came under wildlife scrutiny following a High Court intervention. (The Economic Times, 2026-05); no free-text remarks in any report; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0)"
+        ]
+      },
+      {
+        "project_key": "PRJ-004207",
+        "project_name": "Kwar HE Project",
+        "sector": "Power",
+        "state": "Jammu & Kashmir",
+        "anticipated_cost_cr": 4526.1,
+        "tier": "Low",
+        "p_any_2q": 0.493,
+        "slip_to_date_months": 16.0,
+        "evidence": [
+          "litigation: The National Green Tribunal has placed the Kwar Hydro Project under environmental scrutiny. (Daily Excelsior, 2026-09); last mentioned Apr 2023 to Apr 2023, not mentioned since: 'Hon\u2019ble Court has further dismissed the petition of M/s Om Infra Ltd vide order dt. 29.05.2023'"
         ]
       },
       {
@@ -485,6 +709,19 @@
         ]
       },
       {
+        "project_key": "PRJ-005927",
+        "project_name": "Vadodara Mumbai Expressway Karvad - Jujuwa from Km. 128.000 to Km. 154.600 Phase-I Package-IX",
+        "sector": "Roads & Highways",
+        "state": "Gujarat",
+        "anticipated_cost_cr": 2587.0,
+        "tier": "Low",
+        "p_any_2q": 0.471,
+        "slip_to_date_months": 21.0,
+        "evidence": [
+          "contractor: NHAI has invited fresh bids to complete pending work on Package 9 of the Delhi-Mumbai Expressway's Vadodara-Virar section. (deshgujarat.com, 2026-05); no free-text remarks in any report"
+        ]
+      },
+      {
         "project_key": "PRJ-004296",
         "project_name": "4L of Bettadahalli- Shivamogga section from Km.170.415 to km. 226.750 of NH-206 Tumkur- Shivamogga Pkg-IV",
         "sector": "Roads & Highways",
@@ -521,58 +758,6 @@
         "slip_to_date_months": 83.0,
         "evidence": [
           "land: NH-82 (km 0-92.935): 6,282 parcels over 10.0 years of notifications, complexity 4/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-        ]
-      },
-      {
-        "project_key": "PRJ-005796",
-        "project_name": "4L of Greenfield Alignment from Km. 47.000 to Km. 89.210 of Balbhadarpur to Bela Nawda Section of NH-119D",
-        "sector": "Roads & Highways",
-        "state": "Bihar",
-        "anticipated_cost_cr": 2118.5,
-        "tier": "Low",
-        "p_any_2q": 0.228,
-        "slip_to_date_months": 24.0,
-        "evidence": [
-          "land: NH-119D (km 47-89.21): 11,591 parcels over 4.1 years of notifications, complexity 5/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-        ]
-      },
-      {
-        "project_key": "PRJ-006090",
-        "project_name": "4L of Tumkur-Shimoga Pkg-II from Km 65.195 Karadi to Km 121.900 Banawara of NH-206",
-        "sector": "Roads & Highways",
-        "state": "Karnataka",
-        "anticipated_cost_cr": 1989.9,
-        "tier": "Medium",
-        "p_any_2q": 0.895,
-        "slip_to_date_months": 62.0,
-        "evidence": [
-          "land: NH-206 (km 65.195-121.9): 3,576 parcels over 5.5 years of notifications, complexity 5/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-        ]
-      },
-      {
-        "project_key": "PRJ-004274",
-        "project_name": "6L Greenfield Kandili - Aluru Section of NH-130-CD Road from km 342500 to km 365033 Package-OD-8",
-        "sector": "Roads & Highways",
-        "state": "Odisha",
-        "anticipated_cost_cr": 1912.8,
-        "tier": "Medium",
-        "p_any_2q": 0.854,
-        "slip_to_date_months": 22.0,
-        "evidence": [
-          "land: NH-130CD (km 342.5-365.033): 1,286 parcels over 3.6 years of notifications, complexity 4/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
-        ]
-      },
-      {
-        "project_key": "PRJ-004439",
-        "project_name": "4L of Ratnagiri - Kolhapur section from km 112.340 to km 145.300 of NH-166 PkgIII",
-        "sector": "Roads & Highways",
-        "state": "Maharashtra",
-        "anticipated_cost_cr": 1910.4,
-        "tier": "Medium",
-        "p_any_2q": 0.833,
-        "slip_to_date_months": 20.0,
-        "evidence": [
-          "land: NH-166 (km 112.34-145.3): 4,222 parcels over 7.0 years of notifications, complexity 5/5; no free-text remarks in any report; measured hidden delay at the same deadline distance, complexity 4+/5 on the linked stretch: no measurable extra delay (-1 month over the next year, CI -3 to 0; +3 pts date-push risk, CI -6 to +11; 69 projects)"
         ]
       }
     ]
@@ -1031,7 +1216,7 @@
         "p_any_2q": 0.912,
         "slip_to_date_months": 122.0,
         "evidence": [
-          "forest_clearance: open on PARIVESH past its rule limit; not mentioned in report remarks up to Apr 2023; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/KA/ROAD/33150/2018 (NH-66 Four laning between Goa-Karnataka Border to Kundapur, 2.5 ha): filed Apr 2018, no Stage-I after 98 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); last EDS or site-inspection entry 11 Dec 2025 (SIR Requested); portal status on 2026-09-27: Pending at DFO/DCF | FP/KA/ROAD/34601/2018 (Four laning of Goa-Karnataka Border - Kundapur Section of ..., 28.2 ha): filed Jul 2018, Stage-II May 2025; portal status on 2026-09-27: APPROVED | FP/KA/ROAD/45169/2020 (Construction of Kumta Bypass through Manaki, Kalkeri,..., 7.8 ha): filed Mar 2020, dropped without approval; portal status on 2026-09-27: DELISTED (due to non-reply of EDS by UA within 90 days)"
+          "forest_clearance: open on PARIVESH past its rule limit; not mentioned in report remarks up to Apr 2023; linear, area unknown: up to MoEFCC with PSC + FAC + site inspection (scenario 5_DH_gt40) (expected 3.0); PARIVESH: FP/KA/ROAD/33150/2018 (NH-66 Four laning between Goa-Karnataka Border to Kundapur, 2.5 ha): filed Apr 2018, no Stage-I after 98 months at Jul 2026; rule limit about 8 months (FC Rules 2004: 255 days to Stage-I for up to 40 ha, not mining); last EDS or site-inspection entry 11 Dec 2025 (SIR Requested); portal status on 2026-09-27: Pending at DFO/DCF | FP/KA/ROAD/34601/2018 (Four laning of Goa-Karnataka Border - Kundapur Section of ..., 28.2 ha): filed Jul 2018, Stage-II May 2025; portal status on 2026-09-27: APPROVED | FP/KA/ROAD/45169/2020 (Construction of Kumta Bypass through Manaki, Kalkeri,..., 7.8 ha): filed Mar 2020, dropped without approval; portal status on 2026-09-27: DELISTED (due to non-reply of EDS by UA within 90 days); web research: Concessionaire says the Forest Department has not allowed use of land at some places, and some compensated owners have not vacated. (Deccan Herald, 2026-09)"
         ]
       },
       {
@@ -1489,5 +1674,21 @@
         "as_of_note": "Bhoomi Rashi register, stretches fully notified by t"
       }
     ]
+  },
+  "web_research": {
+    "rule": "a live negative web research fact (severity >= 2, match high, within 4 quarters of asof) flags the row; source news_research where nothing else did",
+    "n_projects_with_facts": 728,
+    "flagged_only_by_research": {
+      "land_acquisition": 7,
+      "forest_clearance": 3,
+      "litigation": 4,
+      "contractor_stress": 13
+    },
+    "flagged_also_by_research": {
+      "land_acquisition": 2,
+      "forest_clearance": 1,
+      "litigation": 0,
+      "contractor_stress": 0
+    }
   }
 }
