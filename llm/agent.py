@@ -362,13 +362,16 @@ def _no_cites(v):
     return v
 
 
-def _digits(text: str) -> tuple[str, dict[str, str]]:
+def _digits(text: str, keep: set[str]) -> tuple[str, dict[str, str]]:
     """(text with the plain number words written as digits, 'two quarters' -> '2 quarters', so the check reads them
-    as the numbers they are; digits -> the words they replaced). 'one of', 'half', 'twice' and the like stay words
-    (brief.validate judges those)."""
+    as the numbers they are; digits -> the words they replaced). A word the facts themselves use ('ten workers' in
+    a research note: keep) stays a word, and so do 'one of', 'half', 'twice' and the like; brief.validate judges
+    those."""
     words: dict[str, str] = {}
 
     def repl(m):
+        if m[0].lower() in keep or (m[1] or m[3] or "").lower() in keep:
+            return m[0]
         n = (WORD_VALUES[m[3].lower()] if m[3] else
              WORD_VALUES[m[1].lower()] + (WORD_VALUES[m[2].lower()] if m[2] else 0))
         words.setdefault(str(n), m[0])
@@ -382,7 +385,8 @@ def check(text: str, blocks: list[dict], sources: list[dict], question: str, pub
     answer), citations that exist, and for the public no model internals."""
     facts = {"facts": _no_cites(blocks), "sources": [{k: s[k] for k in ("title", "source", "date")} for s in sources],
              "question": question}
-    body, words = _digits(CITE.sub(" ", text))
+    keep = {w.lower() for w in brief.NUMBER_WORD.findall(json.dumps(facts, ensure_ascii=False, default=str))}
+    body, words = _digits(CITE.sub(" ", text), keep)
     ok, reasons, _ = brief.validate(body, facts)
     reasons = [re.sub(r"^'(\d+)'", lambda m: f"'{words.get(m[1], m[1])}'", r) for r in reasons]
     cited = {int(n) for m in CITE.finditer(text) for n in m[1].split(",")}

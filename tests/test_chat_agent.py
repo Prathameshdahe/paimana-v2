@@ -243,6 +243,8 @@ def test_citations_and_public_internals_are_checked():
     assert agent.check("Three quarters on [1].", quarters, src, "?", True) == (
         False, ["'Three' is not in the payload"])
     assert not agent.check("The cost is double [1].", quarters, src, "?", True)[0]  # other number words stay words
+    note = [{**blocks[0], "summary": "a tunnel burst killed ten workers"}]  # a word the facts use stays a word
+    assert agent.check("A burst killed ten workers [1].", note, src, "?", True)[0]
 
 
 def test_facts_are_renumbered_deduplicated_and_fitted():
