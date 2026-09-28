@@ -355,6 +355,19 @@ def test_batch_keys_rotate(agent_db):
     assert first[0] not in research.batch_keys(5)          # researched: to the back of the rotation
 
 
+def test_long_watchlists_do_not_starve_the_risky_rotation(agent_db):
+    idx = scout.index()["projects"]
+    quiet = sorted(k for k, p in idx.items() if p["tier"] not in research.RISKY_TIERS)[:6]
+    for k in quiet:
+        db.watch("ipmd_analyst", k)
+    got = research.batch_keys(4)
+    assert got[:2] == quiet[:2] and all(idx[k]["tier"] in research.RISKY_TIERS for k in got[2:])   # half the run
+    for k in got[:2]:
+        db.mark_researched(k, 0, 0)
+    assert research.batch_keys(4)[:2] == quiet[2:4]         # the watched rotate too, least recently researched first
+    assert research.batch_keys(1) == [quiet[2]] and len(research.batch_keys(40)) == 40
+
+
 def test_api_job_and_live_status(agent_db, monkeypatch):
     monkeypatch.setattr(research, "_judge_llm", FakeJudge())
     monkeypatch.setattr(scout, "run", lambda keys, pib=True, get=None: {"errors": []})

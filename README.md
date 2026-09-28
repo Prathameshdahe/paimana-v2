@@ -155,7 +155,8 @@ The backend runs these background loops (`backend/live/scheduler.py`):
   `POST /api/jobs/scout?project_key=PRJ-...` scouts one project on the spot.
 - **Research agent**, every `RESEARCH_INTERVAL_H` hours (24; the first run is
   30 minutes after start; `RESEARCH_AGENT=0` turns it off). For up to
-  `RESEARCH_PER_RUN` projects (20; watchlists, then Critical, High and Watch)
+  `RESEARCH_PER_RUN` projects (20; watchlists for up to half of them, then
+  Critical, High and Watch, the least recently researched first)
   it refreshes the news, has the local LLM judge each new item from its
   headline (relevant or not, category, direction, severity, a short summary
   whose numbers must be in the headline), stores the relevant ones as cited

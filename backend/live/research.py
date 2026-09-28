@@ -519,15 +519,19 @@ def per_run() -> int:
 
 
 def batch_keys(n: int | None = None) -> list[str]:
-    """Watchlisted projects first, then Critical, High and Watch, the least recently researched (never first) and
-    riskiest first."""
+    """Up to n (RESEARCH_PER_RUN) projects: watchlisted ones first, for at most half the run, then Critical, High and
+    Watch, then any watchlisted ones past their half; within each the least recently researched (never first), then
+    the first watched or the riskiest. The cap keeps the risky rotation moving however long the watchlists get."""
+    n = n or per_run()
     idx = scout.index()["projects"]
     last = db.researched()
     with closing(db.connect()) as con:
         watched = [r[0] for r in con.execute("SELECT project_key FROM watchlist GROUP BY 1 ORDER BY min(added_at)")]
-    risky = sorted((k for k, p in idx.items() if p["tier"] in RISKY_TIERS),
+    watched = sorted((k for k in dict.fromkeys(watched) if k in idx), key=lambda k: last.get(k) or "")
+    risky = sorted((k for k, p in idx.items() if p["tier"] in RISKY_TIERS and k not in set(watched)),
                    key=lambda k: (last.get(k) or "", -(idx[k]["p_any_2q"] or 0)))
-    return list(dict.fromkeys(k for k in watched + risky if k in idx))[:n or per_run()]
+    share = watched[:(n + 1) // 2]
+    return (share + risky + watched[len(share):])[:n]
 
 
 def batch() -> dict:
