@@ -88,10 +88,10 @@ def _names(text: str, key: str, name: str) -> bool:
 def expect(api: TestClient, q: dict, check: dict):
     """The value a check compares with, read from the API as the question's viewer."""
     with viewing_as(q):
-        return _expect(api, check)
+        return _expect(api, q, check)
 
 
-def _expect(api: TestClient, check: dict):
+def _expect(api: TestClient, q: dict, check: dict):
     kind = check["kind"]
     if kind in ("count", "top_group", "first_project"):
         r = api.get(check["path"], params=check.get("params") or {})

@@ -52,3 +52,18 @@ def test_a_card_passes_a_check_but_not_the_answer_text():
                            {"routing_ok": True, "tools_ok": True, "checks_ok": True, "text_checked": False,
                             "text_ok": True, "first_card_s": 0.1, "done_s": 1.0}], llm=False)
     assert s["checks"] == "2/2" and s["text_checks"] == "0/1"
+
+
+def test_every_check_kind_gets_its_expected_value():
+    """expect() reads each API-backed check's value as the question's viewer; worst_agency reads the hidden bias from
+    serving (the API sends it to the developer only), so it needs the question too."""
+    from backend import serving  # noqa: PLC0415
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from backend.main import app  # noqa: PLC0415
+    q = next(q for q in chat_eval.load() if any(c["kind"] == "worst_agency" for c in q["checks"]))
+    with TestClient(app) as api:
+        got = chat_eval.expect(api, q, {"kind": "worst_agency"})
+    scope = make_viewer(q["role"], q.get("ministry"), q.get("agency")).scope
+    ranked = [p for p in serving.agency_matrix(scope=scope)["points"] if not p["hidden"] and p["schedule_bias"]]
+    assert got == max(ranked, key=lambda p: p["schedule_bias"])["agency"]
