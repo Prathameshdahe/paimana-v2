@@ -8,7 +8,8 @@
  * undecodable data are skipped, so a newer backend cannot break an older page.
  *
  * Errors, as ApiError (lib/api.ts): status 0 the backend is not reachable (or the stream broke); 429 the rate limit,
- * its message the backend's JSON `detail`; any other status with the detail when there is one. Aborting the signal
+ * its message the backend's JSON `detail` (which says when to ask again; else built from Retry-After); any other
+ * status with the detail when there is one. Aborting the signal
  * rejects with the fetch AbortError; the caller tells a stop from a failure by `signal.aborted`.
  */
 import { API_BASE, ApiError, url, viewerHeaders } from '@/lib/api'
@@ -91,13 +92,20 @@ export function chatMessages(history: ChatTurn[], question: string): ChatTurn[] 
 async function failure(res: Response): Promise<ApiError> {
   let detail = res.statusText || `HTTP ${res.status}`
   let body: unknown
+  let given = false
   try {
     body = await res.json()
     const d = (body as { detail?: unknown } | null)?.detail
-    if (typeof d === 'string') detail = d
+    if (typeof d === 'string') {
+      detail = d
+      given = true
+    }
   } catch {
     // not a JSON error body
   }
+  // the rate limit's detail says when to ask again; without one, the Retry-After header does
+  const wait = Number(res.headers.get('Retry-After'))
+  if (res.status === 429 && !given && wait > 0) detail = `Please try again in ${Math.ceil(wait)} seconds.`
   return new ApiError(res.status, detail, body)
 }
 

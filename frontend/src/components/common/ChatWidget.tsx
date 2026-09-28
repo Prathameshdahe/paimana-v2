@@ -520,7 +520,7 @@ function ProblemNote({ p }: { p: Problem }) {
     return (
       <div className="rounded-xl border border-warning/25 bg-warning/5 px-3.5 py-2.5 text-fg-base">
         <div className="font-medium text-warning">Too many questions in a short time</div>
-        <div className="mt-0.5 text-xs text-fg-muted">{p.message} Wait a minute, then ask again.</div>
+        <div className="mt-0.5 text-xs text-fg-muted">{p.message}</div>
       </div>
     )
   }
