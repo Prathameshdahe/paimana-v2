@@ -91,9 +91,10 @@ def due(key: str) -> str:
 
 
 def batch_keys() -> list[str]:
-    """The Critical, High and Watch projects, least recently opined first (never first), then by tier, then the
-    riskiest (p_any_2q; the Watch tier has none) and key."""
-    last = db.second_opinion_times()
+    """The Critical, High and Watch projects, least recently opined in the plain view (the job's; a developer's
+    numbers-view opinion on demand does not count) first (never first), then by tier, then the riskiest (p_any_2q;
+    the Watch tier has none) and key."""
+    last = db.second_opinion_times(view="plain")
     rank = {t: i for i, t in enumerate(RISKY_TIERS)}
     rows = [r for t in RISKY_TIERS for r in serving.in_tier(t)]
     return [r["project_key"] for r in sorted(rows, key=lambda r: (

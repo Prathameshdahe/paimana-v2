@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import brief, db, labels, serving, store  # noqa: E402
 from backend.access import Viewer  # noqa: E402
-from backend.live import scheduler  # noqa: E402
+from backend.live import opinions, scheduler  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.schemas import ScoutOutput, _to_camel  # noqa: E402
 from llm import agent, client as llm_client, rag, second_opinion as so, tools, worker  # noqa: E402
@@ -556,6 +556,23 @@ def test_second_opinion_views_are_worded_and_stored_apart(client, world, fresh_d
     assert o["status"] == "ok" and o["view"] == "plain" and not o["cached"]
     assert not leaks(o) and not text_leaks(o) and o["evidenceHash"] == so.evidence_hash(plain)
     assert {r["view"] for r in db.second_opinions(k)} == {"numbers", "plain"}
+
+
+def test_the_nightly_rotation_follows_the_plain_opinions(fresh_db):
+    """The job asks for the plain view (what officials read): a developer's numbers-view opinion on demand does not
+    send the project to the back of its rotation."""
+    db.init()
+    k = opinions.batch_keys()[0]
+    row = {"project_key": k, "evidence_hash": "numbers", "model": "m", "prompt_version": "v", "asof": "2026-07-01",
+           "generated_at": "2099-01-01T00:00:00+00:00", "status": "ok", "view": "numbers"}
+    db.save_second_opinion(row)
+    assert k in db.second_opinion_times() and db.second_opinion_times(view="plain") == {}
+    assert opinions.batch_keys()[0] == k
+    db.save_second_opinion({**row, "evidence_hash": "plain", "view": "plain"})
+    assert db.second_opinion_times(view="plain") == {k: row["generated_at"]} and opinions.batch_keys()[-1] == k
+    legacy = {kk: v for kk, v in row.items() if kk != "view"}   # stored before the views: the numbers view
+    db.save_second_opinion({**legacy, "evidence_hash": "legacy"})
+    assert db.second_opinion_times(view="numbers") == {k: row["generated_at"]}
 
 
 # ------------------------------------------------------------------ chat and worker

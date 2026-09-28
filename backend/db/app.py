@@ -693,12 +693,14 @@ def second_opinions(project_key: str | None = None) -> list[dict]:
     return [_opinion(r) for r in _rows_or_none(sql + " ORDER BY generated_at DESC NULLS LAST, project_key", params)]
 
 
-def second_opinion_times() -> dict[str, str]:
+def second_opinion_times(view: str | None = None) -> dict[str, str]:
     """project_key -> when it was last asked for a second opinion: its newest one (any evidence version, accepted or
-    rejected) or a newer rejection noted on an accepted one (json last_rejected.at)."""
+    rejected) or a newer rejection noted on an accepted one (json last_rejected.at); with view only the opinions of
+    that view ('plain' or 'numbers': json view, an opinion stored before the views is 'numbers')."""
     return {r["project_key"]: r["last"] for r in _rows_or_none("""SELECT project_key,
         max(greatest(generated_at, CAST("json" -> 'last_rejected' ->> 'at' AS timestamptz))) AS last
-        FROM app.second_opinions GROUP BY 1""")}
+        FROM app.second_opinions WHERE CAST(:view AS text) IS NULL OR coalesce("json" ->> 'view', 'numbers') = :view
+        GROUP BY 1""", {"view": view})}
 
 
 def save_second_opinion(row: dict) -> None:
