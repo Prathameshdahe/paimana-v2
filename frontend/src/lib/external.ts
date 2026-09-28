@@ -77,7 +77,8 @@ export function fromPrior(p: HiddenDelayPrior): Estimate {
 
 export function fromMatch(m: HiddenDelayMatch): Estimate {
   return {
-    label: m.label, measurable: m.measurable, nProjects: m.nProjects, nRows: m.nRows,
+    // unit G types the descriptive fields nullable: a missing count reads as none measured
+    label: m.label ?? '', measurable: m.measurable ?? false, nProjects: m.nProjects ?? 0, nRows: m.nRows ?? 0,
     months: trio(m.extraMonths, m.extraMonthsLo, m.extraMonthsHi),
     push: trio(m.extraPush, m.extraPushLo, m.extraPushHi),
     holm: m.holmMonths === null && m.holmPush === null ? null : Math.min(m.holmMonths ?? 1, m.holmPush ?? 1),

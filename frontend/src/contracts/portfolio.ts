@@ -53,6 +53,9 @@ export interface TopProject {
   pAny2q: number | null
   /** the numbers in words; absent from an older backend */
   outlook?: Outlook | null
+  /** as on ProjectRow: the first plain driver that raises the risk, else the first flagged check (the public: always
+   * the check); absent from an older backend */
+  topReason?: string | null
   anticipatedCostCr: number | null
   /** the stagnation badge */
   override: boolean | null
@@ -323,15 +326,17 @@ export interface NoticeLift extends Lift {
   by_sector: Record<string, Lift>
 }
 
+/** the composite score's distribution per coverage: the counts stay; the score statistics are hidden numbers (null
+ * without the numbers feature) */
 export interface CompositeDistribution {
   n_projects: number
   n_score_ge_high: number
-  mean: number
-  min: number
-  '25%': number
-  '50%': number
-  '75%': number
-  max: number
+  mean: number | null
+  min: number | null
+  '25%': number | null
+  '50%': number | null
+  '75%': number | null
+  max: number | null
 }
 
 /** pipeline/hidden_delay.py: extra slip over the next 4 quarters against matched projects */
@@ -356,13 +361,16 @@ export interface HiddenDelayPrior {
   /**
    * the extra months in words (months, push and their CIs are hidden numbers); absent from an older backend. Unit G
    * sends it snake_case, like the rest of the summary's nested keys (extra_months_word); lib/external reads either.
+   * null: too few projects to measure (measurable false); 'no measurable extra delay': the interval does not lie
+   * above zero.
    */
   extra_months_word?: DelayWord | null
   extraMonthsWord?: DelayWord | null
   /** current projects in scope it applies to; null for the NH/district grouping (not rated) */
   n_current?: number | null
   garvit_status: string
-  garvit_band: string
+  /** Garvit's guessed band in months: a hidden number (null without the numbers feature) */
+  garvit_band: string | null
   as_of_note: string
 }
 
@@ -419,7 +427,8 @@ export interface ExternalSummary {
     n_rated: number
     n_flagged: number
     n_possible: number
-    link_check?: Record<string, { n: number; correct: number; ci_lo: number; ci_hi: number }>
+    /** a hand-checked sample per link method: n and correct stay; the bootstrap interval is a hidden number */
+    link_check?: Record<string, { n: number; correct: number; ci_lo: number | null; ci_hi: number | null }>
     by_state?: LandState[]
   } | null
   hiddenDelayPriors: { note: string; min_projects: number; rows: HiddenDelayPrior[] } | null

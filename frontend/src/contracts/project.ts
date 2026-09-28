@@ -62,6 +62,8 @@ export interface ProjectRow {
   monthsP95: number | null
   /** the numbers in words; absent from an older backend */
   outlook?: Outlook | null
+  /** the top five drivers in words, strongest first ([] for the public); absent from an older backend */
+  driversPlain?: PlainDriver[] | null
   /** the plainest reason it ranks where it does (the first plain driver, else the first flagged check); absent from an
    * older backend */
   topReason?: string | null
@@ -243,14 +245,17 @@ export interface RemarkStatus {
   proposalNo: string | null
 }
 
-/** a measured hidden-delay prior that applies to the project (pipeline/hidden_delay.py) */
+/**
+ * a measured hidden-delay prior that applies to the project (pipeline/hidden_delay.py; unit G's schemas
+ * HiddenDelayPrior, whose descriptive fields are nullable)
+ */
 export interface HiddenDelayMatch {
   factor: 'forest_clearance' | 'land_progress' | 'land_complexity'
   group: string
-  label: string
-  nRows: number
-  nProjects: number
-  measurable: boolean
+  label: string | null
+  nRows: number | null
+  nProjects: number | null
+  measurable: boolean | null
   extraMonths: number | null
   extraMonthsLo: number | null
   extraMonthsHi: number | null
@@ -259,14 +264,17 @@ export interface HiddenDelayMatch {
   extraPushHi: number | null
   holmMonths: number | null
   holmPush: number | null
-  /** the measured extra months in words (the months, push and CIs are hidden numbers); absent from an older backend */
+  /**
+   * the measured extra months in words (the months, push and CIs are hidden numbers); null: too few projects to
+   * measure; absent from an older backend
+   */
   extraMonthsWord?: DelayWord | null
   /** what it was matched on */
-  basis: string
+  basis: string | null
   /** the remark quarter it is as of; null for the land register */
   asOf: string | null
   /** the status still describes the project at asof (a remark within 4 quarters, or the land register); else it is the last report's */
-  current: boolean
+  current: boolean | null
 }
 
 /** portal, proposals, remarkStatus and hiddenDelay are empty on the public page */
@@ -572,6 +580,8 @@ export interface BriefOut {
   nNumbersChecked: number | null
   attempts: number | null
   payload: Record<string, unknown>
+  /** the payload it was written from: 'numbers' (the developer) or 'plain' (outlook words); absent from an older backend */
+  view?: 'numbers' | 'plain'
 }
 
 /** the 422 body: numbers in the text that are not in the payload */
@@ -641,6 +651,9 @@ export interface SecondOpinionOut {
   nNumbersChecked?: number | null
   evidence?: OpinionEvidence[] | null
   pack?: { items?: OpinionEvidence[] | null } | null
+  /** the pack it was made from: 'numbers' (the developer) or 'plain' (the tier and outlook in words); absent from an
+   * older backend */
+  view?: 'numbers' | 'plain'
 }
 
 /** ?cached=1 with no opinion for the current evidence yet */

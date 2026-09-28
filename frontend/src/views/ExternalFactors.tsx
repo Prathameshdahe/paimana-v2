@@ -479,7 +479,7 @@ function DelayTile({ r, min }: { r: HiddenDelayPrior; min: number }) {
         <span className="text-xs leading-snug text-fg-muted">{r.label}</span>
         <InfoTip label={`About ${r.label}`}>
           {details(e, min, numbers).map((line) => <p key={line}>{line}</p>)}
-          {numbers
+          {numbers && r.garvit_band
             ? <p className="text-fg-dimmed">Garvit&rsquo;s guessed band ({r.garvit_status}): {r.garvit_band} months. Matched on {r.strata}; {r.as_of_note}.</p>
             : <p className="text-fg-dimmed">Matched on {r.strata}; {r.as_of_note}.</p>}
         </InfoTip>
@@ -730,18 +730,29 @@ function RemarkFlagsPanel({ s }: { s: ExternalSummary }) {
   )
 }
 
+/** the score statistics of one coverage, when all of them came (the developer's: they are hidden numbers) */
+interface Box { min: number; q25: number; q50: number; q75: number; max: number; mean: number }
+
+function boxOf(d: CompositeDistribution | undefined): Box | null {
+  if (!d) return null
+  const { min, max, mean } = d
+  const [q25, q50, q75] = [d['25%'], d['50%'], d['75%']]
+  return min === null || max === null || mean === null || q25 === null || q50 === null || q75 === null
+    ? null : { min, q25, q50, q75, max, mean }
+}
+
 /** min-max whisker, 25-75% box, median tick and the flag line on a 0-1 track */
-function BoxPlot({ d }: { d: CompositeDistribution }) {
+function BoxPlot({ b }: { b: Box }) {
   const x = (v: number) => `${Math.min(100, Math.max(0, v * 100))}%`
   return (
     <div className="relative h-6 rounded-md bg-surface-input" role="img"
-      aria-label={`min ${d.min.toFixed(2)}, quartiles ${d['25%'].toFixed(2)} / ${d['50%'].toFixed(2)} / ${d['75%'].toFixed(2)}, max ${d.max.toFixed(2)}`}>
-      <div className="absolute top-1/2 h-px bg-fg-dimmed" style={{ left: x(d.min), width: x(d.max - d.min) }} />
+      aria-label={`min ${b.min.toFixed(2)}, quartiles ${b.q25.toFixed(2)} / ${b.q50.toFixed(2)} / ${b.q75.toFixed(2)}, max ${b.max.toFixed(2)}`}>
+      <div className="absolute top-1/2 h-px bg-fg-dimmed" style={{ left: x(b.min), width: x(b.max - b.min) }} />
       <div
         className="absolute top-1 bottom-1 min-w-[3px] rounded-sm bg-accent/30 border border-accent"
-        style={{ left: x(d['25%']), width: x(d['75%'] - d['25%']) }}
+        style={{ left: x(b.q25), width: x(b.q75 - b.q25) }}
       />
-      <div className="absolute top-0 bottom-0 w-0.5 bg-fg-base" style={{ left: x(d['50%']) }} />
+      <div className="absolute top-0 bottom-0 w-0.5 bg-fg-base" style={{ left: x(b.q50) }} />
       <div className="absolute top-0 bottom-0 border-l border-dashed border-critical" style={{ left: x(COMPOSITE_HIGH) }} />
     </div>
   )
@@ -759,6 +770,7 @@ function CompositePanel({ s }: { s: ExternalSummary }) {
       <div className="space-y-5 px-5 py-4">
         {rows.map(({ key, label, note }) => {
           const d = s.externalComposite.by_coverage[key]
+          const b = numbers ? boxOf(d) : null
           return (
             <div key={key} className="space-y-1.5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -768,19 +780,19 @@ function CompositePanel({ s }: { s: ExternalSummary }) {
                 </span>
                 <span className="text-xs text-fg-dimmed">
                   {!d ? 'no projects'
-                    : numbers
-                      ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · median ${d['50%'].toFixed(2)} · mean ${d.mean.toFixed(2)}`
+                    : b
+                      ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · median ${b.q50.toFixed(2)} · mean ${b.mean.toFixed(2)}`
                       : `${d.n_score_ge_high.toLocaleString('en-IN')} of ${d.n_projects.toLocaleString('en-IN')} rated projects flagged`}
                 </span>
               </div>
-              {d && numbers && <BoxPlot d={d} />}
-              {d && !numbers && (
+              {b && <BoxPlot b={b} />}
+              {d && !b && (
                 <Bar share={d.n_score_ge_high / Math.max(d.n_projects, 1)} className="bg-fg-muted" />
               )}
             </div>
           )
         })}
-        {numbers && (
+        {rows.some(({ key }) => numbers && boxOf(s.externalComposite.by_coverage[key])) && (
           <div className="flex justify-between text-xs text-fg-dimmed">
             <span>0</span>
             <span>score · dashed at {COMPOSITE_HIGH}</span>

@@ -487,7 +487,7 @@ function DelayLine({ m, numbers }: { m: HiddenDelayMatch; numbers: boolean }) {
       <span>{m.current ? `Expected hidden delay${q ? ` (status as of ${q})` : ''}:` : `At the last report (${q ?? 'date unknown'}), projects at that status:`}</span>
       <span className={cn('font-semibold', !m.current || v.tone === 'muted' ? 'text-fg-muted' : INK[v.tone])}>{v.text}</span>
       <InfoTip label="About the measured hidden delay">
-        <p className="font-medium">{m.label}, from the {m.basis}{q ? ` (as of ${q})` : ''}.</p>
+        <p className="font-medium">{m.label ?? 'Measured on matched projects'}{m.basis ? `, from the ${m.basis}` : ''}{q ? ` (as of ${q})` : ''}.</p>
         {!m.current && <p>That status is more than {LIVE_QUARTERS} quarters old, so it is not an expected delay for the coming year.</p>}
         {details(e, 15, numbers).map((line) => <p key={line}>{line}</p>)}
       </InfoTip>
