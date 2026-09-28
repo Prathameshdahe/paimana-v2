@@ -31,10 +31,10 @@ Ranking: TF-IDF (word 1-2 grams, sublinear tf, English stop words) over title an
 project cards, help, docs and glossary alone (TITLE_RANK: a name finds its project card before the shorter chunks
 that also name it); and nomic embeddings ('search_document: ' before a chunk, 'search_query: ' before a question).
 Each ranks only the chunks the viewer may read: visibility (the public reads public chunks), scope (Viewer.keys, for
-the chunk's project and the projects it mentions), kinds and project are filtered before ranking, so a hidden chunk never takes a place. The
-rankings (top POOL each) are fused by reciprocal rank, score = sum of 1 / (RRF_K + rank). Without embeddings (still
-computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-IDF ranks alone: search() never
-raises for an LLM outage.
+the chunk's project and the projects it mentions), kinds and project are filtered before ranking, so a hidden chunk
+never takes a place. The rankings (top POOL each) are fused by reciprocal rank, score = sum of 1 / (RRF_K + rank).
+Without embeddings (still computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-IDF ranks
+alone: search() never raises for an LLM outage.
 
 Artifacts in dataset/rag/ (gitignored): chunks.parquet; embeddings.npz, the float16 vectors of the embedded chunks
 with the content hash of each, so a vector is only ever paired with the chunk text it was computed from (the files
