@@ -3,6 +3,7 @@ import { formatDate, cn } from '@/lib/formatters'
 import { RISK_DIMENSION, RISK_STATE_CHIP } from '@/lib/riskPalette'
 import type { RiskRow, RiskState } from '@/contracts/project'
 
+/** ml/risk_profile.py's source words for a row, as an officer reads them (backend/labels.py keeps the same) */
 const SOURCE_LABEL: Record<string, string> = {
   model: 'model',
   silver: 'reports',
@@ -11,7 +12,9 @@ const SOURCE_LABEL: Record<string, string> = {
   agency_stats: 'agency history',
   bhoomi_rashi: 'Bhoomi Rashi land records',
   parivesh_rules: 'Parivesh FC rules',
+  parivesh_portal: 'PARIVESH portal',
   external_composite: 'land + forest composite',
+  news_research: 'web research',
 }
 
 const CHIP_TEXT: Record<RiskState, string> = { flagged: 'Flagged', clear: 'Clear', unknown: 'Unknown ?' }

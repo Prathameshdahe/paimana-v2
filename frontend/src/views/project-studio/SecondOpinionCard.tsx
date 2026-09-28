@@ -9,6 +9,7 @@ import { CiteChip, CitedText } from '@/components/common/CitedText'
 import { useCachedSecondOpinion, useSecondOpinion } from '@/lib/queries'
 import { ApiError, isOffline } from '@/lib/api'
 import { citedRefs, webUrl } from '@/lib/citations'
+import { unavailableHeadline } from '@/lib/opinion'
 import { CONCERN, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import { cn, formatDateTime, formatLooseDate } from '@/lib/formatters'
 import { Section } from './ProjectVisuals'
@@ -55,12 +56,11 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 function OpinionError({ error }: { error: unknown }) {
   if (isOffline(error) || !(error instanceof ApiError)) return <ApiErrorNote error={error} className="py-3" />
   if (error.status === 503) {
-    // busy: LM Studio is up but answering the chat or writing a brief; the opinion waits its turn
-    const busy = (error.body as Partial<SecondOpinionUnavailable> | undefined)?.busy === true
+    // busy: LM Studio is up but answering the chat or writing a brief; down: not reachable; else it timed out
     return (
       <div className="space-y-1">
         <div className="text-sm font-semibold text-warning">
-          {busy ? 'The local model is busy; try again in a minute' : 'Local LLM not running — start LM Studio'}
+          {unavailableHeadline(error.body as Partial<SecondOpinionUnavailable> | undefined)}
         </div>
         <div className="text-xs text-fg-dimmed">{error.message}</div>
       </div>

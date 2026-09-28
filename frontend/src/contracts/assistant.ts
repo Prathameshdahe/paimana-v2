@@ -7,7 +7,7 @@
  * Numbers in the narrative were checked against the tools' facts (backend.brief.validate) unless `validated` is
  * false; `[n]` in the text points at item n of the turn's sources card.
  */
-import type { Flag, OpinionConcern, Tier } from './project'
+import type { DatePrecision, Flag, OpinionConcern, Tier } from './project'
 
 /** one earlier turn, text only; the backend keeps at most 12 and wants the last one from the user */
 export interface ChatTurn {
@@ -71,8 +71,9 @@ export interface StatsRow {
   name: string | null
   n: number
   capitalCr: number | null
-  nCritical: number
-  nHigh: number
+  /** null when the count is not known for the row (agency stats where the tiers were not counted), never 0 for it */
+  nCritical: number | null
+  nHigh: number | null
 }
 
 export interface StatsCard {
@@ -162,6 +163,8 @@ export interface ChatSource {
   source: string | null
   url: string | null
   date: string | null
+  /** how much of `date` the source gave: a month-precise fact is stored as its first day and shows as the month */
+  datePrecision?: DatePrecision | null
   projectKey: string | null
 }
 

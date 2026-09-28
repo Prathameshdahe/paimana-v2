@@ -19,12 +19,16 @@ export const RESEARCH_GROUPS: Array<{ key: ResearchGroup; label: string; hint: s
   { key: 'other', label: 'Older and other reports', hint: 'older issues and neutral reports' },
 ]
 
-/** live > progress (the category) > resolved > positive > other */
+/**
+ * live > resolved > progress (a positive fact, or the progress category unless the fact is negative) > other. A
+ * negative fact never lands in Progress: a stalled or slipping milestone is categorised `progress` too, and it
+ * belongs with the older issues, not the good news.
+ */
 export function researchGroup(f: Pick<ResearchFact, 'live' | 'status' | 'direction' | 'category'>): ResearchGroup {
   if (f.live) return 'live'
-  if (f.category === 'progress') return 'progress'
   if (f.status === 'resolved') return 'resolved'
-  if (f.direction === 'positive') return 'progress'
+  if (f.direction === 'negative') return 'other'
+  if (f.category === 'progress' || f.direction === 'positive') return 'progress'
   return 'other'
 }
 

@@ -553,9 +553,13 @@ export interface SecondOpinionRejected {
   attempts: number
 }
 
-/** the 503 body: LM Studio is not reachable, or (busy) serving the chat or a brief */
+/**
+ * the 503 body: LM Studio is not reachable (down), it answered nothing in time (down false), or (busy) it is
+ * serving the chat or a brief; an older backend sends neither flag, which reads as down
+ */
 export interface SecondOpinionUnavailable {
   status: 'llm_unavailable'
   detail: string
   busy?: boolean
+  down?: boolean
 }

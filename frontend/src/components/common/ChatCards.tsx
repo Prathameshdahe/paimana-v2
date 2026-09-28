@@ -120,6 +120,12 @@ const GROUP_LABEL: Record<string, string> = {
   bottleneck: 'Bottleneck',
 }
 
+/** a tier count: a number as itself, null as "unknown" (the count is not known for the row; not the same as 0) */
+function Count({ v, cls }: { v: number | null; cls: string }) {
+  if (v === null) return <span className="text-fg-dimmed" title="The count is not known for this row">unknown</span>
+  return <span className={v ? `font-semibold ${cls}` : 'text-fg-dimmed'}>{v}</span>
+}
+
 function StatsCardView({ card }: { card: StatsCard }) {
   const th = 'py-1.5 px-2 font-medium'
   return (
@@ -143,8 +149,8 @@ function StatsCardView({ card }: { card: StatsCard }) {
                 </th>
                 <td className="px-2 py-1.5 text-right tabular-nums text-fg-base">{r.n.toLocaleString('en-IN')}</td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg-muted">{orDash(r.capitalCr, formatINRShort)}</td>
-                <td className={cn('px-2 py-1.5 text-right tabular-nums', r.nCritical ? 'font-semibold text-critical' : 'text-fg-dimmed')}>{r.nCritical}</td>
-                <td className={cn('py-1.5 pl-2 pr-1 text-right tabular-nums', r.nHigh ? 'font-semibold text-warning' : 'text-fg-dimmed')}>{r.nHigh}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums"><Count v={r.nCritical} cls="text-critical" /></td>
+                <td className="py-1.5 pl-2 pr-1 text-right tabular-nums"><Count v={r.nHigh} cls="text-warning" /></td>
               </tr>
             ))}
           </tbody>
@@ -469,7 +475,7 @@ export function SourcesList({ items, anchor, flashed }: {
                 <div className="flex flex-wrap items-center gap-x-1.5 text-fg-dimmed">
                   <span>{KIND_LABEL[s.kind] ?? asLabel(s.kind)}</span>
                   {s.source && <span className="truncate">· {s.source}</span>}
-                  {s.date && <span>· {formatLooseDate(s.date)}</span>}
+                  {s.date && <span>· {formatLooseDate(s.date, s.datePrecision)}</span>}
                   {s.projectKey && (
                     <span>
                       ·{' '}
