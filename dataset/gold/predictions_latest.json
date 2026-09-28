@@ -1,12 +1,12 @@
 {
-  "path": "dataset/gold/predictions_lgbm-any2q-20260927-222602+20260928-051908_2026-07.parquet",
+  "path": "dataset/gold/predictions_lgbm-any2q-20260927-222602+20260928-072744_2026-07.parquet",
   "asof": "2026-07-01",
-  "model_version": "lgbm-any2q-20260927-222602+20260928-051908",
+  "model_version": "lgbm-any2q-20260927-222602+20260928-072744",
   "gold_version": "2676494d0207",
   "models": {
     "p_date_push_2q": "ML-20260927-222602/lightgbm/y_date_push_h2",
-    "p_cost_rev_2q": "ML-20260928-051908/lightgbm/y_cost_rev_h2",
+    "p_cost_rev_2q": "ML-20260928-072744/lightgbm/y_cost_rev_h2",
     "p_any_2q": "ML-20260927-222602/lightgbm/y_any_h2",
-    "p_any_4q": "ML-20260928-051908/lightgbm/y_any_h4"
+    "p_any_4q": "ML-20260927-222602/lightgbm/y_any_h4"
   }
 }
