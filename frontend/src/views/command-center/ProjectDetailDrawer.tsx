@@ -7,7 +7,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { ApiError } from '@/lib/api'
 import { useProject, useSignals, useTimeline } from '@/lib/queries'
 import { useProjectPanel } from '@/lib/useProjectPanel'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import {
   ExternalChips, MoneyBar, ProgressTrend, ProjectChips, RiskGrid, RiskRingCard, TimelineStrip, TimeVsWork, TopDrivers,
@@ -53,7 +53,7 @@ export function ProjectDetailDrawer() {
 }
 
 function PanelBody({ projectKey }: { projectKey: string }) {
-  const { role } = useRole()
+  const { role } = useSession()
   const full = can(role, 'canSeeDrivers')
   const { data: detail, error } = useProject(projectKey)
   // the canonical key: an old or merged key resolves to the project it now belongs to

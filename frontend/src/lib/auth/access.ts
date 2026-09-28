@@ -2,11 +2,12 @@
  * src/lib/auth/access.ts
  *
  * The one access map of the frontend: which role opens which page and uses which feature. Routes
- * (App.tsx), the nav, the bell, the chat, live controls and the project page all read it. The
- * backend enforces the same rules (backend/access.py POLICY; docs/ACCESS_CONTROL.md) — this map
- * only decides what is shown. No role (not signed in) is the public.
+ * (App.tsx), the nav, the bell, the chat, live controls, the account menu and the project page all read it.
+ * The backend enforces the same rules (backend/access.py POLICY; docs/ACCESS_CONTROL.md) — this map
+ * only decides what is shown. No session (not signed in) is the public. Administration is the one page a
+ * role alone does not open: it needs the session's admin flag as well (canAdmin).
  */
-import type { Role } from './RoleContext'
+import type { Role } from './SessionContext'
 
 const EVERYONE: Role[] = ['public', 'agency_official', 'ministry_official', 'ipmd_analyst']
 const OFFICIALS: Role[] = ['agency_official', 'ministry_official', 'ipmd_analyst']
@@ -25,7 +26,11 @@ export const ROUTE_ROLES: Record<string, Role[]> = {
   '/approvals': OFFICIALS,
   '/models': MINISTRY_UP,
   '/workers': IPMD,
+  '/admin': IPMD, // and the admin flag (ADMIN_ROUTES)
 }
+
+/** pages that need the session's admin flag on top of the role */
+const ADMIN_ROUTES = new Set(['/admin'])
 
 export const FEATURE_ROLES = {
   /** SHAP drivers, analogues, quantile intervals, provenance, forecast, brief, project news */
@@ -47,6 +52,8 @@ export const FEATURE_ROLES = {
   canSeePipelineErrors: IPMD,
   /** model versions and data provenance in the top bar */
   canSeeModelVersion: OFFICIALS,
+  /** users, sign-up requests and the audit log (backend: need admin); the role half of canAdmin */
+  canAdmin: IPMD,
 } satisfies Record<string, Role[]>
 
 export type Feature = keyof typeof FEATURE_ROLES
@@ -55,11 +62,18 @@ export function can(role: Role | null, feature: Feature): boolean {
   return FEATURE_ROLES[feature].includes(role ?? 'public')
 }
 
-/** roles for a path: its first segment ('/projects/PRJ-1' -> '/projects'); unknown paths are everyone's */
-export function routeRoles(path: string): Role[] {
-  return ROUTE_ROLES['/' + (path.split('/')[1] ?? '')] ?? EVERYONE
+/** an administrator: an IPMD analyst whose account carries the admin flag (secure.txt section 17) */
+export function canAdmin(viewer: { role: Role | null; isAdmin: boolean }): boolean {
+  return viewer.isAdmin && can(viewer.role, 'canAdmin')
 }
 
-export function canOpen(role: Role | null, path: string): boolean {
-  return routeRoles(path).includes(role ?? 'public')
+const first = (path: string) => '/' + (path.split('/')[1] ?? '')
+
+/** roles for a path: its first segment ('/projects/PRJ-1' -> '/projects'); unknown paths are everyone's */
+export function routeRoles(path: string): Role[] {
+  return ROUTE_ROLES[first(path)] ?? EVERYONE
+}
+
+export function canOpen(role: Role | null, path: string, isAdmin = false): boolean {
+  return routeRoles(path).includes(role ?? 'public') && (isAdmin || !ADMIN_ROUTES.has(first(path)))
 }

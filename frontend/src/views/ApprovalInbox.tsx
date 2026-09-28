@@ -3,7 +3,7 @@ import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import type { DispatchDraft } from '@/contracts/workers'
 import { apiPost } from '@/lib/api'
 import { useDispatchDrafts } from '@/lib/queries'
@@ -14,7 +14,7 @@ import { useDispatchDrafts } from '@/lib/queries'
  * projects; IPMD sees all) and lets only the addressee decide.
  */
 export function ApprovalInbox() {
-  const { role } = useRole()
+  const { role } = useSession()
   const queryClient = useQueryClient()
   const { data: drafts, isError } = useDispatchDrafts()
 

@@ -3,7 +3,7 @@ import { Download, FileSearch, Inbox, Newspaper, type LucideIcon } from 'lucide-
 import { Button } from '@/components/ui/Button'
 import { InfoTip } from '@/components/ui/Tooltip'
 import { useLiveStatus, useWatchNow } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { formatDateTime, cn } from '@/lib/formatters'
 import type { LiveJob } from '@/contracts/portfolio'
@@ -21,7 +21,7 @@ function lastAndNext(job: LiveJob, last: string | null | undefined) {
  * (lib/auth/access.ts).
  */
 export function LiveStatus() {
-  const { role } = useRole()
+  const { role } = useSession()
   return can(role, 'canSeeLive') ? <Strip canRun={can(role, 'canRunJobs')} /> : null
 }
 

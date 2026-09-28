@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { ChatWidget } from '@/components/common/ChatWidget'
-import { RoleProvider } from '@/lib/auth/RoleContext'
+import { SessionProvider, useSession } from '@/lib/auth/SessionContext'
 import { RequireRole } from '@/lib/auth/RequireRole'
 
 const Home = lazy(() => import('@/views/Home').then(m => ({ default: m.Home })))
@@ -20,24 +20,36 @@ const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar }
 // its own chunk (recharts, motion): the main bundle does not wait for it
 const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDetailDrawer').then(m => ({ default: m.ProjectDetailDrawer })))
 
+/** the account pages stand alone: no top bar, no side panel, no assistant */
+const BARE = new Set(['/login'])
+
+const Loading = () => (
+  <div className="flex h-48 items-center justify-center text-xs text-fg-dimmed">loading…</div>
+)
+
 export default function App() {
+  return (
+    <SessionProvider>
+      <TooltipProvider>
+        <Shell />
+      </TooltipProvider>
+    </SessionProvider>
+  )
+}
+
+function Shell() {
   const location = useLocation()
-  const isLogin = location.pathname === '/login'
+  const bare = BARE.has(location.pathname)
+  // the routes wait for GET /api/auth/me, so an official never sees the public page flash before their own
+  const { status } = useSession()
 
   return (
-    <RoleProvider>
-    <TooltipProvider>
-      <div className="min-h-dvh bg-surface-base text-fg-base font-sans antialiased selection:bg-accent/30 selection:text-fg-base flex flex-col">
-        {/* Persistent TopBar on every route except the full-bleed login screen */}
-        {!isLogin && <TopBar />}
+    <div className="min-h-dvh bg-surface-base text-fg-base font-sans antialiased selection:bg-accent/30 selection:text-fg-base flex flex-col">
+      {!bare && <TopBar />}
 
-        {/* Dynamic Route Content */}
-        <main className={isLogin ? 'flex-1' : 'flex-1 pb-16'}>
-          <Suspense fallback={
-            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
-              loading module...
-            </div>
-          }>
+      <main className={bare ? 'flex-1' : 'flex-1 pb-16'}>
+        <Suspense fallback={<Loading />}>
+          {status === 'loading' ? <Loading /> : (
             <Routes>
               {/* Who opens which page: lib/auth/access.ts (ROUTE_ROLES); the public browses without signing in */}
               <Route path="/" element={<Home />} />
@@ -66,16 +78,15 @@ export default function App() {
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Suspense>
-        </main>
+          )}
+        </Suspense>
+      </main>
 
-        {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
-        {!isLogin && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
+      {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
+      {!bare && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
 
-        {/* the project assistant, for every role (lib/auth/access.ts canChat); the backend scopes each tool to the viewer */}
-        {!isLogin && <ChatWidget />}
-      </div>
-    </TooltipProvider>
-    </RoleProvider>
+      {/* the project assistant, for every role (lib/auth/access.ts canChat); the backend scopes each tool to the viewer */}
+      {!bare && <ChatWidget />}
+    </div>
   )
 }

@@ -7,7 +7,7 @@ import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
 import { LiveStatus } from '@/views/home/LiveStatus'
 import { AgencyHome, LinkButton, MinistryHome, PublicHome } from '@/views/home/RoleHomes'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { canOpen } from '@/lib/auth/access'
 
 /**
@@ -16,7 +16,7 @@ import { canOpen } from '@/lib/auth/access'
  * Command Center (/command).
  */
 export function Home() {
-  const { role, ministry, agency } = useRole()
+  const { role, ministry, agency } = useSession()
   if (role === 'ministry_official' && ministry) return <MinistryHome ministry={ministry} />
   if (role === 'agency_official' && agency) return <AgencyHome agency={agency} />
   if (role === 'ipmd_analyst') return <AnalystHome />
@@ -33,7 +33,7 @@ const QUICK_LINKS: Array<{ to: string; label: string; hint: string; icon: Lucide
 
 /** IPMD: the whole portfolio, the live jobs, quick links to the analysis pages, the map and the alert inbox. */
 function AnalystHome() {
-  const { role } = useRole()
+  const { role } = useSession()
   return (
     <Page>
       <PageHeader

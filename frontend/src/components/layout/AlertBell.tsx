@@ -7,7 +7,7 @@ import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDateTime } from '@/lib/formatters'
@@ -29,7 +29,7 @@ function readSeen(): string | undefined {
  * (backend scope). Analysts and ministry officials can acknowledge (lib/auth/access.ts).
  */
 export function AlertBell() {
-  const { role } = useRole()
+  const { role } = useSession()
   const panel = useProjectPanel()
   const [seenAt, setSeenAt] = useState(readSeen)
   const latest = useAlerts({ acked: false, size: 8 })

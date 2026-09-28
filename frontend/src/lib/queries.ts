@@ -39,7 +39,7 @@ import type {
 import type { ModelsOut } from '@/contracts/audit'
 import type { AgencyMatrix, BottleneckDetail, BottleneckPage } from '@/contracts/intel'
 import type { DispatchDraft } from '@/contracts/workers'
-import { useScopeKey } from '@/lib/auth/RoleContext'
+import { useScopeKey } from '@/lib/auth/SessionContext'
 
 export type PortfolioFilters = {
   ministry?: string
@@ -70,7 +70,7 @@ export type AlertQuery = {
 
 const enc = encodeURIComponent
 
-/** Ministries and agencies to sign in as (the same for every viewer). */
+/** Ministries and agencies an account can be scoped to (the same for every viewer): the request-access and admin pickers. */
 export function useScopes() {
   return useQuery({ queryKey: ['scopes'], queryFn: () => apiGet<Scopes>('/api/scopes'), staleTime: Infinity })
 }
@@ -258,7 +258,7 @@ export function useAlerts(query: AlertQuery = {}) {
   })
 }
 
-/** Acknowledged as the signed-in role (lib/api.ts headers); the backend records it. */
+/** Acknowledged as the signed-in user (the session cookie); the backend records who. */
 export function useAckAlert() {
   const client = useQueryClient()
   return useMutation({

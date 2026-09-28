@@ -8,7 +8,7 @@ import { usePortfolio, useProject } from '@/lib/queries'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import { cn } from '@/lib/formatters'
-import { useRole, useScopeKey, type Role } from '@/lib/auth/RoleContext'
+import { useSession, useScopeKey, type Role } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { CiteChip, CitedText } from './CitedText'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -135,7 +135,7 @@ function starters(role: Role | null, portfolio: Portfolio | undefined, open: { t
  * 75% of the window), a round launcher; the conversation resets when the viewer's role or scope changes.
  */
 export function ChatWidget() {
-  const { role } = useRole()
+  const { role } = useSession()
   const scope = useScopeKey()
   // an error in the chat itself (not one answer or card, which have their own) takes the chat away, not the app
   return can(role, 'canChat') ? (
@@ -146,7 +146,7 @@ export function ChatWidget() {
 }
 
 function Chat() {
-  const { role, ministry, agency } = useRole()
+  const { role, ministry, agency } = useSession()
   const panel = useProjectPanel()
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)

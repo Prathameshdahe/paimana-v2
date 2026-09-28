@@ -1,19 +1,20 @@
 /**
  * src/lib/chatStream.ts
  *
- * POST /api/chat and read its text/event-stream answer (contracts/assistant.ts). EventSource cannot POST or send
- * the viewer headers, so this is fetch + a ReadableStream reader + a small SSE parser: events are split on blank
- * lines, a chunk may end mid-line or mid-event (the rest waits for the next chunk), one chunk may hold several
- * events, `:` lines are comments (heartbeats) and `\r\n` line ends are read like `\n`. Unknown event names and
- * undecodable data are skipped, so a newer backend cannot break an older page.
+ * POST /api/chat and read its text/event-stream answer (contracts/assistant.ts). EventSource cannot POST, so this is
+ * fetch + a ReadableStream reader + a small SSE parser: events are split on blank lines, a chunk may end mid-line
+ * or mid-event (the rest waits for the next chunk), one chunk may hold several events, `:` lines are comments
+ * (heartbeats) and `\r\n` line ends are read like `\n`. Unknown event names and undecodable data are skipped, so a
+ * newer backend cannot break an older page. The session cookie names the viewer and, when signed in, the CSRF
+ * token goes along as the POST needs (lib/api.ts authHeaders); the public sends neither.
  *
  * Errors, as ApiError (lib/api.ts): status 0 the backend is not reachable; 429 the rate limit, its message the
- * backend's JSON `detail` (which says when to ask again; else built from Retry-After); any other status with the
- * detail when there is one. A stream that breaks after the answer began is a StreamBroken (the backend was reached,
- * so it is not "offline"). Aborting the signal rejects with the fetch AbortError; the caller tells a stop from a
- * failure by `signal.aborted`.
+ * backend's JSON `detail` (which says when to ask again; else built from Retry-After); 401 a session that is gone
+ * (the session context is told, as for any call); any other status with the detail when there is one. A stream
+ * that breaks after the answer began is a StreamBroken (the backend was reached, so it is not "offline"). Aborting
+ * the signal rejects with the fetch AbortError; the caller tells a stop from a failure by `signal.aborted`.
  */
-import { API_BASE, ApiError, url, viewerHeaders } from '@/lib/api'
+import { API_BASE, ApiError, authHeaders, failure, reportUnauthorized, url } from '@/lib/api'
 import type { ChatEvent, ChatEventName, ChatRequest, ChatTurn } from '@/contracts/assistant'
 
 /** the connection broke after the answer began streaming: the backend is up, the answer is cut short */
@@ -121,26 +122,6 @@ export function chatMessages(history: ChatTurn[], question: string): ChatTurn[] 
   return turns.slice(-MAX_TURNS).map((t) => ({ role: t.role, content: t.content.slice(0, MAX_CHARS) }))
 }
 
-async function failure(res: Response): Promise<ApiError> {
-  let detail = res.statusText || `HTTP ${res.status}`
-  let body: unknown
-  let given = false
-  try {
-    body = await res.json()
-    const d = (body as { detail?: unknown } | null)?.detail
-    if (typeof d === 'string') {
-      detail = d
-      given = true
-    }
-  } catch {
-    // not a JSON error body
-  }
-  // the rate limit's detail says when to ask again; without one, the Retry-After header does
-  const wait = Number(res.headers.get('Retry-After'))
-  if (res.status === 429 && !given && wait > 0) detail = `Please try again in ${Math.ceil(wait)} seconds.`
-  return new ApiError(res.status, detail, body)
-}
-
 /**
  * Asks the assistant and calls onEvent for every event as it arrives; resolves when the stream ends (normally
  * after `done` or `error`). Rejects with an ApiError, or the AbortError when `signal` is aborted.
@@ -154,14 +135,16 @@ export async function streamChat(
   try {
     res = await fetch(url('/api/chat'), {
       method: 'POST',
-      headers: { ...viewerHeaders(), 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      headers: { ...authHeaders(), 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify(request),
+      credentials: 'include',
       signal,
     })
   } catch (e) {
     if (signal?.aborted) throw e
-    throw new ApiError(0, `backend not reachable at ${API_BASE}`)
+    throw new ApiError(0, `backend not reachable at ${API_BASE || window.location.origin}`)
   }
+  if (res.status === 401) reportUnauthorized()
   if (!res.ok) throw await failure(res)
   if (!res.body) throw new ApiError(res.status, 'the answer came without a stream')
 

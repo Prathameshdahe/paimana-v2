@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { MotionConfig } from 'motion/react'
 import { useForecast, useProject, useSignals, useTimeline } from '@/lib/queries'
 import { isOffline } from '@/lib/api'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ProjectIdentityStrip } from './project-studio/ProjectIdentityStrip'
 import { PredictionPanel } from './project-studio/PredictionPanel'
@@ -30,7 +30,7 @@ import { Badge, StalledBadge } from '@/components/ui/Badge'
  */
 export function ProjectStudio() {
   const { key = '' } = useParams<{ key: string }>()
-  const { role } = useRole()
+  const { role } = useSession()
   const full = can(role, 'canSeeDrivers')
   const { data: detail, isLoading, error } = useProject(key)
   // the canonical key: an old or merged key resolves to the project it now belongs to

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Input'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDate, formatDateTime } from '@/lib/formatters'
@@ -24,7 +24,7 @@ const KINDS = Object.keys(ALERT_KIND_LABEL) as AlertKind[]
  */
 export function EarlyWarningInbox() {
   const panel = useProjectPanel()
-  const { role } = useRole()
+  const { role } = useSession()
   const [page, setPage] = useState(1)
   const [kind, setKind] = useState<AlertKind | undefined>()
   const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })

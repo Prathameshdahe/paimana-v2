@@ -11,7 +11,7 @@ import { Page, PageHeader } from '@/components/layout/Page'
 import { EvidenceFeed } from './external-factors/EvidenceFeed'
 import { LandMap } from './external-factors/LandMap'
 import { ResearchPanel } from './external-factors/ResearchPanel'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
@@ -55,7 +55,7 @@ function Bar({ share, className = 'bg-warning' }: { share: number; className?: s
  */
 export function ExternalFactors() {
   const { data, error, isLoading } = useExternalSummary()
-  const { role } = useRole()
+  const { role } = useSession()
 
   return (
     <Page>

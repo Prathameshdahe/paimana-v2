@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronDown, LogOut } from 'lucide-react'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
@@ -32,10 +32,10 @@ export function TopBar() {
   const meta = useMeta()
   const { data: p } = usePortfolio()
   const m = meta.data
-  const { role, displayName, ministry, agency, clearRole } = useRole()
+  const { role, displayName, ministry, agency, status, signOut } = useSession()
   const scope = ministry ?? agency
   const navigate = useNavigate()
-  const signedIn = !!role && role !== 'public'
+  const signedIn = !!role
   useAlertStream()
 
   return (
@@ -96,19 +96,19 @@ export function TopBar() {
                   </div>
                   <Popover.Close asChild>
                     <button
-                      onClick={() => {
-                        clearRole()
-                        navigate('/login')
+                      onClick={async () => {
+                        await signOut()
+                        navigate('/')
                       }}
                       className="flex w-full items-center gap-2 border-t border-border-subtle px-4 py-2.5 text-left text-sm text-fg-muted hover:bg-surface-elevated hover:text-fg-base"
                     >
-                      <LogOut className="size-4" /> Switch role
+                      <LogOut className="size-4" /> Sign out
                     </button>
                   </Popover.Close>
                 </Popover.Content>
               </Popover.Portal>
             </Popover.Root>
-          ) : (
+          ) : status === 'loading' ? null : (
             <Link
               to="/login"
               className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85"
