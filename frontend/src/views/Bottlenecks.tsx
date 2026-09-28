@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts'
-import { Building2, CalendarClock, Gauge, Newspaper, ShieldAlert } from 'lucide-react'
+import { Building2, CalendarClock, Newspaper, ShieldAlert } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { OutlookChip } from '@/components/ui/OutlookChip'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Input'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { useBottleneck, useBottlenecks } from '@/lib/queries'
+import { useSession } from '@/lib/auth/SessionContext'
+import { can } from '@/lib/auth/access'
+import { outlookOf } from '@/lib/outlook'
 import { EVENT_CATEGORY, categoryLabel } from '@/lib/riskPalette'
-import { cn, formatDate, formatINR, formatINRShort, formatProb, orDash } from '@/lib/formatters'
+import { cn, formatDate, formatINR, formatINRShort, orDash } from '@/lib/formatters'
 import type { TreemapNode } from 'recharts/types/util/types'
 import type { Bottleneck } from '@/contracts/intel'
 
@@ -26,6 +30,18 @@ const headline = (b: Bottleneck) =>
 function place(b: Bottleneck): string {
   const who = b.level === 'state' ? 'all authorities' : !b.authority || b.authority === 'unspecified' ? 'authority not named' : b.authority
   return `${b.state ?? 'state unknown'} · ${who}`
+}
+
+/** "6 of 10 rated Critical or High": a count, the tiers' share of the cluster */
+const rated = (b: Bottleneck) => `${b.nCriticalHigh} of ${b.nProjects} rated Critical or High`
+
+/** the treemap's one line: the cluster blocking the most capital, in facts */
+function takeaway(rows: Bottleneck[]): string | null {
+  const top = [...rows].sort((a, b) => b.capitalExposedCr - a.capitalExposedCr)[0]
+  if (!top) return null
+  const what = categoryLabel(top.category)
+  const where = top.state ? ` in ${top.state}` : ''
+  return `${what}${where} blocks the most capital: ${top.nProjects} project${top.nProjects === 1 ? '' : 's'}, ${formatINR(top.capitalExposedCr)}.`
 }
 
 /** where a cluster's evidence comes from: remarks, plus news when it has signals */
@@ -87,7 +103,7 @@ function NodeTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
       <div className="font-semibold">{categoryLabel(b.category)} · {place(b)}</div>
       <div>{headline(b)}</div>
       <div className="text-fg-muted">
-        {b.nCriticalHigh} critical/high · mean P(slip, 2q) {orDash(b.meanPAny2q, (p) => formatProb(p))} · {b.nSignals} news signals
+        {rated(b)} · {b.nSignals} linked news item{b.nSignals === 1 ? '' : 's'}
       </div>
       <div className="text-fg-dimmed">
         open in {sourceOf(b)} {orDash(b.earliestFirstSeen, formatDate)} → {orDash(b.lastSeen, formatDate)}
@@ -101,14 +117,11 @@ function ClusterStats({ b }: { b: Bottleneck }) {
   const item = 'flex items-center gap-1'
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-dimmed">
-      <span className={cn(item, b.nCriticalHigh > 0 && 'text-critical')} title="critical or high tier members">
-        <ShieldAlert className="size-3.5" /> {b.nCriticalHigh} critical/high
+      <span className={cn(item, b.nCriticalHigh > 0 && 'text-critical')}>
+        <ShieldAlert className="size-3.5" aria-hidden="true" /> {rated(b)}
       </span>
-      <span className={item} title="mean P(slip, 2q) of the members">
-        <Gauge className="size-3.5" /> {orDash(b.meanPAny2q, (p) => formatProb(p))}
-      </span>
-      <span className={item} title="linked news signals">
-        <Newspaper className="size-3.5" /> {b.nSignals}
+      <span className={item}>
+        <Newspaper className="size-3.5" aria-hidden="true" /> {b.nSignals} linked news
       </span>
       <span className={item} title={`open in ${sourceOf(b)}`}>
         <CalendarClock className="size-3.5" /> {orDash(b.earliestFirstSeen, formatDate)} → {orDash(b.lastSeen, formatDate)}
@@ -120,10 +133,14 @@ function ClusterStats({ b }: { b: Bottleneck }) {
 function Members({ id }: { id: string }) {
   const [page, setPage] = useState(1)
   const panel = useProjectPanel()
+  const { role } = useSession()
+  const numbers = can(role, 'canSeeNumbers')
   const { data, error, isFetching } = useBottleneck(id, page)
   const pages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1
   if (error) return <ApiErrorNote error={error} />
-  if (!data) return <div className="px-5 py-8 text-center text-sm text-fg-dimmed">loading projects...</div>
+  if (!data) {
+    return <div className="space-y-2 px-5 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded bg-surface-input/60" />)}</div>
+  }
   const b = data.bottleneck
   return (
     <>
@@ -144,9 +161,9 @@ function Members({ id }: { id: string }) {
               </button>
               <span className="truncate text-sm text-fg-base" title={m.name ?? undefined}>{m.name ?? ''}</span>
             </div>
-            <div className="text-xs text-fg-dimmed">
-              P(slip, 2q) {orDash(m.pAny2q, (p) => formatProb(p))} · {orDash(m.anticipatedCostCr, formatINR)} ·{' '}
-              {m.agency ?? 'agency unknown'}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-dimmed">
+              <OutlookChip outlook={outlookOf(m, numbers)} tier={m.tier} />
+              <span>· {orDash(m.anticipatedCostCr, formatINR)} · {m.agency ?? 'agency unknown'}</span>
             </div>
             {m.evidence.map((e, i) => (
               <div key={i} className="rounded-lg bg-surface-elevated/70 px-3 py-2 text-xs leading-snug text-fg-muted">
@@ -249,7 +266,10 @@ export function Bottlenecks() {
           <ApiErrorNote error={error} />
         </Card>
       ) : !data ? (
-        <div className="h-48 flex items-center justify-center text-sm text-fg-dimmed">loading bottlenecks...</div>
+        <div className="grid animate-pulse gap-4 lg:grid-cols-3" aria-busy="true" aria-label="Loading the bottlenecks">
+          <div className="h-[440px] rounded-xl bg-surface-input/60 lg:col-span-2" />
+          <div className="h-[440px] rounded-xl bg-surface-input/60" />
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 py-2 shadow-card">
@@ -283,17 +303,18 @@ export function Bottlenecks() {
 
           {shown.length === 0 ? (
             <Card>
-              <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
-                no cluster matches these filters — not the same as no open issues: remarks stop in 2023
+              <div className="px-5 py-8 text-center text-sm text-fg-muted">
+                No shared issue matches these filters. That is not the same as no open issues: the report remarks stop in 2023.
               </div>
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
               <div className="lg:col-span-2 space-y-5">
                 <Card
-                  title={`Capital that would be affected · ${shown.length}`}
+                  title={`Where shared issues hold up the most capital · ${shown.length}`}
                   info="Area: capital of the member projects. Colour: issue category. Click a block for its projects."
                 >
+                  {takeaway(shown) && <p className="px-5 pt-4 text-base text-fg-base">{takeaway(shown)}</p>}
                   <div className="h-[380px] p-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <Treemap
@@ -350,8 +371,8 @@ export function Bottlenecks() {
                 {selected ? (
                   <Members key={selected} id={selected} />
                 ) : (
-                  <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
-                    pick a cluster to list its projects and the remarks or news behind each
+                  <div className="px-5 py-8 text-center text-sm text-fg-muted">
+                    Pick a block or a cluster to list its projects and the remarks or news behind each.
                   </div>
                 )}
               </Card>

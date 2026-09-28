@@ -4,6 +4,7 @@ import { useProjectPanel } from '@/lib/useProjectPanel'
 import { FileSearch, Info, Siren } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge, IconChip, StalledBadge } from '@/components/ui/Badge'
+import { OutlookChip } from '@/components/ui/OutlookChip'
 import { InfoTip } from '@/components/ui/Tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
@@ -14,6 +15,7 @@ import { ResearchPanel } from './external-factors/ResearchPanel'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
+import { outlookOf } from '@/lib/outlook'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
 import { EXTERNAL_FACTORS as FACTORS, EVENT_CATEGORY, FLAG_ICON } from '@/lib/riskPalette'
 import { details, formatQuarter, fromPrior, verdict } from '@/lib/external'
@@ -46,12 +48,20 @@ function Bar({ share, className = 'bg-warning' }: { share: number; className?: s
   )
 }
 
+/** the developer (canSeeNumbers): the lifts, the measured months with their CIs, the composite's distribution */
+function useNumbers(): boolean {
+  const { role } = useSession()
+  return can(role, 'canSeeNumbers')
+}
+
 /**
  * External Factors (/external) over /api/external/summary: per-factor tiles and their top
  * projects, the early-notice list, coverage and the composite score; the caveats sit in one
  * "About this data" section. Every figure comes from gold/external_summary.json, except the web
  * research panel (/api/research/summary, every role: the public gets counts and headlines). The
- * news evidence below pages /api/signals/feed (officials only; the public sees the summary).
+ * news evidence below pages /api/signals/feed (officials only; the public sees the summary). Counts,
+ * money and shares of past projects are shown to everyone; the lifts, measured months, CIs and the
+ * composite's distribution only to the developer, and the measured delay reads as a word band.
  */
 export function ExternalFactors() {
   const { data, error, isLoading } = useExternalSummary()
@@ -61,12 +71,12 @@ export function ExternalFactors() {
     <Page>
       <PageHeader
         title="External Factors"
-        subtitle="Issues on the ground that the cost and schedule numbers show only at a later revision"
+        subtitle="What holds projects up on the ground before the cost and schedule figures move"
         actions={
           data && (
             <span className="text-xs text-fg-dimmed">
-              as of {formatDate(data.asOfDate)} · {data.nProjects.toLocaleString()} projects
-              {can(role, 'canSeeModelVersion') && ` · ${data.modelVersion}`}
+              as of {formatDate(data.asOfDate)} · {data.nProjects.toLocaleString('en-IN')} projects
+              {can(role, 'canSeeNumbers') && ` · ${data.modelVersion}`}
             </span>
           )
         }
@@ -77,7 +87,12 @@ export function ExternalFactors() {
           <ApiErrorNote error={error} />
         </Card>
       ) : isLoading || !data ? (
-        <div className="h-48 flex items-center justify-center text-sm text-fg-dimmed">loading external factors...</div>
+        <div className="animate-pulse space-y-4" aria-busy="true" aria-label="Loading the external factors">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-28 rounded-xl bg-surface-input/60" />)}
+          </div>
+          <div className="h-64 rounded-xl bg-surface-input/60" />
+        </div>
       ) : (
         <>
           <FactorBoard s={data} />
@@ -225,9 +240,10 @@ function FactorBoard({ s }: { s: ExternalSummary }) {
 
 function NoticeTable({ rows }: { rows: ExternalProject[] }) {
   const panel = useProjectPanel()
+  const numbers = useNumbers()
 
   if (rows.length === 0) {
-    return <div className="px-5 py-6 text-center text-sm text-fg-dimmed">no project in this list</div>
+    return <div className="px-5 py-6 text-center text-sm text-fg-muted">No project in this list.</div>
   }
   const th = 'py-2.5 px-4 text-xs font-medium text-fg-muted'
   // the public gets no evidence lines (as on its project page): no Evidence column then
@@ -291,7 +307,8 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                 )}
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1"><Badge tier={p.tier} />{p.stalled && <StalledBadge />}</div>
-                  <div className="mt-1 whitespace-nowrap text-xs text-fg-dimmed">P(slip) {pct(p.p_any_2q)}</div>
+                  <div className="mt-1.5"><OutlookChip outlook={outlookOf({ outlook: p.outlook }, false)} tier={p.tier} /></div>
+                  {numbers && <div className="mt-1 whitespace-nowrap text-xs text-fg-dimmed">P(slip) {pct(p.p_any_2q)}</div>}
                 </td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums text-fg-base">{slip(p.slip_to_date_months)}</td>
                 <td className="whitespace-nowrap py-3 pl-4 pr-5 text-right font-mono tabular-nums text-fg-base">
@@ -383,6 +400,7 @@ function EarlyNoticePanel({ s }: { s: ExternalSummary }) {
 }
 
 function CoveragePanel({ s }: { s: ExternalSummary }) {
+  const numbers = useNumbers()
   const c = s.coverage
   const lf = s.noticeBacktest.land_or_forest
   const n = Math.max(c.n_current, 1)
@@ -410,14 +428,14 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
         ))}
       </div>
 
-      {lf && (
+      {lf && lf.slip_rate_with !== null && lf.slip_rate_without !== null && (
         <div className="border-t border-border-subtle px-5 py-4">
           <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg-base">
             Did an open land or forest remark come before a slip?
             <InfoTip label="About this backtest">
-              Past reports with no slip yet: share whose completion was pushed 3+ months within 4 quarters. Within the same
-              sector and year the lift is {times(lf.lift_within_sector_year)}. It does not hold in every sector (see About this
-              data), so an early notice is a reason to ask the agency, not a forecast.
+              Past reports with no slip yet: the share whose completion was pushed three months or more within four
+              quarters.{numbers && ` Within the same sector and year the lift is ${times(lf.lift_within_sector_year)}.`} It
+              does not hold in every sector, so an early notice is a reason to ask the agency, not a forecast.
             </InfoTip>
           </div>
           {[
@@ -430,7 +448,7 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
               <span className="text-right tabular-nums text-fg-base">{pct(r.v)}</span>
             </div>
           ))}
-          <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>
+          {numbers && <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>}
         </div>
       )}
     </Card>
@@ -448,21 +466,24 @@ const TONE_TEXT = { warning: 'text-warning', stable: 'text-stable', muted: 'text
 
 /** one measured prior: the verdict, how many current projects it applies to; n, CI and Garvit's band in the tip */
 function DelayTile({ r, min }: { r: HiddenDelayPrior; min: number }) {
+  const numbers = useNumbers()
   const e = fromPrior(r)
-  const v = verdict(e)
+  const v = verdict(e, numbers)
   return (
     <div className={cn('rounded-lg border bg-surface-panel p-3', v.tone === 'muted' ? 'border-border-subtle' : 'border-border-default')}>
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs leading-snug text-fg-muted">{r.label}</span>
         <InfoTip label={`About ${r.label}`}>
-          {details(e, min).map((line) => <p key={line}>{line}</p>)}
-          <p className="text-fg-dimmed">Garvit&rsquo;s guessed band ({r.garvit_status}): {r.garvit_band} months. Matched on {r.strata}; {r.as_of_note}.</p>
+          {details(e, min, numbers).map((line) => <p key={line}>{line}</p>)}
+          {numbers
+            ? <p className="text-fg-dimmed">Garvit&rsquo;s guessed band ({r.garvit_status}): {r.garvit_band} months. Matched on {r.strata}; {r.as_of_note}.</p>
+            : <p className="text-fg-dimmed">Matched on {r.strata}; {r.as_of_note}.</p>}
         </InfoTip>
       </div>
       <div className={cn('mt-2 font-semibold leading-none tabular-nums', v.tone === 'muted' ? 'text-sm' : 'text-lg', TONE_TEXT[v.tone])}>{v.text}</div>
       {v.also && <div className="mt-1 text-xs font-medium text-fg-muted">{v.also}</div>}
       <div className="mt-1.5 text-xs text-fg-dimmed">
-        {r.n_current !== undefined && r.n_current !== null ? `${r.n_current} current · ` : ''}n = {r.n_projects}
+        {r.n_current !== undefined && r.n_current !== null ? `${r.n_current} open now · ` : ''}{r.n_projects} past projects
       </div>
     </div>
   )
@@ -470,6 +491,7 @@ function DelayTile({ r, min }: { r: HiddenDelayPrior; min: number }) {
 
 /** measured extra slip per forest stage, land share and land complexity against matched projects, as tiles */
 function HiddenDelayPanel({ s }: { s: ExternalSummary }) {
+  const numbers = useNumbers()
   const h = s.hiddenDelayPriors
   if (!h) return null
   const groups = (Object.keys(FACTOR_TITLE) as HiddenDelayPrior['factor'][])
@@ -477,9 +499,11 @@ function HiddenDelayPanel({ s }: { s: ExternalSummary }) {
     .filter(([, rows]) => rows.length > 0)
   return (
     <Card
-      title="Measured hidden delay"
-      info={<>{h.note} Each tile: the extra completion push over the next 4 quarters where its 95% interval excludes zero (else the extra chance of a 3+ month push, else none measurable). &ldquo;Current&rdquo;: projects in view whose status is current today. A remark stage or share counts only within {s.remarkFlags?.live_window_quarters ?? 4} quarters of its report, and remark free text ends in {s.remarkFlags?.last_remark_quarter ?? '2023'}, so the remark groups count none now; a forest stage PARIVESH shows as finally approved does not count either.</>}
-      titleRight={<span>measured on real projects · replaces the guessed bands</span>}
+      title="How much longer each issue usually adds"
+      info={numbers
+        ? <>{h.note} Each tile: the extra completion push over the next 4 quarters where its 95% interval excludes zero (else the extra chance of a 3+ month push, else none measurable). &ldquo;Current&rdquo;: projects in view whose status is current today. A remark stage or share counts only within {s.remarkFlags?.live_window_quarters ?? 4} quarters of its report, and remark free text ends in {s.remarkFlags?.last_remark_quarter ?? '2023'}, so the remark groups count none now; a forest stage PARIVESH shows as finally approved does not count either.</>
+        : <>How much longer projects at each stage took over the next four quarters than matched projects without the issue, in words, measured on real past projects. &ldquo;Open now&rdquo;: projects in view whose status is current today. A remark stage counts only within {s.remarkFlags?.live_window_quarters ?? 4} quarters of its report, and remark free text ends in {s.remarkFlags?.last_remark_quarter ?? '2023'}.</>}
+      titleRight={<span>measured on real projects</span>}
     >
       <div className="divide-y divide-border-subtle">
         {groups.map(([f, rows]) => (
@@ -720,13 +744,14 @@ function BoxPlot({ d }: { d: CompositeDistribution }) {
 }
 
 function CompositePanel({ s }: { s: ExternalSummary }) {
+  const numbers = useNumbers()
   const rows = [
     { key: 'fc+la' as const, label: 'Forest + land', note: `rated: flagged at ${COMPOSITE_HIGH} or above` },
     { key: 'fc_only' as const, label: 'Forest only', note: 'not rated: the land half is missing, so unknown' },
   ]
 
   return (
-    <Card title="External-factor score" info="Distribution of the land + forest composite by data coverage. Box: middle half; bar: median; dashed line: the flag threshold." className="h-full">
+    <Card title="Land and forest together" info={numbers ? 'Distribution of the land + forest composite by data coverage. Box: middle half; bar: median; dashed line: the flag threshold.' : 'How many projects with both land and forest data are flagged on the two together; with forest data alone the land half is unknown.'} className="h-full">
       <div className="space-y-5 px-5 py-4">
         {rows.map(({ key, label, note }) => {
           const d = s.externalComposite.by_coverage[key]
@@ -738,20 +763,26 @@ function CompositePanel({ s }: { s: ExternalSummary }) {
                   <InfoTip label={`About ${label}`}>{note}</InfoTip>
                 </span>
                 <span className="text-xs text-fg-dimmed">
-                  {d
-                    ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · median ${d['50%'].toFixed(2)} · mean ${d.mean.toFixed(2)}`
-                    : 'no projects'}
+                  {!d ? 'no projects'
+                    : numbers
+                      ? `${d.n_projects.toLocaleString()} projects · ${d.n_score_ge_high} at ≥ ${COMPOSITE_HIGH} · median ${d['50%'].toFixed(2)} · mean ${d.mean.toFixed(2)}`
+                      : `${d.n_score_ge_high.toLocaleString('en-IN')} of ${d.n_projects.toLocaleString('en-IN')} rated projects flagged`}
                 </span>
               </div>
-              {d && <BoxPlot d={d} />}
+              {d && numbers && <BoxPlot d={d} />}
+              {d && !numbers && (
+                <Bar share={d.n_score_ge_high / Math.max(d.n_projects, 1)} className="bg-fg-muted" />
+              )}
             </div>
           )
         })}
-        <div className="flex justify-between text-xs text-fg-dimmed">
-          <span>0</span>
-          <span>score · dashed at {COMPOSITE_HIGH}</span>
-          <span>1</span>
-        </div>
+        {numbers && (
+          <div className="flex justify-between text-xs text-fg-dimmed">
+            <span>0</span>
+            <span>score · dashed at {COMPOSITE_HIGH}</span>
+            <span>1</span>
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -759,6 +790,7 @@ function CompositePanel({ s }: { s: ExternalSummary }) {
 
 /** every caveat and method note of this page, folded into one section */
 function AboutData({ s }: { s: ExternalSummary }) {
+  const numbers = useNumbers()
   const c = s.coverage
   const lf = s.noticeBacktest.land_or_forest
   const sectors = lf ? Object.entries(lf.by_sector) : []
@@ -778,7 +810,10 @@ function AboutData({ s }: { s: ExternalSummary }) {
       ? [`PARIVESH: ${s.portal.n_linked.toLocaleString()} current projects have a hand-reviewed link to a forest-clearance proposal in the PARIVESH 1.0 list (proposals filed 2014 to mid-2022; the list is not a census). ${s.portal.n_open} were still open in ${formatDate(s.asOfDate)} and ${s.portal.n_overdue} of those were past the rule limit, which flags the forest row; none of the ${s.portal.n_open} is mentioned in the report remarks.`]
       : []),
   ]
-  if (lf) {
+  if (lf && !numbers) {
+    caveats.push('On history, past reports with an open land or forest remark were followed by a pushed completion date more often than those without, but not in every sector, so an early notice is a reason to ask the agency, not a forecast.')
+  }
+  if (lf && numbers) {
     caveats.push(
       `On history, of past reports with no slip yet, those with an open land or forest remark had their completion pushed 3+ months within 4 quarters ${pct(lf.slip_rate_with)} of the time against ${pct(lf.slip_rate_without)} without (${times(lf.lift)}; ${times(lf.lift_within_sector_year)} within the same sector and year). ` +
         (holds.length

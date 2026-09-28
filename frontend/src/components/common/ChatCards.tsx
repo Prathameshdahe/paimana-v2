@@ -1,13 +1,19 @@
 /**
  * The assistant's cards (contracts/assistant.ts): the data an answer is built from, drawn from the card itself so
  * they read the same whatever the narrative says. Project names open the side panel; the sources list carries the
- * [n] anchors the narrative's chips scroll to; external links open in a new tab without a referrer.
+ * [n] anchors the narrative's chips scroll to; external links open in a new tab without a referrer. The four roles
+ * read the outlook and the drivers in words; only the developer (canSeeNumbers) sees a probability, a months figure
+ * or a SHAP bar, even when an older backend sends them.
  */
 import React, { useId, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ExternalLink, Loader2, RotateCcw, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
+import { OutlookChip } from '@/components/ui/OutlookChip'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { useProjectPanel } from '@/lib/useProjectPanel'
+import { useSession } from '@/lib/auth/SessionContext'
+import { can } from '@/lib/auth/access'
+import { driversOf, outlookLine, outlookOf, strengthDots } from '@/lib/outlook'
 import { webUrl } from '@/lib/citations'
 import { CONCERN, FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, TIER_COLOR, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import {
@@ -21,8 +27,14 @@ import type { Flag } from '@/contracts/project'
 
 const pct = (v: number) => `${v.toFixed(0)}%`
 
-/** the chance the list and project cards show, in the words the public page uses */
+/** the chance the developer's list and project cards show */
 const P_ANY = 'Delay or cost rise, next 6 months'
+
+/** the developer: the cards show the numbers an older backend (or the developer's own answer) carries */
+function useNumbers(): boolean {
+  const { role } = useSession()
+  return can(role, 'canSeeNumbers')
+}
 
 function Shell({ title, right, children, className }: {
   title: React.ReactNode
@@ -71,6 +83,7 @@ function FlagIcons({ flags }: { flags: Flag[] }) {
 
 function ProjectLine({ p }: { p: ChatProjectRow }) {
   const panel = useProjectPanel()
+  const numbers = useNumbers()
   const t = tierKey(p.tier)
   return (
     <button
@@ -89,9 +102,11 @@ function ProjectLine({ p }: { p: ChatProjectRow }) {
           <FlagIcons flags={p.flags} />
         </span>
       </span>
-      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-fg-base" title={P_ANY}>
-        {orDash(p.pAny2q, formatProb)}
-      </span>
+      {numbers && p.pAny2q !== null ? (
+        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-fg-base" title={P_ANY}>{formatProb(p.pAny2q)}</span>
+      ) : (
+        <OutlookChip outlook={outlookOf(p, false)} tier={p.tier} />
+      )}
     </button>
   )
 }
@@ -162,11 +177,22 @@ function StatsCardView({ card }: { card: StatsCard }) {
 
 // ------------------------------------------------------------------ one project, compare
 
-/** the tier ring in small: the chance of a slip as the arc, in the tier colour */
-function MiniRing({ tier, p }: { tier: string | null; p: number | null }) {
+/** the tier ring in small: a whole circle in the tier colour; the developer's shows the chance as the arc */
+function MiniRing({ tier, p: chance }: { tier: string | null; p: number | null }) {
+  const numbers = useNumbers()
+  const p = numbers ? chance : null
   const t = tierKey(tier)
   const R = 16
   const C = 2 * Math.PI * R
+  if (!numbers) {
+    return (
+      <div className="relative size-12 shrink-0" role="img" aria-label={`Tier: ${TIER_LABEL[t]}`}>
+        <svg viewBox="0 0 40 40" className="size-12" aria-hidden="true">
+          <circle cx={20} cy={20} r={R} fill="none" strokeWidth={5} stroke={TIER_COLOR[t]} strokeOpacity={tier ? 1 : 0.5} />
+        </svg>
+      </div>
+    )
+  }
   return (
     <div className="relative size-12 shrink-0" role="img" aria-label={`${TIER_LABEL[t]}${p !== null ? `, ${formatProb(p)} chance of a delay or cost rise in the next 6 months` : ''}`}>
       <svg viewBox="0 0 40 40" className="size-12 -rotate-90" aria-hidden="true">
@@ -195,25 +221,32 @@ function Figure({ label, value }: { label: string; value: string }) {
 }
 
 function ProjectCardView({ card }: { card: ProjectCard }) {
-  const slip = card.monthsP50 !== null && card.monthsP50 >= 0.5 ? `+${Math.round(card.monthsP50)} mo` : card.monthsP50 !== null ? 'none' : '—'
+  const numbers = useNumbers()
+  const o = outlookOf(card, numbers)
+  const slip = numbers
+    ? (card.monthsP50 !== null && card.monthsP50 >= 0.5 ? `+${Math.round(card.monthsP50)} mo` : card.monthsP50 !== null ? 'none' : '—')
+    : (o?.slip ?? '—')
+  const watch = tierKey(card.tier) === 'Watch'
+  const summary = numbers && card.pAny2q !== null
+    ? `${formatProb(card.pAny2q)} chance of a delay or cost rise in the next 6 months`
+    : watch ? 'No completion date, so the delay risk is not ranked'
+      : o ? `${outlookLine(o)} over the ${o.horizon ?? 'next two quarters'}` : 'The outlook in words is not available yet'
   return (
     <Shell title={<OpenProject projectKey={card.key}>{card.name ?? card.key}</OpenProject>} right={<span className="font-mono">{card.key}</span>}>
       <div className="flex items-center gap-3">
         <MiniRing tier={card.tier} p={card.pAny2q} />
         <div className="min-w-0 space-y-1">
           <Badge tier={card.tier} />
-          <div className="text-xs leading-snug text-fg-muted">
-            {card.pAny2q !== null ? `${formatProb(card.pAny2q)} chance of a delay or cost rise in the next 6 months` : 'No completion date, so the delay risk is not ranked'}
-          </div>
+          <div className="text-xs leading-snug text-fg-muted">{summary}</div>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
         <Figure label="Work done" value={orDash(card.progressPct, pct)} />
         <Figure label="Anticipated cost" value={orDash(card.costCr, formatINR)} />
         <Figure label="Expected completion" value={orDash(card.anticipatedCompletion, formatDate)} />
-        <Figure label="Likely further delay" value={slip} />
+        <Figure label="Likely further slip" value={slip} />
       </div>
-      {(card.pDatePush2q !== null || card.pCostRev2q !== null) && (
+      {numbers && (card.pDatePush2q !== null || card.pCostRev2q !== null) && (
         <div className="mt-2 text-xs text-fg-dimmed">
           Date push {orDash(card.pDatePush2q, formatProb)} · cost revision {orDash(card.pCostRev2q, formatProb)}, next 6 months
         </div>
@@ -233,9 +266,12 @@ function ProjectCardView({ card }: { card: ProjectCard }) {
 }
 
 function CompareCardView({ card }: { card: CompareCard }) {
+  const numbers = useNumbers()
   const rows: Array<[string, (p: ProjectFacts) => React.ReactNode]> = [
     ['Tier', (p) => <Badge tier={p.tier} />],
-    [P_ANY, (p) => <span className="font-mono tabular-nums">{orDash(p.pAny2q, formatProb)}</span>],
+    numbers
+      ? [P_ANY, (p) => <span className="font-mono tabular-nums">{orDash(p.pAny2q, formatProb)}</span>]
+      : ['Outlook', (p) => <OutlookChip outlook={outlookOf(p, false)} tier={p.tier} />],
     ['Work done', (p) => <span className="font-mono tabular-nums">{orDash(p.progressPct, pct)}</span>],
     ['Anticipated cost', (p) => <span className="whitespace-nowrap font-mono tabular-nums">{orDash(p.costCr, formatINRShort)}</span>],
     ['Expected completion', (p) => orDash(p.anticipatedCompletion, formatDate)],
@@ -272,10 +308,30 @@ function CompareCardView({ card }: { card: CompareCard }) {
 // ------------------------------------------------------------------ explain, history
 
 function ExplainCardView({ card }: { card: ExplainCard }) {
-  const drivers = [...card.drivers].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+  const numbers = useNumbers()
+  const drivers = numbers ? [...card.drivers].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)) : []
+  const plain = numbers && drivers.length ? [] : driversOf({ driversPlain: card.driversPlain }, false)
   const max = Math.max(...drivers.map((d) => Math.abs(d.contribution)), 1e-4)
   return (
     <Shell title={<>Why {card.name ?? card.key} is <span className="whitespace-nowrap">{TIER_LABEL[tierKey(card.tier)]}</span></>} right={<Badge tier={card.tier} />}>
+      {plain.length > 0 && (
+        <ol className="space-y-1.5">
+          <li className="text-xs text-fg-muted">What weighs most, strongest first</li>
+          {plain.map((d, i) => {
+            const up = d.direction === 'raises'
+            const Arrow = up ? ArrowUp : ArrowDown
+            return (
+              <li key={`${d.label}-${i}`} className="flex items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-fg-base" title={d.label}>{d.label}</span>
+                <Arrow className={cn('size-3.5 shrink-0', up ? 'text-critical' : 'text-stable')} aria-label={up ? 'raises the risk' : 'lowers the risk'} role="img" />
+                <span className="inline-flex shrink-0 gap-0.5" role="img" aria-label={`${d.strength} effect`}>
+                  {[0, 1, 2].map((k) => <span key={k} className={cn('size-1.5 rounded-full', k < strengthDots(d.strength) ? 'bg-fg-base' : 'bg-fg-dimmed/30')} />)}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      )}
       {drivers.length > 0 && (
         <div className="space-y-2">
           <div className="text-xs text-fg-muted">What moves the model&rsquo;s score most</div>
@@ -300,7 +356,7 @@ function ExplainCardView({ card }: { card: ExplainCard }) {
         </div>
       )}
       {card.flagged.length > 0 && (
-        <div className={cn('space-y-2', drivers.length > 0 && 'mt-3 border-t border-border-subtle pt-2.5')}>
+        <div className={cn('space-y-2', (drivers.length > 0 || plain.length > 0) && 'mt-3 border-t border-border-subtle pt-2.5')}>
           <div className="text-xs text-fg-muted">Flagged checks</div>
           {card.flagged.map((f) => {
             const Icon = RISK_DIMENSION[f.dimension]?.icon ?? AlertTriangle
@@ -316,7 +372,7 @@ function ExplainCardView({ card }: { card: ExplainCard }) {
           })}
         </div>
       )}
-      {drivers.length === 0 && card.flagged.length === 0 && (
+      {drivers.length === 0 && plain.length === 0 && card.flagged.length === 0 && (
         <p className="py-2 text-center text-sm text-fg-dimmed">No drivers or flagged checks for this project</p>
       )}
     </Shell>

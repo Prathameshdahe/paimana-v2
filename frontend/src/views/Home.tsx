@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, BrainCircuit, LayoutList, Network, Radar, Trees, type LucideIcon } from 'lucide-react'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { IconChip } from '@/components/ui/Badge'
-import { KPIRibbon } from '@/views/command-center/KPIRibbon'
+import { WeekBrief } from '@/views/command-center/WeekBrief'
 import { IndiaMap } from '@/views/home/IndiaMap'
 import { EarlyWarningInbox } from '@/views/home/EarlyWarningInbox'
 import { LiveStatus } from '@/views/home/LiveStatus'
@@ -12,14 +12,14 @@ import { canOpen } from '@/lib/auth/access'
 
 /**
  * Landing page, one per role on the same route: the public's transparency view, a ministry's dashboard, an
- * agency's scorecard (views/home/RoleHomes), and the IPMD portfolio overview below. Deep triage lives in
- * Command Center (/command).
+ * agency's scorecard (views/home/RoleHomes), and the IPMD (and developer) portfolio overview below. Deep triage
+ * lives in Command Center (/command).
  */
 export function Home() {
   const { role, ministry, agency } = useSession()
   if (role === 'ministry_official' && ministry) return <MinistryHome ministry={ministry} />
   if (role === 'agency_official' && agency) return <AgencyHome agency={agency} />
-  if (role === 'ipmd_analyst') return <AnalystHome />
+  if (role === 'ipmd_analyst' || role === 'developer') return <AnalystHome />
   return <PublicHome />
 }
 
@@ -31,18 +31,17 @@ const QUICK_LINKS: Array<{ to: string; label: string; hint: string; icon: Lucide
   { to: '/models', label: 'Models', hint: 'Accuracy checks', icon: BrainCircuit },
 ]
 
-/** IPMD: the whole portfolio, the live jobs, quick links to the analysis pages, the map and the alert inbox. */
+/** IPMD: the week over the whole portfolio, the live jobs, quick links to the analysis pages, the map and the alerts. */
 function AnalystHome() {
   const { role } = useSession()
   return (
     <Page>
       <PageHeader
         title="Portfolio overview"
-        subtitle="Every open central-sector project: risk, spend, alerts and live jobs"
-        actions={<LinkButton to="/command">Open Command Center <ArrowRight className="size-4" /></LinkButton>}
+        actions={<LinkButton to="/command">Open Command Center <ArrowRight className="size-4" aria-hidden="true" /></LinkButton>}
       />
 
-      <KPIRibbon />
+      <WeekBrief />
       <LiveStatus />
 
       <nav className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Analysis pages">
