@@ -70,7 +70,7 @@ function buildRows(timeline: Timeline | undefined, forecast: Forecast | undefine
     if (s.recover !== null) r.rec = s.recover
     if (s.agency !== null) r.agy = s.agency
   }
-  for (const b of forecast.band) at(ts(b.quarter)).band = [b.lo, b.hi]
+  for (const b of forecast.band ?? []) at(ts(b.quarter)).band = [b.lo, b.hi]
 
   const end = Math.max(...[...rows.keys()])
   for (const c of forecast.scurve) {

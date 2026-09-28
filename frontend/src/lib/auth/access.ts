@@ -5,14 +5,17 @@
  * (App.tsx), the nav, the bell, the chat, live controls, the account menu and the project page all read it.
  * The backend enforces the same rules (backend/access.py POLICY; docs/ACCESS_CONTROL.md) — this map
  * only decides what is shown. No session (not signed in) is the public. Administration is the one page a
- * role alone does not open: it needs the session's admin flag as well (canAdmin).
+ * role alone does not open: it needs the session's admin flag as well (canAdmin). The hidden developer role
+ * (SPEC9_ui section 7) is in every group and alone holds the raw model numbers (canSeeNumbers): the four other roles
+ * read words, bands, tiers and report facts, and the backend cuts the numbers out of their answers.
  */
 import type { Role } from './SessionContext'
 
-const EVERYONE: Role[] = ['public', 'agency_official', 'ministry_official', 'ipmd_analyst']
-const OFFICIALS: Role[] = ['agency_official', 'ministry_official', 'ipmd_analyst']
-const MINISTRY_UP: Role[] = ['ministry_official', 'ipmd_analyst']
-const IPMD: Role[] = ['ipmd_analyst']
+const EVERYONE: Role[] = ['public', 'agency_official', 'ministry_official', 'ipmd_analyst', 'developer']
+const OFFICIALS: Role[] = ['agency_official', 'ministry_official', 'ipmd_analyst', 'developer']
+const MINISTRY_UP: Role[] = ['ministry_official', 'ipmd_analyst', 'developer']
+const IPMD: Role[] = ['ipmd_analyst', 'developer']
+const DEVELOPER: Role[] = ['developer']
 
 /** page path (first segment) -> roles that may open it */
 export const ROUTE_ROLES: Record<string, Role[]> = {
@@ -54,6 +57,11 @@ export const FEATURE_ROLES = {
   canSeeModelVersion: OFFICIALS,
   /** users, sign-up requests and the audit log (backend: need admin); the role half of canAdmin */
   canAdmin: IPMD,
+  /**
+   * the raw model numbers (backend: numbers): probabilities, SHAP values, quantile intervals, rank percentiles, bias
+   * statistics, CIs, lifts, analogue distances and rates, scenario values. The project page's Model detail tab.
+   */
+  canSeeNumbers: DEVELOPER,
 } satisfies Record<string, Role[]>
 
 export type Feature = keyof typeof FEATURE_ROLES

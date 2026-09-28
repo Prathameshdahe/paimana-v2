@@ -7,7 +7,7 @@
  * Numbers in the narrative were checked against the tools' facts (backend.brief.validate) unless `validated` is
  * false; `[n]` in the text points at item n of the turn's sources card.
  */
-import type { DatePrecision, Flag, OpinionConcern, Tier } from './project'
+import type { DatePrecision, Flag, OpinionConcern, Outlook, PlainDriver, Tier } from './project'
 
 /** one earlier turn, text only; the backend keeps at most 12 and wants the last one from the user */
 export interface ChatTurn {
@@ -52,7 +52,10 @@ export interface ChatProjectRow {
   ministry: string | null
   agency: string | null
   tier: Tier | null
+  /** a hidden number: null without the numbers feature */
   pAny2q: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
   anticipatedCostCr: number | null
   physicalProgressPct: number | null
   anticipatedCompletion: string | null
@@ -89,12 +92,14 @@ export interface ProjectFacts {
   key: string
   name: string | null
   tier: Tier | null
-  /** chance of a date push or cost revision within 2 quarters */
+  /** chance of a date push or cost revision within 2 quarters; a hidden number, as the three below */
   pAny2q: number | null
   pDatePush2q: number | null
   pCostRev2q: number | null
   /** median further slip, months */
   monthsP50: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
   progressPct: number | null
   costCr: number | null
   anticipatedCompletion: string | null
@@ -128,7 +133,10 @@ export interface ExplainCard {
   key: string
   name: string | null
   tier: Tier | null
+  /** the SHAP drivers in numbers: the developer's; [] for the four roles */
   drivers: Driver[]
+  /** the drivers in words; absent from an older backend */
+  driversPlain?: PlainDriver[] | null
   flagged: FlaggedCheck[]
 }
 

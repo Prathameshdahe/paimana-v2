@@ -5,7 +5,7 @@ import { fetchMe, logout } from './authApi'
 import { PUBLIC, sessionOf, type Session } from './session'
 import type { Me } from '@/contracts/auth'
 
-export type { OfficialRole, Role, Session } from './session'
+export type { AccountRole, OfficialRole, Role, Session } from './session'
 
 /**
  * src/lib/auth/SessionContext.tsx

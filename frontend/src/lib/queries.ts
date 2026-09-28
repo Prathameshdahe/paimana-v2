@@ -7,7 +7,7 @@
  * the views say so; there is no bundled fallback data.
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiGet, apiPost } from '@/lib/api'
+import { ApiError, apiGet, apiPost } from '@/lib/api'
 import type {
   AlertKind,
   Alert,
@@ -26,7 +26,9 @@ import type {
   BriefOut,
   Flag,
   Forecast,
+  MapRow,
   ProjectDetail,
+  ProjectMap,
   ProjectPage,
   ProjectResearch,
   ProjectSignals,
@@ -98,6 +100,78 @@ export function useProjects(query: ProjectQuery, enabled = true) {
     placeholderData: keepPreviousData,
     enabled,
   })
+}
+
+/** the list's filters without its sort and paging: what the map is asked for */
+function mapFilters(q: ProjectQuery): ProjectQuery {
+  const { q: text, tier, sector, state, ministry, flag, near_complete } = q
+  return { q: text, tier, sector, state, ministry, flag, near_complete }
+}
+
+/** the fallback's size: the list's cap per request (backend/routes.py le=100); nothing asks for more */
+export const MAP_FALLBACK_SIZE = 100
+
+/** a backend without GET /api/projects/map answers 400 (the key rule) or 404: remembered, so it is asked once */
+let mapMissing = false
+
+export interface ProjectMapResult {
+  rows: MapRow[] | undefined
+  /** rows in scope for these filters */
+  total: number | undefined
+  /** set when rows are only the riskiest MAP_FALLBACK_SIZE (no map endpoint): the caption says so */
+  partial: { shown: number; total: number } | null
+  isLoading: boolean
+  isFetching: boolean
+  error: unknown
+}
+
+/**
+ * Every row in scope for the command centre's risk map (GET /api/projects/map, the list's filters, no paging). A
+ * backend without that endpoint gets one ask, then the list's first page of the MAP_FALLBACK_SIZE riskiest instead,
+ * and `partial` tells the caption.
+ */
+export function useProjectMap(query: ProjectQuery): ProjectMapResult {
+  const scope = useScopeKey()
+  const filters = mapFilters(query)
+  const map = useQuery({
+    queryKey: ['projects', 'map', filters, scope],
+    queryFn: async (): Promise<ProjectMap | null> => {
+      try {
+        const r = await apiGet<ProjectMap | MapRow[]>('/api/projects/map', filters)
+        return Array.isArray(r) ? { total: r.length, items: r } : r
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 400 || e.status === 404 || e.status === 405)) {
+          mapMissing = true
+          return null
+        }
+        throw e
+      }
+    },
+    enabled: !mapMissing,
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+  const fallback = mapMissing || map.data === null
+  const list = useProjects({ ...filters, sort: 'risk', order: 'desc', page: 1, size: MAP_FALLBACK_SIZE }, fallback)
+  if (fallback) {
+    const items = list.data?.items
+    return {
+      rows: items,
+      total: list.data?.total,
+      partial: list.data && list.data.total > list.data.items.length ? { shown: list.data.items.length, total: list.data.total } : null,
+      isLoading: list.isLoading,
+      isFetching: list.isFetching,
+      error: list.error,
+    }
+  }
+  return {
+    rows: map.data?.items,
+    total: map.data?.total,
+    partial: null,
+    isLoading: map.isLoading,
+    isFetching: map.isFetching,
+    error: map.error,
+  }
 }
 
 export function useProject(key: string | null) {

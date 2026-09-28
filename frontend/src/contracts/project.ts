@@ -3,6 +3,11 @@
  *
  * One-project and project-list shapes as served by the FastAPI backend
  * (backend/schemas.py; keys are camelCase). Dates are ISO strings.
+ *
+ * The numbers policy (SPEC9_ui section 6): only the developer role gets the raw model numbers (probabilities, SHAP,
+ * quantiles, rank percentiles). For every other viewer the backend sends them as null or [] and adds words instead:
+ * `outlook` and `driversPlain` on scores, `outlook` and `topReason` on rows, the words forecast. Fields marked
+ * "absent from an older backend" are optional so a page renders against either backend.
  */
 
 /** Rank-based tier; a project without an anticipated completion date is in the Watch tier (no date-based score). */
@@ -10,6 +15,34 @@ export type Tier = 'Critical' | 'High' | 'Medium' | 'Low' | 'Watch'
 export type TierFilter = Tier
 export type Flag = 'land' | 'forest' | 'litigation' | 'contractor' | 'early_notice'
 export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name' | 'progress'
+
+/* ------------------------------------------------------------------ the numbers policy's words */
+
+/** how likely, in words, from fixed bands of a hidden probability (>= 0.75 very likely, >= 0.5 likely, >= 0.25 possible) */
+export type OutlookWord = 'very likely' | 'likely' | 'possible' | 'unlikely'
+/** the likely further slip, from the hidden median months */
+export type SlipBand = 'under 6 months' | '6 to 12 months' | '1 to 2 years' | 'over 2 years'
+/** a measured extra delay in words, from the hidden months (the hidden-delay priors) */
+export type DelayWord = 'a few months' | 'about half a year' | 'about a year' | 'over a year'
+
+/**
+ * The outlook in words, on scores and on list rows: delay from P(date push, 2q), cost from P(cost revision, 2q) with
+ * the same bands, slip from the median further slip. A part is null when the project is not ranked (no completion
+ * date) or the model has no value; horizon names the window ('next two quarters').
+ */
+export interface Outlook {
+  delay: OutlookWord | null
+  cost: OutlookWord | null
+  slip: SlipBand | null
+  horizon: string | null
+}
+
+/** one of the project's top five model drivers in words: which way it pushes and how hard, within those five */
+export interface PlainDriver {
+  label: string
+  direction: 'raises' | 'lowers'
+  strength: 'strong' | 'moderate' | 'slight'
+}
 
 export interface ProjectRow {
   key: string
@@ -19,6 +52,7 @@ export interface ProjectRow {
   agency: string | null
   ministry: string | null
   tier: Tier | null
+  /** a hidden number, as are the five after override: null without the numbers feature */
   tierRankPct: number | null
   override: boolean | null
   pAny2q: number | null
@@ -26,6 +60,10 @@ export interface ProjectRow {
   pCostRev2q: number | null
   monthsP50: number | null
   monthsP95: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
+  /** the plainest reason it ranks where it does (the first plain driver, else the first flagged check); absent from an older backend */
+  topReason?: string | null
   anticipatedCostCr: number | null
   expenditureCr: number | null
   physicalProgressPct: number | null
@@ -42,12 +80,39 @@ export interface ProjectPage {
   items: ProjectRow[]
 }
 
+/**
+ * GET /api/projects/map: every row in scope for the command centre's risk map, slim and unpaged (the list's filters,
+ * redacted like the list). Position on the map comes only from the due date and the key, never a hidden number.
+ */
+export interface MapRow {
+  key: string
+  name: string | null
+  sector: string | null
+  state: string | null
+  tier: Tier | null
+  override: boolean | null
+  anticipatedCompletion: string | null
+  anticipatedCostCr: number | null
+  physicalProgressPct: number | null
+  noCompletionDate: boolean | null
+  outlook?: Outlook | null
+  topReason?: string | null
+  flags: Flag[]
+}
+
+export interface ProjectMap {
+  asof?: string | null
+  total: number
+  items: MapRow[]
+}
+
 export interface ShapValue {
   feature: string
   value: unknown
   contribution: number
 }
 
+/** the model's view of one project; the probabilities, quantiles, rank and shapTop5 are hidden numbers (null / []) */
 export interface Scores {
   pDatePush2q: number | null
   pCostRev2q: number | null
@@ -67,6 +132,10 @@ export interface Scores {
   stagnationQuarters: number | null
   elapsedRatio: number | null
   shapTop5: ShapValue[]
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
+  /** the top five drivers in words, strongest first; absent from an older backend */
+  driversPlain?: PlainDriver[] | null
 }
 
 export type RiskState = 'flagged' | 'clear' | 'unknown'
@@ -189,6 +258,8 @@ export interface HiddenDelayMatch {
   extraPushHi: number | null
   holmMonths: number | null
   holmPush: number | null
+  /** the measured extra months in words (the months, push and CIs are hidden numbers); absent from an older backend */
+  extraMonthsWord?: DelayWord | null
   /** what it was matched on */
   basis: string
   /** the remark quarter it is as of; null for the land register */
@@ -372,6 +443,7 @@ export interface ScenarioPoint {
   agencyBasis: string | null
 }
 
+/** a nearest past project at the same stage, in numbers (the developer's Model detail) */
 export interface Analogue {
   rank: number
   analogueKey: string
@@ -386,6 +458,19 @@ export interface Analogue {
   yAny: number | null
   yDatePush: number | null
   yCostRev: number | null
+}
+
+/** what happened to a past project like this one, within 4 quarters */
+export type AnalogueOutcome = 'slipped' | 'held' | 'unknown'
+
+/** a nearest past project as the four roles get it: what happened, how long ago; no distance, slip or rate */
+export interface AnalogueBrief {
+  name: string | null
+  sector: string | null
+  outcome: AnalogueOutcome
+  yearsAgo: number | null
+  /** its project key, when the backend sends one */
+  key?: string | null
 }
 
 export interface ScurvePoint {
@@ -404,30 +489,38 @@ export interface BandPoint {
   hi: number
 }
 
+/** the reported completion and, as hidden numbers, the predicted window; `band` says the window in words */
 export interface CompletionBand {
   anticipated: string | null
-  monthsP05: number | null
-  monthsP50: number | null
-  monthsP95: number | null
-  p05: string | null
-  p50: string | null
-  p95: string | null
+  monthsP05?: number | null
+  monthsP50?: number | null
+  monthsP95?: number | null
+  p05?: string | null
+  p50?: string | null
+  p95?: string | null
+  /** how far past the reported date completion likely lands, in words; absent from an older backend */
+  band?: SlipBand | null
 }
 
+/**
+ * GET /api/projects/{key}/forecast (officials). The scenario curves, S-curve and band are a picture and come to every
+ * official; the page shows their values only to the developer. The four roles get the analogues as AnalogueBrief
+ * and the completion window in words; the fields marked optional are absent from that answer.
+ */
 export interface Forecast {
   key: string
   asof: string
-  sector: string | null
-  elapsedRatio: number | null
-  physicalProgressPct: number | null
+  sector?: string | null
+  elapsedRatio?: number | null
+  physicalProgressPct?: number | null
   scenarios: ScenarioPoint[]
-  analogues: Analogue[]
-  analogueSummary: string
-  scurveFitYear: number | null
+  analogues: Array<Analogue | AnalogueBrief>
+  analogueSummary?: string | null
+  scurveFitYear?: number | null
   scurve: ScurvePoint[]
-  band: BandPoint[]
+  band?: BandPoint[] | null
   completion: CompletionBand
-  bandMethod: string
+  bandMethod?: string | null
 }
 
 export interface Signal {
@@ -440,6 +533,7 @@ export interface Signal {
   summary: string | null
   category: string | null
   severity: number | null
+  /** the match score: the page shows it to the developer only */
   linkScore: number | null
   method: string | null
   /** first report period after the article whose CUF row changed; null while none has */

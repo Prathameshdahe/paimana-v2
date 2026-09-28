@@ -12,6 +12,7 @@ import { useAlertStream } from '@/lib/useAlertStream'
 import { AlertBell } from './AlertBell'
 import { ChangePasswordDialog } from './ChangePasswordDialog'
 
+/** the officials' roles in words; the developer has none (hidden: only a small tag inside the account menu) */
 const ROLE_LABELS: Record<string, string> = {
   ipmd_analyst: 'IPMD Analyst',
   ministry_official: 'Ministry Official',
@@ -95,11 +96,20 @@ export function TopBar() {
                   className="z-50 w-72 overflow-hidden border border-border-default bg-surface-panel shadow-pop"
                 >
                   <div className="space-y-0.5 px-4 py-3">
-                    <div className="truncate text-sm font-semibold text-fg-base">{displayName || ROLE_LABELS[role]}</div>
-                    {email && <div className="truncate text-xs text-fg-muted" title={email}>{email}</div>}
-                    <div className="truncate text-xs text-fg-dimmed">
-                      {ROLE_LABELS[role]}{scope && ` · ${scope}`}{isAdmin && ' · administrator'}
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 truncate text-sm font-semibold text-fg-base">{displayName || ROLE_LABELS[role]}</span>
+                      {role === 'developer' && (
+                        <span className="shrink-0 rounded-md bg-fg-base/5 px-1.5 py-px text-xs font-medium text-fg-muted ring-1 ring-inset ring-border-default">
+                          Developer
+                        </span>
+                      )}
                     </div>
+                    {email && <div className="truncate text-xs text-fg-muted" title={email}>{email}</div>}
+                    {role !== 'developer' && (
+                      <div className="truncate text-xs text-fg-dimmed">
+                        {ROLE_LABELS[role]}{scope && ` · ${scope}`}{isAdmin && ' · administrator'}
+                      </div>
+                    )}
                   </div>
                   <div className="border-t border-border-subtle py-1">
                     <Popover.Close asChild>

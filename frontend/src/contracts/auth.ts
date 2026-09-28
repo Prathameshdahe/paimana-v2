@@ -7,15 +7,22 @@
  * app.users: no session is the public.
  */
 
-/** an account's role; the public is no role */
+/** an official's role, the ones sign-up and the administration offer; the public is no role */
 export type OfficialRole = 'agency_official' | 'ministry_official' | 'ipmd_analyst'
+
+/**
+ * any account's role: an official's, or the hidden developer (every feature, the raw model numbers, Models, Workers
+ * and the audit log; SPEC9_ui section 7). Me.role is 'developer' only to the developer themself; no list, sign-up
+ * choice or label names it.
+ */
+export type AccountRole = OfficialRole | 'developer'
 
 /** GET /api/auth/me and the answer of POST /api/auth/login; 401 when not signed in */
 export interface Me {
   userId: number
   email: string
   displayName: string | null
-  role: OfficialRole
+  role: AccountRole
   /** ministry_official: the ministry every page is cut to */
   ministry: string | null
   /** agency_official: the canonical agency every page is cut to */

@@ -4,7 +4,7 @@
  * Portfolio-level shapes as served by the FastAPI backend (backend/schemas.py;
  * keys are camelCase): data version, aggregates, alerts, external rollup.
  */
-import type { DatePrecision, TierFilter } from './project'
+import type { DatePrecision, DelayWord, Outlook, TierFilter } from './project'
 
 export interface Meta {
   asof: string
@@ -49,7 +49,10 @@ export interface TopProject {
   sector: string | null
   state: string | null
   tier: string | null
+  /** a hidden number: null without the numbers feature */
   pAny2q: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
   anticipatedCostCr: number | null
   /** the stagnation badge */
   override: boolean | null
@@ -212,7 +215,10 @@ export interface ExternalProject {
   state: string | null
   anticipated_cost_cr: number | null
   tier: string | null
+  /** a hidden number: null without the numbers feature */
   p_any_2q: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
   slip_to_date_months: number | null
   /** "factor: evidence" lines from the risk profile; empty for the public (as the public project page) */
   evidence: string[]
@@ -298,7 +304,10 @@ export interface EarlyNotice {
   top: ExternalProject[]
 }
 
-/** notice backtest: past rows with no slip to date; slip = completion pushed >= 3 months by t + 4 quarters */
+/**
+ * notice backtest: past rows with no slip to date; slip = completion pushed >= 3 months by t + 4 quarters. The rates
+ * and lifts are hidden numbers (null without the numbers feature); the counts stay.
+ */
 export interface Lift {
   n_with: number
   slip_rate_with: number | null
@@ -344,6 +353,8 @@ export interface HiddenDelayPrior {
   extra_push_hi: number | null
   holm_months: number | null
   holm_push: number | null
+  /** the extra months in words (months, push and their CIs are hidden numbers); absent from an older backend */
+  extraMonthsWord?: DelayWord | null
   /** current projects in scope it applies to; null for the NH/district grouping (not rated) */
   n_current?: number | null
   garvit_status: string
