@@ -291,8 +291,8 @@ function ExplainCardView({ card }: { card: ExplainCard }) {
                     {up ? 'raises risk' : 'lowers risk'}
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden bg-surface-input">
-                  <div className={cn('h-full', up ? 'bg-critical/80' : 'bg-stable/80')} style={{ width: `${(Math.abs(d.contribution) / max) * 100}%` }} />
+                <div className="h-2 overflow-hidden rounded-full bg-surface-input">
+                  <div className={cn('h-full rounded-full', up ? 'bg-critical/80' : 'bg-stable/80')} style={{ width: `${(Math.abs(d.contribution) / max) * 100}%` }} />
                 </div>
               </div>
             )

@@ -57,7 +57,7 @@ export function TopBar() {
           {m && (
             // the data version and the viewer's project count (scoped portfolio)
             <span
-              className="hidden xl:inline-flex items-center gap-1.5 whitespace-nowrap bg-surface-panel px-3 py-1 text-xs text-fg-muted ring-1 ring-inset ring-border-subtle"
+              className="hidden xl:inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-panel px-3 py-1 text-xs text-fg-muted ring-1 ring-inset ring-border-subtle"
               title={`latest report: ${m.latestReportDoc ?? 'unknown'}`}
             >
               <span className="size-1.5 rounded-full bg-stable" />
@@ -69,7 +69,7 @@ export function TopBar() {
             // the scope every page is cut to (backend/access.py)
             <span
               title={`viewing as ${scope}`}
-              className="hidden md:inline-block max-w-[200px] truncate bg-accent/10 px-3 py-1 text-xs font-medium text-fg-base ring-1 ring-inset ring-accent/25"
+              className="hidden md:inline-block max-w-[200px] truncate rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-fg-base ring-1 ring-inset ring-accent/25"
             >
               {scope}
             </span>
@@ -81,7 +81,7 @@ export function TopBar() {
             <Popover.Root>
               <Popover.Trigger
                 aria-label="account"
-                className="flex items-center gap-1 py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <span className="flex size-8 items-center justify-center rounded-full bg-fg-base text-xs font-semibold text-fg-inverse">
                   {initials(displayName, role)}

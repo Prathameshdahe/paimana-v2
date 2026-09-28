@@ -74,10 +74,10 @@ export function Slider({
         onPointerCancel={() => setIsDragging(false)}
         {...props}
       >
-        <RadixSlider.Track className="bg-surface-input relative grow h-1.5 border border-border-default">
+        <RadixSlider.Track className="bg-surface-input relative grow rounded-full h-1.5 border border-border-default">
           <RadixSlider.Range
             className={cn(
-              'absolute h-full transition-colors',
+              'absolute rounded-full h-full transition-colors',
               isDragging ? 'bg-accent ring-1 ring-accent' : 'bg-accent'
             )}
           />

@@ -343,7 +343,7 @@ function Chat() {
               className="group absolute inset-y-0 left-0 z-10 w-3 -translate-x-1/2 cursor-ew-resize touch-none focus-visible:outline-none"
             >
               <div className={cn(
-                'mx-auto h-full w-1 transition-colors group-hover:bg-accent/30 group-focus-visible:bg-accent/50',
+                'mx-auto h-full w-1 rounded-full transition-colors group-hover:bg-accent/30 group-focus-visible:bg-accent/50',
                 dragging && 'bg-accent/50'
               )} />
             </div>
@@ -402,13 +402,13 @@ function Chat() {
             <div className="shrink-0 space-y-3 border-t border-border-subtle bg-surface-panel px-4 py-3.5">
               {ctxKey && (
                 <div className="flex">
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 bg-accent/10 py-1 pl-2.5 pr-1 text-xs text-accent ring-1 ring-inset ring-accent/20">
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-accent/10 py-1 pl-2.5 pr-1 text-xs text-accent ring-1 ring-inset ring-accent/20">
                     <Crosshair className="size-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate" title={openName ?? undefined}>Asking about {openName}</span>
                     <button
                       type="button"
                       onClick={() => setDropped(askKey)}
-                      className="flex size-5 shrink-0 items-center justify-center transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      className="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                       aria-label="Stop asking about this project"
                       title="Stop asking about this project"
                     >
@@ -428,7 +428,7 @@ function Chat() {
                         key={s}
                         onClick={() => ask(s)}
                         disabled={busy}
-                        className=" border border-border-subtle bg-surface-base px-3 py-1.5 text-left text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50"
+                        className="rounded-full border border-border-subtle bg-surface-base px-3 py-1.5 text-left text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50"
                       >
                         {s}
                       </button>
@@ -504,7 +504,7 @@ function Verdict({ done }: { done: ChatDone }) {
         <span title={done.reasons.join('; ') || undefined}>{note}</span>
       ) : (
         <span
-          className="inline-flex items-center gap-1 bg-stable/10 px-2.5 py-0.5 font-medium text-stable ring-1 ring-inset ring-stable/20"
+          className="inline-flex items-center gap-1 rounded-full bg-stable/10 px-2.5 py-0.5 font-medium text-stable ring-1 ring-inset ring-stable/20"
           title="Every number in this answer was traced to the data the assistant looked up"
         >
           <ShieldCheck className="size-3.5" aria-hidden="true" />

@@ -22,7 +22,7 @@ export function SignalCard({ s }: { s: FeedItem }) {
         <span className="font-medium text-fg-muted">{s.source ?? 'source unknown'}</span>
         <span>{day(s.publishedAt)}</span>
         {s.category && (
-          <span className="flex items-center gap-1 bg-surface-elevated px-2 py-0.5 text-fg-muted">
+          <span className="flex items-center gap-1 rounded-full bg-surface-elevated px-2 py-0.5 text-fg-muted">
             <span className="size-2 rounded-full" style={{ background: cat?.color ?? '#9a968c' }} />
             {categoryLabel(s.category)}
           </span>
@@ -54,7 +54,7 @@ export function SignalCard({ s }: { s: FeedItem }) {
               )}
               {p.cufChangePeriod ? (
                 <span
-                  className=" bg-warning/10 px-2 py-0.5 font-medium text-warning"
+                  className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning"
                   title={`news ${day(s.publishedAt)}, then the report of ${formatDate(p.cufChangePeriod)} pushed the date or revised the cost`}
                 >
                   report change {p.leadDays} days later

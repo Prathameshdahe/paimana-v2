@@ -50,7 +50,7 @@ function Strip({ canRun }: { canRun: boolean }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border-subtle bg-surface-panel px-4 py-2.5 text-xs text-fg-muted shadow-card animate-card-in">
-      <span className={cn('flex items-center gap-1.5 bg-surface-elevated px-2.5 py-1 font-semibold', state.text)}>
+      <span className={cn('flex items-center gap-1.5 rounded-full bg-surface-elevated px-2.5 py-1 font-semibold', state.text)}>
         <span className={cn('inline-block h-2 w-2 rounded-full', state.dot)} />
         {state.label}
         {data && !data.enabled && (

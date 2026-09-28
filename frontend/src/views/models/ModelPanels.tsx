@@ -122,7 +122,7 @@ export function ShapSummary({ rows, runId }: { rows: ShapSummaryRow[]; runId: st
                 labelFormatter={(l: string, p) => `${l} · group ${(p?.[0]?.payload as ShapSummaryRow | undefined)?.group ?? '?'}`}
                 contentStyle={{ fontSize: 12, fontFamily: 'IBM Plex Mono, monospace' }}
               />
-              <Bar dataKey="meanAbsShap" fill="#2a78d6" isAnimationActive={false} />
+              <Bar dataKey="meanAbsShap" fill="#2a78d6" radius={[0, 4, 4, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>

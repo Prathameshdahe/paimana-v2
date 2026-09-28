@@ -59,6 +59,7 @@ function Cell({ x = 0, y = 0, width = 0, height = 0, bottleneckId, category = ''
         y={y}
         width={width}
         height={height}
+        rx={6}
         fill={color}
         fillOpacity={selected && !on ? 0.45 : 0.9}
         stroke={on ? '#1f2937' : 'hsl(var(--color-surface-panel))'}
@@ -186,7 +187,7 @@ function Members({ id }: { id: string }) {
 
 const chip = (on: boolean) =>
   cn(
-    'inline-flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors',
+    'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
     on ? 'bg-fg-base text-fg-inverse shadow-sm' : 'text-fg-muted hover:bg-surface-elevated hover:text-fg-base'
   )
 
@@ -252,7 +253,7 @@ export function Bottlenecks() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 py-2 shadow-card">
-            <span className="flex bg-surface-elevated p-0.5">
+            <span className="flex rounded-full bg-surface-elevated p-0.5">
               {(['authority', 'state'] as const).map((l) => (
                 <button key={l} onClick={() => { setLevel(l); setSelected(null) }} className={chip(level === l)}>
                   {l === 'authority' ? 'By authority' : 'State rollups'}

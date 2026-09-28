@@ -45,7 +45,7 @@ export function InfoTip({ children, label = 'About this', className }: { childre
         type="button"
         aria-label={label}
         className={cn(
-          'inline-flex shrink-0 items-center justify-center text-fg-dimmed transition-colors hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+          'inline-flex shrink-0 items-center justify-center rounded-full text-fg-dimmed transition-colors hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
           className
         )}
       >

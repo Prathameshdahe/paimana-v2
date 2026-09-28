@@ -55,11 +55,11 @@ export function AlertBell() {
     <Popover.Root onOpenChange={(open) => open && markSeen()}>
       <Popover.Trigger
         aria-label={`alerts: ${n} unread`}
-        className="relative flex size-9 items-center justify-center text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <Bell className="h-4 w-4" />
         {n > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-critical text-white text-xs font-semibold leading-[18px] text-center tabular-nums ring-2 ring-surface-base">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-critical text-white text-xs font-semibold leading-[18px] text-center tabular-nums ring-2 ring-surface-base">
             {n > 99 ? '99+' : n}
           </span>
         )}

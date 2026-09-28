@@ -88,14 +88,14 @@ export function LandMap({ states, className }: { states: LandState[]; className?
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed">
         <span className="flex items-center gap-2">
           <span className="size-2.5 rounded-sm" style={{ background: NO_DATA }} /> no data
-          <span className="h-2 w-14" style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${INK} 18%, #f6f3ee), ${INK})` }} />
+          <span className="h-2 w-14 rounded-full" style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${INK} 18%, #f6f3ee), ${INK})` }} />
           {Math.round(max).toLocaleString('en-IN')} ha
         </span>
         <span>{total('n_rated')} of {total('n_road')} current road projects in these states rated</span>
         {offMap.length > 0 && (
           <span className="flex flex-wrap gap-1.5">
             {offMap.map((s) => (
-              <span key={s.state} className=" bg-surface-elevated px-2 py-0.5" title={`${s.n_rated} rated of ${s.n_road} road projects`}>
+              <span key={s.state} className="rounded-full bg-surface-elevated px-2 py-0.5" title={`${s.n_rated} rated of ${s.n_road} road projects`}>
                 {s.state}{s.has_data ? ` ${n(s.stretches)} stretches` : ' · no data'}
               </span>
             ))}

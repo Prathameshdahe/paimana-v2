@@ -235,11 +235,11 @@ function Leaderboard({ points, selected, onPick }: { points: AgencyPoint[]; sele
 function BiasCompare({ label, value, sector, note }: { label: string; value: number | null; sector: number | null; note: string }) {
   const scale = Math.max(0.1, Math.abs(value ?? 0), Math.abs(sector ?? 0))
   const bar = (v: number | null, cls: string) => (
-    <div className="relative h-2 bg-surface-input">
+    <div className="relative h-2 rounded-full bg-surface-input">
       <div className="absolute inset-y-0 left-1/2 w-px bg-border-strong" />
       {v !== null && (
         <div
-          className={cn('absolute inset-y-0', cls)}
+          className={cn('absolute inset-y-0 rounded-full', cls)}
           style={v >= 0 ? { left: '50%', width: `${(v / scale) * 50}%` } : { right: '50%', width: `${(-v / scale) * 50}%` }}
         />
       )}
@@ -384,13 +384,13 @@ export function Agencies() {
                 <input type="checkbox" checked={showSmall} onChange={(e) => setShowSmall(e.target.checked)} className="accent-[hsl(var(--color-accent))]" />
                 include n &lt; 5
               </label>
-              <span className="flex bg-surface-elevated p-0.5">
+              <span className="flex rounded-full bg-surface-elevated p-0.5">
                 {(['chart', 'table'] as const).map((v) => (
                   <button
                     key={v}
                     onClick={() => setView(v)}
                     className={cn(
-                      'h-7 px-3 font-medium transition-colors',
+                      'h-7 rounded-full px-3 font-medium transition-colors',
                       view === v ? 'bg-surface-panel text-fg-base shadow-sm' : 'hover:text-fg-base'
                     )}
                   >

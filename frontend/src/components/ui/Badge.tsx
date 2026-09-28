@@ -26,7 +26,7 @@ export function Badge({ variant = 'muted', tier, className, children, ...props }
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center gap-1 px-2 py-0.5 text-xs font-medium leading-4 whitespace-nowrap ring-1 ring-inset',
+        'inline-flex items-center justify-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium leading-4 whitespace-nowrap ring-1 ring-inset',
         TONE_CHIP[v],
         RING[v],
         className

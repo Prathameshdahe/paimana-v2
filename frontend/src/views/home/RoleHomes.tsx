@@ -118,11 +118,11 @@ function RiskCell({ p }: { p: number | null }) {
 /** a bar from a centre zero line: overrun to the right (red), under to the left (green) */
 function SignedBar({ value, scale }: { value: number | null; scale: number }) {
   return (
-    <div className="relative h-2 bg-surface-input">
+    <div className="relative h-2 rounded-full bg-surface-input">
       <div className="absolute inset-y-0 left-1/2 w-px bg-border-strong" />
       {value !== null && (
         <div
-          className={cn('absolute inset-y-0 transition-[width] duration-700', value > 0 ? 'bg-critical/75' : 'bg-stable/75')}
+          className={cn('absolute inset-y-0 rounded-full transition-[width] duration-700', value > 0 ? 'bg-critical/75' : 'bg-stable/75')}
           style={value >= 0
             ? { left: '50%', width: `${Math.min(1, value / scale) * 50}%` }
             : { right: '50%', width: `${Math.min(1, -value / scale) * 50}%` }}
@@ -383,13 +383,13 @@ function BiasBullet({ label, self, sector, peers, note, rank }: {
         </span>
       </div>
       <div className="relative h-6">
-        <div className="absolute inset-x-0 top-1/2 h-2.5 -translate-y-1/2 bg-surface-input" />
+        <div className="absolute inset-x-0 top-1/2 h-2.5 -translate-y-1/2 rounded-full bg-surface-input" />
         {peers.map((v, i) => (
           <span key={i} className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg-dimmed/50" style={{ left: pos(v) }} />
         ))}
         {self !== null && (
           <div
-            className={cn('absolute top-1/2 h-2.5 -translate-y-1/2 transition-all duration-700', worse ? 'bg-critical/80' : 'bg-stable/80')}
+            className={cn('absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full transition-all duration-700', worse ? 'bg-critical/80' : 'bg-stable/80')}
             style={{ left: pos(Math.min(0, self)), width: `calc(${pos(Math.max(0, self))} - ${pos(Math.min(0, self))})` }}
           />
         )}
@@ -402,7 +402,7 @@ function BiasBullet({ label, self, sector, peers, note, rank }: {
         )}
         {sector !== null && (
           <Tooltip content={`sector median ${formatSignedRatio(sector)}`}>
-            <div className="absolute inset-y-0 w-1 -translate-x-1/2 bg-fg-base" style={{ left: pos(sector) }} />
+            <div className="absolute inset-y-0 w-1 -translate-x-1/2 rounded-full bg-fg-base" style={{ left: pos(sector) }} />
           </Tooltip>
         )}
       </div>
