@@ -7,9 +7,9 @@
  * rather than printing a dash. A tier count and an outlook band are never merged into one claim.
  */
 import { formatINRShort } from './formatters'
-import { likelyOrWorse } from './outlook'
+import { likelyOrWorse, outlookOf } from './outlook'
 import type { AlertKind, Kpis, TierCount } from '@/contracts/portfolio'
-import type { Flag, Outlook, Tier } from '@/contracts/project'
+import type { Flag, Outlook, ProjectDetail, Tier } from '@/contracts/project'
 
 /** whole months from asof to date (calendar months, UTC): negative when the date has passed */
 export function monthsUntil(asof: string, date: string): number {
@@ -127,6 +127,20 @@ export function projectHeadline(input: HeadlineInput, asof: string | null | unde
 
   const groups = [facts.join(', '), view.join(', '), ...tail].filter(Boolean)
   return groups.length ? `${opener}: ${groups.join('; ')}.` : `${opener}.`
+}
+
+/** the headline of a loaded project page; numbers: the developer, whose words may come from the numbers */
+export function detailHeadline(d: ProjectDetail, numbers: boolean): string {
+  return projectHeadline({
+    tier: d.scores?.tier ?? null,
+    physicalProgressPct: d.latest?.physicalProgressPct ?? null,
+    anticipatedCompletion: d.latest?.anticipatedCompletion ?? null,
+    elapsedRatio: d.scores?.elapsedRatio ?? null,
+    outlook: outlookOf(d.scores, numbers),
+    stagnationOverride: d.scores?.stagnationOverride ?? null,
+    stagnationQuarters: d.scores?.stagnationQuarters ?? null,
+    flags: d.flags,
+  }, d.provenance.asof)
 }
 
 // ------------------------------------------------------------------ the week

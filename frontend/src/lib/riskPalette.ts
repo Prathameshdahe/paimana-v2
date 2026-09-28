@@ -117,6 +117,20 @@ export const RISK_DIMENSION: Record<string, { label: string; short: string; icon
   external_composite: { label: 'External factor score', short: 'Land + forest', icon: Layers },
 }
 
+/** ml/risk_profile.py's source words for a checklist row, as an officer reads them (backend/labels.py keeps the same) */
+export const SOURCE_LABEL: Record<string, string> = {
+  model: 'model',
+  silver: 'reports',
+  report: 'report remarks',
+  sector_context: 'sector output data',
+  agency_stats: 'agency history',
+  bhoomi_rashi: 'Bhoomi Rashi land records',
+  parivesh_rules: 'Parivesh FC rules',
+  parivesh_portal: 'PARIVESH portal',
+  external_composite: 'land + forest composite',
+  news_research: 'web research',
+}
+
 // unknown gets its own look (dashed, grey) so it never reads as clear
 export const RISK_STATE_CHIP: Record<RiskState, string> = {
   flagged: 'bg-critical/10 text-critical ring-1 ring-inset ring-critical/25',

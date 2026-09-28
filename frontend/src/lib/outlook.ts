@@ -133,6 +133,20 @@ export function toneOf(word: OutlookWord | null | undefined): OutlookTone | 'mut
   return word ? OUTLOOK_TONE[word] : 'muted'
 }
 
+/** the slip band's tone: longer is worse */
+export function slipTone(band: SlipBand | null | undefined): OutlookTone | 'muted' {
+  return !band ? 'muted' : band === 'under 6 months' ? 'watch' : band === '6 to 12 months' ? 'warning' : 'critical'
+}
+
+/** where the tier sits, in a sentence (ml/score.py TIER_TOP 5/20/50%): the ring's caption */
+export const TIER_PLAIN: Record<string, string> = {
+  Critical: 'Among the few open projects most likely to be delayed or cost more over the next two quarters.',
+  High: 'Among the open projects more likely than most to be delayed or cost more over the next two quarters.',
+  Medium: 'In the riskier half of open projects for a delay or a cost rise over the next two quarters.',
+  Low: 'In the less risky half of open projects for a delay or a cost rise over the next two quarters.',
+  Watch: 'No completion date on record, so the delay risk is not ranked.',
+}
+
 /** a delay of likely or worse */
 export function likelyOrWorse(word: OutlookWord | null | undefined): boolean {
   return word === 'likely' || word === 'very likely'

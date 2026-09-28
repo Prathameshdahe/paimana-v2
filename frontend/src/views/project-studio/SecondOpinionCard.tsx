@@ -84,7 +84,16 @@ function OpinionError({ error }: { error: unknown }) {
   return <ApiErrorNote error={error} className="py-3" />
 }
 
-function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
+/**
+ * an evidence item's text as this viewer may read it: the pack's model line can carry the model's numbers (from a
+ * backend before the numbers policy), so without canSeeNumbers it reads as the tier alone
+ */
+function evidenceText(e: OpinionEvidence, tier: string | null | undefined, numbers: boolean): string {
+  if (numbers || e.kind !== 'model') return e.text
+  return tier ? `The risk model ranks it ${TIER_LABEL[tierKey(tier)]}.` : 'The risk model’s ranking.'
+}
+
+function Opinion({ o, tier, numbers }: { o: SecondOpinionOut; tier?: string | null; numbers: boolean }) {
   const ids = useId()
   const [active, setActive] = useState<string | null>(null)
   const items = evidenceOf(o)
@@ -110,7 +119,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
           text={o.narrative ?? ''}
           style="evidence"
           renderCite={(ref) => (
-            <CiteChip label={ref} title={byId.get(ref)?.text ?? `Evidence ${ref}`} active={active === ref} onClick={() => pick(ref)} />
+            <CiteChip label={ref} title={(() => { const e = byId.get(ref); return e ? evidenceText(e, tier, numbers) : `Evidence ${ref}` })()} active={active === ref} onClick={() => pick(ref)} />
           )}
         />
       </p>
@@ -140,7 +149,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
                   </span>
                   {e ? (
                     <div className="min-w-0 space-y-0.5">
-                      <div className={cn('leading-snug', stale ? 'text-fg-muted' : 'text-fg-base')}>{e.text}</div>
+                      <div className={cn('leading-snug', stale ? 'text-fg-muted' : 'text-fg-base')}>{evidenceText(e, tier, numbers)}</div>
                       <div className="text-fg-dimmed">
                         {stale && (
                           <span className="mr-1 rounded bg-surface-input px-1 py-px font-medium text-fg-muted" title={STALE_NOTE}>
@@ -178,7 +187,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
           o.model,
           o.generatedAt && `written ${formatDateTime(o.generatedAt)}`,
           items.length ? `${items.length} evidence items read` : null,
-          o.nNumbersChecked ? `${o.nNumbersChecked} numbers checked` : null,
+          numbers && o.nNumbersChecked ? `${o.nNumbersChecked} numbers checked` : null,
           o.cached ? 'cached' : null,
         ].filter(Boolean).join(' · ')}
       </div>
@@ -195,12 +204,14 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
  * two: the fetch keeps going when the panel closes. It never changes the tier.
  * panel: the side panel's block (Section); page: the full page's card beside the brief.
  */
-export function SecondOpinionCard({ projectKey, variant, tier, className }: {
+export function SecondOpinionCard({ projectKey, variant, tier, className, numbers = false }: {
   projectKey: string
   variant: 'panel' | 'page'
   /** the model's tier, for the "against the model" line */
   tier?: string | null
   className?: string
+  /** the developer: the pack's model line and the figures-checked count as sent */
+  numbers?: boolean
 }) {
   const cached = useCachedSecondOpinion(projectKey)
   const [requested, setRequested] = useState(false)
@@ -229,7 +240,7 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
   if (opinion) {
     body = (
       <ErrorBoundary fallback={<p className="text-xs text-fg-dimmed">The opinion came back in a form this page cannot show.</p>}>
-        <Opinion o={opinion} tier={tier} />
+        <Opinion o={opinion} tier={tier} numbers={numbers} />
       </ErrorBoundary>
     )
   } else if (writing) {
@@ -276,7 +287,7 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
 
   if (variant === 'panel') {
     return (
-      <Section title={<>AI second opinion <span className="font-normal text-fg-dimmed">· local LLM</span></>} right={right} className={className}>
+      <Section title={<>AI second opinion <span className="font-normal text-fg-dimmed">· local model</span></>} right={right} className={className}>
         <div className="space-y-3">{body}{note}{live}</div>
       </Section>
     )
@@ -284,7 +295,7 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
   return (
     <div className={cn('overflow-hidden rounded-xl border border-border-subtle bg-surface-panel shadow-card', className)}>
       <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-5 py-3">
-        <span className="text-sm font-semibold text-fg-base">AI second opinion <span className="font-normal text-fg-dimmed">· local LLM</span></span>
+        <span className="text-sm font-semibold text-fg-base">AI second opinion <span className="font-normal text-fg-dimmed">· local model</span></span>
         {right}
       </div>
       <div className="space-y-3 px-4 py-3">{body}{note}{live}</div>

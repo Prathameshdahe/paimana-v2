@@ -75,8 +75,11 @@ export function ExternalEvents({ events, asof }: { events: EventRow[]; asof: str
   )
 }
 
-/** News the scout linked to this project; an empty list is "not found yet", never "clear". */
-export function LinkedSignals({ data, error }: { data: ProjectSignals | undefined; error: unknown }) {
+/**
+ * News the scout linked to this project; an empty list is "not found yet", never "clear". numbers (the developer):
+ * each item's match score and method too.
+ */
+export function LinkedSignals({ data, error, numbers = false }: { data: ProjectSignals | undefined; error: unknown; numbers?: boolean }) {
   const scouted = data?.lastScoutAt
 
   return (
@@ -94,7 +97,9 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-6 text-center text-xs text-fg-dimmed">loading signals...</div>
+        <div className="space-y-2 px-5 py-4" aria-busy="true">
+          {[0, 1].map((i) => <div key={i} className="h-10 animate-pulse rounded bg-surface-input/60" />)}
+        </div>
       ) : data.items.length === 0 ? (
         <div className="px-5 py-6 text-center text-xs text-fg-dimmed space-y-1">
           <div>no linked news yet — not the same as clear</div>
@@ -113,7 +118,7 @@ export function LinkedSignals({ data, error }: { data: ProjectSignals | undefine
                 {s.source ?? 'source unknown'} · {s.publishedAt ? new Date(s.publishedAt).toLocaleDateString('en-IN') : 'date unknown'}
                 {s.category && ` · ${s.category.replace(/_/g, ' ')}`}
                 {s.severity !== null && <span className={cn(s.severity >= 2 && 'text-critical')}> · severity {s.severity}</span>}
-                {s.linkScore !== null && ` · link ${s.linkScore.toFixed(2)} (${s.method ?? 'match'})`}
+                {numbers && s.linkScore !== null && ` · link ${s.linkScore.toFixed(2)} (${s.method ?? 'match'})`}
               </div>
               <div className="text-xs text-fg-muted">
                 {s.cufChangePeriod
