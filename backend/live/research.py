@@ -11,15 +11,15 @@ recently researched first, per the `researched` table):
      shown as the fact's citation;
   3. the LLM judges them in batches of up to BATCH from the headline and the feed summary alone (the article is
      never fetched): per item {i, relevant, category, direction, severity, event_month, summary}, the reply's JSON
-     checked item by item with a pydantic model (an invalid entry gets the one retry below too). The items go into the prompt between markers as quotes, never as
-     instructions (a '<<<' or '>>>' in the feed text is blanked, so an item cannot close the quote), and the model
-     output decides nothing but the verdict on the item it was shown. A summary is kept only when every number and
-     date in it is in the item's headline, feed summary or publish date (backend/brief.validate), it names no
-     private person (pipeline/research.private_names), it shares at least MIN_SHARED words with its own item (4+
-     letters, the project's place words aside: a summary made up from nothing in the item, or written to an
-     injected instruction, shares none) and its words match its own item at least as well as any other item of the
-     batch (the model does copy a neighbour's headline); failing items get one retry, alone, naming what was wrong,
-     then they are rejected with their reasons;
+     checked item by item with a pydantic model (an invalid entry gets the one retry below too). The items go into
+     the prompt between markers as quotes, never as instructions (a '<<<' or '>>>' in the feed text is blanked, so
+     an item cannot close the quote), and the model output decides nothing but the verdict on the item it was
+     shown. A summary is kept only when every number and date in it is in the item's headline, feed summary or
+     publish date (backend/brief.validate), it names no private person (pipeline/research.private_names), it shares
+     at least MIN_SHARED words with its own item (4+ letters, the project's place words aside: a summary made up
+     from nothing in the item, or written to an injected instruction, shares none) and its words match its own item
+     at least as well as any other item of the batch (the model does copy a neighbour's headline); failing items get
+     one retry, alone, naming what was wrong, then they are rejected with their reasons;
   4. a relevant item becomes a research_facts row (origin 'agent': the gold columns plus signal_id, model,
      prompt_version, judged_at), and every verdict, relevant, not relevant or rejected, a signal_judgements row, so
      an item is judged once per project; a relevant item from the unlinked pool is also linked to the project

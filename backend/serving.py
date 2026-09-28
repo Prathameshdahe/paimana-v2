@@ -663,8 +663,8 @@ def _research_scope(s, scope):
 
 def research_summary(scope=None) -> dict:
     """Web research over the current projects in scope, sweep and agent facts together (deduplicated per project by
-    URL and story as research()): coverage, facts by category x direction with the live ones, by state, and the newest live
-    blockers (severity >= 2) with their project."""
+    URL and story as research()): coverage, facts by category x direction with the live ones, by state, and the
+    newest live blockers (severity >= 2) with their project."""
     from . import db
     s = state()
     cur, projects, sweep = _research_scope(scope)
