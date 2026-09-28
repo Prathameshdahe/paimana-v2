@@ -108,7 +108,7 @@ characters; only its first 1000 are read.
 | `search_knowledge` | help, glossary, docs and record text (`llm/rag.py`) | public chunks | scoped | scoped | ✓ |
 | `explain_prediction` | the five SHAP drivers in plain labels with direction words, flagged checks with evidence | – | scoped | scoped | ✓ |
 | `second_opinion` | the cached AI second opinion (`llm.second_opinion.cached`), never generated in chat | – | scoped | scoped | ✓ |
-| `agency_scorecard` | agency matrix: schedule and cost overrun, open projects, Critical / High counts | – | all agencies, own by default | their ministry's agencies | ✓ |
+| `agency_scorecard` | agency matrix: schedule and cost overrun, open projects, Critical / High counts (null when some of the agency's open projects are outside the scope) | – | all agencies, own by default | their ministry's agencies | ✓ |
 | `bottlenecks` | clusters of projects held up by one open issue and place | – | scoped | scoped | ✓ |
 
 Public outputs are built from `serving.public_project`, `public_page`, `public_external`, `public_research` and

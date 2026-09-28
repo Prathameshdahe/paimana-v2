@@ -246,6 +246,23 @@ def test_bottlenecks_and_agencies_for_ipmd():
     a = tools.run(IPMD, "agency_scorecard", {"agency": "NHAI"})
     check_result(a)
     assert a.facts["agencies"][0]["agency"] == "NHAI"
+    row = a.cards[0]["rows"][0]
+    crit = serving.projects(tier="Critical", agency="NHAI", size=1)["total"]
+    assert row["nCritical"] == a.facts["agencies"][0]["critical_open"] == crit > 0 and row["nHigh"] is not None
+
+
+def test_agency_tier_counts_are_never_partial():
+    """The matrix shows a scoped official agencies whose open projects are partly or wholly outside the scope:
+    their Critical and High counts are unknown (None, left out of the facts), never the in-scope part read as 0."""
+    for viewer, agency in ((powergrid(), "NHAI"), (coal(), "INDIAN RAILWAYS")):  # none / 1 of 4 in scope
+        a = tools.run(viewer, "agency_scorecard", {"agency": agency})
+        check_result(a)
+        row, fact = a.cards[0]["rows"][0], a.facts["agencies"][0]
+        assert row["n"] > 0 and row["nCritical"] is None and row["nHigh"] is None
+        assert "critical_open" not in fact and "high_open" not in fact and "not zero" in a.facts["tier_counts"]
+    own = tools.run(powergrid(), "agency_scorecard", {})  # its own agency: every open project is in scope
+    row = own.cards[0]["rows"][0]
+    assert row["name"] == "POWERGRID" and row["nCritical"] is not None and "tier_counts" not in own.facts
 
 
 def test_second_opinion_reads_the_cache_only(keys, monkeypatch):

@@ -981,13 +981,21 @@ def second_opinion(viewer, key) -> ToolResult:
 
 @serving.cached
 def _chat_agency_tiers(s, scope):
-    """Canonical agency -> (Critical, High) current projects in scope."""
+    """Canonical agency -> (current projects, Critical, High) in scope."""
     sql, params = serving._scope_sql(scope)
-    return {r["agency"]: (r["n_critical"], r["n_high"]) for r in serving._rows(s, f"""
-        SELECT a.canonical AS agency, count(*) FILTER (WHERE c.tier = 'Critical') AS n_critical,
+    return {r["agency"]: (r["n"], r["n_critical"], r["n_high"]) for r in serving._rows(s, f"""
+        SELECT a.canonical AS agency, count(*) AS n, count(*) FILTER (WHERE c.tier = 'Critical') AS n_critical,
                count(*) FILTER (WHERE c.tier = 'High') AS n_high
         FROM cur c JOIN amap a ON a.raw = c.agency
         WHERE c.project_key IN (SELECT project_key FROM cur WHERE {sql}) GROUP BY 1""", params)}
+
+
+def _agency_tier_counts(tiers: dict, p: dict) -> tuple[int | None, int | None]:
+    """(Critical, High) open projects of matrix point p, over the same projects as its n_open; (None, None) when
+    some of them are outside the viewer's scope (the matrix shows an agency official every agency, and a ministry
+    official its agencies' projects of every ministry), since counting only the visible ones would read as 0."""
+    n, crit, high = tiers.get(p["agency"], (0, 0, 0))
+    return (crit, high) if n == p["n_open"] else (None, None)
 
 
 def _agency_fact(p: dict) -> dict:
@@ -1018,17 +1026,19 @@ def agency_scorecard(viewer, agency=None, sort="capital", limit=8) -> ToolResult
         return ToolResult(summary=f"No agency record for {quote(agency, 60)}.", facts={"agency": quote(agency, 60)},
                           found=False)
     tiers = _chat_agency_tiers(viewer.scope)
-    rows = [{"name": p["agency"], "n": p["n_open"], "capitalCr": p["capital_cr"],
-             "nCritical": tiers.get(p["agency"], (0, 0))[0], "nHigh": tiers.get(p["agency"], (0, 0))[1]}
-            for p in chosen]
-    facts = {"shown": len(chosen), "agencies": [_agency_fact(p) | {"critical_open": r["nCritical"],
-                                                                    "high_open": r["nHigh"]}
+    rows = [{"name": p["agency"], "n": p["n_open"], "capitalCr": p["capital_cr"]}
+            | dict(zip(("nCritical", "nHigh"), _agency_tier_counts(tiers, p))) for p in chosen]
+    facts = {"shown": len(chosen), "agencies": [_agency_fact(p) | _compact({"critical_open": r["nCritical"],
+                                                                             "high_open": r["nHigh"]})
                                                 for p, r in zip(chosen, rows)],
              "note": "Schedule overrun: how much longer than planned the agency's median project runs (0% is on "
                      "time); cost overrun likewise; agencies with few projects are shrunk toward their sector. "
                      "recent_trend_pct: the median schedule overrun of projects sanctioned in the last 3 years "
                      "minus that of older ones, in points; recent projects have had less time to slip, so a "
                      "negative trend is partly that."}
+    if any(r["nCritical"] is None for r in rows):
+        facts["tier_counts"] = ("critical_open and high_open are left out for an agency with open projects outside "
+                                "your scope: they are unknown here, not zero.")
     p = chosen[0]
     if agency:
         summary = f"{p['agency']}: {_plural(p['n_open'], 'open project')}" + "".join(
