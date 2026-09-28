@@ -6,7 +6,7 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet
 Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summary.csv (b table), ablation.csv
-         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators)
+         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators), intervals.csv
 
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
@@ -25,6 +25,12 @@ early warning is for (the top 50 of a fold is otherwise almost all projects alre
 A target in TRAIN_FROM trains on rows from that date only (none today). A target in CALIBRATED gets a Platt
 calibrator fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
 it; the summary's calibration column says which. The ablation table compares the raw LightGBM scores.
+
+The score step's intervals (LightGBM quantile regressors at 5/50/95% of the months pushed and the cost change % by
+t + 2q, fit_quantiles) are backtested the same way on the validation and flash cutoffs of their binary counterparts
+(y_date_push, y_cost_rev): intervals.csv has the p05-p95 coverage (nominal 90%), the share below p05 and above p95,
+the mean width and the pinball loss at each quantile. A conformal widening from folds realised by the cutoff was
+tried and left out (docs/MODEL_UPGRADES_2026-09.md): those folds already cover >= 90%, so it moved nothing.
 """
 import json
 import time
@@ -80,6 +86,9 @@ ABLATION_MODEL = {"state": "lgbm_state", "+dynamics": "lgbm_state_dyn", "+contex
                   "+freshness": "lgbm_state_dyn_ctx_fresh", "+external": "lightgbm"}
 ABLATION_GAINS = ["pr_auc", "precision_50", "recall_100"]     # each step minus the step before
 MAIN = ["naive", "rule", "logreg", "lightgbm"]
+# the score step's interval models: name -> (h = 2 regression label, the binary target whose windows it is tested on)
+QUANTILE_TARGETS = {"months": ("y_months", "y_date_push"), "cost_pct": ("y_cost_pct", "y_cost_rev")}
+ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
 WINDOW_RULE = ("A quarter is reliable for a target when every field its label compares (needs) is >= reliable_min "
                "complete in silver/coverage.parquet. A cutoff c is usable when c and c + h are reliable and c has "
                f">= {MIN_ROWS} labelled rows. test = the newest {N_TEST} usable cutoff(s). validation = the last "
@@ -199,6 +208,45 @@ def fit_lgbm(tr, cols, cats, y, params=None):
     """LightGBM with LGB_PARAMS, or with params (a registry entry's own, ml/registry.py fitter)."""
     m = lgb.LGBMClassifier(**(params or LGB_PARAMS)).fit(lgb_X(tr, cols, cats), tr[y])
     return m, lambda d: m.predict_proba(lgb_X(d, cols, cats))[:, 1]
+
+
+def qframe(feats, lab, y):
+    """Rows with a known regression label y joined to their features, completed projects dropped."""
+    d = lab[PK + ["target_period", y]].dropna(subset=[y]).merge(feats, on=PK, how="inner")
+    return d[~d.is_completed.astype(bool)].sort_values(PK, ignore_index=True)
+
+
+def fit_quantiles(tr, y, cols, cats):
+    """One LightGBM quantile regressor of y per ALPHAS level (LGB_PARAMS). Returns predict(d) -> (rows x levels),
+    sorted along each row so the quantiles never cross."""
+    X = lgb_X(tr, cols, cats)
+    ms = [lgb.LGBMRegressor(**{**LGB_PARAMS, "objective": "quantile", "alpha": a}).fit(X, tr[y])
+          for a in ALPHAS.values()]
+    return lambda d: np.sort(np.column_stack([m.predict(lgb_X(d, cols, cats)) for m in ms]), axis=1)
+
+
+def quantile_backtest(d, y, cutoffs, cols, cats):
+    """Rolling origin for fit_quantiles: at each cutoff c, fitted on rows with target_period <= c, the rows at c."""
+    out = []
+    for c in cutoffs:
+        tr, te = d[d.target_period <= c], d[d.period == c]
+        q = fit_quantiles(tr, y, cols, cats)(te)
+        out.append(pd.DataFrame({"cutoff": c, "project_key": te.project_key.to_numpy(), "y": te[y].to_numpy(float),
+                                 **{s: q[:, i] for i, s in enumerate(ALPHAS)}}))
+    return pd.concat(out, ignore_index=True)
+
+
+def pinball(y, q, a):
+    u = np.asarray(y, float) - np.asarray(q, float)
+    return float(np.mean(np.maximum(a * u, (a - 1) * u)))
+
+
+def interval_metrics(p):
+    """p05-p95 coverage, the shares below and above, mean width and the pinball loss at each ALPHAS level."""
+    inside = (p.y >= p.p05) & (p.y <= p.p95)
+    return {"n": len(p), "coverage": float(inside.mean()), "below_p05": float((p.y < p.p05).mean()),
+            "above_p95": float((p.y > p.p95).mean()), "mean_width": float((p.p95 - p.p05).mean()),
+            **{f"pinball_{s}": pinball(p.y, p[s], a) for s, a in ALPHAS.items()}}
 
 
 def topk(y, p, k):
@@ -440,6 +488,20 @@ def run(run_dir, extra=None):
         print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']} "
               f"calibration {method}  {time.time() - t0:.0f}s")
 
+    ivals = []
+    for name, (y, like) in QUANTILE_TARGETS.items():
+        d = qframe(feats, labels[2], y)
+        for split, k in (("val", "validation"), ("flash", "flash")):
+            cs = pd.to_datetime(wins.get(f"{like}_h2", {}).get(k, []))
+            if len(cs):
+                ivals.append({"target": name, "label": y, "split": split, "n_folds": len(cs),
+                              **interval_metrics(quantile_backtest(d, y, cs, cols, cats))})
+    ivals = pd.DataFrame(ivals)
+    if len(ivals):
+        print("  intervals: " + "  ".join(f"{r.target} {r.split} coverage {r.coverage:.3f} pinball p50 "
+                                          f"{r.pinball_p50:.3f}" for r in ivals.itertuples())
+              + f"  {time.time() - t0:.0f}s")
+
     run_dir.mkdir(parents=True, exist_ok=True)
     lead = ["target", "horizon"]
     folds = pd.concat(all_folds, ignore_index=True)
@@ -452,6 +514,7 @@ def run(run_dir, extra=None):
     calib = pd.concat(calib, ignore_index=True)[lead + ["model", "bin", "n", "mean_pred", "obs_rate"]]
     folds.to_csv(run_dir / "backtest_folds.csv", index=False)
     summary.to_csv(run_dir / "backtest_summary.csv", index=False)
+    ivals.to_csv(run_dir / "intervals.csv", index=False)
     abl.to_csv(run_dir / "ablation.csv", index=False)
     calib.to_csv(run_dir / "calibration.csv", index=False)
     pd.concat(shap, ignore_index=True).to_csv(run_dir / "shap_summary.csv", index=False)
@@ -462,7 +525,8 @@ def run(run_dir, extra=None):
         "gold_version": manifest["gold_version"], "silver_version": manifest["silver_version"], **wins},
         indent=2), encoding="utf-8")
     return {"windows": wins, "frames": frames, "features": cols, "groups": groups, "categorical": cats,
-            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt}
+            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt,
+            "intervals": ivals}
 
 
 def main(run_id=None, extra=None):

@@ -27,7 +27,6 @@ import sys
 import time
 from pathlib import Path
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
@@ -38,8 +37,8 @@ GOLD, SILVER, PK = backtest.GOLD, backtest.SILVER, backtest.PK
 LOG = GOLD / "prediction_log.parquet"
 PROBS = {"p_date_push_2q": ("y_date_push", 2), "p_cost_rev_2q": ("y_cost_rev", 2), "p_any_2q": ("y_any", 2),
          "p_any_4q": ("y_any", 4)}
-QUANTILES = {"months": "y_months", "cost_pct": "y_cost_pct"}     # h = 2 regression targets
-ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
+QUANTILES = {name: y for name, (y, _) in backtest.QUANTILE_TARGETS.items()}     # h = 2 regression targets
+ALPHAS = backtest.ALPHAS
 TIERS = ["Critical", "High", "Medium", "Low"]
 WATCH = "Watch"             # the tier of a project with no anticipated completion date (no date-based score)
 TIER_TOP = [0.05, 0.20, 0.50, 1.0]      # cumulative rank share at the bottom of each tier
@@ -155,13 +154,8 @@ def main(asof=None):
     cols, cats = lead["feature_list"], lead["categorical"]
     Xc = backtest.lgb_X(cur, cols, cats)
     for name, y in QUANTILES.items():
-        lab = labels[2]
-        d = lab.loc[lab.target_period <= asof, PK + ["target_period", y]].dropna(subset=[y]).merge(feats, on=PK)
-        d = d[~d.is_completed.astype(bool)].sort_values(PK, ignore_index=True)
-        X = backtest.lgb_X(d, cols, cats)
-        q = np.column_stack([lgb.LGBMRegressor(**{**backtest.LGB_PARAMS, "objective": "quantile", "alpha": a})
-                             .fit(X, d[y]).predict(Xc) for a in ALPHAS.values()])
-        q = np.sort(q, axis=1)          # crossing quantiles are reordered, so p05 <= p50 <= p95
+        d = backtest.qframe(feats, labels[2][labels[2].target_period <= asof], y)
+        q = backtest.fit_quantiles(d, y, cols, cats)(cur)      # sorted, so p05 <= p50 <= p95
         q[unseen_missing(d, cur, cols)] = np.nan
         for i, s in enumerate(ALPHAS):
             out[f"{name}_{s}"] = q[:, i]

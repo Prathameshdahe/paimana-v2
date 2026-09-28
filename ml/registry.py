@@ -162,7 +162,7 @@ def register(reg, run_id, res, params, inc, created):
     man, cols, cats = res["manifest"], res["features"], res["categorical"]
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
                                                       "calibration.csv", "shap_summary.csv", "windows.json",
-                                                      "params.json", backtest.PLATT_FILE]}
+                                                      "params.json", backtest.PLATT_FILE, "intervals.csv"]}
     out = []
     for (y, h), d in res["frames"].items():
         key = f"{y}_h{h}"

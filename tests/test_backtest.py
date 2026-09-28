@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -132,3 +133,17 @@ def test_calibrate_reads_only_folds_realised_by_the_cutoff():
     noisy = pool.assign(y=np.where(late, 1 - pool.y, pool.y), p=np.where(late, 0.99, pool.p))
     b = backtest.calibrate(target, noisy, 2)
     assert np.allclose(a.p, b.p) and not np.allclose(a.p, target.p)
+
+
+def test_interval_backtest_trains_on_realised_rows_and_scores_coverage_and_pinball():
+    d = labelled(2, n_keys=80)
+    d["y_months"] = 3 * d.x + np.random.default_rng(5).normal(size=len(d))
+    cutoffs = Q[6:8]
+    p = backtest.quantile_backtest(d, "y_months", cutoffs, ["x"], [])
+    assert (p.groupby("cutoff").size() == 80).all() and (p.p05 <= p.p50).all() and (p.p50 <= p.p95).all()
+    m = backtest.interval_metrics(p)
+    assert 0.6 < m["coverage"] < 1 and m["coverage"] + m["below_p05"] + m["above_p95"] == pytest.approx(1)
+    assert m["pinball_p50"] == pytest.approx(0.5 * np.mean(np.abs(p.y - p.p50)))
+    late = d.assign(y_months=np.where(d.target_period > cutoffs[0], 1e6, d.y_months))   # outcomes after the cutoff
+    q = backtest.quantile_backtest(late, "y_months", cutoffs[:1], ["x"], [])
+    assert np.allclose(q[["p05", "p50", "p95"]], p[p.cutoff == cutoffs[0]][["p05", "p50", "p95"]])
