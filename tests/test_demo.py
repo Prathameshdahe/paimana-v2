@@ -69,6 +69,19 @@ def test_demo_dockerignore_keeps_secrets_out_and_lets_data_in():
     assert {".git", ".env", ".env.*", "deploy/certs", "backups", "temp", "Dataset drive folder", "dataset.zip"} <= lines
     assert {"frontend/node_modules", "database/*.db"} <= lines
     assert not {"dataset", "model", "database/*.json"} & lines
+    # the assistant indexes docs/HELP.md and the other documents (llm/rag.py): docs/ goes in, only its screenshots stay out
+    for ignore in ("Dockerfile.demo.dockerignore", ".dockerignore"):
+        kept = {line.strip() for line in _text(ignore).splitlines()}
+        assert "docs" not in kept and "docs/screenshots" in kept
+
+
+def test_nginx_sends_only_the_address_it_saw():
+    """nginx is the only proxy: an appended X-Forwarded-For would carry a client-chosen address past the gateway,
+    which TRUSTED_PROXIES trusts on Docker Desktop."""
+    for name in ("deploy/nginx.demo.conf", "deploy/nginx.conf.template"):
+        conf = _text(name)
+        assert "proxy_set_header X-Forwarded-For $remote_addr;" in conf
+        assert "$proxy_add_x_forwarded_for" not in conf
 
 
 def test_demo_nginx_keeps_the_production_locations_and_headers():

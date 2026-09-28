@@ -23,7 +23,7 @@ database/*.json
 temp
 backups
 deploy/certs
-docs
+docs/screenshots
 tests
 mlruns
 dataset.zip

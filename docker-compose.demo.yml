@@ -1,6 +1,6 @@
-# PAIMANA demo stack: the whole app on one laptop with one command and no setup (README, Quick start;
-# docs/DEPLOYMENT.md, Demo). The data and the model are inside the api image (Dockerfile.demo), PostgreSQL keeps its
-# own volume, and the dashboard is http://localhost:8080 with a one-click sign-in button per role.
+# PAIMANA demo stack: the whole app on one laptop with one command and no setup (docs/DEPLOYMENT.md, Demo). The
+# data and the model are inside the api image (Dockerfile.demo), PostgreSQL keeps its own volume, and the dashboard
+# is http://localhost:8080 with a one-click sign-in button per role.
 #   docker compose -f docker-compose.demo.yml up -d --build     first start builds the images (a few minutes)
 #   docker compose -f docker-compose.demo.yml down              stop; the api's writes go back to the image
 #   docker compose -f docker-compose.demo.yml down -v           stop and forget the database too

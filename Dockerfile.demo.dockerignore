@@ -1,6 +1,7 @@
 # What never enters the demo images (Dockerfile.demo; BuildKit reads this file instead of .dockerignore for that
 # Dockerfile). Unlike .dockerignore it lets dataset/, model/ and database/*.json in: the demo api carries the data.
-# Secrets, the git-ignored intermediates (rebuilt by the pipeline) and the raw source PDFs stay out.
+# Secrets, the git-ignored intermediates (rebuilt by the pipeline) and the raw PDF corpus of the team drive stay out.
+# docs/ goes in without its screenshots: the assistant indexes docs/HELP.md and the other documents (llm/rag.py).
 .git
 .gitignore
 .claude
@@ -21,7 +22,7 @@ database/*.db-journal
 temp
 backups
 deploy/certs
-docs
+docs/screenshots
 tests
 mlruns
 *.tar
