@@ -213,9 +213,11 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
     )
   } else if (writing) {
     body = (
-      <div className="space-y-1.5 text-xs text-fg-muted" role="status">
+      <div className="space-y-1.5 text-xs text-fg-muted">
+        {/* the clock ticks every second, so it stays out of the live region (announce) below */}
         <div className="font-medium text-fg-base">
-          The local model is reading the evidence{elapsed !== null && <span className="font-normal tabular-nums text-fg-dimmed"> · {clock(elapsed)}</span>}
+          The local model is reading the evidence
+          {elapsed !== null && <span className="font-normal tabular-nums text-fg-dimmed" aria-hidden="true"> · {clock(elapsed)}</span>}
         </div>
         <p>
           This usually takes one to two minutes on this machine; every citation and number is checked before it shows.
@@ -235,6 +237,13 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
     )
   }
 
+  // screen readers hear the start of a requested opinion and its outcome, nothing in between; a stored one is silent
+  const genConcern = gen.data ? (CONCERN[gen.data.concern] ?? CONCERN.watch) : null
+  const announce = writing ? 'The local model is reading the evidence; this takes one to two minutes.'
+    : genConcern && gen.data ? `Second opinion ready: ${genConcern.label}. ${gen.data.headline}`
+    : gen.error ? 'The second opinion could not be written.'
+    : ''
+
   const note = (
     <p className="flex items-start gap-1.5 text-xs text-fg-dimmed">
       <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
@@ -242,10 +251,12 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
     </p>
   )
 
+  const live = <div className="sr-only" role="status">{announce}</div>
+
   if (variant === 'panel') {
     return (
       <Section title={<>AI second opinion <span className="font-normal text-fg-dimmed">· local LLM</span></>} right={right} className={className}>
-        <div className="space-y-3">{body}{note}</div>
+        <div className="space-y-3">{body}{note}{live}</div>
       </Section>
     )
   }
@@ -255,7 +266,7 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
         <span className="text-sm font-semibold text-fg-base">AI second opinion <span className="font-normal text-fg-dimmed">· local LLM</span></span>
         {right}
       </div>
-      <div className="space-y-3 px-4 py-3">{body}{note}</div>
+      <div className="space-y-3 px-4 py-3">{body}{note}{live}</div>
     </div>
   )
 }
