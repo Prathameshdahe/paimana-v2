@@ -1,7 +1,8 @@
 # External data cross-check
 
 This note checks Garvit's External Factors guide (docs/EXTERNAL_FACTORS_GUIDE.md) and his two mock files
-(dataset/raw/external/mock/) against the real sources in the repo. It also says what we took from the guide and
+(dataset/raw/external/mock/) against the real sources in the repo. The research behind it is summed up for the team in
+docs/EXTERNAL_RESEARCH_2026-09.md. It also says what we took from the guide and
 what we left out. The checks run as tests in tests/test_external_crosscheck.py and tests/test_external.py.
 Current numbers are for the scored portfolio at July 2026 (1,763 projects).
 
@@ -106,9 +107,10 @@ references it and that every gold key is a real PRJ key.
   - Forest events in the report remarks cover the rest. In the current portfolio, 71 projects mention forest or
     environment clearance, 34 had a forest event still open when the remarks ended, and 21 have known forest
     hectares.
-- **Multi-state land data.** Done for the 29 states with data (see above). To refresh a state, drop its
-  whole-state export into `dataset/raw/external/bhoomi_rashi/` (see the README there) and rerun
-  `python -m pipeline.run external`. Most states' latest Publish Date is 2025-05-09, so the register has barely
+- **Multi-state land data.** Done for the 29 states with data (see above). To refresh, turn on the backend's
+  quarterly pull (`BHOOMI_PULL=1`, backend/live/portals.py), which keeps only the aggregated stretches in
+  `dataset/raw/external/bhoomi_rashi_pulls/`, or drop a whole-state export into `dataset/raw/external/bhoomi_rashi/`
+  (see the README there); then rerun `python -m pipeline.run external`. Most states' latest Publish Date is 2025-05-09, so the register has barely
   changed since May 2025.
 - **Compensation and possession status.** Not in Bhoomi Rashi. Report remarks tagged `compensation` and
   `possession` are the only signal.
