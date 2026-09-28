@@ -408,3 +408,19 @@ def test_the_developer_is_never_named_on_an_alert(client, fresh_db):
     again = client.post(f"/api/alerts/{aid}/ack", headers=h).json()        # the first ack stands
     assert again["ackedBy"] is None and "developer" not in str(again)
     assert [a["role"] for a in db.audit_rows(action="alert.ack")["items"]] == ["ministry_official", "developer"]
+
+
+def test_a_failed_run_error_never_reaches_a_scoped_official(client, scopes, monkeypatch):
+    """Review finding (unit B, round 1): a scheduled run's last_error (an exception's text, which can name any
+    project, e.g. a database key violation) is shown whole to viewers without a scope only."""
+    m = scopes["ministries"][2]["name"]
+    mine = serving.scope_keys(("ministry", m))
+    other = next(k for k in sorted(serving.scope_keys(None)) if k not in mine)
+    text = f"UniqueViolation: duplicate key; DETAIL: Key (project_key)=({other}) already exists."
+    monkeypatch.setitem(scheduler.STATUS["research"], "last_error", text)
+    ministry(m)
+    body = client.get("/api/live/status").json()
+    assert other not in str(body) and body["research"]["lastError"] == "the last run failed"
+    assert body["scout"]["lastError"] is None                               # no error stays no error
+    ipmd()
+    assert client.get("/api/live/status").json()["research"]["lastError"] == text

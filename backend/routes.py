@@ -466,11 +466,19 @@ def get_radar_summary(v: Viewer = Depends(need("radar"))):
     return scout.radar_summary(keys=_signal_keys(v))
 
 
+def _scrubbed_job(x: dict, v: Viewer) -> dict:
+    """One job's live status as this viewer may read it: the last run scrubbed (_scrub), and for a viewer with a scope
+    the last error only as the fact of it (an exception's text can name any project, a key violation for one)."""
+    out = {**x, "last_run": _scrubbed_run(x.get("last_run"), v)}
+    if v.scope is not None and out.get("last_error") is not None:
+        out["last_error"] = "the last run failed"
+    return out
+
+
 @router.get("/live/status", response_model=LiveStatus)
 def get_live_status(v: Viewer = Depends(need("live"))):
     out = scheduler.status()
-    return {k: {**x, "last_run": _scrubbed_run(x.get("last_run"), v)} if isinstance(x, dict) else x
-            for k, x in out.items()}
+    return {k: _scrubbed_job(x, v) if isinstance(x, dict) else x for k, x in out.items()}
 
 
 @router.get("/stream")

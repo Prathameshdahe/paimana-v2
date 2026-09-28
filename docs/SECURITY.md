@@ -164,7 +164,8 @@ question never retrieves an official chunk and an official never one outside the
 `tests/test_rag.py::test_public_never_sees_official_chunks`, `test_agency_scope_filters_project_chunks`). The model
 runs locally in LM Studio; no text leaves the machine and the frontend holds no key. The research and second-opinion
 runs record counts only in their job summaries (the projects they covered go to the log), and `GET /api/jobs` and
-`GET /api/live/status` strip every per-project field for a viewer with a scope, so an official never learns of
+`GET /api/live/status` strip every per-project field (and a failed run's error text) for a viewer with a scope, so
+an official never learns of
 another scope's projects from them (Segment 8 review finding [0];
 `tests/test_access.py::test_job_summaries_never_show_a_scoped_official_another_scopes_project`).
 

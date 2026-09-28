@@ -87,7 +87,8 @@ The scope applies to everything built from project rows: portfolio KPIs and tier
 and search, the project page (404 outside it), alerts and the live alert stream, bottleneck members (a cluster with
 none in scope is hidden, the rest are recounted over their in-scope members), the External Factors counts and top
 lists, the news feed and radar rollup (linked items only), the memos and the job summaries. Job summaries are
-counts only, and every per-project field is removed for a scoped viewer. The agency matrix shows a ministry official
+counts only, and every per-project field is removed for a scoped viewer; a failed run's error text reaches a scoped
+viewer only as "the last run failed". The agency matrix shows a ministry official
 the agencies of their ministry. It shows an agency official every agency, with their own flagged (`isSelf`) and
 always shown, so they can compare with their peers. The watchlist is one list per role, cut to the viewer's scope.
 
