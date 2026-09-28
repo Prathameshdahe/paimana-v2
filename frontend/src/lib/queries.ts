@@ -64,6 +64,11 @@ export type ProjectQuery = PortfolioFilters & {
   size?: number
 }
 
+/** does the query carry a filter (not just a sort or a page)? */
+export function hasFilters(q: ProjectQuery): boolean {
+  return !!(q.q || q.tier || q.sector || q.state || q.ministry || q.flag || q.near_complete)
+}
+
 export type AlertQuery = {
   /** ISO time; created at or after */
   since?: string
@@ -128,9 +133,9 @@ export interface ProjectMapResult {
 /**
  * Every row in scope for the command centre's risk map (GET /api/projects/map, the list's filters, no paging). A
  * backend without that endpoint gets one ask, then the list's first page of the MAP_FALLBACK_SIZE riskiest instead,
- * and `partial` tells the caption.
+ * and `partial` tells the caption. enabled false: nothing is asked.
  */
-export function useProjectMap(query: ProjectQuery): ProjectMapResult {
+export function useProjectMap(query: ProjectQuery, enabled = true): ProjectMapResult {
   const scope = useScopeKey()
   const filters = mapFilters(query)
   const map = useQuery({
@@ -147,12 +152,12 @@ export function useProjectMap(query: ProjectQuery): ProjectMapResult {
         throw e
       }
     },
-    enabled: !mapMissing,
+    enabled: enabled && !mapMissing,
     placeholderData: keepPreviousData,
     retry: false,
   })
   const fallback = mapMissing || map.data === null
-  const list = useProjects({ ...filters, sort: 'risk', order: 'desc', page: 1, size: MAP_FALLBACK_SIZE }, fallback)
+  const list = useProjects({ ...filters, sort: 'risk', order: 'desc', page: 1, size: MAP_FALLBACK_SIZE }, enabled && fallback)
   if (fallback) {
     const items = list.data?.items
     return {
@@ -325,12 +330,14 @@ export function useExternalSummary() {
   })
 }
 
-export function useAlerts(query: AlertQuery = {}) {
+/** enabled false: not asked (a viewer without alerts) */
+export function useAlerts(query: AlertQuery = {}, enabled = true) {
   const scope = useScopeKey()
   return useQuery({
     queryKey: ['alerts', query, scope],
     queryFn: () => apiGet<AlertPage>('/api/alerts', query),
     placeholderData: keepPreviousData,
+    enabled,
     // no polling: useAlertStream refetches every alert query when /api/stream pushes one
   })
 }

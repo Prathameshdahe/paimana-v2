@@ -56,8 +56,44 @@ export function TierBar({ tiers, total, className = 'h-2' }: { tiers: TierCount[
 }
 
 /**
+ * The portfolio in one line under a page's opening sentence: money, overrun over sanction, the built share, the five
+ * tier counts and the tier bar. Report facts and counts only.
+ */
+export function PortfolioLine({ className }: { className?: string }) {
+  const { data: p, error, isLoading } = usePortfolio()
+  if (error) return <ApiErrorNote error={error} className="py-2 text-left" />
+  if (isLoading || !p) return <div className={cn('h-10 animate-pulse rounded-lg bg-surface-input/70', className)} />
+  const k = p.kpis
+  const n = (t: string) => p.tiers.find((x) => x.tier === t)?.n ?? 0
+  const facts = [
+    k.anticipatedCostCr !== null && formatINRShort(k.anticipatedCostCr),
+    k.overrunPct !== null && `${formatPctDelta(k.overrunPct)} over sanction`,
+    k.avgProgressPct !== null && `${formatPct(k.avgProgressPct, 0)} built on average`,
+  ].filter((x): x is string => !!x)
+  return (
+    <div className={cn('space-y-2', className)}>
+      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+        <span className="text-fg-muted">
+          <span className="font-semibold text-fg-base">{k.nProjects.toLocaleString('en-IN')}</span> open projects
+          {facts.length > 0 && <> · {facts.join(' · ')}</>}
+        </span>
+        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          {[...TIERS, 'Watch' as const].map((t) => (
+            <span key={t} className="inline-flex items-baseline gap-1">
+              <span className={cn('font-semibold tabular-nums', TIER_TEXT[t])}>{n(t).toLocaleString('en-IN')}</span>
+              <span className="text-fg-dimmed">{TIER_LABEL[t]}</span>
+            </span>
+          ))}
+        </span>
+      </div>
+      <TierBar tiers={p.tiers} total={k.nProjects} className="h-1.5" />
+    </div>
+  )
+}
+
+/**
  * Four stat tiles from /api/portfolio: capital, overrun, the tier mix as one bar, and spend with
- * physical progress. Home and Command Center share them.
+ * physical progress.
  */
 export function KPIRibbon() {
   const { data: p, error, isLoading } = usePortfolio()
