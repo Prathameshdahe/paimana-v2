@@ -123,6 +123,17 @@ def _block(nginx, header):
     return nginx[start:nginx.index("\n    }", start)]
 
 
+def test_nginx_log_masks_reset_tokens(nginx):
+    """The access log never holds a reset link's token: the request line is logged through a map that masks it."""
+    fmt = re.search(r"log_format paimana (.*?);", nginx, re.S)[1]
+    assert '"$request"' not in fmt and "$paimana_log_uri" in fmt
+    rule = re.search(r'map \$request_uri \$paimana_log_uri \{\s*"~(.*?)"\s+"(.*?)";', nginx, re.S)
+    rx = re.compile(rule[1].replace("(?<", "(?P<"))
+    m = rx.match("/reset?token=abc123")
+    assert m and rule[2].replace("$paimana_log_path", m["paimana_log_path"]) == "/reset?token=[redacted]"
+    assert rx.match("/api/auth/reset?x=1&token=abc") and not rx.match("/api/projects?q=token")
+
+
 def test_nginx_locations(nginx):
     assert nginx.count("client_max_body_size 110m;") == 1
     assert "client_max_body_size 110m;" in _block(nginx, "location = /api/jobs/ingest")

@@ -12,8 +12,14 @@ limit_req_zone $binary_remote_addr zone=chat:1m rate=10r/m;
 limit_req_status 429;
 limit_req_log_level warn;
 
-log_format paimana '$remote_addr [$time_iso8601] "$request" $status $body_bytes_sent rt=$request_time '
-                   'rid=$request_id "$http_user_agent"';
+# the logged request line masks a one-time token in the query string (the SPA's /reset?token= link: whoever reads the
+# log could reset that account's password within its day); every other request line is logged as it came
+map $request_uri $paimana_log_uri {
+    "~^(?<paimana_log_path>[^?]*)\?(.*&)?token="  "$paimana_log_path?token=[redacted]";
+    default                                        $request_uri;
+}
+log_format paimana '$remote_addr [$time_iso8601] "$request_method $paimana_log_uri $server_protocol" $status '
+                   '$body_bytes_sent rt=$request_time rid=$request_id "$http_user_agent"';
 access_log /dev/stdout paimana;
 
 gzip on;
