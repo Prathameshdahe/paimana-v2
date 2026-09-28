@@ -668,6 +668,15 @@ def test_an_index_saved_before_the_policy_is_never_served(tmp_path):
     assert rag.load(tmp_path) is None and rag.load(tmp_path, any_version=True) is not None
 
 
+def test_the_help_reads_the_outlook_in_words():
+    """docs/HELP.md is the public's trusted help text (the chat's search_knowledge quotes it): no viewer but the
+    developer sees a percentage chance, so it explains the tier and the outlook words instead of how to read one."""
+    text = (Path(__file__).resolve().parents[1] / rag.HELP).read_text(encoding="utf-8")
+    assert not re.search(r"\bat \d+%|\d+ in \d+ such|percentages rank", text)
+    words = [c for _, c in serving.CHANCES] + ["unlikely"] + sorted(SLIPS - {None})
+    assert all(f"**{w}**" in text for w in words) and serving.HORIZON in text
+
+
 def test_model_statistics_docs_only_for_the_developer():
     rows = [rag._chunk("doc:a", "doc", "official", "Method", "how the tiers are cut", "docs/A.md"),
             rag._chunk("doc:b", "doc", "numbers", "Backtest", "validation results", "docs/MODEL_UPGRADES_2026-09.md"),

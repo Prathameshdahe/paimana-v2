@@ -14,21 +14,28 @@ reported.
 
 ## What the risk tiers mean
 
-For every current project with an anticipated completion date, the model estimates the chance of a slip: that within
+For every current project with an anticipated completion date, the model estimates how likely a slip is: that within
 the next 2 quarters its anticipated completion date moves out by 3 months or more, or its anticipated cost goes up by
-5% or more. It also estimates the chance of a date push and of a cost revision on their own, the chance of either
-within 4 quarters, and the likely slip in months.
+5% or more. It also estimates a date push and a cost revision on their own, a slip within 4 quarters, and how much
+further the completion date is likely to move.
 
-Projects are ranked by that chance and tiered by rank:
+Projects are ranked by that estimate and tiered by rank:
 
 - **Critical**: the riskiest 5% of scored projects.
 - **High**: the next 15% (Critical and High together are the top 20%).
 - **Medium**: the next 30%.
 - **Low**: the remaining 50%.
 
-Tiers are relative. "High" means riskier than most of the current portfolio, not a fixed level of danger. The
-percentages rank projects against each other; they are not calibrated frequencies, so read a project at 40% as "more
-likely to slip than most", not as "4 in 10 such projects slip".
+Tiers are relative. "High" means riskier than most of the current portfolio, not a fixed level of danger.
+
+## The outlook in words
+
+Next to its tier, each project shows its outlook for the next two quarters in words. A push of the completion date
+and a cost revision are each **very likely**, **likely**, **possible** or **unlikely**, and the likely further slip
+of the completion date is **under 6 months**, **6 to 12 months**, **1 to 2 years** or **over 2 years**. The words
+are fixed bands of the model's estimate, which ranks projects against each other rather than counting how often such
+projects slip: read "likely" as "more likely to slip than most", not as a promise. The main reasons for the tier are
+given the same way: what raises or lowers the risk, and whether its effect is strong, moderate or slight.
 
 ## The Watch tier
 
