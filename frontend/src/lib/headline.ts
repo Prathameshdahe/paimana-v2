@@ -103,7 +103,8 @@ export function projectHeadline(input: HeadlineInput, asof: string | null | unde
   const due = dueIn(input.anticipatedCompletion, asof)
 
   const facts: string[] = []
-  if (input.physicalProgressPct !== null && input.physicalProgressPct !== undefined) facts.push(done(input.physicalProgressPct))
+  const pct = input.physicalProgressPct
+  if (pct !== null && pct !== undefined) facts.push(done(pct))
   if (due) {
     facts.push(due.overdue ? `${plural(-due.months, 'month')} past its expected date`
       : due.months === 0 ? 'due this month' : `${plural(due.months, 'month')} from its expected date`)
@@ -121,9 +122,12 @@ export function projectHeadline(input: HeadlineInput, asof: string | null | unde
   const tail: string[] = []
   if (input.stagnationOverride) {
     const q = input.stagnationQuarters
-    tail.push(q && q >= 1 ? `no progress for ${plural(Math.round(q), 'quarter')}` : 'no progress for two or more quarters')
+    tail.push(q && q >= 1 ? `no progress for ${plural(Math.round(q), 'quarter')}`
+      : 'no progress for two or more quarters')
   }
-  if (input.flags?.includes('early_notice')) tail.push(`${noticeNoun(input.flags)} on record with no slip in the numbers yet`)
+  if (input.flags?.includes('early_notice')) {
+    tail.push(`${noticeNoun(input.flags)} on record with no slip in the numbers yet`)
+  }
 
   const groups = [facts.join(', '), view.join(', '), ...tail].filter(Boolean)
   return groups.length ? `${opener}: ${groups.join('; ')}.` : `${opener}.`
@@ -193,9 +197,11 @@ export function weekBrief(input: WeekBriefInput): string[] {
     if (withWords) {
       out.push(n === 0
         ? `${prefix}${prefix ? 'none is' : 'No project is'} due within six months with a delay likely.`
-        : `${prefix}${prefix ? n.toLocaleString('en-IN') : plural(n, 'project')} ${are} due within six months and likely to slip.`)
+        : `${prefix}${prefix ? n.toLocaleString('en-IN') : plural(n, 'project')} ${are} due within six months `
+          + 'and likely to slip.')
     } else if (prefix) {
-      out.push(`${prefix}${n === 0 ? 'none is' : `${n.toLocaleString('en-IN')} ${are}`} Critical or High and due within six months.`)
+      const who = n === 0 ? 'none is' : `${n.toLocaleString('en-IN')} ${are}`
+      out.push(`${prefix}${who} Critical or High and due within six months.`)
     } else {
       out.push(n === 0
         ? 'No Critical or High project is due within six months.'
@@ -205,8 +211,8 @@ export function weekBrief(input: WeekBriefInput): string[] {
     if (n > 0 && notice > 0) {
       const one = notice === 1
       const who = notice === n ? (one ? 'It' : 'All of them') : `${notice.toLocaleString('en-IN')} of them`
-      out.push(`${who} ${one ? 'shows' : 'show'} no slip in the reports yet but ${one ? 'has' : 'have'} a land, forest, `
-        + 'court or contractor issue on record.')
+      out.push(`${who} ${one ? 'shows' : 'show'} no slip in the reports yet but ${one ? 'has' : 'have'} `
+        + 'a land, forest, court or contractor issue on record.')
     }
   } else if (input.kpis) {
     const k = input.kpis

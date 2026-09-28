@@ -45,7 +45,7 @@ export function PasswordInput({ className, ...props }: InputHTMLAttributes<HTMLI
         onClick={() => setShown((s) => !s)}
         aria-label={shown ? 'Hide the password' : 'Show the password'}
         aria-pressed={shown}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
       </button>
@@ -56,7 +56,7 @@ export function PasswordInput({ className, ...props }: InputHTMLAttributes<HTMLI
 /** the error of a whole form, announced at once */
 export function FormError({ children }: { children: ReactNode }) {
   return (
-    <p role="alert" className="border border-critical/40 bg-critical/5 px-3 py-2 text-sm text-critical">
+    <p role="alert" className="rounded-lg border border-critical/40 bg-critical/5 px-3 py-2 text-sm text-critical">
       {children}
     </p>
   )
@@ -70,7 +70,7 @@ export function FormNotice({ children, tone = 'info' }: { children: ReactNode; t
     success: 'border-stable/40 bg-stable/5 text-stable',
   }[tone]
   return (
-    <p role="status" className={cn('border px-3 py-2 text-sm', cls)}>
+    <p role="status" className={cn('rounded-lg border px-3 py-2 text-sm', cls)}>
       {children}
     </p>
   )

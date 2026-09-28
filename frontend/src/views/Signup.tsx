@@ -164,7 +164,7 @@ export function Signup() {
               onChange={(e) => setWhy(e.target.value)}
               aria-describedby={describedBy}
               aria-invalid={invalid || undefined}
-              className="w-full resize-y border border-border-default bg-surface-input px-3 py-2 text-sm text-fg-base placeholder:text-fg-dimmed focus:border-accent focus:outline-none"
+              className="w-full resize-y rounded-lg border border-border-default bg-surface-input px-3 py-2 text-sm text-fg-base placeholder:text-fg-dimmed focus:border-accent focus:outline-none"
               placeholder="Your post, and what you will use the radar for"
             />
           )}

@@ -270,7 +270,7 @@ export function Radar() {
           {feed.error ? (
             <ApiErrorNote error={feed.error} />
           ) : !feed.data ? (
-            <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading signals...</div>
+            <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
           ) : feed.data.items.length === 0 ? (
             <div className="px-5 py-8 text-center text-xs text-fg-dimmed space-y-1">
               {filtered ? (

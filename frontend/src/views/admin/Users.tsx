@@ -64,7 +64,7 @@ export function Users() {
       {users.error ? (
         <ApiErrorNote error={users.error} />
       ) : !data ? (
-        <p className="py-6 text-center text-xs text-fg-dimmed">loading…</p>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="h-8 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : (
         <>
           <Table label="accounts">
@@ -212,7 +212,7 @@ function TokenPanel({ t, onDismiss }: { t: ResetToken & { user: User }; onDismis
     }
   }
   return (
-    <div role="status" className="space-y-2 border border-accent/40 bg-accent/5 px-4 py-3 text-sm text-fg-base">
+    <div role="status" className="space-y-2 rounded-xl border border-accent/40 bg-accent/5 px-4 py-3 text-sm text-fg-base">
       <p>
         One-time reset token for <span className="font-medium">{t.user.email}</span>. It is shown once and not stored
         here: give it to the user, who sets a new password at <span className="font-mono">/reset</span>.

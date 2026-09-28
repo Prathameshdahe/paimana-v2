@@ -37,7 +37,8 @@ export function analogueChips(f: Forecast | undefined): AnalogueChip[] {
   if (!f) return []
   return f.analogues.map((a) => {
     if (!isNumericAnalogue(a)) {
-      return { key: a.key ?? null, name: a.name ?? 'an unnamed project', sector: a.sector, outcome: a.outcome, yearsAgo: a.yearsAgo }
+      const { sector, outcome, yearsAgo } = a
+      return { key: a.key ?? null, name: a.name ?? 'an unnamed project', sector, outcome, yearsAgo }
     }
     const months = a.analoguePeriod ? -monthsUntil(f.asof, a.analoguePeriod) : null
     return {

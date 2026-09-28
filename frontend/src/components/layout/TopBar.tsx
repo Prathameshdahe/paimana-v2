@@ -93,7 +93,7 @@ export function TopBar() {
                 <Popover.Content
                   align="end"
                   sideOffset={8}
-                  className="z-50 w-72 overflow-hidden border border-border-default bg-surface-panel shadow-pop"
+                  className="z-50 w-72 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-pop"
                 >
                   <div className="space-y-0.5 px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export function TopBar() {
           ) : status === 'loading' ? null : (
             <Link
               to="/login"
-              className="inline-flex h-8 items-center bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85"
+              className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               Sign in
             </Link>
@@ -160,7 +160,7 @@ export function TopBar() {
 
       {isOffline(meta.error) && (
         <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center text-xs text-critical">
-          backend not reachable at {API_BASE || 'this origin'} — start uvicorn: <code className="font-mono">{START_BACKEND}</code>
+          The data service is not answering at {API_BASE || 'this address'}. On the server, start it with <code className="font-mono">{START_BACKEND}</code>
         </div>
       )}
 

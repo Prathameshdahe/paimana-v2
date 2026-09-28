@@ -85,7 +85,7 @@ export function AlertBell() {
           {latest.error ? (
             <ApiErrorNote error={latest.error} className="py-4" />
           ) : !latest.data ? (
-            <div className="px-4 py-6 text-center text-xs text-fg-dimmed">loading alerts...</div>
+            <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
           ) : latest.data.items.length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-fg-dimmed">no open alerts</div>
           ) : (

@@ -290,7 +290,10 @@ export function layoutMap({ rows, asof, width, mode, specs, zoom, outlookOf }: L
     bins.set(b, list)
   }
 
-  return { width, height, plotX0, plotX1, nowX, overdueX0: plotX0, lanes, dots, byLane, overflow, ticks, later, noDate, bins, binW: BIN_W }
+  return {
+    width, height, plotX0, plotX1, nowX, overdueX0: plotX0, lanes, dots, byLane, overflow, ticks, later, noDate, bins,
+    binW: BIN_W,
+  }
 }
 
 /** the dot under (x, y), within its radius plus a little slack; null when none */

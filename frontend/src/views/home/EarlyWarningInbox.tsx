@@ -59,7 +59,7 @@ export function EarlyWarningInbox() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : isLoading || !data ? (
-        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">loading alerts...</div>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : data.items.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
           {kind

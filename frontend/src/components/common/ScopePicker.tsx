@@ -40,7 +40,7 @@ export function ScopePicker({ options, value, onChange, noun, plural, compact, i
         className="py-2 text-sm"
       />
       <div
-        className={cn('overflow-y-auto border border-border-default bg-surface-panel', compact ? 'max-h-40' : 'max-h-56')}
+        className={cn('overflow-y-auto rounded-lg border border-border-default bg-surface-panel', compact ? 'max-h-40' : 'max-h-56')}
         data-lenis-prevent
         role="listbox"
         aria-label={`${noun} options`}

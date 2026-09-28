@@ -96,7 +96,7 @@ export function EvidenceFeed() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading news evidence...</div>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : data.items.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-fg-dimmed space-y-1">
           <div>no news evidence stored yet — not the same as no external trouble</div>

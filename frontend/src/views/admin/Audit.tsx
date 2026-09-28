@@ -52,7 +52,7 @@ export function Audit() {
       {audit.error ? (
         <ApiErrorNote error={audit.error} />
       ) : !data ? (
-        <p className="py-6 text-center text-xs text-fg-dimmed">loading…</p>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="h-8 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : (
         <>
           <Table label="audit log">

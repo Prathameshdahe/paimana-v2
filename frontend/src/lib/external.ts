@@ -73,12 +73,18 @@ const sign = (v: number, digits: number) => {
 export const months1 = (v: number) => `${sign(v, 1)} mo`
 export const pts = (v: number) => `${sign(v * 100, 0)} pts`
 
+export interface Verdict {
+  text: string
+  tone: 'warning' | 'stable' | 'muted'
+  also?: string
+}
+
 /**
  * The short verdict. With numbers (the developer): '+2.5 mo' when the months or push interval excludes zero, 'none
  * measurable' when both span zero. Without: the backend's word ('a few months more'), 'none measurable' when it has
  * no word, 'not available yet' from a backend that sends no words. 'too few to measure' under the project floor.
  */
-export function verdict(e: Estimate, numbers = true): { text: string; tone: 'warning' | 'stable' | 'muted'; also?: string } {
+export function verdict(e: Estimate, numbers = true): Verdict {
   if (!e.measurable) return { text: 'too few to measure', tone: 'muted' }
   if (!numbers) {
     if (e.word) return { text: `${e.word} more`, tone: 'warning' }
@@ -101,7 +107,10 @@ export function details(e: Estimate, minProjects = 15, numbers = true): string[]
     return [`${e.nProjects} projects with this status in 2014 to 2023: too few to measure (need ${minProjects}).`]
   }
   if (!numbers) {
-    return [`Measured against matched projects over the next four quarters, on ${e.nProjects} real projects with this status. Exploratory, not a forecast.`]
+    return [
+      `Measured against matched projects over the next four quarters, on ${e.nProjects} real projects with this status. `
+        + 'Exploratory, not a forecast.',
+    ]
   }
   if (!e.months || !e.push) {
     return [`${e.nProjects} projects with this status in 2014 to 2023: too few to measure (need ${minProjects}).`]

@@ -41,7 +41,7 @@ export function PasswordPair({ password, confirm, onPassword, onConfirm, email, 
             <div className="flex items-center gap-2" aria-hidden={!password}>
               <div className="flex flex-1 gap-1" role="img" aria-label={password ? `Strength: ${check.label}` : undefined}>
                 {[1, 2, 3, 4].map((i) => (
-                  <span key={i} className={cn('h-1.5 flex-1', i <= check.score ? METER[check.score] : 'bg-border-subtle')} />
+                  <span key={i} className={cn('h-1.5 flex-1 rounded-full', i <= check.score ? METER[check.score] : 'bg-border-subtle')} />
                 ))}
               </div>
               <span className="w-16 text-right text-xs text-fg-dimmed">{password ? check.label : ''}</span>

@@ -28,7 +28,14 @@ const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDet
 const BARE = new Set(['/login', '/signup', '/reset'])
 
 const Loading = () => (
-  <div className="flex h-48 items-center justify-center text-xs text-fg-dimmed">loading…</div>
+  <div className="mx-auto w-full max-w-[1440px] animate-pulse space-y-6 px-4 py-6 sm:px-6" aria-busy="true" aria-label="Loading the page">
+    <div className="h-7 w-64 rounded-lg bg-surface-input" />
+    <div className="h-28 rounded-xl bg-surface-input/70" />
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="h-64 rounded-xl bg-surface-input/60 lg:col-span-2" />
+      <div className="h-64 rounded-xl bg-surface-input/60" />
+    </div>
+  </div>
 )
 
 export default function App() {

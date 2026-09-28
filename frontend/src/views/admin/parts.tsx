@@ -69,7 +69,7 @@ export function RoleScopeEditor({ value, onChange, idPrefix }: {
 /** the table frame every tab uses */
 export function Table({ children, label }: { children: ReactNode; label: string }) {
   return (
-    <div className="overflow-x-auto border border-border-subtle bg-surface-panel">
+    <div className="overflow-x-auto rounded-xl border border-border-subtle bg-surface-panel shadow-card">
       <table className="w-full border-collapse" aria-label={label}>{children}</table>
     </div>
   )

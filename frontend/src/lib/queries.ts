@@ -159,11 +159,11 @@ export function useProjectMap(query: ProjectQuery, enabled = true): ProjectMapRe
   const fallback = mapMissing || map.data === null
   const list = useProjects({ ...filters, sort: 'risk', order: 'desc', page: 1, size: MAP_FALLBACK_SIZE }, enabled && fallback)
   if (fallback) {
-    const items = list.data?.items
+    const page = list.data
     return {
-      rows: items,
-      total: list.data?.total,
-      partial: list.data && list.data.total > list.data.items.length ? { shown: list.data.items.length, total: list.data.total } : null,
+      rows: page?.items,
+      total: page?.total,
+      partial: page && page.total > page.items.length ? { shown: page.items.length, total: page.total } : null,
       isLoading: list.isLoading,
       isFetching: list.isFetching,
       error: list.error,

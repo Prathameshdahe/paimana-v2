@@ -330,7 +330,7 @@ export function Bottlenecks() {
                   </div>
                 </Card>
 
-                <Card title="Clusters">
+                <Card title="Each shared issue, the largest first">
                   <div className="divide-y divide-border-subtle">
                     {shown.map((b) => (
                       <button

@@ -49,11 +49,16 @@ export function peerClause(peers: AgencyPoint[], sector: string | null): string 
   const known = peers.filter((a) => a.scheduleWord && a.scheduleWord !== 'too few projects')
   if (known.length < 2) return null
   const counts = new Map<ScheduleWord, number>()
-  for (const a of known) counts.set(a.scheduleWord as ScheduleWord, (counts.get(a.scheduleWord as ScheduleWord) ?? 0) + 1)
+  for (const a of known) {
+    const w = a.scheduleWord as ScheduleWord
+    counts.set(w, (counts.get(w) ?? 0) + 1)
+  }
   const [word, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
   if (!word || !n) return null
   const frac = fractionWord(n, known.length)
-  const verb = word === 'about on time' ? 'are about on time' : word === 'usually later' ? 'usually finish later than planned' : 'usually finish earlier than planned'
-  const who = frac === 'all' || frac === 'most' || frac === 'nearly all' ? `${frac} agencies` : `${frac} of the agencies`
+  const verb = word === 'about on time' ? 'are about on time'
+    : word === 'usually later' ? 'usually finish later than planned' : 'usually finish earlier than planned'
+  const whole = frac === 'all' || frac === 'most' || frac === 'nearly all'
+  const who = whole ? `${frac} agencies` : `${frac} of the agencies`
   return `${who}${sector ? ` in ${sector}` : ''} ${verb}`
 }

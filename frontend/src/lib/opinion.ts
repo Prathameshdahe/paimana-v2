@@ -10,5 +10,5 @@ import type { SecondOpinionUnavailable } from '@/contracts/project'
 export function unavailableHeadline(body: Partial<SecondOpinionUnavailable> | undefined): string {
   if (body?.busy === true) return 'The local model is busy; try again in a minute'
   if (body?.down === false) return 'The local model did not answer in time; try again'
-  return 'Local LLM not running — start LM Studio'
+  return 'The local AI model is not running, so no opinion can be written now'
 }

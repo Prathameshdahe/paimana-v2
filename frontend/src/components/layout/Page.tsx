@@ -2,12 +2,12 @@ import React from 'react'
 import { cn } from '@/lib/formatters'
 import { InfoTip } from '@/components/ui/Tooltip'
 
-/** The one page container: max width, gutters, vertical rhythm, and a fade-in on route change. */
+/** The one page container: max width, gutters, chapter rhythm (sections 32 px apart), a fade-in on route change. */
 export function Page({ className, children, narrow }: { className?: string; children: React.ReactNode; narrow?: boolean }) {
   return (
     <div
       className={cn(
-        'mx-auto w-full space-y-5 px-4 py-6 sm:px-6 animate-page-in',
+        'mx-auto w-full space-y-8 px-4 py-6 sm:px-6 animate-page-in',
         narrow ? 'max-w-[1100px]' : 'max-w-[1440px]',
         className
       )}

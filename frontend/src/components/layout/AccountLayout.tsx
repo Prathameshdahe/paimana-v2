@@ -27,7 +27,7 @@ export function AccountLayout({ children, wide }: { children: ReactNode; wide?: 
           <ul className="mt-8 max-w-md space-y-3 text-sm leading-relaxed text-fg-inverse/90">
             {BULLETS.map((b) => (
               <li key={b} className="flex gap-3">
-                <span className="mt-2.5 size-1.5 shrink-0 bg-fg-inverse/60" aria-hidden="true" />
+                <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-fg-inverse/60" aria-hidden="true" />
                 {b}
               </li>
             ))}
@@ -37,7 +37,7 @@ export function AccountLayout({ children, wide }: { children: ReactNode; wide?: 
       </aside>
 
       <main className="flex flex-1 items-start justify-center px-4 py-10 sm:px-6 lg:items-center">
-        <div className={cn('w-full border border-border-default bg-surface-panel p-6 shadow-card sm:p-8', wide ? 'max-w-lg' : 'max-w-sm')}>
+        <div className={cn('w-full rounded-xl border border-border-default bg-surface-panel p-6 shadow-card sm:p-8', wide ? 'max-w-lg' : 'max-w-sm')}>
           {children}
         </div>
       </main>

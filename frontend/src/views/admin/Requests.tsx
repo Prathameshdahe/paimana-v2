@@ -36,9 +36,9 @@ export function Requests() {
       {list.error ? (
         <ApiErrorNote error={list.error} />
       ) : !list.data ? (
-        <p className="py-6 text-center text-xs text-fg-dimmed">loading…</p>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="h-8 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : rows.length === 0 ? (
-        <p className="border border-border-subtle bg-surface-panel py-8 text-center text-sm text-fg-dimmed">No {status} requests.</p>
+        <p className="rounded-xl border border-border-subtle bg-surface-panel py-8 text-center text-sm text-fg-muted">No {status} requests right now.</p>
       ) : (
         <Table label={`${status} sign-up requests`}>
           <thead>

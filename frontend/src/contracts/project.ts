@@ -18,7 +18,7 @@ export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name' | 'progress'
 
 /* ------------------------------------------------------------------ the numbers policy's words */
 
-/** how likely, in words, from fixed bands of a hidden probability (>= 0.75 very likely, >= 0.5 likely, >= 0.25 possible) */
+/** how likely, in words, from fixed bands of a hidden probability: >= 0.75 very likely, >= 0.5 likely, >= 0.25 possible */
 export type OutlookWord = 'very likely' | 'likely' | 'possible' | 'unlikely'
 /** the likely further slip, from the hidden median months */
 export type SlipBand = 'under 6 months' | '6 to 12 months' | '1 to 2 years' | 'over 2 years'
@@ -62,7 +62,8 @@ export interface ProjectRow {
   monthsP95: number | null
   /** the numbers in words; absent from an older backend */
   outlook?: Outlook | null
-  /** the plainest reason it ranks where it does (the first plain driver, else the first flagged check); absent from an older backend */
+  /** the plainest reason it ranks where it does (the first plain driver, else the first flagged check); absent from an
+   * older backend */
   topReason?: string | null
   anticipatedCostCr: number | null
   expenditureCr: number | null
