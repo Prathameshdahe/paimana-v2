@@ -7,8 +7,9 @@ complete() and call_llm() are the single-turn calls of the brief and the worker 
 returns the reply; chat_stream() sends the same with "stream": true and yields the content deltas of the server-sent
 events as they arrive (lazily: the request starts, and an error surfaces, at the first next(); closing the generator
 early closes the connection, and LM Studio stops generating). embed() returns float32 rows, L2-normalised, from the
-embedding model in batches. extract_json() reads the first JSON object or array out of a reply: qwen2.5-coder has no
-native tool calls here, so JSON comes back as text, sometimes fenced or with prose around it.
+embedding model in batches. extract_json() reads the first JSON object or array out of a reply (extract_json(text,
+dict) an object only): qwen2.5-coder has no native tool calls here, so JSON comes back as text, sometimes fenced or
+with prose around it; a reply cut off by max_tokens raises instead of returning one of its parts.
 
 The local model generates one answer at a time (about 4 tokens/s on a laptop), so every generation goes through
 LLM_GATE: the caller wraps one call, or the calls of one task, in `with gate(wait_s) as ok:` and does not call when ok
@@ -263,29 +264,55 @@ def _close(s: str, start: int) -> int | None:
     return None
 
 
-def extract_json(text: str) -> dict | list:
+_NOT_JSON = object()
+
+
+def _loads(span: str):
+    for cand in (span, TRAILING_COMMA.sub(r"\1", span)):
+        try:
+            return json.loads(cand)
+        except ValueError:
+            pass
+    return _NOT_JSON
+
+
+def _plain_list(v) -> bool:
+    """A list of plain values only: in prose, '[1]' is a citation and '[2024]' a year, not the answer."""
+    return isinstance(v, list) and not any(isinstance(x, (dict, list)) for x in v)
+
+
+def extract_json(text: str, want: type | None = None) -> dict | list:
     """The first JSON object or array in an LLM reply: inside a ``` fence first, else anywhere in the text, prose
-    around it ignored; a trailing comma before a closing bracket is forgiven. json.JSONDecodeError (a ValueError) when
-    there is none."""
+    around it ignored; a trailing comma before a closing bracket is forgiven. want=dict or want=list takes only that
+    type (a caller that needs a list of plain values should ask for it fenced or inside an object: prose brackets
+    look the same). With want None, a list of plain values is taken only when no object or nested list follows it
+    in its block (a fence, else the whole text). A bracket that never closes (a reply cut off by max_tokens) ends the
+    search in its block: nothing inside it is taken, so a truncated plan never comes back as one of its parts.
+    json.JSONDecodeError (a ValueError) when there is none."""
+    if want not in (None, dict, list):
+        raise TypeError(f"want must be dict, list or None, not {want!r}")
     text = text or ""
     for block in [m.group(1) for m in FENCE.finditer(text)] + [text]:
-        i = 0
+        i, plain = 0, _NOT_JSON
         while True:
             starts = [p for p in (block.find("{", i), block.find("[", i)) if p >= 0]
             if not starts:
                 break
             start = min(starts)
             end = _close(block, start)
-            if end is None:
-                i = start + 1
+            if end is None:  # cut off: what is inside is part of it, and a list before it is prose
+                plain = _NOT_JSON
+                break
+            v = _loads(block[start:end + 1])
+            i = end + 1  # past this span, JSON or prose in brackets
+            if v is _NOT_JSON or (want is not None and not isinstance(v, want)):
                 continue
-            span = block[start:end + 1]
-            for cand in (span, TRAILING_COMMA.sub(r"\1", span)):
-                try:
-                    return json.loads(cand)
-                except ValueError:
-                    pass
-            i = end + 1  # a bracketed span that is not JSON (prose in brackets): look after it
+            if want is None and _plain_list(v):
+                plain = v if plain is _NOT_JSON else plain
+                continue
+            return v
+        if plain is not _NOT_JSON:
+            return plain
     raise json.JSONDecodeError("no JSON object or array in the reply", text, 0)
 
 
@@ -299,7 +326,7 @@ def call_llm(system_prompt: str, user_prompt: str, response_model: type[BaseMode
 
     raw = _post(full_system, user_prompt)
     try:
-        return response_model(**extract_json(raw))
+        return response_model(**extract_json(raw, dict))
     except (json.JSONDecodeError, ValidationError, TypeError) as first_err:
         retry_prompt = (
             f"{user_prompt}\n\nYour previous reply failed to parse: {first_err}\n"
@@ -307,7 +334,7 @@ def call_llm(system_prompt: str, user_prompt: str, response_model: type[BaseMode
         )
         raw2 = _post(full_system, retry_prompt)
         try:
-            return response_model(**extract_json(raw2))
+            return response_model(**extract_json(raw2, dict))
         except (json.JSONDecodeError, ValidationError, TypeError) as second_err:
             raise LLMOutputError(
                 f"LM Studio returned invalid JSON twice. Last error: {second_err}. Last raw: {raw2}"

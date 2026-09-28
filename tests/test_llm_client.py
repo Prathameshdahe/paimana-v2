@@ -167,10 +167,50 @@ def test_extract_json(text, want):
     assert client.extract_json(text) == want
 
 
-@pytest.mark.parametrize("text", ["", "no json here", '{"cut": "off by max_tokens', "[unbalanced"])
+@pytest.mark.parametrize("text, want", [
+    # a citation or a year in the prose is not the answer when an object follows
+    ('Based on [1] and [2], the plan: {"calls": [{"tool": "x"}]}', {"calls": [{"tool": "x"}]}),
+    ('Note (see [2024]): {"k": 1}', {"k": 1}),
+    # a list of plain values is still the answer when nothing else is there, or when it is fenced
+    ("[0, 2]", [0, 2]),
+    ("Relevant: [1, 3]", [1, 3]),
+    ('```json\n[0, 2]\n```\nand {"a": 1}', [0, 2]),
+])
+def test_extract_json_skips_prose_brackets(text, want):
+    assert client.extract_json(text) == want
+
+
+def test_extract_json_wanted_type():
+    assert client.extract_json('[{"a": 1}] then {"b": 2}', dict) == {"b": 2}
+    assert client.extract_json('{"a": [1]} then [2]', list) == [2]
+    assert client.extract_json("Based on [1]: [2, 3]", list) == [1]  # a plain list asked for: prose looks the same
+    with pytest.raises(ValueError):
+        client.extract_json("[1, 2]", dict)
+    with pytest.raises(TypeError):
+        client.extract_json("{}", str)
+
+
+@pytest.mark.parametrize("text", [
+    "", "no json here", '{"cut": "off by max_tokens', "[unbalanced",
+    # cut off by max_tokens: never one of its complete inner parts, and never a citation before it
+    '{"calls": [{"tool": "search_projects", "args": {"q": "x"}}, {"tool": "get_pro',
+    'See [1]. {"calls": [{"tool": "x"}, {"too',
+])
 def test_extract_json_raises_value_error(text):
     with pytest.raises(ValueError):
         client.extract_json(text)
+    with pytest.raises(ValueError):
+        client.extract_json(text, dict)
+
+
+def test_call_llm_retries_a_truncated_reply(monkeypatch):
+    replies = iter(['{"n": 3, "why": "cut off', 'Answer [1]: {"n": 4, "why": "x"}'])
+    fake(monkeypatch, lambda r: httpx.Response(200, json={"choices": [{"message": {"content": next(replies)}}]}))
+
+    class Out(BaseModel):
+        n: int
+        why: str
+    assert client.call_llm("sys", "user", Out) == Out(n=4, why="x")
 
 
 # ------------------------------------------------------------------ gate and breaker
