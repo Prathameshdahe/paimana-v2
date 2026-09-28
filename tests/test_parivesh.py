@@ -23,19 +23,25 @@ Railway (vi). Shape ... (vii). Area of forest land proposed for diversion(in ha.
 
 def test_only_government_bodies_keep_a_user_agency_name():
     s = pd.Series(["NATIONAL HIGHWAY AUTHORITY OF INDIA PIU AGRA", "PADAM KUMAR JAIN", "ESSAR OIL LIMITED",
-                   "MAGNET BUILDTECH PVT LTD", "EXECUTIVE ENGINEER PWD KORBA", "WESTERN COALFIELDS LIMITED", None])
-    assert P.public_agency(s).notna().tolist() == [True, False, False, False, True, True, False]
+                   "MAGNET BUILDTECH PVT LTD", "EXECUTIVE ENGINEER PWD KORBA", "WESTERN COALFIELDS LIMITED", None,
+                   "BHARAT COKING COAL LIMITED", "EASTERN COAL FIELD LTD", "R V GAJJAR", "SRI NIRANJAN NAYAK"])
+    assert P.public_agency(s).notna().tolist() == [True, False, False, False, True, True, False, True, True, False,
+                                                   False]
 
 
-def test_legacy_table_drops_the_agency_of_people_and_any_email():
-    pull = pd.DataFrame({"state": "Bihar", "proposal_no": ["FP/BR/ROAD/1/2018", "FP/BR/ROAD/2/2019"], "file_no": "x",
-                         "name": "a road", "category": "Road", "user_agency": ["SOME PERSON", "PWD DIVISION PATNA"],
-                         "area_ha": 1.0, "status": "APPROVED", "received": ["2018-01-02", "2019-01-02"],
-                         "stage1": [None, "2019-06-01"], "stage2": None,
-                         "milestones": ["EDS by UA (someone@example.com): 01/02/2019", None]})
-    t = P.legacy_table(pull)
-    assert t["user_agency_govt"].tolist()[0] is None or pd.isna(t["user_agency_govt"].iloc[0])
-    assert t["user_agency_govt"].iloc[1] == "PWD DIVISION PATNA" and "@" not in t["milestones"].iloc[0]
+def test_legacy_table_keeps_linked_proposals_without_people_or_email():
+    pull = pd.DataFrame({"state": "Bihar",
+                         "proposal_no": ["FP/BR/ROAD/1/2018", "FP/BR/ROAD/2/2019", "FP/BR/ROAD/3/2019"], "file_no": "x",
+                         "name": ["house of Sh. A S/o B", "a road", "unlinked"], "category": "Road",
+                         "user_agency": ["SOME PERSON", "PWD DIVISION PATNA", "PWD"], "area_ha": 1.0,
+                         "status": "APPROVED", "received": ["2018-01-02", "2019-01-02", "2019-01-02"],
+                         "stage1": [None, "2019-06-01", None], "stage2": None,
+                         "milestones": ["EDS by UA (someone@example.com): 01/02/2019", None, None]})
+    t = P.legacy_table(pull, {"FP/BR/ROAD/1/2018", "FP/BR/ROAD/2/2019"})
+    assert t["proposal_no"].tolist() == ["FP/BR/ROAD/1/2018", "FP/BR/ROAD/2/2019"]      # only the linked ones
+    assert pd.isna(t["user_agency_govt"].iloc[0]) and pd.isna(t["name"].iloc[0])        # a person's title goes too
+    assert t["user_agency_govt"].iloc[1] == "PWD DIVISION PATNA" and t["name"].iloc[1] == "a road"
+    assert "@" not in t["milestones"].iloc[0]
     assert t.columns.tolist() == P.LEGACY_COLS and t["listing"].eq(P.LEGACY_NOTE).all()
 
 
@@ -98,13 +104,16 @@ def test_proposal_rows_and_project_rollup():
     assert rows.loc["FP/MP/RAIL/41734/2019", "stage_at_asof"] == "dropped without approval"
     assert "no reply on the page" in rows.loc["FP/MP/RAIL/41734/2019", "evidence"]
     assert rows.loc["FP/XX/ROAD/9/2020", "found_in"] == "not_found"
+    blank = P.proposal_rows(links.iloc[:1], legacy.assign(name=None), tl, ASOF)["evidence"].iloc[0]
+    assert blank.startswith("FP/JH/MIN/44804/2020 (133.7 ha): filed Mar 2020")        # a blanked title
     events = pd.DataFrame({"project_key": ["PRJ-2"], "category": ["forest_env"], "status": ["open"],
                            "last_seen": [pd.Timestamp("2026-04-01")]})
     p = P.portal_projects(rows.reset_index(), links, events, ASOF).set_index("project_key")
     assert p.index.tolist() == ["PRJ-1", "PRJ-2"]                                  # not-found proposals drop out
     assert p.loc["PRJ-1", "open_not_in_report"] and not p.loc["PRJ-2", "open_not_in_report"]
+    # one proposal final and one withdrawn reads as final, not dropped
     assert (p.loc["PRJ-2", "n_final"], p.loc["PRJ-2", "n_dropped"], p.loc["PRJ-2", "stage_at_asof"]) == (
-        1, 1, "dropped without approval")
+        1, 1, "Stage-II (final)")
     assert p.loc["PRJ-2", "area_ha"] == round(66.69 + 72.8362, 2)
 
 

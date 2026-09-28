@@ -8,7 +8,7 @@ Inputs   silver/typed_rows.parquet (every clean remark with its PRJ key), silver
          silver/project_master.parquet, raw/external/parivesh_fc_scenarios.csv,
          raw/external/land_acquisition_*.csv (Bhoomi Rashi stretch tables: Maharashtra, and the other 28 states with
          data in land_acquisition_india.csv) and raw/external/bhoomi_rashi/ (raw Bhoomi Rashi state exports, parsed by
-         pipeline/bhoomi_rashi.py), raw/external/parivesh_fc_proposals_legacy.csv, parivesh_fc_timelines_remarks.csv
+         pipeline/bhoomi_rashi.py), raw/external/parivesh_fc_proposals_linked.csv, parivesh_fc_timelines_remarks.csv
          and fc_project_links_reviewed.csv (PARIVESH proposals, pipeline/parivesh.py)
 Outputs  gold/project_events.parquet, gold/project_mentions.parquet, gold/remark_status.parquet,
          gold/external_fc.parquet, gold/external_land.parquet, gold/external_land_links.parquet (its stretches),

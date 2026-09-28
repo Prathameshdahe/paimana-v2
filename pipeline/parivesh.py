@@ -3,8 +3,9 @@ PARIVESH forest-clearance proposals: the portal side of the forest row (evidence
 research found no backtest lift from portal data, so nothing here is a model feature).
 
 Built by the external step (pipeline/external.py main):
-Inputs   raw/external/parivesh_fc_proposals_legacy.csv (proposals visible in the PARIVESH 1.0 online list,
-         2014 to mid-2022, NOT a census: it lacks known proposals and diverges from official state totals),
+Inputs   raw/external/parivesh_fc_proposals_linked.csv (the proposals of the PARIVESH 1.0 online list, 2014 to
+         mid-2022 and NOT a census, that a reviewed link or a remark names; the full 10,025-row research pull is
+         not committed, see legacy_table),
          raw/external/parivesh_fc_timelines_remarks.csv (legacy timeline.aspx pages of proposal numbers the report
          remarks name but the list lacks), raw/external/fc_project_links_reviewed.csv (hand-reviewed project <->
          proposal links), the remark proposal numbers (gold/remark_status) and the forest events
@@ -13,11 +14,14 @@ Outputs  gold/fc_proposal_status.parquet (one row per project x proposal number 
 
 Point in time: a proposal's stage at asof reads only its dated events (received, Stage-I, Stage-II, queries) on or
 before asof. Delisting, withdrawal and rejection carry no date in the list, so they are the status on the retrieval
-date, shown as such. Only government bodies and PSUs keep a user agency name (public_agency); the portal's
-'Pending Email' field and e-mail addresses are never stored.
+date, shown as such. Only government bodies and PSUs keep a user agency name (public_agency), and a proposal
+title is kept only with such an agency (titles of private applicants can name a person); the portal's 'Pending
+Email' field and e-mail addresses are never stored.
 
 Refresh the timeline cache (public page, one request per second at most, no captcha):
     python -m pipeline.parivesh timelines FP/MP/RAIL/41734/2019 [...]
+Rebuild the committed list from a research pull (after gold/remark_status.parquet exists):
+    python -m pipeline.parivesh legacy <pull.parquet>
 """
 import re
 import sys
@@ -32,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.silver import ROOT  # noqa: E402
 
 EXTERNAL = ROOT / "dataset" / "raw" / "external"
-LEGACY = EXTERNAL / "parivesh_fc_proposals_legacy.csv"
+LEGACY = EXTERNAL / "parivesh_fc_proposals_linked.csv"
 TIMELINES = EXTERNAL / "parivesh_fc_timelines_remarks.csv"
 LINKS = EXTERNAL / "fc_project_links_reviewed.csv"
 NORMS = EXTERNAL / "fc_norms.csv"
@@ -47,16 +51,20 @@ DROPPED = r"delist|withdrawn|reject|closed|returned|revoked"
 GOV_AGENCY = (
     r"NATIONAL\s+HIGH\s*WAY|\bNHAI\b|\bNHIDCL\b|\bMORTH\b|MINISTRY|\bP\.?\s*W\.?\s*D\b|PUBLIC\s+WORKS?|ROADS?\s+(?:AND|&)\s+"
     r"BUILDINGS?|\bR\s*&\s*B\b|RAILWAY|\bRLY\b|RAIL\s+VIKAS|\bRVNL\b|\bIRCON\b|BORDER\s+ROADS|\bBRO\b|DEPARTMENT|\bDEPTT?\b"
-    r"|EXECUTIVE\s+ENGINEER|SUPERINTENDING\s+ENGINEER|CHIEF\s+ENGINEER|\bGOVT\b|GOVERNMENT|NAGAR\s+(?:PALIKA|NIGAM"
+    r"|EXI?CUTIVE\s*ENGINEER|SUPERINTENDING\s+ENGINEER|CHIEF\s+(?:\w+\s+)?ENGINEER|\bGOVT\b|GOVERNMENT"
+    r"|NAGAR\s+(?:PALIKA|NIGAM"
     r"|PANCHAYAT|PARISHAD)|MUNICIPAL|ZILLA|PANCHAYAT|COLLECTOR|IRRIGATION|JAL\s+(?:NIGAM|BOARD|SANSTHAN)|WATER\s+RESOURCES"
-    r"|POWER\s*GRID|\bNTPC\b|\bNHPC\b|\bSJVN\b|\bTHDC\b|COAL\s+INDIA|COALFIELDS|\b(?:CCL|BCCL|MCL|SECL|WCL|NCL|ECL)\b"
+    r"|POWER\s*GRID|\bNTPC\b|\bNHPC\b|\bSJVN\b|\bTHDC\b|COAL\s+INDIA|COAL\s*FIELDS?"
+    r"|\b(?:CCL|BCCL|MCL|SECL|WCL|NCL|ECL)\b"
     r"|SINGARENI|SINAGRENI|\bONGC\b|OIL\s+AND\s+NATURAL\s+GAS|OIL\s+INDIA|\bIOCL?\b|INDIAN\s+OIL|\bBPCL\b|\bHPCL\b|\bGAIL\b"
     r"|\bBSNL\b|\bNMDC\b|\bSAIL\b|\bNLC\b|UPPTCL|PSPCL|PSTCL|TRANSCO|\bUPCL\b|PTCUL|JBVNL|GETCO|GUJARAT\s+ENERGY|MSETCL"
     r"|KPTCL|TANTRANSCO|APTRANSCO|OPTCL|MPPTCL|RRVPNL|HVPNL|CSPTCL|WBSETCL|KSEB|POWER\s+TRANSMISSION\s+CORPORATION"
     r"|VIDYUT|ELECTRICITY\s+BOARD|DIVISION|CIRCLE|DEVELOPMENT\s+AUTHORITY|CPWD|\bAAI\b|AIRPORTS\s+AUTHORITY|DEFENCE"
     r"|\bARMY\b|\bITBP\b|\bBSF\b|\bCRPF\b|POLICE|GAS\s+AUTHORITY|BHARAT\s+(?:BROADBAND|PETROLEUM|SANCHAR)|\bBBNL\b"
     r"|STATE\s+(?:ELECTRICITY|TRANSMISSION|POWER|HIGHWAY|ROAD\s+DEVELOPMENT)|METRO\s+RAIL|DEDICATED\s+FREIGHT|\bDFCCIL\b"
-    r"|\bKRCL\b|PORT\s+TRUST|HOUSING\s+BOARD|\bPMGSY\b|\bDRDA\b|RURAL\s+ENGINEERING|\bWRD\b|\bPHE\b")
+    r"|\bKRCL\b|PORT\s+TRUST|HOUSING\s+BOARD|\bPMGSY\b|\bDRDA\b|RURAL\s+ENGINEERING|\bWRD\b|\bPHE\b|MORT\s*&\s*H|\bPIU"
+    r"|\bPMU\b|\bMSRDC\b|NARMADA\s+NIGAM|HINDUSTAN\s+PETROLEUM|NATIONAL\s+ALUMINIUM|RAIL\s+BIJLEE"
+    r"|COKING\s+COAL")
 PRIVATE_AGENCY = r"PRIVATE|\bPVT\b|\(P\)|\bLLP\b|\bM/S\b"
 EMAIL = r"[\w.+-]+@[\w-]+\.[\w.]+"
 LEGACY_COLS = ["state", "proposal_no", "file_no", "name", "category", "user_agency_govt", "area_ha", "status",
@@ -70,8 +78,11 @@ STATUS_COLS = ["project_key", "proposal_no", "found_in", "name", "category", "ar
 PORTAL_COLS = ["project_key", "link_source", "n_proposals", "proposals", "area_ha", "n_open", "n_stage1_only",
                "n_final", "n_dropped", "n_overdue", "stage_at_asof", "months_in_stage", "norm_months",
                "oldest_open_received", "open_not_in_report", "evidence"]
-# stage at asof, most to least outstanding: the project's reading is its most outstanding proposal
+# a proposal's stage at asof
 STAGE_ORDER = ["filed, no Stage-I", "Stage-I, awaiting Stage-II", "dropped without approval", "Stage-II (final)"]
+# a project reads as its most outstanding open proposal, else its final approval, else dropped: one proposal final
+# and another withdrawn is a cleared project with a withdrawn part, not a dropped one
+ROLLUP_RANK = {STAGE_ORDER[0]: 0, STAGE_ORDER[1]: 1, STAGE_ORDER[3]: 2, STAGE_ORDER[2]: 3}
 
 
 def public_agency(s):
@@ -80,10 +91,14 @@ def public_agency(s):
     return s.where(up.str.contains(GOV_AGENCY) & ~up.str.contains(PRIVATE_AGENCY))
 
 
-def legacy_table(pull, retrieved="2026-09-27"):
-    """The research pull of the PARIVESH 1.0 list (one row per proposal) -> the committed CSV: user agency kept only
-    for government bodies and PSUs, e-mail addresses removed from the milestone text."""
-    d = pull.assign(user_agency_govt=public_agency(pull["user_agency"]),
+def legacy_table(pull, keep, retrieved="2026-09-27"):
+    """The research pull of the PARIVESH 1.0 list (one row per proposal) -> the committed CSV: only the proposals in
+    keep (the ones a link or a remark names; the full pull stays out of the repo), user agency kept only for
+    government bodies and PSUs, the title blanked where the agency is not one, e-mail addresses removed from the
+    milestone text."""
+    pull = pull[pull["proposal_no"].isin(keep)]
+    gov = public_agency(pull["user_agency"])
+    d = pull.assign(user_agency_govt=gov, name=pull["name"].where(gov.notna()),
                     milestones=pull["milestones"].str.replace(EMAIL, "", regex=True),
                     listing=LEGACY_NOTE, source=LEGACY_URL, retrieved=retrieved)
     for c in ["received", "stage1", "stage2"]:
@@ -278,9 +293,9 @@ def evidence(r, asof):
     last query 08 Oct 2025 (EDS(Addl. Info)); PARIVESH 1.0 status on 2026-09-27: Pending With UA'."""
     if r.found_in == "not_found":
         return f"{r.proposal_no}: not found in the saved PARIVESH list or timeline pages"
-    name = str(r.name).strip().rstrip(".")
+    name = str(r.name).strip().rstrip(".") if isinstance(r.name, str) else ""  # blank: not a government applicant
     name = name if len(name) <= 60 else name[:60].rsplit(" ", 1)[0] + "..."
-    head = f"{r.proposal_no} ({name}, {r.area_ha:.1f} ha)"
+    head = f"{r.proposal_no} ({name + ', ' if name else ''}{r.area_ha:.1f} ha)"
     filed = f"filed {r.received:%b %Y}" if pd.notna(r.received) else "filing date not shown"
     at = f"{asof:%b %Y}"
     body = {STAGE_ORDER[0]: f"{filed}, no Stage-I after {r.months_in_stage:.0f} months at {at}",
@@ -308,10 +323,10 @@ def portal_projects(rows, links, events, asof, open_q=4):
                                                      on=["project_key", "proposal_no"])
     fe = events[events["category"].eq("forest_env") & events["status"].eq("open")
                 & (events["last_seen"] > asof - pd.DateOffset(months=3 * open_q))]
-    rank = {s: i for i, s in enumerate(STAGE_ORDER)}
     out = []
     for k, g in r.groupby("project_key"):
-        g = g.assign(_r=g["stage_at_asof"].map(rank)).sort_values(["_r", "months_in_stage"], ascending=[True, False])
+        g = g.assign(_r=g["stage_at_asof"].map(ROLLUP_RANK)).sort_values(["_r", "months_in_stage"],
+                                                                           ascending=[True, False])
         top = g.iloc[0]
         op = g[g["open_at_asof"]]
         out.append({"project_key": k, "link_source": ";".join(sorted(set(g["link_source"]))),
@@ -346,6 +361,14 @@ def main(argv=None):
         both.sort_values("proposal_no").to_csv(TIMELINES, index=False)
         print(new.to_string(index=False))
         return both
+    if argv[:1] == ["legacy"] and argv[1:]:
+        rs = pd.read_parquet(ROOT / "dataset" / "gold" / "remark_status.parquet")
+        keep = set(remark_links(rs)["proposal_no"]) | set(pd.read_csv(LINKS, dtype="str")["proposal_no"])
+        t = legacy_table(pd.read_parquet(argv[1]), keep)
+        t.to_csv(LEGACY, index=False)
+        print(f"{LEGACY.name}: {len(t)} of {len(keep)} linked or remark-named proposals are in the pull "
+              f"({int(t['name'].isna().sum())} titles blanked: the applicant is not a government body or PSU)")
+        return t
     print(__doc__)
 
 

@@ -12,8 +12,8 @@ Proposal" search are captcha-gated, so they were not used). We did not find publ
 the PARIVESH 1.0 legacy portal or the PARIVESH 2.0 dashboard. None publishes a machine-readable crawl policy:
 forestsclearance.nic.in/robots.txt is empty, parivesh.nic.in/robots.txt returns the application page and
 bhoomirashi.gov.in/robots.txt redirects to an error page (checked 2026-09-28). We never store the PARIVESH
-"Pending Email" field, e-mail addresses or the names of private individuals; a user agency name is kept only when it
-is plainly a government body or PSU.
+"Pending Email" field, e-mail addresses or the names of private individuals; a user agency name, and a proposal
+title, is kept only when the agency is plainly a government body or PSU.
 
 ## Land acquisition
 
@@ -32,7 +32,7 @@ is plainly a government body or PSU.
 | File | What it is | Source | Retrieved |
 |---|---|---|---|
 | `parivesh_fc_scenarios.csv` | the Parivesh approval rulebook (28 scenarios: route, authority, gates, complexity) from Garvit's external-factors guide | docs/EXTERNAL_FACTORS_GUIDE.md | 2026-09 |
-| `parivesh_fc_proposals_legacy.csv` | 10,025 Form-A proposals **visible in the PARIVESH 1.0 online list, received 2014 to mid-2022; not a census** (it lacks known proposals such as FP/MP/RAIL/41734/2019, holds 42% of the Stage-II approvals Parliament reports for 2014-2024, and its state counts diverge from official receipts) | [PARIVESH 1.0 Online_Status.aspx](https://forestsclearance.nic.in/Online_Status.aspx), paged 30 rows at a time, Road split by state (a query caps at 2,970 rows) | 2026-09-27 |
+| `parivesh_fc_proposals_linked.csv` | the 377 Form-A proposals that a reviewed link (`fc_project_links_reviewed.csv`) or a report remark names, out of 10,025 **visible in the PARIVESH 1.0 online list, received 2014 to mid-2022; not a census** (it lacks known proposals such as FP/MP/RAIL/41734/2019, holds 42% of the Stage-II approvals Parliament reports for 2014-2024, and its state counts diverge from official receipts). The full pull is not committed: many private applicants' titles name a person. A title is kept only when the user agency is a government body or PSU (18 of 377 are blank); rebuild with `python -m pipeline.parivesh legacy <pull.parquet>` | [PARIVESH 1.0 Online_Status.aspx](https://forestsclearance.nic.in/Online_Status.aspx), paged 30 rows at a time, Road split by state (a query caps at 2,970 rows) | 2026-09-27 |
 | `parivesh_fc_timelines_sample.csv` | the date each level received 150 proposals (DFO, CF, nodal, state, RO, Stage-I, compliance, Stage-II); **a sample of proposals that reached Stage-I (148 of 150), so it is conditioned on success**; 94 of 150 are 5 ha or less and 3 are in Maharashtra | [PARIVESH 1.0 timeline.aspx](https://forestsclearance.nic.in/timeline.aspx?pid=FP/MP/RAIL/39172/2019) | 2026-09-27 |
 | `parivesh_fc_timelines_remarks.csv` | the timeline pages of proposal numbers named in the report remarks, when the list lacks them (refresh with `python -m pipeline.parivesh timelines <proposal no>`) | same | 2026-09-28 |
 | `parivesh2_fc_state_levels_2026-09-27.csv` | PARIVESH 2.0 pendency by state and level (UA, DFO, PSC, DC, CF, nodal, PCCF, Principal Secretary, IRO, MoEFCC, Stage-I, Stage-II, final order, delisted, total; 31,474 proposals) | [PARIVESH 2.0 FC Authority Dashboard](https://parivesh.nic.in/fc-dashboard/FCDashboard.aspx), last updated 27-Sep-2026 02:15 | 2026-09-27 |
