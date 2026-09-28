@@ -306,8 +306,8 @@ def assemble(results: list) -> tuple[list[dict], list[dict], list[int | None]]:
         local = []
         for s in r.sources:
             sig = (s["kind"], s["title"], s["source"], s["url"], s["projectKey"])
-            if sig not in index:
-                sources.append({"n": len(sources) + 1, **s, "title": s["title"] or s["source"] or s["kind"]})
+            if sig not in index:  # its title and publisher are printed inside the data block too
+                sources.append(_scrub({"n": len(sources) + 1, **s, "title": s["title"] or s["source"] or s["kind"]}))
                 index[sig] = len(sources)
             local.append(index[sig])
         facts = _scrub(_renumber(r.facts, local))
