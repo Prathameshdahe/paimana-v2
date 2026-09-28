@@ -8,7 +8,8 @@ import { OUTLOOK_TONE, OUTLOOK_WORDS, TONE_DOT, TONE_TEXT, outlookOf, toneOf } f
 import { dueIn } from '@/lib/headline'
 import { cn, formatDate, formatINR } from '@/lib/formatters'
 import {
-  AXIS_H, LABEL_W, SIZES, ZOOMS, hitTest, keysIn, layoutMap, type Dot, type LaneMode, type LaneSpec, type MapLayout, type Zoom,
+  AXIS_H, LABEL_W, OVERFLOW_H, SIZES, ZOOMS, hitTest, keysIn, layoutMap, markAt, type Dot, type LaneMode, type LaneSpec,
+  type MapLayout, type OverflowMark, type Zoom,
 } from './riskMapLayout'
 import type { MapRow, Outlook, OutlookWord, TierFilter } from '@/contracts/project'
 import type { TierCount } from '@/contracts/portfolio'
@@ -119,7 +120,9 @@ const DotsLayer = memo(function DotsLayer({ dots, selection, openKey }: {
  * the hatched strip is overdue) and by lane: the delay outlook in words, or the tier until the backend sends words.
  * Size is the anticipated cost in three named steps; a red outer ring is early notice, a dashed ring stalled.
  * Hover shows a card, click opens the side panel, dragging on empty canvas selects the dots under it for the table
- * (Shift adds; on touch after a short hold), Escape clears. Keyboard: one tab stop per lane; Left and Right walk the
+ * (Shift adds; on touch after a short hold), Escape clears. A month too crowded for its lane folds the rest into a
+ * "+n" mark above the dots: clicking it lists those projects in the table, a brush over their column takes them too,
+ * and the keyboard walk visits them. Keyboard: one tab stop per lane; Left and Right walk the
  * lane in due-date order, Up and Down change lane, Home and End jump, Enter opens, Space selects. The table below is
  * the full screen-reader path. No wheel zoom (the page must scroll): three presets set the window instead.
  */
@@ -129,13 +132,16 @@ export function RiskMap(p: RiskMapProps) {
   const width = useWidth(box)
   const [zoom, setZoom] = useState<Zoom>('36')
   const [hover, setHover] = useState<Dot | null>(null)
+  const [hoverMark, setHoverMark] = useState<OverflowMark | null>(null)
   const [focus, setFocus] = useState<{ lane: number; index: number } | null>(null)
   const [brush, setBrush] = useState<{ x0: number; y0: number; x1: number; y1: number; add: boolean } | null>(null)
   const [live, setLive] = useState('')
   const laneRefs = useRef<Array<SVGGElement | null>>([])
   const svgRef = useRef<SVGSVGElement>(null)
   const frame = useRef<number | null>(null)
-  const press = useRef<{ x: number; y: number; dot: Dot | null; add: boolean; timer: number | null; armed: boolean; moved: boolean } | null>(null)
+  const press = useRef<{
+    x: number; y: number; dot: Dot | null; mark: OverflowMark | null; add: boolean; timer: number | null; armed: boolean; moved: boolean
+  } | null>(null)
   // an id safe inside url(#...): useId's own may carry colons or guillemets
   const hatchId = `hatch-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
 
@@ -169,10 +175,11 @@ export function RiskMap(p: RiskMapProps) {
     if (!layout || e.button !== 0) return
     const { x, y } = point(e)
     const dot = hitTest(layout, x, y)
+    const mark = dot ? null : markAt(layout, x, y)
     const touch = e.pointerType === 'touch'
-    const state = { x, y, dot, add: e.shiftKey, timer: null as number | null, armed: !dot && !touch, moved: false }
+    const state = { x, y, dot, mark, add: e.shiftKey, timer: null as number | null, armed: !dot && !mark && !touch, moved: false }
     // on touch the brush starts after a 150 ms hold, so a swipe still scrolls the page
-    if (!dot && touch) state.timer = window.setTimeout(() => { if (press.current) press.current.armed = true }, 150)
+    if (!dot && !mark && touch) state.timer = window.setTimeout(() => { if (press.current) press.current.armed = true }, 150)
     press.current = state
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
@@ -194,7 +201,9 @@ export function RiskMap(p: RiskMapProps) {
     if (frame.current !== null) return
     frame.current = requestAnimationFrame(() => {
       frame.current = null
-      setHover(hitTest(layout, x, y))
+      const dot = hitTest(layout, x, y)
+      setHover(dot)
+      setHoverMark(dot ? null : markAt(layout, x, y))
     })
   }
 
@@ -210,6 +219,7 @@ export function RiskMap(p: RiskMapProps) {
       return
     }
     if (pr.dot && !pr.moved) p.onOpen(pr.dot.key)
+    else if (pr.mark && !pr.moved) p.onSelect(pr.mark.keys, pr.add)
   }
 
   const focusDot = focus && layout ? layout.byLane[focus.lane]?.[focus.index] ?? null : null
@@ -258,6 +268,10 @@ export function RiskMap(p: RiskMapProps) {
   }
 
   const shown = hover ?? focusDot
+  // a folded row in the keyboard walk rings its "+n" mark
+  const shownMark = shown?.folded && layout ? layout.overflow.find((o) => o.lane === shown.lane && o.keys.includes(shown.key)) ?? null : null
+  const drawn = layout?.dots.length ?? 0
+  const foldedN = layout?.overflow.reduce((s, o) => s + o.n, 0) ?? 0
   const titleRight = (
     <span className="flex flex-wrap items-center gap-2">
       <span className="inline-flex rounded-lg bg-surface-elevated p-0.5" role="group" aria-label="Time window">
@@ -283,7 +297,9 @@ export function RiskMap(p: RiskMapProps) {
         <Takeaway rows={rows} asof={asof} />
         {p.partial && (
           <p className="text-xs text-fg-dimmed">
-            The {p.partial.shown} most at risk of {p.partial.total.toLocaleString('en-IN')} are placed; narrow the filters to place the others.
+            Only the {p.partial.shown} most at risk of {p.partial.total.toLocaleString('en-IN')} are on the map
+            {foldedN > 0 && ` (${drawn.toLocaleString('en-IN')} as dots, ${foldedN.toLocaleString('en-IN')} in the +n counts)`}; narrow the
+            filters to place the others.
           </p>
         )}
 
@@ -322,9 +338,9 @@ export function RiskMap(p: RiskMapProps) {
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                onPointerLeave={() => { if (!press.current) setHover(null) }}
+                onPointerLeave={() => { if (!press.current) { setHover(null); setHoverMark(null) } }}
                 onPointerCancel={() => { press.current = null; setBrush(null) }}
-                style={{ cursor: hover ? 'pointer' : brush ? 'crosshair' : 'default' }}
+                style={{ cursor: hover || hoverMark ? 'pointer' : brush ? 'crosshair' : 'default' }}
               >
                 <defs>
                   <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -349,11 +365,18 @@ export function RiskMap(p: RiskMapProps) {
                 ))}
                 <DotsLayer dots={layout.dots} selection={p.selection} openKey={p.openKey} />
                 {layout.overflow.map((o) => (
-                  <text key={`${o.lane}-${o.x}`} x={o.x} y={o.y + 11} textAnchor="middle" fontSize={12} className="fill-fg-muted">
-                    +{o.n}
-                  </text>
+                  <g key={`${o.lane}-${o.x}`} className={hoverMark === o ? 'text-fg-base' : 'text-fg-muted'}>
+                    <title>{`${o.n} more due then than fit here: click to list them`}</title>
+                    <rect x={o.x - o.halfW} y={o.y - OVERFLOW_H / 2 + 1} width={2 * o.halfW} height={OVERFLOW_H - 2} rx={4}
+                      className={hoverMark === o ? 'fill-surface-input' : 'fill-transparent'} />
+                    <text x={o.x} y={o.y + 4} textAnchor="middle" fontSize={12} fontWeight={600} className="fill-current">+{o.n}</text>
+                  </g>
                 ))}
-                {shown && (
+                {shownMark && (
+                  <rect x={shownMark.x - shownMark.halfW - 2} y={shownMark.y - OVERFLOW_H / 2} width={2 * shownMark.halfW + 4} height={OVERFLOW_H}
+                    rx={5} fill="none" strokeWidth={2} className="stroke-accent" pointerEvents="none" />
+                )}
+                {shown && !shown.folded && (
                   <circle cx={shown.x} cy={shown.y} r={shown.r + (shown === focusDot && !hover ? 4 : 1.5)} fill="none"
                     strokeWidth={2} className={shown === focusDot && !hover ? 'stroke-accent' : 'stroke-fg-base'} pointerEvents="none" />
                 )}
@@ -370,8 +393,8 @@ export function RiskMap(p: RiskMapProps) {
 
         {layout && layout.later > 0 && layout.dots.length > 0 && (
           <p className="text-xs text-fg-muted">
-            {layout.later.toLocaleString('en-IN')} more {layout.later === 1 ? 'is' : 'are'} due after {zoom === '12' ? 'the next 12 months' : 'the next three years'} (the
-            {' '}+n at the right of each lane).{' '}
+            {layout.later.toLocaleString('en-IN')} more {layout.later === 1 ? 'is' : 'are'} due after {zoom === '12' ? 'the next 12 months' : 'the next three years'} (counted
+            at the right edge of each lane).{' '}
             <button type="button" onClick={() => setZoom('all')} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
               Show all
             </button>
@@ -533,6 +556,9 @@ function Legend({ mode }: { mode: LaneMode }) {
         <span className="inline-flex items-center gap-1.5">
           <svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="3" className="fill-fg-dimmed" /><circle cx="7" cy="7" r="6" fill="none" strokeDasharray="2 2" className="stroke-fg-base" /></svg>
           stalled
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="font-semibold text-fg-base">+n</span> more due then than fit: click to list them
         </span>
         <span className="inline-flex items-center gap-2">
           {SIZES.map((s) => (
