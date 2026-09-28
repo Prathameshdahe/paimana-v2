@@ -346,7 +346,10 @@ def watch_once() -> dict:
 
 def save_upload(filename: str | None, fileobj) -> dict:
     """Save an uploaded report into the inbox under a safe, unused name; a file already ingested is not kept."""
-    name = re.sub(r"[^A-Za-z0-9._ ()-]", "_", Path(filename or "").name).strip(" .")
+    # Split on both / and \ so Windows-style path traversal (..\..\etc\passwd)
+    # is stripped on Linux too (where Path().name only splits on /).
+    bare = re.split(r"[/\\]", filename or "")[-1]
+    name = re.sub(r"[^A-Za-z0-9._ ()-]", "_", bare).strip(" .")
     if Path(name).suffix.lower() not in UPLOAD_SUFFIXES:
         raise ValueError("only .csv and .pdf reports are accepted")
     INBOX.mkdir(parents=True, exist_ok=True)
