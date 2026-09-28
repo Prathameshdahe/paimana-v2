@@ -61,7 +61,7 @@ list per role, cut to the scope; it becomes per person once there is real sign-i
 | Radar (signals feed, rollup) | – | ✓ linked, scoped | ✓ linked, scoped | ✓ with the unlinked pool |
 | Alert bell and live stream | – | ✓ scoped | ✓ scoped | ✓ with pipeline errors |
 | Acknowledge an alert | – | – | ✓ scoped | ✓ |
-| Project assistant (chat) | – | – | ✓ scoped | ✓ |
+| AI assistant (chat) | ✓ public tools and public outputs only | ✓ scoped, every tool | ✓ scoped, every tool | ✓ every tool |
 | Approvals | – | memos addressed to agency officials, own projects | memos addressed to ministry officials, own projects | every memo |
 | Decide a memo | – | only its addressee | only its addressee | only its addressee |
 | Live job status | – | ✓ | ✓ | ✓ |
@@ -99,9 +99,31 @@ the per-project PARIVESH lists (open proposals, the proposals named in the remar
 | `POST /api/jobs/*` | 403 | 403 | 403 | ✓ |
 | `/api/models` | 403 | 403 | ✓ | ✓ |
 | `/api/worker-runs`, `POST /api/worker-runs/trigger` | 403 | 403 | 403 | ✓ |
+| `POST /api/chat` | ✓ public tools, 6 a minute and 40 an hour | scoped, 20 a minute | scoped, 20 a minute | ✓, 20 a minute |
 
 An unknown role, or a ministry or agency role without a known scope, is 400.
 `EventSource` cannot send headers, so `/api/stream` takes the same three values as
 `?role=&ministry=&agency=`. A `role` still sent in a request body or query (ack,
 watchlist, approvals) must match the header role, or it is 403; the action is
 recorded in the audit log under the header role.
+
+## AI assistant
+
+`POST /api/chat` is open to every role (`chat` in every role's `POLICY`); what an answer may read is decided per
+tool by the same viewer (`llm/tools.py`, full matrix in `docs/AI_ASSISTANT.md`):
+
+| Tool | Public | Agency | Ministry | IPMD |
+|---|---|---|---|---|
+| Project list, portfolio counts, project page, compare, search of help and records | ✓ public outputs | scoped | scoped | ✓ |
+| Report history | timeline | + tier alerts, prediction log, scoped | + tier alerts, prediction log, scoped | ✓ full |
+| Web research | facts without match reasons or agent headlines | + linked news, scoped | + linked news, scoped | ✓ + linked news |
+| Outside factors | factor names and public evidence strings | + check evidence and PARIVESH detail, scoped | + check evidence and PARIVESH detail, scoped | ✓ full |
+| Risk drivers (SHAP) and flagged checks with evidence | – | scoped | scoped | ✓ |
+| Cached AI second opinion | – | scoped | scoped | ✓ |
+| Agency scorecard | – | every agency, own by default | their ministry's agencies | ✓ |
+| Bottlenecks | – | scoped | scoped | ✓ |
+
+The tools take the viewer from the request, never a scope from the model, and answer a project outside the scope
+exactly like an unknown key. The public writer prompt never mentions model internals, and a public answer that
+names one is rejected. Limits are per client IP and role (`backend/ratelimit.py`), a refused request is 429 before
+anything streams. Nothing about a question is stored or logged.
