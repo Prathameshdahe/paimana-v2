@@ -39,3 +39,8 @@ export function citedRefs(text: string, style: CiteStyle): string[] {
   const refs = splitCitations(text, style).flatMap((s) => (s.kind === 'cite' ? s.refs : []))
   return [...new Set(refs)]
 }
+
+/** the URL when it is an http(s) link, else null: a source link never runs script or opens another scheme */
+export function webUrl(u: string | null | undefined): string | null {
+  return u && /^https?:\/\//i.test(u.trim()) ? u.trim() : null
+}

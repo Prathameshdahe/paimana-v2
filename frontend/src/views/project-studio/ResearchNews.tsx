@@ -6,6 +6,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useResearch } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/formatters'
+import { webUrl } from '@/lib/citations'
 import { RESEARCH_GROUPS, externalLines, factDate, researchCategory, researchGroup, researchedOn, type ResearchGroup } from '@/lib/research'
 import { Section } from './ProjectVisuals'
 import type { ProjectResearch, ResearchFact } from '@/contracts/project'
@@ -42,6 +43,7 @@ function Fact({ f, group }: { f: ResearchFact; group: ResearchGroup }) {
   const date = factDate(f)
   const o = origin(f)
   const label = f.headline ?? f.source ?? f.domain ?? 'Source'
+  const href = webUrl(f.url)
   return (
     <li className={cn('min-w-0 border-l-2 pl-3', RULE[group])}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -56,16 +58,20 @@ function Fact({ f, group }: { f: ResearchFact; group: ResearchGroup }) {
       </div>
       <p className="mt-1 text-sm leading-snug text-fg-base">{f.summary}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-dimmed">
-        <a
-          href={f.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-w-0 max-w-full items-center gap-1 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          title={f.headline ?? f.url}
-        >
-          <span className="truncate">{label}</span>
-          <ExternalLink className="size-3 shrink-0" aria-label="opens in a new tab" />
-        </a>
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-w-0 max-w-full items-center gap-1 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            title={f.headline ?? href}
+          >
+            <span className="truncate">{label}</span>
+            <ExternalLink className="size-3 shrink-0" aria-label="opens in a new tab" />
+          </a>
+        ) : (
+          <span className="truncate text-fg-muted">{label}</span>
+        )}
         {f.headline && f.source && <span className="truncate">· {f.source}</span>}
         <span title={o.title}>· {o.text}</span>
       </div>

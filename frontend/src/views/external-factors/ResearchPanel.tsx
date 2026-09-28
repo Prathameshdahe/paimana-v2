@@ -7,6 +7,7 @@ import { useResearchSummary } from '@/lib/queries'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { cn, formatLooseDate } from '@/lib/formatters'
 import { factDate, researchCategory } from '@/lib/research'
+import { webUrl } from '@/lib/citations'
 import type { ResearchBlocker, ResearchSummary } from '@/contracts/portfolio'
 
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'critical' }) {
@@ -57,6 +58,7 @@ function Blocker({ b }: { b: ResearchBlocker }) {
   const panel = useProjectPanel()
   const date = factDate(b)
   const cat = b.category ? researchCategory(b.category) : null
+  const href = webUrl(b.url)
   return (
     <li className="min-w-0 space-y-1 px-5 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-dimmed">
@@ -70,11 +72,15 @@ function Blocker({ b }: { b: ResearchBlocker }) {
         {b.severity !== null && b.severity >= 3 && <span className="rounded-full bg-critical/10 px-2 py-px font-medium text-critical">severe</span>}
       </div>
       {b.summary && <p className="text-sm leading-snug text-fg-base">{b.summary}</p>}
-      <a href={b.url} target="_blank" rel="noreferrer" title={b.headline}
-        className={cn('inline-flex max-w-full items-center gap-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', b.summary ? 'text-xs text-accent' : 'text-sm font-medium text-fg-base')}>
-        <span className="line-clamp-2">{b.headline}</span>
-        <ExternalLink className="size-3 shrink-0 text-fg-dimmed" aria-label="opens in a new tab" />
-      </a>
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer" title={b.headline}
+          className={cn('inline-flex max-w-full items-center gap-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', b.summary ? 'text-xs text-accent' : 'text-sm font-medium text-fg-base')}>
+          <span className="line-clamp-2">{b.headline}</span>
+          <ExternalLink className="size-3 shrink-0 text-fg-dimmed" aria-label="opens in a new tab" />
+        </a>
+      ) : (
+        <span className={b.summary ? 'text-xs text-fg-muted' : 'text-sm font-medium text-fg-base'}>{b.headline}</span>
+      )}
       {b.source && <span className="text-xs text-fg-dimmed"> · {b.source}</span>}
       {b.projectKey && (
         <div className="flex min-w-0 items-center gap-2 text-xs">

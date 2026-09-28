@@ -7,7 +7,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { CiteChip, CitedText } from '@/components/common/CitedText'
 import { useCachedSecondOpinion, useSecondOpinion } from '@/lib/queries'
 import { ApiError, isOffline } from '@/lib/api'
-import { citedRefs } from '@/lib/citations'
+import { citedRefs, webUrl } from '@/lib/citations'
 import { CONCERN, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import { cn, formatDateTime, formatLooseDate } from '@/lib/formatters'
 import { Section } from './ProjectVisuals'
@@ -21,7 +21,7 @@ const KIND_LABEL: Record<string, string> = {
   research: 'Web research', news: 'News',
 }
 
-const TIER_NOTE = 'An AI second opinion: the local model reads the evidence again. It never changes the tier.'
+const TIER_NOTE = 'AI second opinion — it does not change the tier, which stays the model’s ranking.'
 
 function evidenceOf(o: SecondOpinionOut): OpinionEvidence[] {
   return o.evidence ?? o.pack?.items ?? []
@@ -110,6 +110,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
             {cited.map((id) => {
               const e = byId.get(id)
               const stance = e?.direction ?? e?.stance
+              const href = webUrl(e?.url)
               return (
                 <li key={id} id={anchor(id)}
                   className={cn('flex gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors', active === id && 'bg-accent/10 ring-1 ring-inset ring-accent/30')}>
@@ -125,8 +126,8 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
                       <div className="text-fg-dimmed">
                         {KIND_LABEL[e.kind] ?? e.kind}
                         {e.date && ` · ${formatLooseDate(e.date)}`}
-                        {e.url ? (
-                          <> · <a href={e.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{e.source ?? 'source'}</a></>
+                        {href ? (
+                          <> · <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{e.source ?? 'source'}</a></>
                         ) : e.source ? ` · ${e.source}` : ''}
                       </div>
                     </div>

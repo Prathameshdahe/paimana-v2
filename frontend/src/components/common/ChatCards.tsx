@@ -7,6 +7,7 @@ import React, { useId, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ExternalLink, Loader2, RotateCcw, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { useProjectPanel } from '@/lib/useProjectPanel'
+import { webUrl } from '@/lib/citations'
 import { CONCERN, FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, TIER_COLOR, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import {
   cn, formatDate, formatDateTime, formatINR, formatINRShort, formatLooseDate, formatProb, orDash,
@@ -424,42 +425,48 @@ export function SourcesList({ items, anchor, flashed }: {
     <section aria-label="Sources" className="rounded-xl border border-border-subtle bg-surface-panel/70 p-2.5">
       <h4 className="mb-1.5 px-1 text-xs font-semibold text-fg-muted">Sources</h4>
       <ol className="space-y-0.5">
-        {items.map((s) => (
-          <li
-            key={s.n}
-            id={anchor(s.n)}
-            tabIndex={-1}
-            className={cn(
-              'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none',
-              flashed === s.n ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : ''
-            )}
-          >
-            <span className="mt-px inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-accent/15 px-1 font-semibold leading-none text-accent">
-              {s.n}
-            </span>
-            <div className="min-w-0 flex-1 space-y-0.5">
-              {s.url ? (
-                <a href={s.url} target="_blank" rel="noreferrer" className="inline font-medium leading-snug text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
-                  {s.title}
-                  <ExternalLink className="ml-1 inline size-3 align-baseline text-fg-dimmed" aria-label="opens in a new tab" />
-                </a>
-              ) : (
-                <span className="font-medium leading-snug text-fg-base">{s.title}</span>
+        {items.map((s) => {
+          const href = webUrl(s.url)
+          return (
+            <li
+              key={s.n}
+              id={anchor(s.n)}
+              tabIndex={-1}
+              className={cn(
+                'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none',
+                flashed === s.n ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : ''
               )}
-              <div className="flex flex-wrap items-center gap-x-1.5 text-fg-dimmed">
-                <span>{KIND_LABEL[s.kind] ?? s.kind}</span>
-                {s.source && <span className="truncate">· {s.source}</span>}
-                {s.date && <span>· {formatLooseDate(s.date)}</span>}
-                {s.projectKey && (
-                  <button type="button" onClick={() => panel.open(s.projectKey ?? '')}
-                    className="font-mono text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
-                    · {s.projectKey}
-                  </button>
+            >
+              <span className="mt-px inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-accent/15 px-1 font-semibold leading-none text-accent">
+                {s.n}
+              </span>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                {href ? (
+                  <a href={href} target="_blank" rel="noreferrer" className="inline font-medium leading-snug text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                    {s.title}
+                    <ExternalLink className="ml-1 inline size-3 align-baseline text-fg-dimmed" aria-label="opens in a new tab" />
+                  </a>
+                ) : (
+                  <span className="font-medium leading-snug text-fg-base">{s.title}</span>
                 )}
+                <div className="flex flex-wrap items-center gap-x-1.5 text-fg-dimmed">
+                  <span>{KIND_LABEL[s.kind] ?? s.kind}</span>
+                  {s.source && <span className="truncate">· {s.source}</span>}
+                  {s.date && <span>· {formatLooseDate(s.date)}</span>}
+                  {s.projectKey && (
+                    <span>
+                      ·{' '}
+                      <button type="button" onClick={() => panel.open(s.projectKey ?? '')}
+                        className="font-mono text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                        {s.projectKey}
+                      </button>
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ol>
     </section>
   )

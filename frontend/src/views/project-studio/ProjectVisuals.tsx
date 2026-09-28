@@ -633,10 +633,10 @@ function landFact(x: ProjectDetail['external'], asof: string) {
 /** the research and news chip: cited web facts (every role), and the scout's linked news (officials) */
 function NewsChips({ research, news }: { research: ResearchBrief | null | undefined; news?: { n: number; scouted: boolean } }) {
   if (!research && !news) return null
-  const parts = [
+  const text = [
     research && (research.searched ? `${research.nFacts} research fact${research.nFacts === 1 ? '' : 's'}` : 'not researched yet'),
     news && (news.scouted ? `${news.n} linked news` : 'news not searched yet'),
-  ].filter(Boolean)
+  ].filter(Boolean).join(' · ')
   const live = research?.nNegativeLive ?? 0
   return (
     <>
@@ -644,12 +644,12 @@ function NewsChips({ research, news }: { research: ResearchBrief | null | undefi
         <span className="inline-flex items-center gap-1.5 rounded-full bg-critical/10 px-2.5 py-1 text-xs font-medium text-critical ring-1 ring-inset ring-critical/20"
           title="negative web research facts, not resolved, dated within 4 quarters">
           <Newspaper className="size-3.5" strokeWidth={2} />
-          {live} live blocker{live === 1 ? '' : 's'} in the news
+          {live} live blocker{live === 1 ? '' : 's'} in web research
         </span>
       )}
       <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
         <Newspaper className="size-3.5" strokeWidth={2} />
-        {parts.join(' · ')}
+        {text.charAt(0).toUpperCase() + text.slice(1)}
       </span>
     </>
   )
