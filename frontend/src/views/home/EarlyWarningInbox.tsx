@@ -9,6 +9,7 @@ import { useAckAlert, useAlerts } from '@/lib/queries'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
+import { scrubModelNumbers } from '@/lib/outlook'
 import { formatDate, formatDateTime } from '@/lib/formatters'
 import type { AlertKind } from '@/contracts/portfolio'
 
@@ -30,6 +31,8 @@ export function EarlyWarningInbox() {
   const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })
   const ack = useAckAlert()
   const canAck = can(role, 'canAck')
+  // stored alerts carry the watcher's probability in their detail: only the developer reads it
+  const detailOf = (d: string | null) => (d && !can(role, 'canSeeNumbers') ? scrubModelNumbers(d) : d)
   const kinds = KINDS.filter((k) => k !== 'pipeline_error' || can(role, 'canSeePipelineErrors'))
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
 
@@ -79,13 +82,13 @@ export function EarlyWarningInbox() {
                 <div className="truncate text-sm font-medium text-fg-base">{a.title ?? ALERT_KIND_LABEL[a.kind]}</div>
                 <div
                   className="truncate text-xs text-fg-dimmed"
-                  title={[a.detail, a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
+                  title={[detailOf(a.detail), a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
                 >
                   {ALERT_KIND_LABEL[a.kind] ?? a.kind}
                   {a.projectKey && <> · {a.projectKey}</>}
                   {' · '}
                   {formatDateTime(a.createdAt)}
-                  {a.detail && <> · {a.detail}</>}
+                  {detailOf(a.detail) && <> · {detailOf(a.detail)}</>}
                 </div>
               </button>
               {canAck && (

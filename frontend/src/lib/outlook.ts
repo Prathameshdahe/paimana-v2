@@ -151,3 +151,15 @@ export const TIER_PLAIN: Record<string, string> = {
 export function likelyOrWorse(word: OutlookWord | null | undefined): boolean {
   return word === 'likely' || word === 'very likely'
 }
+
+/**
+ * An alert's or a stored note's text without the model numbers the watcher writes into it ("; P(date push or cost
+ * revision, 2q) = 0.81", "(P = 0.81)"): stored alerts keep them, so the four roles' lists read the text through this.
+ */
+export function scrubModelNumbers(text: string): string {
+  return text
+    .replace(/;?\s*P\([^)]*\)\s*=\s*\d+(?:\.\d+)?%?/g, '')
+    .replace(/\s*\(P\s*=\s*\d+(?:\.\d+)?%?\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
