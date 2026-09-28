@@ -195,17 +195,30 @@ def test_the_stream_is_live_and_a_hang_up_frees_the_llm(tmp_path, monkeypatch):
         assert seen[-1][2] - first_card > 1.0  # the card was sent while the answer was still being written
         assert seen[-1][1]["llm"] == "ok" and seen[-1][1]["validated"]
 
-        # hang up in the middle of the answer: the agent stops and the LLM gate is free again
+        # hang up in the middle of a long answer (1000 tokens, 50 s): the agent stops asking the model for tokens
+        # and the LLM gate is free again within about 2 s, long before the stream would have ended by itself
+        produced = []
+
+        def endless(messages, **kw):
+            for i in range(1000):
+                time.sleep(0.05)
+                produced.append(i)
+                yield "word "
+        monkeypatch.setattr(client, "chat_stream", endless)
         with httpx.stream("POST", url, json=body(), timeout=30) as r:
             for chunk in r.iter_text():
                 if "event: token" in chunk:
                     break
-        deadline, freed = time.time() + 10, False
-        while not freed and time.time() < deadline:
+        hung_up = time.monotonic()
+        freed = False
+        while not freed and time.monotonic() - hung_up < 2.5:
             freed = not client.chat_active() and client.LLM_GATE.acquire(blocking=False)
             time.sleep(0.05)
-        assert freed and not client.chat_active()
+        assert freed and not client.chat_active(), f"gate still held {time.monotonic() - hung_up:.1f} s after"
         client.LLM_GATE.release()
+        n = len(produced)
+        time.sleep(0.5)
+        assert len(produced) == n < 100  # the model's stream was closed, not left running to its end
     finally:
         server.should_exit = True
         thread.join(10)
