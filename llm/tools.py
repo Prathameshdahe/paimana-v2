@@ -10,7 +10,11 @@ scope argument, every project row is cut to viewer.scope, and a project outside 
 like an unknown key, so an answer never reveals that it exists. Who counts as an official follows the routes:
 viewer.can('insights'); anyone else gets the public outputs, built from serving.public_project / public_page /
 public_external / public_research / public_research_summary (no drivers, intervals, rank, evidence lines, PARIVESH
-details, provenance, match reasons or agent headlines).
+details, provenance, match reasons or agent headlines). The numbers policy (docs/ACCESS_CONTROL.md) is on top: only a
+viewer with viewer.can('numbers') (the developer) reads the model's numbers; everyone else reads every project
+through serving.plain_* (no probability, quantile, SHAP value, rank, agency statistic or composite score), and the
+facts and cards carry the outlook in words instead ("outlook": {delay, cost_rise, likely_slip, over}, the drivers
+as drivers_plain), so the writer has no model number to repeat.
 
 A ToolResult has
   summary  one plain line with only numbers from its facts (the progress list and the deterministic answer),
@@ -195,6 +199,17 @@ def _official(viewer) -> bool:
     return viewer.can("insights")
 
 
+def _numbers(viewer) -> bool:
+    """Whether the viewer reads the model's own numbers (module docstring: the numbers policy)."""
+    return viewer.can("numbers")
+
+
+def _outlook_fact(o: dict | None) -> dict | None:
+    """The outlook as facts the writer may repeat: words only (serving.outlook)."""
+    return o and _compact({"delay": o["delay"], "cost_rise": o["cost"], "likely_slip": o["slip"],
+                           "over": f"the {o['horizon']}"}) or None
+
+
 def _src(kind: str, title: str, source: str, url: str | None = None, when=None, key: str | None = None,
          precision: str | None = None) -> dict:
     """A source for the sources card; its date is ISO at the precision the source gives (precision 'year' 'YYYY',
@@ -337,17 +352,19 @@ class BottleneckArgs(Args):
 
 # ------------------------------------------------------------------ shared builders
 
-def _row_item(r: dict) -> dict:
-    """A list row (serving ROW_SQL) as a 'projects' card item."""
+def _row_item(viewer, r: dict) -> dict:
+    """A list row (serving ROW_SQL) as a 'projects' card item; pAny2q only for a viewer with `numbers`."""
     return {"key": r["key"], "name": r["name"], "sector": r["sector"], "state": r["state"],
-            "ministry": r["ministry"], "agency": r["agency"], "tier": r["tier"], "pAny2q": r["p_any_2q"],
+            "ministry": r["ministry"], "agency": r["agency"], "tier": r["tier"],
+            "pAny2q": r["p_any_2q"] if _numbers(viewer) else None, "outlook": r.get("outlook"),
             "anticipatedCostCr": r["anticipated_cost_cr"], "physicalProgressPct": r["physical_progress_pct"],
             "anticipatedCompletion": _iso(r["anticipated_completion"]), "flags": r["flags"] or []}
 
 
-def _row_fact(r: dict) -> dict:
+def _row_fact(viewer, r: dict) -> dict:
     return _compact({"key": r["key"], "name": _short(r["name"]), "state": r["state"], "tier": r["tier"],
-                     "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"]), "cost_cr": _r(r["anticipated_cost_cr"]),
+                     "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"]) if _numbers(viewer) else None,
+                     "outlook": _outlook_fact(r.get("outlook")), "cost_cr": _r(r["anticipated_cost_cr"]),
                      "progress_pct": _r(r["physical_progress_pct"]),
                      "completion": _month(r["anticipated_completion"]),
                      "flags": [FLAG_WORDS.get(f, f) for f in r["flags"] or []]})
@@ -355,17 +372,21 @@ def _row_fact(r: dict) -> dict:
 
 def _rows(viewer, **kw) -> dict:
     page = serving.projects(**kw, scope=viewer.scope)
-    return page if _official(viewer) else serving.public_page(page)
+    page = page if _official(viewer) else serving.public_page(page)
+    return page if _numbers(viewer) else serving.plain_page(page)
 
 
 def _bundle(viewer, key: str) -> tuple[dict, dict | None]:
-    """(the project page, redacted for the public; its current list row or None for a past project)."""
+    """(the project page, redacted for the public and without the model's numbers for anyone without `numbers`;
+    its current list row or None for a past project)."""
     d = serving.project(key)
     rows = serving.rows_for_keys((key,))
     row = rows[0] if rows else None
     if not _official(viewer):
         d = serving.public_project(d)
         row = row and serving.public_page({"items": [row]})["items"][0]
+    if not _numbers(viewer):
+        d, row = serving.plain_project(d), row and serving.plain_row(row)
     return d, row
 
 
@@ -377,7 +398,7 @@ def _project_card(d: dict, row: dict | None) -> dict:
     sc, latest = d["scores"] or {}, d["latest"] or {}
     return {"type": "project", "key": d["key"], "name": _name(d, row), "tier": sc.get("tier"),
             "pAny2q": sc.get("p_any_2q"), "pDatePush2q": sc.get("p_date_push_2q"),
-            "pCostRev2q": sc.get("p_cost_rev_2q"), "monthsP50": sc.get("months_p50"),
+            "pCostRev2q": sc.get("p_cost_rev_2q"), "monthsP50": sc.get("months_p50"), "outlook": sc.get("outlook"),
             "progressPct": row["physical_progress_pct"] if row else latest.get("physical_progress_pct"),
             "costCr": row["anticipated_cost_cr"] if row else latest.get("anticipated_cost_cr"),
             "anticipatedCompletion": _iso(row["anticipated_completion"] if row
@@ -386,11 +407,13 @@ def _project_card(d: dict, row: dict | None) -> dict:
 
 
 def _project_facts(viewer, d: dict, row: dict | None, brief: bool = False) -> dict:
-    """The facts of one project page; brief: the compare subset."""
+    """The facts of one project page (from _bundle: the model's numbers are None without `numbers`, and _compact
+    drops them); brief: the compare subset."""
     sc, latest, m = d["scores"] or {}, d["latest"] or {}, d["master"] or {}
     tier = sc.get("tier")
     f = {"key": d["key"], "name": _short(_name(d, row), 25), "state": m.get("state") or latest.get("state"),
          "tier": tier, "slip_chance_within_2_quarters_pct": _pct(sc.get("p_any_2q")),
+         "outlook": _outlook_fact(sc.get("outlook")),
          "progress_pct": _r(latest.get("physical_progress_pct")),
          "anticipated_cost_cr": _r(latest.get("anticipated_cost_cr")),
          "anticipated_completion": _month(latest.get("anticipated_completion")),
@@ -398,7 +421,7 @@ def _project_facts(viewer, d: dict, row: dict | None, brief: bool = False) -> di
     if brief:
         return _compact(f)
     f.update({"sector": m.get("sector"), "ministry": m.get("ministry"), "agency": m.get("agency"),
-              "horizon_quarters": HORIZONS, "as_of": _month(d["provenance"]["asof"]),
+              "horizon_quarters": HORIZONS if _numbers(viewer) else None, "as_of": _month(d["provenance"]["asof"]),
               "latest_report": _month(latest.get("period")), "stalled": bool(sc.get("stagnation_override")) or None,
               "date_push_chance_within_2_quarters_pct": _pct(sc.get("p_date_push_2q")),
               "cost_revision_chance_within_2_quarters_pct": _pct(sc.get("p_cost_rev_2q")),
@@ -428,12 +451,19 @@ def _project_source(d: dict, row: dict | None, what: str = "PAIMANA project page
     return _src("project", _short(_name(d, row), 20), what, when=d["provenance"]["asof"], key=d["key"])
 
 
-def _tier_words(tier: str | None, pct: int | None) -> str:
+def _tier_words(tier: str | None, pct: int | None, delay: str | None = None) -> str:
+    """The tier with the chance of a slip (pct, for a viewer with `numbers`) or the delay outlook's word."""
     if tier is None:
         return "is not in the current scored portfolio"
-    if tier == serving.WATCH or pct is None:
-        return f"is in the {tier} tier"
-    return f"is in the {tier} tier, with a {pct}% chance of a schedule or cost slip within 2 quarters"
+    if tier != serving.WATCH and pct is not None:
+        return f"is in the {tier} tier, with a {pct}% chance of a schedule or cost slip within 2 quarters"
+    if tier != serving.WATCH and delay:
+        return f"is in the {tier} tier; a delay is {delay} within the {serving.HORIZON}"
+    return f"is in the {tier} tier"
+
+
+def _delay(d: dict) -> str | None:
+    return ((d.get("scores") or {}).get("outlook") or {}).get("delay")
 
 
 def _filters_words(f: dict) -> str:
@@ -460,7 +490,7 @@ def search_projects(viewer, q=None, tier=None, sector=None, state=None, ministry
     items, total, what = page["items"], page["total"], _filters_words(filters)
     title = f"Projects{': ' + what if what else ''}"
     facts = {"filters": filters, "total_matching": total, "shown": len(items), "sorted_by": sort,
-             "projects": [_row_fact(r) for r in items[:TOP_FACTS]]}
+             "projects": [_row_fact(viewer, r) for r in items[:TOP_FACTS]]}
     if not items:
         return ToolResult(summary=f"No current project matches ({what or 'no filter'}).", facts=facts,
                           sources=[_src("portfolio", title, "PAIMANA project list", when=serving.state()["asof"])],
@@ -471,7 +501,7 @@ def search_projects(viewer, q=None, tier=None, sector=None, state=None, ministry
                f"{first['tier'] or 'no tier'}).")
     return ToolResult(summary=summary, facts=facts,
                       cards=[{"type": "projects", "title": title, "total": total,
-                              "items": [_row_item(r) for r in items]}],
+                              "items": [_row_item(viewer, r) for r in items]}],
                       sources=[_src("portfolio", title, "PAIMANA project list", when=serving.state()["asof"])],
                       keys=[r["key"] for r in items])
 
@@ -531,7 +561,7 @@ def get_project(viewer, key) -> ToolResult:
     facts = _project_facts(viewer, d, row)
     progress, when = facts.get("progress_pct"), facts.get("anticipated_completion")
     pct = facts.get("slip_chance_within_2_quarters_pct")
-    summary = (f"{_short(_name(d, row), 12)} ({k}) {_tier_words(facts.get('tier'), pct)}"
+    summary = (f"{_short(_name(d, row), 12)} ({k}) {_tier_words(facts.get('tier'), pct, _delay(d))}"
                + (f"; progress {progress:g}%" if progress is not None else "")
                + (f", anticipated completion {when}" if when else "") + ".")
     return ToolResult(summary=summary, facts=facts, cards=[_project_card(d, row)],
@@ -587,14 +617,15 @@ def project_history(viewer, key) -> ToolResult:
              "changes": _changes(window)}
     sources = [_project_source(d, row, "PAIMANA progress history (project reports)")]
     if _official(viewer):
-        alerts = [a for a in db.alerts(keys={k}, size=50)["items"] if a["kind"] in ("tier_up", "tier_down")][:5]
+        alerts = [a if _numbers(viewer) else serving.plain_alert(a)   # a tier alert prints the chance of a slip
+                  for a in db.alerts(keys={k}, size=50)["items"] if a["kind"] in ("tier_up", "tier_down")][:5]
         facts["tier_alerts"] = [{"date": _month(a["created_at"]), "title": quote(a["title"], 120),
                                  "detail": quote(a["detail"], 160)} for a in alerts]
         log = _chat_prediction_log(k)
-        if len(log) > 1:
+        if len(log) > 1:   # the tier history; the logged chance of a slip only with `numbers`
             facts["predictions"] = [_compact({"as_of": _month(r["asof"]), "tier": r["tier"],
-                                              "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"])})
-                                    for r in log[-6:]]
+                                              "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"])
+                                              if _numbers(viewer) else None}) for r in log[-6:]]
     if not pts:
         return ToolResult(summary=f"No report history for {_short(name, 12)} ({k}).", facts=_compact(facts),
                           sources=sources, keys=[k], found=False)
@@ -623,7 +654,8 @@ def compare_projects(viewer, keys) -> ToolResult:
         cards.append(_project_card(d, row))
         facts.append({**_project_facts(viewer, d, row, brief=True), "cite": len(sources) + 1})
         sources.append(_project_source(d, row))
-    out = _compact({"horizon_quarters": HORIZONS, "projects": facts, "not_found": missing})
+    out = _compact({"horizon_quarters": HORIZONS if _numbers(viewer) else None, "projects": facts,
+                    "not_found": missing})
     if not cards:
         return ToolResult(summary="None of those projects was found.", facts=out, found=False)
     parts = [f"{_short(c['name'], 8)} ({c['key']}): {c['tier'] or 'no tier'}" for c in cards]
@@ -732,7 +764,7 @@ def _research_all(viewer) -> ToolResult:
     if keys:
         rows = serving.rows_for_keys(tuple(dict.fromkeys(keys))[:20])
         cards.append({"type": "projects", "title": "Projects with recent live blockers in web research",
-                      "total": len(rows), "items": [_row_item(x) for x in rows]})
+                      "total": len(rows), "items": [_row_item(viewer, x) for x in rows]})
     summary = (f"Web research covers {_plural(cov['n_searched'], 'searched project')} of {cov['n_current']}; "
                f"{_plural(cov['n_negative_live'], 'live blocker')} on "
                f"{_plural(cov['n_projects_negative_live'], 'project')}.")
@@ -844,9 +876,9 @@ def _external_all(viewer, factor=None, state=None, limit=5) -> ToolResult:
         label = labels.FACTOR_LABELS[factor]
         where = f" in {state}" if state else ""
         cards.insert(0, {"type": "projects", "title": f"Projects flagged for {label.lower()}{where}", "total": total,
-                         "items": [_row_item(r) for r in items]})
+                         "items": [_row_item(viewer, r) for r in items]})
         facts["flagged_projects"] = {"factor": label, "state": state, "total": total,
-                                     "riskiest": [_row_fact(r) for r in items[:TOP_FACTS]]}
+                                     "riskiest": [_row_fact(viewer, r) for r in items[:TOP_FACTS]]}
         keys = [r["key"] for r in items]
         if _official(viewer) and items:
             dim = serving.EXT_FACTORS[factor][1]
@@ -855,7 +887,8 @@ def _external_all(viewer, factor=None, state=None, limit=5) -> ToolResult:
                 AND project_key IN ({','.join('?' * len(keys))})""", [dim, *keys])} if dim else {}
             for f in facts["flagged_projects"]["riskiest"]:
                 if ev.get(f["key"]):
-                    f["evidence"] = quote(ev[f["key"]], 200)
+                    f["evidence"] = quote(ev[f["key"]] if _numbers(viewer) else serving.plain_text(ev[f["key"]], dim),
+                                          200)
         summary = (f"{_plural(total, 'current project')} flagged for {label.lower()}{where}"
                    + (f"; the riskiest is {_short(items[0]['name'], 10)} ({items[0]['key']})" if items else "") + ".")
     else:
@@ -910,49 +943,60 @@ def _value(v):
       "why a project has its tier: the five inputs that moved its score most (plain labels) and its flagged "
       "checks with their evidence (key)", KeyArgs, public=False, feature="insights")
 def explain_prediction(viewer, key) -> ToolResult:
+    """The drivers and the flagged checks. With `numbers`: each driver's value and SHAP contribution (card
+    'drivers') and the chance of a slip; without: the drivers in words (card 'driversPlain', facts 'drivers' with
+    their effect and strength), the outlook, and the checks' evidence in words (_bundle)."""
     k = _resolve(viewer, key)
     if k is None:
         return _not_found(key)
     d, row = _bundle(viewer, k)
-    name, sc = _name(d, row), d["scores"] or {}
-    shap = sc.get("shap_top5") or []
+    name, sc, numbers = _name(d, row), d["scores"] or {}, _numbers(viewer)
+    shap, plain = sc.get("shap_top5") or [], sc.get("drivers_plain") or []
     flagged = [r for r in d["risk_profile"] if r["state"] == "flagged"]
-    card = {"type": "explain", "key": k, "name": name, "tier": sc.get("tier"),
+    card = {"type": "explain", "key": k, "name": name, "tier": sc.get("tier"), "outlook": sc.get("outlook"),
             "drivers": [{"feature": x["feature"], "label": labels.feature_label(x["feature"]), "value": x["value"],
                          "contribution": x["contribution"]} for x in shap],
+            "driversPlain": plain,
             "flagged": [{"dimension": r["dimension"], "label": labels.dimension_label(r["dimension"]),
                          "evidence": r["evidence"]} for r in flagged]}
+    drivers = ([{"input": labels.feature_label(x["feature"]), "value": _value(x["value"]),
+                 "effect": labels.direction(x["contribution"])} for x in shap] if numbers else
+               [{"input": x["label"], "effect": f"{x['direction']} the risk", "strength": x["strength"]}
+                for x in plain])
     facts = _compact({
         "key": k, "name": _short(name, 25), "tier": sc.get("tier"),
         "slip_chance_within_2_quarters_pct": _pct(sc.get("p_any_2q")),
-        "horizon_quarters": HORIZONS,
-        "drivers": [{"input": labels.feature_label(x["feature"]), "value": _value(x["value"]),
-                     "effect": labels.direction(x["contribution"])} for x in shap],
+        "outlook": _outlook_fact(sc.get("outlook")),
+        "horizon_quarters": HORIZONS if numbers else None,
+        "drivers": drivers,
         "flagged_checks": [_compact({"check": labels.dimension_label(r["dimension"]),
                                      "meaning": serving.PLAIN_RISK.get(r["dimension"]),
                                      "evidence": quote(r["evidence"], 200)}) for r in flagged],
         "note": ("The drivers are the five inputs that moved this project's score most; they explain its rank "
-                 "among projects, not the cause of a delay." if shap else
+                 "among projects, not the cause of a delay." if drivers else
                  "No drivers: the project has no date-based score (Watch tier or not scored).")})
-    up = [labels.feature_label(x["feature"]) for x in shap if x["contribution"] > 0][:3]
-    summary = (f"{_short(name, 12)} ({k}) {_tier_words(sc.get('tier'), _pct(sc.get('p_any_2q')))}"
+    up = ([labels.feature_label(x["feature"]) for x in shap if x["contribution"] > 0] if numbers else
+          [x["label"] for x in plain if x["direction"] == "raises"])[:3]
+    summary = (f"{_short(name, 12)} ({k}) {_tier_words(sc.get('tier'), _pct(sc.get('p_any_2q')), _delay(d))}"
                + (f"; the inputs raising its risk most: {', '.join(up)}" if up else "")
                + (f"; flagged checks: {', '.join(labels.dimension_label(r['dimension']) for r in flagged)}"
                   if flagged else "") + ".")
     asof = d["provenance"]["asof"]
     return ToolResult(summary=summary, facts=facts, cards=[card], keys=[k], sources=[
-        _src("model", f"Risk drivers of {_short(name, 12)}", "PAIMANA slip model (SHAP)", when=asof, key=k),
+        _src("model", f"Risk drivers of {_short(name, 12)}",
+             "PAIMANA slip model (SHAP)" if numbers else "PAIMANA risk model", when=asof, key=k),
         _src("checklist", f"Risk checklist of {_short(name, 12)}", "PAIMANA risk checklist", when=asof, key=k)])
 
 
-def _cached_opinion(key: str) -> dict | None:
-    """llm.second_opinion.cached(key) when that module exists (unit B4), else None; never generates."""
+def _cached_opinion(key: str, numbers: bool = False) -> dict | None:
+    """llm.second_opinion.cached(key, numbers) (its view: the numbers policy) when that module exists (unit B4),
+    else None; never generates."""
     try:
         module = importlib.import_module("llm.second_opinion")
     except ImportError:
         return None
     fn = getattr(module, "cached", None)
-    return fn(key) if fn else None
+    return fn(key, numbers=numbers) if fn else None
 
 
 def _opinion_fields(o: dict) -> dict:
@@ -975,7 +1019,7 @@ def second_opinion(viewer, key) -> ToolResult:
         return _not_found(key)
     d, row = _bundle(viewer, k)
     name = _name(d, row)
-    o = _cached_opinion(k)
+    o = _cached_opinion(k, _numbers(viewer))
     if not o or o.get("status") in ("none", "not_scored", "rejected", "llm_unavailable"):
         return ToolResult(summary=f"No AI second opinion yet for {_short(name, 12)} ({k}).",
                           facts={"key": k, "name": _short(name, 25), "second_opinion": "none generated yet"},
@@ -1014,14 +1058,15 @@ def _agency_tier_counts(tiers: dict, p: dict) -> tuple[int | None, int | None]:
     return (crit, high) if n == p["n_open"] else (None, None)
 
 
-def _agency_fact(p: dict) -> dict:
+def _agency_fact(p: dict, numbers: bool) -> dict:
+    """An agency's record: its schedule and cost words for everyone, its overrun statistics only with `numbers`."""
+    stats = {"schedule_overrun_pct": _pct(p["schedule_bias"]), "cost_overrun_pct": _pct(p["cost_bias"]),
+             "sector_schedule_overrun_pct": _pct(p["sector_schedule_bias"]), "recent_trend_pct": _pct(p["trend"]),
+             "shrunk_toward_sector": p["shrunk"] or None} if numbers else {}
     return _compact({"agency": p["agency"], "ministry": p["ministry"], "sector": p["sector"],
                      "projects_with_history": p["n_projects"], "open_projects": p["n_open"],
-                     "capital_cr": _r(p["capital_cr"], 0), "schedule_overrun_pct": _pct(p["schedule_bias"]),
-                     "cost_overrun_pct": _pct(p["cost_bias"]),
-                     "sector_schedule_overrun_pct": _pct(p["sector_schedule_bias"]),
-                     "recent_trend_pct": _pct(p["trend"]), "shrunk_toward_sector": p["shrunk"] or None,
-                     "hidden_small_sample": p["hidden"] or None})
+                     "capital_cr": _r(p["capital_cr"], 0), "schedule": p["schedule_word"], "cost": p["cost_word"],
+                     **stats, "hidden_small_sample": p["hidden"] or None})
 
 
 @tool("agency_scorecard", "Reading the agency matrix",
@@ -1041,25 +1086,30 @@ def agency_scorecard(viewer, agency=None, sort="capital", limit=8) -> ToolResult
     if not chosen:
         return ToolResult(summary=f"No agency record for {quote(agency, 60)}.", facts={"agency": quote(agency, 60)},
                           found=False)
-    tiers = _chat_agency_tiers(viewer.scope)
+    tiers, numbers = _chat_agency_tiers(viewer.scope), _numbers(viewer)
     rows = [{"name": p["agency"], "n": p["n_open"], "capitalCr": p["capital_cr"]}
             | dict(zip(("nCritical", "nHigh"), _agency_tier_counts(tiers, p))) for p in chosen]
-    facts = {"shown": len(chosen), "agencies": [_agency_fact(p) | _compact({"critical_open": r["nCritical"],
-                                                                             "high_open": r["nHigh"]})
+    facts = {"shown": len(chosen), "agencies": [_agency_fact(p, numbers) | _compact({"critical_open": r["nCritical"],
+                                                                                      "high_open": r["nHigh"]})
                                                 for p, r in zip(chosen, rows)],
-             "note": "Schedule overrun: how much longer than planned the agency's median project runs (0% is on "
-                     "time); cost overrun likewise; agencies with few projects are shrunk toward their sector. "
-                     "recent_trend_pct: the median schedule overrun of projects sanctioned in the last 3 years "
-                     "minus that of older ones, in points; recent projects have had less time to slip, so a "
-                     "negative trend is partly that."}
+             "note": "Schedule: how the agency's typical project compares with its planned time (usually later, about "
+                     "on time or usually earlier); cost likewise; agencies with few projects are pulled toward their "
+                     "sector." + (" Schedule overrun: how much longer than planned the agency's median project runs "
+                                  "(0% is on time); cost overrun likewise. recent_trend_pct: the median schedule "
+                                  "overrun of projects sanctioned in the last 3 years minus that of older ones, in "
+                                  "points; recent projects have had less time to slip, so a negative trend is partly "
+                                  "that." if numbers else "")}
     if any(r["nCritical"] is None for r in rows):
         facts["tier_counts"] = ("critical_open and high_open are left out for an agency with open projects outside "
                                 "your scope: they are unknown here, not zero.")
     p = chosen[0]
-    if agency:
+    if agency and numbers:
         summary = f"{p['agency']}: {_plural(p['n_open'], 'open project')}" + "".join(
             f", {what} {_pct(p[col])}%" for col, what in (("schedule_bias", "median schedule overrun"),
                                                           ("cost_bias", "cost overrun")) if p[col] is not None) + "."
+    elif agency:
+        summary = (f"{p['agency']}: {_plural(p['n_open'], 'open project')}; schedule: {p['schedule_word']}; cost: "
+                   f"{p['cost_word']}.")
     else:
         order = {"capital": "largest agency", "schedule_overrun": "agency", "cost_overrun": "agency"}[sort]
         by = {"capital": "by capital", "schedule_overrun": "with the largest schedule overrun",

@@ -9,6 +9,12 @@ frontend/src/lib/riskPalette.ts; SOURCE_LABELS mirrors SOURCE_LABEL in views/pro
 `source` ml/risk_profile.py writes: the frontend map must hold the same keys and words, so a row never shows its raw
 token). The maps are kept by hand on both sides; tests/test_labels.py checks the keys match. The chat (llm/tools.py)
 uses them so a driver or a flagged check reads the same in an answer as on the page.
+
+DRIVER_LABELS are the plainer words of the numbers policy (docs/ACCESS_CONTROL.md, the `numbers` feature): what
+serving.drivers_plain() calls each driver for a viewer who reads words, not model numbers. They hold no digit, unit
+or statistic (no '%', 'pp', 'log', '2-quarter'), so a brief or a chat answer built from them cannot carry a number
+from a label; the backend sends them, so the frontend keeps no copy. driver_label() falls back to feature_label()
+with the units and digits taken out.
 """
 import re
 
@@ -66,6 +72,60 @@ FEATURE_LABELS = {
 }
 _EXT = re.compile(r"^ext_(open|ever)_(.+)$")
 
+# gold feature name -> the words of drivers_plain (module docstring): no digits, units or statistics
+DRIVER_LABELS = {
+    "months_to_anticipated_completion": "Time left to the expected completion",
+    "months_to_scheduled_completion": "Time left to the original deadline",
+    "months_since_last_obs": "Time since the last progress report",
+    "months_since_last_revision": "Time since the last revision",
+    "elapsed_ratio": "Share of the planned time used up",
+    "physical_progress_pct": "Work done so far",
+    "expected_progress_scurve": "Where similar projects usually are at this stage",
+    "scurve_deviation": "Progress compared with similar projects",
+    "progress_velocity_2q": "Pace of work in the last half year",
+    "progress_velocity_4q": "Pace of work in the last year",
+    "velocity_vs_sector_median": "Pace of work compared with the sector",
+    "acceleration": "Work speeding up or slowing down",
+    "stagnation_quarters": "Quarters with no progress",
+    "spend_velocity_2q": "Pace of spending in the last half year",
+    "expenditure_ratio": "Share of the cost already spent",
+    "burn_gap": "Spending compared with work done",
+    "spi": "Work done against the schedule",
+    "cost_variation_pct": "Cost change so far",
+    "slip_to_date_months": "Delay so far",
+    "revisions_so_far": "Earlier revisions of cost or date",
+    "slipped_last_period": "A slip in the last report",
+    "log_cost": "Project size",
+    "cost_band": "Project size",
+    "agency": "Implementing agency",
+    "agency_n": "Size of the agency's portfolio",
+    "agency_slip_rate": "The agency's record of delays",
+    "agency_cost_optimism": "The agency's record on cost",
+    "agency_slip_4q": "The agency's recent delays",
+    "sector_slip_4q": "Recent delays in the sector",
+    "ministry": "Ministry",
+    "sector": "Sector",
+    "state": "State",
+    "sector_actual_target_ratio": "Sector output against its target",
+    "sector_yoy_growth": "Sector output growth",
+    "sector_trend_4q": "Sector output trend",
+    "obs_count_in_quarter": "Reports in the quarter",
+    "dq_score": "Quality of the reported figures",
+    "period_type": "Report type",
+    "ext_open_total": "Open issues in the report remarks",
+    "ext_remark_quarters": "Quarters with written remarks",
+    "ext_months_since_first_land": "Time since a land issue was first reported",
+    "ext_months_since_first_forest_env": "Time since a forest issue was first reported",
+    "fc_expected_complexity": "Expected difficulty of the forest clearance",
+    "fc_worst_complexity": "Worst-case difficulty of the forest clearance",
+    "fc_max_authority_level": "Level that must approve the forest clearance",
+    "la_linked": "Land records linked",
+    "la_complexity_max_by_t": "Difficulty of the land acquisition",
+    "la_parcels_by_t": "Land parcels notified",
+    "la_notif_span_by_t": "Time over which land was notified",
+}
+_UNITS = re.compile(r"\([^)]*\)|%|\S*\d\S*")   # a unit in brackets, a percent sign, a token with a digit
+
 # the 13 risk-profile dimensions (ml/risk_profile.py DIMENSIONS), as the checklist on the project page names them
 DIMENSION_LABELS = {
     "schedule_slip": "Schedule slip",
@@ -117,6 +177,19 @@ def feature_label(feature: str) -> str:
     if m:
         return f"Open {words} issue in remarks" if m[1] == "open" else f"{words} issue ever reported"
     return words[:1].upper() + words[1:]
+
+
+def driver_label(feature: str) -> str:
+    """The drivers_plain words of a gold feature name (DRIVER_LABELS; module docstring): never a digit or a unit."""
+    if feature in DRIVER_LABELS:
+        return DRIVER_LABELS[feature]
+    m = _EXT.match(feature)
+    if m:
+        words = _UNITS.sub(" ", m[2].replace("_", " "))
+        words = " ".join(words.split()) or "an"
+        return (f"Open {words} issue in the report remarks" if m[1] == "open"
+                else f"A {words} issue reported before")
+    return " ".join(_UNITS.sub(" ", feature_label(feature)).split()).rstrip(",;:") or "Another input"
 
 
 def dimension_label(dimension: str) -> str:

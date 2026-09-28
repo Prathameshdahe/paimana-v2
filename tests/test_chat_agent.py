@@ -106,7 +106,7 @@ def test_a_confident_question_streams_cards_then_a_checked_answer(monkeypatch):
     assert [s["n"] for s in sources] == list(range(1, len(sources) + 1))
     assert fake.chats == []  # the router was sure: no planner call
     system = fake.streams[-1][0]["content"]
-    assert system == agent.SYSTEM_PUBLIC
+    assert system == agent.SYSTEM_PUBLIC + agent.NO_NUMBERS   # the public reads no model number either
     for word in ("model", "SHAP", "feature", "driver", "log-odds"):
         assert word.lower() not in system.lower()
 

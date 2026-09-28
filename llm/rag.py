@@ -9,10 +9,13 @@ goes through _quote before it is spliced into a chunk: one line, no tags, code f
 QUOTE_MAX characters; hits of the kinds that carry it have trusted False. Kinds, and who may read them:
   help      docs/HELP.md, by section ............................................................. public
   doc       the maintained docs in DOCS (not docs/PROJECT_DOCUMENTATION.md, which is stale, nor the mock-data notes)
-            .................................................................................... official
+            .................................................................................... official;
+            those that report the model's evaluation statistics (NUMBERS_DOCS: PR-AUC, calibration, lifts, CIs)
+            ..................................... numbers (the developer only: the numbers policy)
   project   one card per current project from the public project page's facts only: name, ministry, agency, sector,
-            state, cost, progress, dates, tier, the chance of a slip as a percent, top risks in plain words, flags
-            (no drivers, intervals, rank or evidence lines) ...................................... public
+            state, cost, progress, dates, tier, the outlook in words (serving.outlook: no model number, the numbers
+            policy of docs/ACCESS_CONTROL.md), top risks in plain words, flags (no drivers, intervals, rank or
+            evidence lines) ....................................................................... public
   event     one per report-remark event with its quote; officials also get its document and page ......... public
   research  web research facts (gold/research_facts.parquet from the sweep, the agent's SQLite research_facts,
             one per project and URL; the agent's raw feed headline is left out, as serving.public_facts drops it)
@@ -31,7 +34,8 @@ state or a sector finds them.
 Ranking: TF-IDF (word 1-2 grams, sublinear tf, English stop words) over title and text; the same over the titles of
 project cards, help, docs and glossary alone (TITLE_RANK: a name finds its project card before the shorter chunks
 that also name it); and nomic embeddings ('search_document: ' before a chunk, 'search_query: ' before a question).
-Each ranks only the chunks the viewer may read: visibility (the public reads public chunks), scope (Viewer.keys, for
+Each ranks only the chunks the viewer may read: visibility (the public reads public chunks, only a viewer with the
+`numbers` feature reads 'numbers' chunks), scope (Viewer.keys, for
 the chunk's project and the projects it mentions), kinds and project are filtered before ranking, so a hidden chunk
 never takes a place. The rankings (top POOL each) are fused by reciprocal rank, score = sum of 1 / (RRF_K + rank).
 Without embeddings (still computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-IDF ranks
@@ -85,6 +89,10 @@ DOCS = ("README.md", "docs/ACCESS_CONTROL.md", "docs/AI_ASSISTANT.md", "docs/EXT
         "docs/EXTERNAL_DATA_CROSSCHECK.md", "docs/IMPLEMENTATION_GUIDE_v2.md", "dataset/raw/external/README.md",
         "docs/RESEARCH_SWEEP_2026-09.md", "docs/MODEL_UPGRADES_2026-09.md", "docs/SECOND_OPINION.md",
         "dataset/raw/external/research/README.md")
+# docs that report the model's evaluation statistics: visibility 'numbers', read only by a viewer with the `numbers`
+# feature (docs/ACCESS_CONTROL.md); the other docs stay 'official'
+NUMBERS_DOCS = {"README.md", "docs/IMPLEMENTATION_GUIDE_v2.md", "docs/EXTERNAL_RESEARCH_2026-09.md",
+                "docs/EXTERNAL_DATA_CROSSCHECK.md", "docs/MODEL_UPGRADES_2026-09.md"}
 FEATURE_LABELS = "frontend/src/lib/featureLabels.ts"
 RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
 KINDS = ("help", "doc", "project", "event", "research", "news", "external", "glossary")
@@ -353,7 +361,8 @@ def doc_chunks() -> list[dict]:
             continue
         title, parts = md_chunks(p.read_text(encoding="utf-8"))
         name = title or rel
-        out += [_chunk(f"doc:{rel}:{i}", "doc", "official", f"{name}: {t}" if t else name, text, rel)
+        vis = "numbers" if rel in NUMBERS_DOCS else "official"
+        out += [_chunk(f"doc:{rel}:{i}", "doc", vis, f"{name}: {t}" if t else name, text, rel)
                 for i, (t, text) in enumerate(parts)]
     return out
 
@@ -369,9 +378,12 @@ def project_card(r: dict, top_risks: list[str]) -> str:
         tier_s = ("Risk tier: Watch (the reports give no anticipated completion date, so it is not ranked by the "
                   "chance of a slip).")
     elif tier:
-        pct = r.get("p_any_2q")
-        tier_s = f"Risk tier: {tier}." + (f" Chance of a schedule or cost slip within 2 quarters: {round(pct * 100)}%."
-                                          if pct is not None else "")
+        o = serving.outlook(r.get("p_date_push_2q"), r.get("p_cost_rev_2q"), r.get("months_p50"))
+        said = [f"a delay is {o['delay']}" if o["delay"] else None,
+                f"a cost rise is {o['cost']}" if o["cost"] else None,
+                f"the likely further slip is {o['slip']}" if o["slip"] else None]
+        said = [x for x in said if x]
+        tier_s = f"Risk tier: {tier}." + (f" Outlook over the {o['horizon']}: {', '.join(said)}." if said else "")
     else:
         tier_s = "Not scored."
     stalled = "Stalled: no progress for 2 or more quarters (a badge; the tier stays by rank)." if r.get("stalled") \
@@ -400,7 +412,8 @@ def project_card(r: dict, top_risks: list[str]) -> str:
 
 def project_chunks(s: dict) -> list[dict]:
     rows = serving._rows(s, """SELECT c.project_key AS "key", c.project_name AS name, c.sector, c.state, c.agency,
-            c.ministry, c.tier, c.stagnation_override AS stalled, c.p_any_2q, c.anticipated_cost_cr,
+            c.ministry, c.tier, c.stagnation_override AS stalled, c.p_date_push_2q, c.p_cost_rev_2q, c.months_p50,
+            c.anticipated_cost_cr,
             c.original_cost_cr, c.expenditure_cr, c.physical_progress_pct, c.anticipated_completion,
             c.scheduled_completion, c.slip_to_date_months, c.obs_period, c.flags, m.sanction_date
         FROM cur c LEFT JOIN master m USING (project_key) ORDER BY c.project_key""")
@@ -747,6 +760,12 @@ def _role(viewer) -> str:
     return getattr(viewer, "role", None) or "public"
 
 
+def _numbers(viewer) -> bool:
+    """Whether the viewer reads the model's numbers (the `numbers` feature): the 'numbers' chunks."""
+    can = getattr(viewer, "can", None)
+    return bool(can and can("numbers"))
+
+
 def _embed_text(r: dict) -> str:
     return f"{DOC_PREFIX}{r['title']}\n{r['text']}"
 
@@ -798,6 +817,7 @@ class Index:
     def __post_init__(self):
         self.kind = np.array([r["kind"] for r in self.rows], dtype=object)
         self.public = np.array([r["visibility"] == "public" for r in self.rows], dtype=bool)
+        self.numbers = np.array([r["visibility"] == "numbers" for r in self.rows], dtype=bool)
         self.pkey = np.array([r["project_key"] or "" for r in self.rows], dtype=object)
         self.named = {i: frozenset(r["mentions"].split()) for i, r in enumerate(self.rows) if r.get("mentions")}
         self._emb32 = None  # a float32 copy of emb, made at the first dense ranking
@@ -812,6 +832,8 @@ class Index:
         mask = np.ones(len(self.rows), dtype=bool)
         if _role(viewer) == "public":
             mask &= self.public
+        if not _numbers(viewer):
+            mask &= ~self.numbers
         if kinds:
             mask &= np.isin(self.kind, list(kinds))
         if project_key:
@@ -1159,7 +1181,7 @@ def main(argv: list[str] | None = None) -> int:
     q = sub.add_parser("search", help="search as a role")
     q.add_argument("query")
     q.add_argument("--role", default="public", choices=["public", "agency_official", "ministry_official",
-                                                        "ipmd_analyst"])
+                                                        "ipmd_analyst", "developer"])
     q.add_argument("--ministry")
     q.add_argument("--agency")
     q.add_argument("-k", type=int, default=6)

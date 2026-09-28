@@ -96,6 +96,8 @@ def forecaster(project_key: str) -> dict:
         "anticipated_cost_cr": (bundle["latest"] or {}).get("anticipated_cost_cr"),
         "model_version": bundle["provenance"]["model_version"],
         "shap_top5": scores.get("shap_top5", []),
+        "outlook": scores.get("outlook"),
+        "drivers_plain": scores.get("drivers_plain", []),
     }
 
 
@@ -131,19 +133,23 @@ def scout(project_row: dict) -> tuple[ScoutOutput, list[dict]]:
 # ---------- 4. Analyst ----------
 
 def analyst(forecaster_output: dict, scout_output: ScoutOutput) -> AnalystOutput:
-    """LLM call. Drafts from already-computed facts only, never asked to invent numbers."""
+    """LLM call. Drafts from already-computed facts only, never asked to invent numbers. Its summary becomes the memo
+    an official reads (the dispatcher), so it gets the outlook and the drivers in words, never the model's
+    probabilities or SHAP values (the numbers policy, docs/ACCESS_CONTROL.md)."""
     system = (
         "You are a project-risk analyst. Write a short summary and recommended action using ONLY "
-        "the facts given below. Do not invent numbers."
+        "the facts given below. Do not invent numbers, and never write a probability or a percentage chance."
     )
+    o = forecaster_output.get("outlook") or {}
+    drivers = [f"{d['label']} ({d['direction']} the risk, {d['strength']})"
+               for d in forecaster_output.get("drivers_plain") or []]
     user = (
         f"Risk tier (by rank): {forecaster_output.get('tier')}\n"
-        f"P(date push or cost revision within 2 quarters): {forecaster_output.get('p_any_2q')}\n"
-        f"P(date push, 2q): {forecaster_output.get('p_date_push_2q')}\n"
-        f"P(cost revision, 2q): {forecaster_output.get('p_cost_rev_2q')}\n"
-        f"Expected slip over 2 quarters (months, median): {forecaster_output.get('months_p50')}\n"
+        f"Outlook over the {o.get('horizon', 'next two quarters')}: a completion-date push is "
+        f"{o.get('delay') or 'not rated'}, a cost revision is {o.get('cost') or 'not rated'}, likely further slip "
+        f"{o.get('slip') or 'unknown'}\n"
         f"Anticipated cost (Cr): {forecaster_output.get('anticipated_cost_cr')}\n"
-        f"SHAP top drivers: {forecaster_output.get('shap_top5')}\n"
+        f"Main reasons: {'; '.join(drivers) or 'none'}\n"
         f"Scout cause tags: {[t.model_dump() for t in scout_output.tags]}\n"
     )
     return _generate(system, user, AnalystOutput)

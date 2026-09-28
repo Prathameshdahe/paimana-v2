@@ -18,6 +18,19 @@ default 4, read from the environment; backend/settings.py carries the same
 names), so a query over the wide tables cannot take the process with it. The
 in-app research agent's facts live in the app database (backend/db, PostgreSQL)
 and are read per request, next to the cached gold part.
+
+Numbers policy (SPEC9_ui section 6, docs/ACCESS_CONTROL.md): the model's own
+numbers (probabilities, quantiles, SHAP drivers, rank, agency bias statistics,
+analogue outcomes, composite scores, measured hidden-delay months, backtest
+lifts) reach only a viewer with the `numbers` feature. Every function here
+returns the full result with words added for everyone: an `outlook` on scores
+and rows (the chance of a date push and of a cost revision in four words, the
+likely slip in four bands), `drivers_plain` (the SHAP drivers as label,
+direction and strength), `top_reason`, the agency matrix's schedule and cost
+words, the hidden-delay priors' extra_months_word, the analogues' outcome; the
+routes pass the result through the plain_* functions for anyone else, which set
+the numbers to null (keys stay, so the response shapes do not change) and
+rewrite the checklist's evidence lines into words (plain_text).
 """
 from __future__ import annotations
 
@@ -40,6 +53,8 @@ from pipeline.hidden_delay import LIVE_Q, applicable
 from pipeline.research import EXT_COLS, TAXONOMY_OF, is_live
 from pipeline.identity.config import IdentityConfig
 from pipeline.identity.identity_map import IdentityMap
+
+from . import labels
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD, SILVER, MODEL = ROOT / "dataset" / "gold", ROOT / "dataset" / "silver", ROOT / "model"
@@ -466,9 +481,9 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
             count(*) FILTER (WHERE tier = 'Critical') AS n_critical, count(*) FILTER (WHERE tier = 'High') AS n_high
             FROM cur{where} GROUP BY 1 ORDER BY capital_cr DESC NULLS LAST, n DESC""", params)
 
-    top = _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, tier, p_any_2q,
+    top = with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, tier, p_any_2q,
         anticipated_cost_cr, stagnation_override AS override FROM cur{where}
-        ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params)
+        ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params))
     return {
         "asof": s["asof"], "filters": {"ministry": ministry, "sector": sector, "state": state_, "tier": tier},
         "kpis": k,
@@ -488,7 +503,25 @@ def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
         ORDER BY {SORTS[sort]} {direction} NULLS LAST, watch_score DESC NULLS LAST, project_key LIMIT ? OFFSET ?""",
                   params + [size, (page - 1) * size])
-    return {"total": total, "page": page, "size": size, "items": items}
+    return {"total": total, "page": page, "size": size, "items": with_words(items)}
+
+
+MAP_MAX = 5000   # rows of the command centre's risk map (every current project today: 1,763)
+MAP_COLS = ("key", "name", "sector", "state", "tier", "override", "anticipated_completion", "anticipated_cost_cr",
+            "physical_progress_pct", "no_completion_date", "flags", "outlook", "top_reason", "top_check")
+
+
+@cached
+def projects_map(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag=None, scope=None,
+                 near_complete=False):
+    """Every current project in scope that matches the filters (as projects(), no paging, at most MAP_MAX), as the
+    slim risk-map row: dates, cost, progress, tier, flags and the words; no model number, so every viewer gets
+    the same row (the public's top_reason is the first flagged check: public_map)."""
+    where, params = _where(ministry, sector, state_, tier, q, flag, None, scope, near_complete)
+    total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
+    rows = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
+        ORDER BY p_any_2q DESC NULLS LAST, watch_score DESC NULLS LAST, project_key LIMIT ?""", params + [MAP_MAX])
+    return {"total": total, "items": [{c: r[c] for c in MAP_COLS} for r in with_words(rows)]}
 
 
 @cached
@@ -497,8 +530,8 @@ def rows_for_keys(s, keys: tuple):
     keys = list(keys)[:100]
     if not keys:
         return []
-    got = {r["key"]: r for r in _rows(
-        s, f"SELECT {ROW_SQL} FROM cur WHERE project_key IN ({','.join('?' * len(keys))})", keys)}
+    got = {r["key"]: r for r in with_words(_rows(
+        s, f"SELECT {ROW_SQL} FROM cur WHERE project_key IN ({','.join('?' * len(keys))})", keys))}
     return [got[k] for k in keys if k in got]
 
 
@@ -527,6 +560,8 @@ def _project(s, key):
     if cur:
         scores = {c: cur[c] for c in SCORE_COLS}
         scores["shap_top5"] = json.loads(cur["shap_top5_json"] or "[]")
+        scores["outlook"] = outlook(cur["p_date_push_2q"], cur["p_cost_rev_2q"], cur["months_p50"])
+        scores["drivers_plain"] = drivers_plain(scores["shap_top5"])
     review = _one(s, "SELECT n_rows, first_period, last_period FROM review WHERE project_key = ?", [key])
     if review:
         review["note"] = (f"{review['n_rows']} report rows are linked to this project with an identity match still "
@@ -580,7 +615,8 @@ def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, a
     checklist picks them): basis says what it was matched on, as_of the remark quarter, current whether that status
     still describes the project at asof (else it is the status at the last report, not an expected delay)."""
     pri = _priors()
-    return [{**pri[(f, g)], "basis": basis, "as_of": as_of, "current": cur}
+    return [{**pri[(f, g)], "extra_months_word": extra_months_word(pri[(f, g)]), "basis": basis, "as_of": as_of,
+             "current": cur}
             for f, g, basis, as_of, cur in applicable(remarks, (land or {}).get("la_state"), portal, asof)
             if (f, g) in pri]
 
@@ -590,10 +626,11 @@ def public_project(d: dict) -> dict:
     (model probabilities, tier cuts), PARIVESH proposal details, remark status or measured hidden delay, or
     provenance internals (model, data versions, source documents), and no match reasons on the research facts nor
     the research agent's headlines (public_facts); tier, progress, cost, completion, risk states, top risks and the
-    cited research facts stay."""
+    cited research facts stay. The drivers go in words too (drivers_plain: an `insights` feature); the other model
+    numbers go by plain_project, as for every viewer without `numbers`."""
     no_src = {"source_doc_id": None, "source_page": None}
-    scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
-                              **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
+    scores = d["scores"] and {**d["scores"], "shap_top5": [], "drivers_plain": [], "tier_rank_pct": None,
+                              "tier_by_rank": None, **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
     prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None, **no_src}
     research = d.get("research")
     return {**d, "scores": scores, "provenance": prov, "review": None,
@@ -618,8 +655,313 @@ def public_external(d: dict) -> dict:
 
 
 def public_page(page: dict) -> dict:
-    """A project list page for the public: no upper slip quantile or rank percentile (as public_project)."""
-    return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None} for r in page["items"]]}
+    """A project list page for the public: no upper slip quantile or rank percentile and no drivers (as
+    public_project); the top reason is the first flagged check (the public page's top risk), never a driver."""
+    return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None, "drivers_plain": [],
+                               "top_reason": r.get("top_check")} for r in page["items"]]}
+
+
+def public_map(page: dict) -> dict:
+    """projects_map() for the public: the top reason from the flagged checks, never a driver (public_page)."""
+    return {**page, "items": [{**r, "top_reason": r.get("top_check")} for r in page["items"]]}
+
+
+# ---------------------------------------------------------------- numbers policy (module docstring)
+
+HORIZON = "next two quarters"   # the outlook's horizon: the 2-quarter date-push, cost-revision and slip models
+CHANCES = ((0.75, "very likely"), (0.5, "likely"), (0.25, "possible"))   # a probability at or above; else unlikely
+STRENGTHS = ("strong", "moderate", "slight")   # a driver's tercile by |contribution| among the project's own
+SCHEDULE_OFF, COST_OFF = 0.10, 0.05   # an agency's median schedule or cost bias beyond +-this is later / more
+AGENCY_MIN_N = 5                      # below it an agency is hidden in the matrix (AGENCY_METHOD): too few projects
+EXTRA_BANDS = ((4.5, "a few months"), (9, "about half a year"), (18, "about a year"))   # below; else over a year
+NO_EXTRA = "no measurable extra delay"
+MODEL_CHECKS = {"schedule_slip": "a completion-date push", "cost_escalation": "a cost revision"}
+NO_WORDS = {"outlook": None, "drivers_plain": [], "top_reason": None, "top_check": None}
+HIDDEN_SCORES = ("p_date_push_2q", "p_cost_rev_2q", "p_any_2q", "p_any_4q", "months_p05", "months_p50",
+                 "months_p95", "cost_pct_p05", "cost_pct_p50", "cost_pct_p95", "tier_rank_pct", "tier_by_rank")
+HIDDEN_ROW = ("tier_rank_pct", "p_any_2q", "p_date_push_2q", "p_cost_rev_2q", "months_p50", "months_p95")
+HIDDEN_ANALOGUE = ("distance", "y_months", "y_cost_pct", "y_any", "y_date_push", "y_cost_rev")
+HIDDEN_COMPLETION = ("months_p05", "months_p50", "months_p95", "p05", "p50", "p95")
+HIDDEN_AGENCY = ("schedule_bias", "schedule_bias_raw", "schedule_bias_q25", "schedule_bias_q75",
+                 "schedule_bias_ci_lo", "schedule_bias_ci_hi", "cost_bias", "cost_bias_raw", "cost_bias_q25",
+                 "cost_bias_q75", "cost_bias_ci_lo", "cost_bias_ci_hi", "sector_schedule_bias", "sector_cost_bias",
+                 "shrink_weight", "trend")
+HIDDEN_PRIOR = ("extra_months", "extra_months_lo", "extra_months_hi", "extra_push", "extra_push_lo", "extra_push_hi",
+                "holm_months", "holm_push", "garvit_band")
+HIDDEN_COMPOSITE = ("external_factor_score", "fc_component", "la_component")
+COMPOSITE_STATS = ("mean", "min", "25%", "50%", "75%", "max")
+LIFTS = ("lift", "lift_within_sector_year")
+BAND_METHOD_PLAIN = (
+    "The progress band spans three what-if paths: the project keeps its own recent pace, recovers to its sector's "
+    "usual pace, or follows its agency's past pattern; it is a range of scenarios, not a prediction of one path. "
+    "The likely completion is the anticipated completion and the likely further slip over the next two quarters, "
+    "in words.")
+AGENCY_METHOD_PLAIN = (
+    "Each agency is described by how its projects compared with their plan: on time, usually later, about on time "
+    "or usually earlier than planned; on cost, usually costs more, about as planned or usually costs less. The "
+    "words come from the agency's typical project, pulled toward its sector when it has few projects; an agency "
+    f"with fewer than {AGENCY_MIN_N} projects with a known plan is 'too few projects'. Capital and open projects "
+    "are the current portfolio.")
+PRIORS_NOTE_PLAIN = (
+    "Extra delay over the next year measured against matched projects that did not have the issue; groups with too "
+    "few projects are not measured, and the groups are exploratory.")
+_N = r"[+-]?\d+"   # hidden_delay.fmt: '+3', '-2', '0'
+P_RX = re.compile(r"P = (\d*\.?\d+) \(High-tier cut \d*\.?\d+\)")   # ml/risk_profile.py, the model dimensions
+ALERT_P_RX = re.compile(r"P\(date push or cost revision, 2q\) = (\d*\.?\d+)")   # watcher and seed alerts
+ALERT_P2_RX = re.compile(r"\(P = (\d*\.?\d+)\)")                               # the watcher's slip_realised
+AGENCY_RX = re.compile(r"agency timelines run ([+-]?\d+)% vs schedule \(median of (\d+) projects\)"
+                       r"(?:; 2q slip rate \d+%)?")                             # agency_optimism
+SCORE_RX = re.compile(r"\bscore (?:\d*\.?\d+|n/a) \([^)]*\): ")               # external_composite
+NO_EXTRA_RX = re.compile(rf"no measurable extra delay \({_N} months? over the next year, CI {_N} to {_N}; {_N} pts "
+                         rf"date-push risk, CI {_N} to {_N}; (\d+) projects\)")   # hidden_delay.text
+_MO, _PTS = (rf"({_N}) months? over the next year \(CI {_N} to {_N}\)",
+             rf"({_N}) pts date-push risk \(CI {_N} to {_N}\)")
+EXTRA_RX = re.compile(rf"(?:{_MO}(?: and {_PTS})?|{_PTS}), measured on (\d+) projects")
+
+
+def _finite(v) -> bool:
+    return v is not None and not (isinstance(v, float) and not math.isfinite(v))
+
+
+def chance_word(p) -> str | None:
+    """A probability as the outlook's word, by fixed bands (>= 0.75 very likely, >= 0.5 likely, >= 0.25 possible,
+    else unlikely); None for none."""
+    return next((w for cut, w in CHANCES if p >= cut), "unlikely") if _finite(p) else None
+
+
+def slip_word(months) -> str | None:
+    """The median further slip (months) as a band: under 6 months, 6 to 12 months, 1 to 2 years, over 2 years."""
+    if not _finite(months):
+        return None
+    if months < 6:
+        return "under 6 months"
+    if months < 12:
+        return "6 to 12 months"
+    return "1 to 2 years" if months <= 24 else "over 2 years"
+
+
+def outlook(p_date_push, p_cost_rev, months_p50) -> dict:
+    """{delay, cost, slip, horizon}: the chance of a completion-date push and of a cost revision within the next two
+    quarters in words (chance_word), the likely further slip (slip_word); None where the model gives no number (the
+    Watch tier has no date-based score)."""
+    return {"delay": chance_word(p_date_push), "cost": chance_word(p_cost_rev), "slip": slip_word(months_p50),
+            "horizon": HORIZON}
+
+
+def drivers_plain(shap: list[dict] | None) -> list[dict]:
+    """The SHAP drivers in words, largest first: {label (labels.driver_label), direction 'raises' | 'lowers' (the
+    chance of a slip), strength 'strong' | 'moderate' | 'slight' (its tercile by |contribution| among the project's
+    own drivers: of five, two strong, two moderate, one slight)}; a driver with no effect is left out."""
+    ds = sorted((d for d in shap or [] if _finite(d.get("contribution")) and d["contribution"]),
+                key=lambda d: -abs(d["contribution"]))
+    return [{"label": labels.driver_label(d["feature"]), "direction": "raises" if d["contribution"] > 0 else "lowers",
+             "strength": STRENGTHS[3 * i // len(ds)]} for i, d in enumerate(ds)]
+
+
+@cached
+def _words(s) -> dict[str, dict]:
+    """Per scored project its words: outlook, drivers_plain, top_reason (the first driver that raises the chance of
+    a slip, else top_check) and top_check (the label of its first flagged check in PLAIN_RISK order, the model's own
+    two left out: they restate the outlook; the public's top reason)."""
+    flagged: dict[str, set] = {}
+    for r in _rows(s, "SELECT project_key AS k, dimension AS d FROM rp WHERE state = 'flagged'"):
+        flagged.setdefault(r["k"], set()).add(r["d"])
+    order = [d for d in PLAIN_RISK if d not in MODEL_CHECKS]
+    out = {}
+    for r in _rows(s, "SELECT project_key AS k, p_date_push_2q, p_cost_rev_2q, months_p50, shap_top5_json FROM cur"):
+        drivers = drivers_plain(json.loads(r["shap_top5_json"] or "[]"))
+        check = next((labels.dimension_label(d) for d in order if d in flagged.get(r["k"], ())), None)
+        out[r["k"]] = {"outlook": outlook(r["p_date_push_2q"], r["p_cost_rev_2q"], r["months_p50"]),
+                       "drivers_plain": drivers,
+                       "top_reason": next((d["label"] for d in drivers if d["direction"] == "raises"), check),
+                       "top_check": check}
+    return out
+
+
+def with_words(rows: list[dict], key: str = "key") -> list[dict]:
+    """rows (project key under key) with their words (_words); a project not scored now gets none (NO_WORDS)."""
+    w = _words()
+    return [{**r, **w.get(r[key], NO_WORDS)} for r in rows]
+
+
+def schedule_word(p: dict) -> str:
+    """An agency matrix point's schedule record in words: 'usually later' / 'usually earlier' than planned when its
+    (shrunk) median schedule bias is beyond +-SCHEDULE_OFF, else 'about on time'; 'too few projects' when hidden."""
+    b = p.get("schedule_bias")
+    if p.get("hidden") or not _finite(b):
+        return "too few projects"
+    return "usually later" if b > SCHEDULE_OFF else "usually earlier" if b < -SCHEDULE_OFF else "about on time"
+
+
+def cost_word(p: dict) -> str:
+    """The cost record in words: 'usually costs more' / 'usually costs less' beyond +-COST_OFF, else 'about as
+    planned'; 'too few projects' when hidden or with fewer than AGENCY_MIN_N projects with both costs."""
+    b = p.get("cost_bias")
+    if p.get("hidden") or (p.get("n_cost") or 0) < AGENCY_MIN_N or not _finite(b):
+        return "too few projects"
+    return "usually costs more" if b > COST_OFF else "usually costs less" if b < -COST_OFF else "about as planned"
+
+
+def _extra_band(months: float) -> str:
+    return next((w for cut, w in EXTRA_BANDS if months < cut), "over a year")
+
+
+def extra_months_word(r: dict) -> str | None:
+    """A measured hidden-delay prior's extra months in words: None when there are too few projects to measure it;
+    NO_EXTRA unless its interval lies above zero (pipeline/hidden_delay.text's test); else a few months, about half
+    a year, about a year or over a year."""
+    m, lo, hi = r.get("extra_months"), r.get("extra_months_lo"), r.get("extra_months_hi")
+    if not r.get("measurable") or not _finite(m):
+        return None
+    return _extra_band(m) if _finite(lo) and lo > 0 and m > 0 else NO_EXTRA
+
+
+def _extra_text(m: re.Match) -> str:
+    months, pts, n = m[1], m[2] or m[3], m[4]
+    parts = []
+    if months is not None:
+        v = int(months)
+        parts.append(f"{_extra_band(v)} of extra delay" if v > 0 else "less delay than similar projects" if v < 0
+                     else NO_EXTRA)
+    if pts is not None:
+        parts.append(f"a {'higher' if int(pts) > 0 else 'lower'} chance of a date push")
+    return " and ".join(parts) + f", measured on {n} projects"
+
+
+def _agency_text(m: re.Match) -> str:
+    word = schedule_word({"schedule_bias": int(m[1]) / 100})
+    how = {"usually later": "later than planned", "usually earlier": "earlier than planned"}.get(word, "about on time")
+    return f"this agency's projects usually finish {how} ({m[2]} projects)"
+
+
+def plain_text(text: str | None, dimension: str | None = None) -> str | None:
+    """An evidence line (a checklist row, an alert, a card) without the model's numbers: a model check's 'P = 0.87
+    (High-tier cut 0.85)' and an alert's 'P(date push or cost revision, 2q) = 0.91' become the outlook's word, the
+    agency's timeline statistics its schedule word, a composite score goes, and a measured hidden delay ('+3 months
+    over the next year (CI 1 to 5), measured on 16 projects') becomes its band with the project count. Report facts
+    (progress, spend, dates, parcels, complexity ratings, months in a stage) stay as written."""
+    if not text:
+        return text
+    what = MODEL_CHECKS.get(dimension)
+    text = P_RX.sub(lambda m: (f"{what} is " if what else "rated ") + f"{chance_word(float(m[1]))} within the "
+                    f"{HORIZON}", text)
+    text = ALERT_P_RX.sub(lambda m: f"a date push or cost revision is {chance_word(float(m[1]))} within the "
+                          f"{HORIZON}", text)
+    text = ALERT_P2_RX.sub(lambda m: f"(rated {chance_word(float(m[1]))})", text)
+    text = AGENCY_RX.sub(_agency_text, text)
+    text = SCORE_RX.sub("", text)
+    text = NO_EXTRA_RX.sub(lambda m: f"{NO_EXTRA} ({m[1]} projects)", text)
+    return EXTRA_RX.sub(_extra_text, text)
+
+
+def _none(d: dict, cols) -> dict:
+    """d with those of cols it has set to None (a hidden number keeps its key, so the shape does not change)."""
+    return {**d, **{c: None for c in cols if c in d}}
+
+
+def _none_deep(v, cols: set):
+    """v (nested dicts and lists) with every key in cols set to None, at any depth."""
+    if isinstance(v, dict):
+        return {k: None if k in cols else _none_deep(x, cols) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_none_deep(x, cols) for x in v]
+    return v
+
+
+def plain_prior(r: dict) -> dict:
+    """A measured hidden-delay prior without its months, shares, intervals and p-values (extra_months_word stays)."""
+    return {**_none(r, HIDDEN_PRIOR), "extra_months_word": extra_months_word(r)}
+
+
+def plain_scores(sc: dict | None) -> dict | None:
+    return sc and {**_none(sc, HIDDEN_SCORES), "shap_top5": []}
+
+
+def plain_row(r: dict) -> dict:
+    """A list row (ROW_SQL) without the model's numbers: the outlook, drivers_plain and top_reason stay."""
+    return _none(r, HIDDEN_ROW)
+
+
+def plain_page(page: dict) -> dict:
+    return {**page, "items": [plain_row(r) for r in page["items"]]}
+
+
+def plain_project(d: dict) -> dict:
+    """The project page without the model's numbers: probabilities, quantiles, rank, SHAP values (drivers_plain and
+    the outlook stay), the composite score, the measured hidden-delay months; the checklist's evidence in words."""
+    ext = d["external"]
+    return {**d, "scores": plain_scores(d["scores"]),
+            "risk_profile": [{**r, "evidence": plain_text(r["evidence"], r["dimension"])} for r in d["risk_profile"]],
+            "external": {**ext, "composite": ext["composite"] and _none(ext["composite"], HIDDEN_COMPOSITE),
+                         "hidden_delay": [plain_prior(p) for p in ext["hidden_delay"]]}}
+
+
+def plain_portfolio(p: dict) -> dict:
+    return {**p, "top": [plain_row(r) for r in p["top"]]}
+
+
+def plain_forecast(f: dict) -> dict:
+    """The forecast without the model's numbers (schemas.Forecast): the completion as its band word, the analogues
+    as name, sector, outcome and years ago (no distance or outcome figures), the summary as counts; the scenario
+    curves, their band and the sector S-curve stay (a picture the chart draws; the UI prints no value of them)."""
+    ana = f["analogues"]
+    n_slipped = sum(a["outcome"] == "slipped" for a in ana)
+    summary = (f"{n_slipped} of the {len(ana)} most similar past projects at this stage slipped or had a cost "
+               "revision within 4 quarters." if ana else "no similar past projects at this stage")
+    return {**f, "analogues": [_none(a, HIDDEN_ANALOGUE) for a in ana], "analogue_summary": summary,
+            "completion": _none(f["completion"], HIDDEN_COMPLETION), "band_method": BAND_METHOD_PLAIN}
+
+
+def plain_agency_matrix(m: dict) -> dict:
+    """The agency matrix without its statistics (medians, quartiles, CIs, shrink weight, trend): the schedule and
+    cost words and the counts stay."""
+    return {**m, "method": AGENCY_METHOD_PLAIN, "points": [_none(p, HIDDEN_AGENCY) for p in m["points"]]}
+
+
+def _plain_cards(cards: list[dict]) -> list[dict]:
+    return [{**_none(c, HIDDEN_ROW), "evidence": [plain_text(e) for e in c.get("evidence") or []]} for c in cards]
+
+
+def plain_external(d: dict) -> dict:
+    """The External Factors summary without the model's numbers: no chance of a slip on the project cards (their
+    outlook stays; their evidence lines in words), no backtest lifts (the slip shares of past projects with and
+    without a flag stay: counts), no composite score distribution or scores, and the measured priors as words."""
+    po, hd, ec = d.get("portal"), d.get("hidden_delay_priors"), d["external_composite"]
+    return {**d, "factors": {n: {**f, "top": _plain_cards(f["top"])} for n, f in d["factors"].items()},
+            "early_notice": {**d["early_notice"], "top": _plain_cards(d["early_notice"]["top"])},
+            "notice_backtest": _none_deep(d["notice_backtest"], set(LIFTS)),
+            "external_composite": _none_deep(ec, set(COMPOSITE_STATS) | set(HIDDEN_COMPOSITE)),
+            "portal": po and {**po, "top_overdue": _plain_cards(po.get("top_overdue") or []),
+                              "open_list": _plain_cards(po.get("open_list") or [])},
+            "hidden_delay_priors": hd and {**hd, "note": PRIORS_NOTE_PLAIN,
+                                           "rows": [plain_prior(r) for r in hd.get("rows") or []]}}
+
+
+def plain_bottlenecks(page: dict) -> dict:
+    """Bottlenecks without the members' mean chance of a slip and mean slip (counts and capital stay)."""
+    return {**page, "items": [_plain_bottleneck(b) for b in page["items"]]}
+
+
+def _plain_bottleneck(b: dict) -> dict:
+    return {**_none(b, ("mean_p_any_2q", "mean_months_p50")),
+            "top_members": [_none(m, HIDDEN_ROW) for m in b.get("top_members") or []]}
+
+
+def plain_bottleneck(d: dict) -> dict:
+    return {**d, "bottleneck": _plain_bottleneck(d["bottleneck"]),
+            "members": [_none(m, HIDDEN_ROW) for m in d["members"]]}
+
+
+def plain_alert(a: dict) -> dict:
+    """An alert whose title and detail carry no model number (plain_text: seeded and watcher alerts print the
+    chance of a slip; an early notice quotes checklist evidence)."""
+    return {**a, "title": plain_text(a.get("title")), "detail": plain_text(a.get("detail"))}
+
+
+def plain_signal(s: dict) -> dict:
+    """A news signal (or a feed item's linked project) without the linker's match score."""
+    return {**s, "link_score": None, **({"projects": [plain_signal(p) for p in s["projects"]]}
+                                        if "projects" in s else {})}
 
 
 # ---------------------------------------------------------------- research
@@ -823,6 +1165,10 @@ def forecast(s, key):
     scen = _rows(s, """SELECT step, quarter, "continue" AS continue_, recover, agency, agency_basis FROM scen
         WHERE project_key = ? ORDER BY step""", [key])
     ana = _rows(s, """SELECT * EXCLUDE (project_key, "asof") FROM ana WHERE project_key = ? ORDER BY rank""", [key])
+    for a in ana:   # the analogue's words: its outcome 4 quarters on, and how long before asof it was at this stage
+        then = a["analogue_period"]
+        a.update(name=a["analogue_name"], outcome={1: "slipped", 0: "held"}.get(a["y_any"], "unknown"),
+                 years_ago=round((s["asof"] - then).days / 365.25) if then else None)
     n_any = sum(1 for a in ana if a["y_any"] == 1)
     months = sorted(a["y_months"] for a in ana if a["y_months"] is not None)
     median = months[len(months) // 2] if months else None
@@ -848,7 +1194,8 @@ def forecast(s, key):
         "band": [{"quarter": p["quarter"], "lo": min(p["continue_"], p["recover"], p["agency"]),
                   "mid": p["continue_"], "hi": max(p["continue_"], p["recover"], p["agency"])} for p in scen
                  if None not in (p["continue_"], p["recover"], p["agency"])],
-        "completion": {"anticipated": ac, "months_p05": cur["months_p05"], "months_p50": cur["months_p50"],
+        "completion": {"anticipated": ac, "band": slip_word(cur["months_p50"]),
+                       "months_p05": cur["months_p05"], "months_p50": cur["months_p50"],
                        "months_p95": cur["months_p95"], "p05": _add_months(ac, cur["months_p05"]),
                        "p50": _add_months(ac, cur["months_p50"]), "p95": _add_months(ac, cur["months_p95"])},
         "band_method": BAND_METHOD,
@@ -938,10 +1285,12 @@ def external_summary(s, scope=None):
         LEFT JOIN composite c USING (project_key)
         WHERE project_key IN (SELECT project_key FROM cur WHERE {sql})""", params)
     stalled = {r["k"] for r in _rows(s, "SELECT project_key AS k FROM cur WHERE stagnation_override")}
+    words = _words()
 
-    def mark(cards):  # the stagnation badge and the flagged factors (from the evidence lines) on every card
+    def mark(cards):  # the stagnation badge, the flagged factors (from the evidence lines) and the outlook on a card
         return [{**r, "stalled": r["project_key"] in stalled,
-                 "factors": list(dict.fromkeys(ln.split(": ", 1)[0] for ln in r.get("evidence") or []))}
+                 "factors": list(dict.fromkeys(ln.split(": ", 1)[0] for ln in r.get("evidence") or [])),
+                 "outlook": words.get(r["project_key"], NO_WORDS)["outlook"]}
                 for r in cards]
 
     inscope = f"project_key IN (SELECT project_key FROM cur WHERE {sql})"
@@ -972,7 +1321,8 @@ def _priors_in_scope(s, block, inscope, params):
         LEFT JOIN portal p USING (project_key) WHERE c.{inscope}""", params)
     n = Counter((h["factor"], h["group"]) for r in rows
                 for h in hidden_delay({"la_state": r["la_state"]}, r, r, s["asof"]) if h["current"])
-    return {**block, "rows": [{**r, "n_current": None if r["factor"] == "land_complexity_nh"
+    return {**block, "rows": [{**r, "extra_months_word": extra_months_word(r),
+                               "n_current": None if r["factor"] == "land_complexity_nh"
                                else n[(r["factor"], r["group"])]} for r in block["rows"]]}
 
 
@@ -1157,7 +1507,7 @@ def agency_matrix(s, sector=None, ministry=None, include_hidden=False, scope=Non
         WHERE {" AND ".join(conds)} ORDER BY hidden, capital_cr DESC, n_projects DESC, agency LIMIT 500""",
                    [self_] + params)
     return {"asof": s["asof"], "n_agencies": counts["n"], "n_hidden": counts["n_hidden"], "method": AGENCY_METHOD,
-            "points": points}
+            "points": [{**p, "schedule_word": schedule_word(p), "cost_word": cost_word(p)} for p in points]}
 
 
 @cached
@@ -1166,10 +1516,12 @@ def agency_known(s, agency):
 
 
 def _top_members(s, rows):
-    """Replace each bottleneck row's member_keys by its first TOP_MEMBERS members (key, name, tier, p, cost)."""
+    """Replace each bottleneck row's member_keys by its first TOP_MEMBERS members (key, name, tier, p, cost, the
+    words)."""
     keys = sorted({k for r in rows for k in r["member_keys"][:TOP_MEMBERS]})
-    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, tier, p_any_2q,
-        anticipated_cost_cr FROM cur WHERE project_key IN ({','.join('?' * len(keys))})""", keys)} if keys else {}
+    got = {r["key"]: r for r in with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, tier,
+        p_any_2q, anticipated_cost_cr FROM cur WHERE project_key IN ({','.join('?' * len(keys))})""", keys))} \
+        if keys else {}
     for r in rows:
         r["top_members"] = [got[k] for k in r.pop("member_keys")[:TOP_MEMBERS] if k in got]
     return rows
@@ -1235,9 +1587,9 @@ def bottleneck(s, bid, page=1, size=50, scope=None):
         return None
     keys = b["member_keys"]
     page_keys = keys[(page - 1) * size: page * size]
-    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, agency,
-        tier, p_any_2q, months_p50, anticipated_cost_cr FROM cur
-        WHERE project_key IN ({','.join('?' * len(page_keys))})""", page_keys)} if page_keys else {}
+    got = {r["key"]: r for r in with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, sector,
+        state, agency, tier, p_any_2q, months_p50, anticipated_cost_cr FROM cur
+        WHERE project_key IN ({','.join('?' * len(page_keys))})""", page_keys))} if page_keys else {}
     ev = {}
     for e in _rows(s, """SELECT * EXCLUDE (bottleneck_id) FROM bmembers WHERE bottleneck_id = ?
             ORDER BY project_key, last_seen DESC""", [bid]):

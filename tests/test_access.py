@@ -92,13 +92,15 @@ def test_out_of_scope_project_is_404(client, scopes):
 
 def test_public_project_page_is_redacted(client):
     key = client.get("/api/projects", params={"size": 1}, headers=public()).json()["items"][0]["key"]
-    full = client.get(f"/api/projects/{key}", headers=ipmd()).json()
+    # the model's numbers: the developer only (tests/test_numbers_policy.py)
+    full = client.get(f"/api/projects/{key}", headers=as_role(client, "developer")).json()
     pub = client.get(f"/api/projects/{key}", headers=public()).json()
     assert full["scores"]["shapTop5"] and full["scores"]["monthsP95"] is not None
     assert full["provenance"]["modelVersion"] and full["provenance"]["sourceDocId"]
     assert pub["scores"]["shapTop5"] == [] and pub["scores"]["monthsP05"] is None
     assert pub["scores"]["monthsP95"] is None and pub["scores"]["costPctP95"] is None
-    assert pub["scores"]["tier"] == full["scores"]["tier"] and pub["scores"]["monthsP50"] == full["scores"]["monthsP50"]
+    assert pub["scores"]["tier"] == full["scores"]["tier"] and pub["scores"]["monthsP50"] is None
+    assert pub["scores"]["outlook"] == full["scores"]["outlook"] and pub["scores"]["driversPlain"] == []
     prov = pub["provenance"]
     assert prov["modelVersion"] is None and prov["goldVersion"] is None and prov["sourceDocId"] is None
     assert prov["asof"] == full["provenance"]["asof"] and pub["review"] is None
@@ -109,7 +111,7 @@ def test_public_project_page_is_redacted(client):
     assert all(r["evidence"] is None for r in pub["riskProfile"])  # no "P = 0.55 (High-tier cut ...)"
     assert all(e["sourceDocId"] is None for e in pub["external"]["events"])
     pub_rows = client.get("/api/projects", params={"size": 20}, headers=public()).json()["items"]
-    full_rows = client.get("/api/projects", headers=ipmd(), params={"size": 20}).json()["items"]
+    full_rows = client.get("/api/projects", headers=as_role(client, "developer"), params={"size": 20}).json()["items"]
     assert any(r["monthsP95"] is not None and r["tierRankPct"] is not None for r in full_rows)
     assert all(r["monthsP95"] is None and r["tierRankPct"] is None for r in pub_rows)
     assert [r["tier"] for r in pub_rows] == [r["tier"] for r in full_rows]

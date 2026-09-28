@@ -2,7 +2,8 @@
 current evidence has none yet, fitted in between the chat answers.
 
 batch_keys() orders the Critical, High and Watch projects by when they were last asked (never first), then by
-tier and the riskiest first. run(keys, limit) takes them in turn and, for each, builds the evidence pack and skips it
+tier and the riskiest first. The job works in the plain view (second_opinion.pack's default: the pack without the
+model's numbers, the opinion every official reads); the developer's numbers view is asked for on demand. run(keys, limit) takes them in turn and, for each, builds the evidence pack and skips it
 when it is not scored, has no evidence about the project itself (second_opinion.has_evidence: nothing but the status
 line and the model) or was already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an
 opinion accepted or rejected under it, or a rejection under it noted on an older prompt's accepted opinion

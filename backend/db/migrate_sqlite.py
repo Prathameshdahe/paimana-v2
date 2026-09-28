@@ -27,7 +27,7 @@ TABLES = ("sources", "job_runs", "alerts", "watchlist", "signals", "signal_proje
           "briefs", "research_facts", "researched", "signal_judgements", "second_opinions")
 CONFLICT = {"sources": "(sha256, pipeline_version)", "job_runs": "(id)", "alerts": "(id)", "watchlist":
             "(role, project_key)", "signals": "(id)", "signal_projects": "(signal_id, project_key)",
-            "scouted": "(project_key)", "audit_log": "(id)", "briefs": "(project_key, asof, model_version)",
+            "scouted": "(project_key)", "audit_log": "(id)", "briefs": "(project_key, asof, model_version, view)",
             "research_facts": "(fact_id)", "researched": "(project_key)",
             "signal_judgements": "(signal_id, project_key)", "second_opinions": "(project_key, evidence_hash, model)"}
 SERIAL = ("job_runs", "alerts", "signals", "audit_log")

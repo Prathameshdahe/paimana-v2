@@ -49,7 +49,8 @@ FEATURES = {
     "unlinked_signals": "news items not linked to any project",
     "admin": "administration: sign-up requests and accounts",
     "audit": "the audit log",
-    "numbers": "raw model numbers (probabilities, contributions, intervals, calibration)",
+    "numbers": "the model's raw numbers (probabilities, quantiles, SHAP drivers, rank, agency statistics, analogue "
+               "outcomes); everyone else reads them in words (backend/serving.py plain_*)",
 }
 
 

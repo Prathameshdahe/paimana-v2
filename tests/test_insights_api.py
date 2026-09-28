@@ -32,7 +32,7 @@ def top_key(client):
 # ------------------------------------------------------------------ agencies
 
 def test_agency_matrix_hides_small_agencies_and_merges_names(client):
-    m = client.get("/api/agencies/matrix").json()
+    m = client.get("/api/agencies/matrix", headers=as_role(client, "developer")).json()   # with its statistics
     pts = m["points"]
     assert 0 < len(pts) <= 500 and m["nAgencies"] >= len(pts) and m["method"]
     assert all(p["nProjects"] >= 5 and not p["hidden"] for p in pts)
@@ -209,17 +209,18 @@ def test_brief_waits_for_the_llm_gate_and_says_busy(client, top_key, monkeypatch
 
 
 def test_brief_accepts_caches_and_rejects(client, top_key, monkeypatch):
-    facts = brief.payload(top_key)
+    facts = brief.payload(top_key, numbers=True)   # the developer's view (tests/test_numbers_policy.py: the plain one)
     p = facts["prediction"]
     good = (f"The model rates this project {p['tier']}: P(any slip, 2 quarters) = {p['p_any_2q']}.\n\n"
             f"The expected slip is {p['slip_months_p50']} months.")
     calls = []
     monkeypatch.setattr(llm_client, "complete", lambda system, user: calls.append(user) or good)
-    r = client.get(f"/api/projects/{top_key}/brief")
+    dev = as_role(client, "developer")
+    r = client.get(f"/api/projects/{top_key}/brief", headers=dev)
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["status"] == "ok" and not out["cached"] and len(out["paragraphs"]) == 2 and out["payload"]
-    again = client.get(f"/api/projects/{top_key}/brief").json()
+    again = client.get(f"/api/projects/{top_key}/brief", headers=dev).json()
     assert again["cached"] and again["text"] == good and len(calls) == 1
 
     other = client.get("/api/projects", params={"size": 1, "page": 2}).json()["items"][0]["key"]

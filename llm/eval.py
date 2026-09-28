@@ -17,7 +17,8 @@ account), so they follow the data:
                  of `by`); the answer names it
   first_project  {path, params}: the first item of GET path; the answer or the first projects card names it
   last_completion {key}: the project's latest anticipated completion month; the answer states it
-  worst_agency   the shown agency with the largest schedule overrun in /api/agencies/matrix; the answer names it
+  worst_agency   the shown agency with the largest schedule overrun in the viewer's agency matrix (read from
+                 serving: the overrun is a model statistic the API gives only the developer); the answer names it
   mentions / not_mentions {any: [...]}: the answer (or, for not_mentions, anything sent) contains one / none
   card           {type}: a card of that type was sent
 Reported: routing accuracy (the router's own calls and second-round tool are exactly the expected tools), tool
@@ -39,6 +40,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend import access
+from backend import serving
 from backend.access import make_viewer
 from backend.main import app
 from llm import agent, router
@@ -106,10 +108,11 @@ def _expect(api: TestClient, check: dict):
         pts = api.get(f"/api/projects/{check['key']}/timeline").json()["points"]
         d = pts[-1]["anticipatedCompletion"]
         return time.strftime("%B %Y", time.strptime(d[:7], "%Y-%m"))
-    if kind == "worst_agency":
-        pts = [p for p in api.get("/api/agencies/matrix").json()["points"]
-               if not p["hidden"] and p["scheduleBias"] is not None]
-        return max(pts, key=lambda p: p["scheduleBias"])["agency"]
+    if kind == "worst_agency":   # the ground truth is a hidden number (the numbers policy): read it from serving
+        scope = make_viewer(q["role"], q.get("ministry"), q.get("agency")).scope
+        pts = [p for p in serving.agency_matrix(scope=scope)["points"]
+               if not p["hidden"] and p["schedule_bias"] is not None]
+        return max(pts, key=lambda p: p["schedule_bias"])["agency"]
     return None
 
 

@@ -1,4 +1,13 @@
-"""Pydantic models: API responses + LLM structured-output schemas."""
+"""Pydantic models: API responses + LLM structured-output schemas.
+
+The numbers policy (SPEC9_ui section 6, docs/ACCESS_CONTROL.md): the model's own numbers (probabilities, quantiles,
+SHAP values, rank, agency bias statistics, analogue distances and outcomes, composite scores, measured hidden-delay
+months, backtest lifts, the news linker's match score) are sent only to a viewer with the `numbers` feature (the
+developer). For everyone else the backend sets them to null (the key stays; a list of SHAP values is empty) and the
+responses carry words instead: Outlook, PlainDriver, top_reason, the agency words, extra_months_word, the analogue
+outcome and the completion band. The words are sent to every viewer, the developer too, so the UI reads one field
+whoever is signed in. Each model below says which of its fields are hidden numbers.
+"""
 from datetime import date
 from typing import Annotated, Any, Literal
 
@@ -27,6 +36,32 @@ Record = Annotated[dict[str, Any], AfterValidator(_camel_keys)]
 Tier = Literal["Critical", "High", "Medium", "Low", "Watch"]
 Flag = Literal["land", "forest", "litigation", "contractor", "early_notice"]
 Sort = Literal["risk", "cost", "slip", "name", "progress"]
+Chance = Literal["very likely", "likely", "possible", "unlikely"]
+SlipBand = Literal["under 6 months", "6 to 12 months", "1 to 2 years", "over 2 years"]
+
+
+class Outlook(CamelModel):
+    """The model's 2-quarter outlook in words (backend/serving.py outlook), on project scores, list rows, the
+    portfolio's top list, bottleneck members, external-factor cards and chat cards, for every viewer.
+    delay: the chance of a completion-date push (p_date_push_2q) within the horizon, by fixed bands: >= 0.75 'very
+    likely', >= 0.5 'likely', >= 0.25 'possible', else 'unlikely'; cost: the same bands over the chance of a cost
+    revision (p_cost_rev_2q); slip: the median further slip (months_p50): under 6 months, 6 to 12 months, 1 to 2
+    years (to 24 months), over 2 years. A field is null where the model gives no number: the Watch tier (no
+    anticipated completion date) has no delay and no slip. horizon is always 'next two quarters'."""
+    delay: Chance | None
+    cost: Chance | None
+    slip: SlipBand | None
+    horizon: Literal["next two quarters"]
+
+
+class PlainDriver(CamelModel):
+    """One SHAP driver in words (serving.drivers_plain), largest first: label (backend/labels.py DRIVER_LABELS: no
+    digits or units), direction (what it does to the chance of a slip), strength (its tercile by |contribution|
+    among the project's own five: two strong, two moderate, one slight). Viewers with `insights` get them; the
+    public gets an empty list."""
+    label: str
+    direction: Literal["raises", "lowers"]
+    strength: Literal["strong", "moderate", "slight"]
 
 
 class Meta(CamelModel):
@@ -67,6 +102,8 @@ class GroupStat(CamelModel):
 
 
 class TopProject(CamelModel):
+    """The portfolio's 20 riskiest; p_any_2q is a hidden number (null without `numbers`); outlook and top_reason
+    as on ProjectRow."""
     key: str
     name: str | None
     sector: str | None
@@ -75,6 +112,8 @@ class TopProject(CamelModel):
     p_any_2q: float | None
     anticipated_cost_cr: float | None
     override: bool | None = None  # the stagnation badge
+    outlook: Outlook | None = None
+    top_reason: str | None = None
 
 
 class Portfolio(CamelModel):
@@ -89,6 +128,11 @@ class Portfolio(CamelModel):
 
 
 class ProjectRow(CamelModel):
+    """A current project in a list (projects, agency projects, watchlist, chat cards). Hidden numbers (null without
+    `numbers`): tier_rank_pct, p_any_2q, p_date_push_2q, p_cost_rev_2q, months_p50, months_p95. Words for every
+    viewer: outlook; drivers_plain (empty for the public); top_reason: the label of the first driver that raises
+    the chance of a slip, else of the first flagged check (land, forest, court case, contractor, stagnation ...;
+    the model's own schedule and cost checks left out), the public always the flagged check; null when neither."""
     key: str
     name: str | None
     sector: str | None
@@ -110,6 +154,9 @@ class ProjectRow(CamelModel):
     slip_to_date_months: float | None
     no_completion_date: bool | None
     flags: list[str]
+    outlook: Outlook | None = None
+    drivers_plain: list[PlainDriver] = []
+    top_reason: str | None = None
 
 
 class ProjectPage(CamelModel):
@@ -119,6 +166,30 @@ class ProjectPage(CamelModel):
     items: list[ProjectRow]
 
 
+class MapRow(CamelModel):
+    """One dot of the command centre's risk map (GET /api/projects/map): the same row for every viewer, with no model
+    number at all; top_reason as on ProjectRow (the public's from the flagged checks)."""
+    key: str
+    name: str | None
+    sector: str | None
+    state: str | None
+    tier: str | None
+    override: bool | None
+    anticipated_completion: date | None
+    anticipated_cost_cr: float | None
+    physical_progress_pct: float | None
+    no_completion_date: bool | None
+    flags: list[str]
+    outlook: Outlook | None
+    top_reason: str | None
+
+
+class MapPage(CamelModel):
+    """GET /api/projects/map: every matching current project in scope (at most 5,000; total counts them all)."""
+    total: int
+    items: list[MapRow]
+
+
 class ShapValue(CamelModel):
     feature: str
     value: Any = None
@@ -126,6 +197,10 @@ class ShapValue(CamelModel):
 
 
 class Scores(CamelModel):
+    """The project page's model block. Hidden numbers (null without `numbers`; shap_top5 empty): the four
+    probabilities, the six quantiles, tier_rank_pct, tier_by_rank, shap_top5. For every viewer: tier, the stagnation
+    badge and its quarters, no_completion_date, elapsed_ratio (the share of the planned time used: a report fact),
+    outlook, and drivers_plain (empty for the public)."""
     p_date_push_2q: float | None
     p_cost_rev_2q: float | None
     p_any_2q: float | None
@@ -144,9 +219,15 @@ class Scores(CamelModel):
     stagnation_quarters: float | None
     elapsed_ratio: float | None
     shap_top5: list[ShapValue]
+    outlook: Outlook | None = None
+    drivers_plain: list[PlainDriver] = []
 
 
 class RiskRow(CamelModel):
+    """A checklist row. evidence: None for the public; without `numbers` in words (serving.plain_text: the model
+    checks' 'P = 0.87 (High-tier cut 0.85)' as 'a completion-date push is very likely within the next two quarters',
+    the agency's timeline statistics as its schedule word, no composite score, a measured hidden delay as its band
+    and project count); report facts in it stay as written."""
     dimension: str
     state: Literal["flagged", "clear", "unknown"]
     evidence: str | None
@@ -173,7 +254,38 @@ class EventRow(CamelModel):
     remarks_last_seen: date | None
 
 
+class HiddenDelayPrior(CamelModel):
+    """A measured hidden-delay prior (pipeline/hidden_delay.py) that applies to the project: extra slip over the next
+    year against matched projects. Hidden numbers (null without `numbers`): extra_months and its interval, extra_push
+    and its interval, the Holm p-values. extra_months_word for every viewer: null when there are too few projects to
+    measure (measurable False); 'no measurable extra delay' unless the interval lies above zero; else 'a few months'
+    (under 4.5), 'about half a year' (under 9), 'about a year' (under 18) or 'over a year'. n_projects stays (a
+    count). basis: what it was matched on; as_of: the remark quarter; current: whether it still describes the
+    project at asof."""
+    factor: str
+    group: str
+    label: str | None
+    n_rows: int | None
+    n_projects: int | None
+    measurable: bool | None
+    extra_months: float | None
+    extra_months_lo: float | None
+    extra_months_hi: float | None
+    extra_push: float | None
+    extra_push_lo: float | None
+    extra_push_hi: float | None
+    holm_months: float | None
+    holm_push: float | None
+    extra_months_word: Literal["no measurable extra delay", "a few months", "about half a year", "about a year",
+                               "over a year"] | None = None
+    basis: str | None = None
+    as_of: Any = None
+    current: bool | None = None
+
+
 class External(CamelModel):
+    """The project's outside factors. composite's external_factor_score, fc_component and la_component are hidden
+    numbers (null without `numbers`; its coverage and ext_score_evidence ratings stay)."""
     fc: Record | None
     land: Record | None
     land_pairs: list[Record]
@@ -184,7 +296,7 @@ class External(CamelModel):
     portal: Record | None = None
     proposals: list[Record] = []
     remark_status: Record | None = None
-    hidden_delay: list[Record] = []
+    hidden_delay: list[HiddenDelayPrior] = []
 
 
 class Provenance(CamelModel):
@@ -345,6 +457,11 @@ class ScenarioPoint(CamelModel):
 
 
 class Analogue(CamelModel):
+    """A similar past project at the same stage. Hidden numbers (null without `numbers`): distance and the outcome
+    figures y_months, y_cost_pct, y_any, y_date_push, y_cost_rev. For every viewer: name (= analogue_name), sector,
+    outcome ('slipped': its date was pushed or its cost revised within 4 quarters, 'held': neither, 'unknown': not
+    known yet) and years_ago (whole years from the analogue's period, when it was at this stage, to the served asof;
+    target_period is its outcome's period, 4 quarters on)."""
     rank: int
     analogue_key: str
     analogue_name: str | None
@@ -358,6 +475,9 @@ class Analogue(CamelModel):
     y_any: int | None
     y_date_push: int | None
     y_cost_rev: int | None
+    name: str | None = None
+    outcome: Literal["slipped", "held", "unknown"] = "unknown"
+    years_ago: int | None = None
 
 
 class ScurvePoint(CamelModel):
@@ -376,7 +496,11 @@ class BandPoint(CamelModel):
 
 
 class CompletionBand(CamelModel):
+    """anticipated: the reports' anticipated completion (a fact); band: the likely further slip in words (Outlook
+    .slip's bands), for every viewer. Hidden numbers (null without `numbers`): the slip quantiles months_p05/50/95 and
+    the dates p05/p50/p95 derived from them."""
     anticipated: date | None
+    band: SlipBand | None = None
     months_p05: float | None
     months_p50: float | None
     months_p95: float | None
@@ -386,6 +510,22 @@ class CompletionBand(CamelModel):
 
 
 class Forecast(CamelModel):
+    """GET /api/projects/{key}/forecast (needs `insights`), one shape in two variants.
+
+    With `numbers` (the developer): everything as the pipeline wrote it, plus the words (completion.band, the
+    analogues' name / outcome / years_ago).
+
+    Without `numbers` (agency, ministry and IPMD officials), serving.plain_forecast:
+      completion   {anticipated, band} (band: 'under 6 months' | '6 to 12 months' | '1 to 2 years' | 'over 2 years'
+                   | null); months_p05/50/95 and p05/p50/p95 are null;
+      analogues    [{rank, analogueKey, analogueName, name, sector, basis, analoguePeriod, targetPeriod, outcome:
+                   'slipped' | 'held' | 'unknown', yearsAgo}], distance and the y_* outcome figures null;
+      analogue_summary  counts only: '7 of the 10 most similar past projects at this stage slipped or had a cost
+                   revision within 4 quarters.' (no median slip);
+      scenarios, band, scurve   kept with their values: they are the curves the chart draws (a picture; SPEC9_ui
+                   section 6 and the design brief: the UI's tooltip names the scenario and the month, never a value);
+      band_method  a plain sentence instead of the quantile-model method.
+    elapsed_ratio and physical_progress_pct are report facts in both."""
     key: str
     asof: date
     sector: str | None
@@ -402,7 +542,15 @@ class Forecast(CamelModel):
 
 
 class ExternalSummary(CamelModel):
-    """gold/external_summary.json; the nested blocks keep the file's own keys."""
+    """gold/external_summary.json; the nested blocks keep the file's own keys (snake_case). Every project card
+    (factors.*.top, early_notice.top, portal.top_overdue and open_list) carries `outlook` (an Outlook dict) for every
+    viewer. Hidden numbers (null without `numbers`, serving.plain_external): the cards' p_any_2q (their evidence
+    lines in words), notice_backtest's lift and lift_within_sector_year (at any depth; the slip shares and counts
+    stay), external_composite's score distribution (mean, min, 25%, 50%, 75%, max per coverage) and the top_fc_la
+    cards' external_factor_score / fc_component / la_component (n_projects and n_score_ge_high stay), and
+    hidden_delay_priors.rows' extra_months / extra_push and their intervals, holm_* and garvit_band. Every prior row
+    carries extra_months_word (as HiddenDelayPrior); without `numbers` hidden_delay_priors.note is a plain
+    sentence."""
     as_of_date: date
     n_projects: int
     model_version: str
@@ -516,7 +664,13 @@ class ModelsOut(CamelModel):
 
 class AgencyPoint(CamelModel):
     """One canonical agency (gold/agency_matrix.parquet). schedule_bias / cost_bias are shrunk toward the sector
-    median when n < 10, the *_raw ones are not; CIs are bootstrap 90% intervals of the raw median."""
+    median when n < 10, the *_raw ones are not; CIs are bootstrap 90% intervals of the raw median.
+    Hidden numbers (null without `numbers`, serving.plain_agency_matrix): every schedule_bias* and cost_bias* field,
+    sector_schedule_bias, sector_cost_bias, shrink_weight and trend. Words for every viewer: schedule_word ('usually
+    later' / 'usually earlier' than planned when the shrunk median schedule bias is beyond +-10%, else 'about on
+    time'; 'too few projects' when hidden) and cost_word ('usually costs more' / 'usually costs less' beyond +-5%,
+    else 'about as planned'; 'too few projects' when hidden or with fewer than 5 projects with both costs). The
+    counts, capital, shrunk, hidden and is_self stay."""
     agency: str
     names: str | None
     sector: str | None
@@ -545,9 +699,14 @@ class AgencyPoint(CamelModel):
     trend: float | None
     n_recent: int
     is_self: bool = False  # the signed-in agency official's own agency
+    schedule_word: Literal["usually later", "about on time", "usually earlier", "too few projects"] = \
+        "too few projects"
+    cost_word: Literal["usually costs more", "about as planned", "usually costs less", "too few projects"] = \
+        "too few projects"
 
 
 class AgencyMatrix(CamelModel):
+    """method: without `numbers` a plain description of the words instead of the statistics."""
     asof: date
     n_agencies: int
     n_hidden: int
@@ -556,16 +715,20 @@ class AgencyMatrix(CamelModel):
 
 
 class MemberBrief(CamelModel):
+    """p_any_2q is a hidden number (null without `numbers`); outlook for every viewer."""
     key: str
     name: str | None
     tier: str | None
     p_any_2q: float | None
     anticipated_cost_cr: float | None
+    outlook: Outlook | None = None
 
 
 class Bottleneck(CamelModel):
     """A cluster of current projects sharing an open issue (category, authority, state); level 'state' is the
-    rollup over every authority. headline + note: the projects that would be affected, not a causal claim."""
+    rollup over every authority. headline + note: the projects that would be affected, not a causal claim.
+    mean_p_any_2q and mean_months_p50 are hidden numbers (null without `numbers`); the counts, n_critical_high and
+    the capital stay."""
     bottleneck_id: str
     level: Literal["authority", "state"]
     category: str
@@ -607,6 +770,7 @@ class MemberEvidence(CamelModel):
 
 
 class BottleneckMember(CamelModel):
+    """p_any_2q and months_p50 are hidden numbers (null without `numbers`); outlook for every viewer."""
     key: str
     name: str | None
     sector: str | None
@@ -617,6 +781,7 @@ class BottleneckMember(CamelModel):
     months_p50: float | None
     anticipated_cost_cr: float | None
     evidence: list[MemberEvidence]
+    outlook: Outlook | None = None
 
 
 class BottleneckDetail(CamelModel):
@@ -629,7 +794,11 @@ class BottleneckDetail(CamelModel):
 
 
 class BriefOut(CamelModel):
-    """A validated brief; payload is every fact the model was given (its own keys), the numbers it may cite."""
+    """A validated brief; payload is every fact the model was given (its own keys, snake_case), the numbers it may
+    cite. view 'numbers' (the developer): the payload's prediction holds the probabilities, intervals and SHAP
+    top_drivers (backend/brief.py). view 'plain' (everyone else): prediction is {tier, horizon, delay, cost_rise,
+    likely_slip} in the Outlook's words, drivers_plain replaces top_drivers, the checklist evidence is in words; the
+    text is checked against that payload, so it cannot carry a model number. Each view is cached on its own."""
     status: Literal["ok"]
     key: str
     asof: str
@@ -641,6 +810,7 @@ class BriefOut(CamelModel):
     n_numbers_checked: int | None
     attempts: int | None
     payload: dict[str, Any]
+    view: Literal["numbers", "plain"] = "plain"
 
 
 Concern = Literal["none", "watch", "concern"]
@@ -673,7 +843,10 @@ class SecondOpinionOut(CamelModel):
     vs_model compares the two. cited: the ids the narrative cites; evidence: every item of the pack, the context
     included, though the LLM read only the items whose direction is not context (all of them when there is nothing
     else: OpinionEvidence); n_evidence_read: how many of them it read (the count a card should show, not
-    len(evidence)). model is the LLM, model_version PAIMANA's scoring model."""
+    len(evidence)). model is the LLM, model_version PAIMANA's scoring model. view: the pack it was made from, 'plain'
+    (every viewer without `numbers`: the model item states the tier and the outlook in words, the checklist items'
+    evidence is in words) or 'numbers' (the developer: the probabilities); each view is stored under its own
+    evidence_hash, so the two never mix."""
     status: Literal["ok"]
     key: str
     name: str
@@ -698,6 +871,7 @@ class SecondOpinionOut(CamelModel):
     attempts: int | None = None
     n_numbers_checked: int | None = None
     llm_ms: int | None = None
+    view: Literal["numbers", "plain"] = "plain"
 
 
 class SecondOpinionNone(CamelModel):
@@ -735,7 +909,9 @@ AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "sig
 
 
 class Alert(CamelModel):
-    """project_key is None only for a pipeline_error alert."""
+    """project_key is None only for a pipeline_error alert. Without `numbers` the title and detail are rewritten in
+    words (serving.plain_alert: a tier alert's 'P(date push or cost revision, 2q) = 0.91' reads 'a date push or cost
+    revision is very likely within the next two quarters'), in the feed and on the live stream."""
     id: int
     created_at: str
     project_key: str | None
@@ -879,6 +1055,8 @@ class LeadTime(CamelModel):
 
 
 class Signal(LeadTime):
+    """A news item linked to the project; link_score (the linker's match score) is a hidden number (null without
+    `numbers`); method (how it was linked) stays."""
     id: int
     url: str
     title: str | None
@@ -900,6 +1078,7 @@ class ProjectSignals(CamelModel):
 
 
 class FeedProject(LeadTime):
+    """link_score is a hidden number (null without `numbers`)."""
     key: str
     name: str | None
     state: str | None

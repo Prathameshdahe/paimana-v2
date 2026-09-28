@@ -11,12 +11,20 @@ written to; a number matches a payload number rounded to the decimals written, a
 (0.8% is not 0.80); signs are ignored. A number in words ('seventy-one', 'three', 'twice'; not 'one of') is rejected
 unless the same word is in the payload (a project named 'Four Laning of ...'). Cached briefs are checked again.
 A rejected draft is retried once with the offending numbers named; a second rejection returns the reasons. Accepted
-briefs are cached per (project, asof, model_version) in the app database; LM Studio down is 'llm_unavailable'
+briefs are cached per (project, asof, model_version, view) in the app database; LM Studio down is 'llm_unavailable'
 (connect timeout llm.client.CONNECT_TIMEOUT; Windows retries a refused connection, so about 5 s), remembered through
 the client's shared circuit breaker (client.mark_down / down_recently, client.DOWN_S seconds) with the chat and the
 second opinion, so a page that asks again does not wait again and a refusal any of them found spares the others. A
 slow answer (LLMTimeoutError) or an HTTP error is 'llm_unavailable' too but does not trip the breaker: LM Studio is
 up.
+
+Two views (the numbers policy, docs/ACCESS_CONTROL.md): 'numbers', for a viewer with the `numbers` feature (the
+developer), gives the model the probabilities, the slip and cost intervals and the SHAP drivers with their values;
+'plain', for everyone else and the default, gives it the tier, the outlook in words (serving.outlook: a delay and a
+cost rise very likely / likely / possible / unlikely over the next two quarters, the likely slip as a band), the
+drivers in words (serving.drivers_plain) and the checklist evidence in words (serving.plain_text), with its own
+prompt (SYSTEM_PLAIN). The validator is the same, so a plain brief cannot carry a probability: it is not in its
+payload. Each view has its own cached brief.
 """
 import json
 import math
@@ -55,6 +63,16 @@ SYSTEM = (
     "say what would fix or speed up the project. Paragraph 1: the model's tier, its probabilities, the expected slip "
     "and its 90% range, and the top drivers. Paragraph 2: the flagged checklist rows, the open report events and the "
     "news, naming their source or date as given. Say 'unknown' where the payload says unknown.")
+SYSTEM_PLAIN = (
+    "You write a brief on one infrastructure project for a government monitoring officer: exactly two short "
+    "paragraphs of plain text, no headings, no lists, at most 110 words each. Use only facts in the JSON payload. "
+    "Every number you write must appear in the payload, in digits. Do not compute new numbers (no sums, differences "
+    "or ratios) and do not add dates. Do not give advice and do not say what would fix or speed up the project. The "
+    "model's outlook is given in words (very likely, likely, possible, unlikely): use those words and never write a "
+    "probability, a percentage chance or a score. Paragraph 1: the model's tier, its outlook for the next two "
+    "quarters (a delay, a cost rise, the likely slip) and the main reasons, in the payload's words, saying which "
+    "raise the risk and which lower it. Paragraph 2: the flagged checklist rows, the open report events and the "
+    "news, naming their source or date as given. Say 'unknown' where the payload says unknown.")
 STRICT = ("Your previous draft was rejected because these numbers are not in the payload: {bad}. Rewrite both "
           "paragraphs. Copy every number and date exactly as it appears in the payload, in digits, or leave it "
           "out.")
@@ -64,8 +82,9 @@ def _r(v, nd=2):
     return None if v is None else round(float(v), nd)
 
 
-def payload(key: str) -> dict | None:
-    """The facts the brief may use for one current project; None when it is not in the scored portfolio."""
+def payload(key: str, numbers: bool = False) -> dict | None:
+    """The facts the brief may use for one current project, in the view numbers asks for (module docstring); None
+    when it is not in the scored portfolio."""
     d = serving.project(key)
     sc = d["scores"]
     rows = serving.rows_for_keys((key,))
@@ -73,15 +92,35 @@ def payload(key: str) -> dict | None:
         return None
     row = rows[0]
     sig = [s for s in db.project_signals(key, limit=50)["items"] if (s["severity"] or 0) >= 2][:5]
-    return {
+    out = {
         "project": {"key": key, "name": row["name"], "sector": row["sector"], "state": row["state"],
                     "agency": row["agency"], "ministry": row["ministry"]},
         "asof": str(d["provenance"]["asof"]), "model_version": d["provenance"]["model_version"],
+        "view": "numbers" if numbers else "plain",
         "status": {"physical_progress_pct": _r(row["physical_progress_pct"], 1),
                    "anticipated_cost_cr": _r(row["anticipated_cost_cr"], 1),
                    "expenditure_cr": _r(row["expenditure_cr"], 1),
                    "anticipated_completion": str(row["anticipated_completion"] or "unknown"),
                    "slip_to_date_months": _r(row["slip_to_date_months"], 0)},
+        "checklist_flagged": [{"dimension": r["dimension"],
+                               "evidence": r["evidence"] if numbers else serving.plain_text(r["evidence"],
+                                                                                           r["dimension"]),
+                               "source": r["source"], "as_of_date": str(r["as_of_date"]) if r["as_of_date"] else None}
+                              for r in d["risk_profile"] if r["state"] == "flagged"],
+        "open_events": [{"category": e["category"], "subtype": e["subtype"], "authority": e["authority"],
+                         "first_seen": str(e["first_seen"]), "last_seen": str(e["last_seen"]),
+                         "evidence": e["evidence"]} for e in d["external"]["events"] if e["status"] == "open"],
+        "news": [{"title": s["title"], "source": s["source"], "published_at": (s["published_at"] or "")[:10],
+                  "category": s["category"] or "unclassified", "severity": s["severity"]} for s in sig],
+    }
+    if not numbers:
+        o = sc["outlook"]
+        return {**out, "prediction": {"tier": sc["tier"] or "untiered", "horizon": o["horizon"],
+                                      "delay": o["delay"] or "unknown", "cost_rise": o["cost"] or "unknown",
+                                      "likely_slip": o["slip"] or "unknown"},
+                "drivers_plain": sc["drivers_plain"]}
+    return {
+        **out,
         "prediction": {"tier": sc["tier"] or "untiered", "horizons_quarters": [2, 4], "interval_pct": 90,
                        "p_date_push_2q": _r(sc["p_date_push_2q"]), "p_cost_revision_2q": _r(sc["p_cost_rev_2q"]),
                        "p_any_2q": _r(sc["p_any_2q"]), "p_any_4q": _r(sc["p_any_4q"]),
@@ -91,14 +130,6 @@ def payload(key: str) -> dict | None:
                        "cost_change_pct_p95": _r(sc["cost_pct_p95"], 1)},
         "top_drivers": [{"feature": v["feature"], "value": v["value"] if not isinstance(v["value"], float)
                          else _r(v["value"]), "contribution": _r(v["contribution"])} for v in sc["shap_top5"]],
-        "checklist_flagged": [{"dimension": r["dimension"], "evidence": r["evidence"], "source": r["source"],
-                               "as_of_date": str(r["as_of_date"]) if r["as_of_date"] else None}
-                              for r in d["risk_profile"] if r["state"] == "flagged"],
-        "open_events": [{"category": e["category"], "subtype": e["subtype"], "authority": e["authority"],
-                         "first_seen": str(e["first_seen"]), "last_seen": str(e["last_seen"]),
-                         "evidence": e["evidence"]} for e in d["external"]["events"] if e["status"] == "open"],
-        "news": [{"title": s["title"], "source": s["source"], "published_at": (s["published_at"] or "")[:10],
-                  "category": s["category"] or "unclassified", "severity": s["severity"]} for s in sig],
     }
 
 
@@ -188,20 +219,21 @@ def _ask(facts: dict, bad: list[str] | None = None) -> str:
     user = "Payload:\n" + json.dumps(facts, ensure_ascii=False, default=str)
     if bad:
         user += "\n\n" + STRICT.format(bad=", ".join(bad))
-    return client.complete(SYSTEM, user).strip()
+    return client.complete(SYSTEM if facts["view"] == "numbers" else SYSTEM_PLAIN, user).strip()
 
 
 def paragraphs(text: str) -> list[str]:
     return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
 
 
-def generate(key: str) -> dict:
-    """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} for one canonical key."""
-    facts = payload(key)
+def generate(key: str, numbers: bool = False) -> dict:
+    """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} for one canonical key, in the view
+    numbers asks for (module docstring)."""
+    facts = payload(key, numbers)
     if facts is None:
         return {"status": "not_scored", "detail": f"project {key} is not in the current scored portfolio"}
-    asof, mv = facts["asof"], facts["model_version"]
-    hit = db.cached_brief(key, asof, mv)
+    asof, mv, view = facts["asof"], facts["model_version"], facts["view"]
+    hit = db.cached_brief(key, asof, mv, view)
     if hit and validate(hit["text"], facts)[0]:   # a brief cached under an older, looser validator is redone
         return {**hit, "paragraphs": paragraphs(hit["text"]), "status": "ok", "cached": True, "payload": facts}
     down = {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
@@ -227,7 +259,7 @@ def generate(key: str) -> dict:
         return {"status": "llm_unavailable", "detail": str(e)[:300]}
     if not ok:
         return {"status": "rejected", "reasons": reasons, "attempts": attempts}
-    out = {"key": key, "asof": asof, "model_version": mv, "text": text,
+    out = {"key": key, "asof": asof, "model_version": mv, "view": view, "text": text,
            "paragraphs": paragraphs(text),
            "n_numbers_checked": n, "attempts": attempts,
            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}

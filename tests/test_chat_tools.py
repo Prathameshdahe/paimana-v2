@@ -16,6 +16,7 @@ from backend.access import Viewer  # noqa: E402
 from llm import rag, tools  # noqa: E402
 
 PUBLIC, IPMD = Viewer("public"), Viewer("ipmd_analyst")
+DEV = Viewer("developer")   # the model's numbers (the numbers policy: tests/test_numbers_policy.py)
 OFFICIAL_ONLY = {"explain_prediction", "second_opinion", "agency_scorecard", "bottlenecks"}
 CARD_TYPES = {"projects", "stats", "project", "explain", "history", "compare", "sources", "opinion"}
 
@@ -118,10 +119,10 @@ def test_project_tools_on_a_real_project(keys, monkeypatch):
         r = tools.run(IPMD, name, {"key": k})
         check_result(r)
         assert r.keys == [k]
-    p = tools.run(IPMD, "get_project", {"key": k})
+    p = tools.run(DEV, "get_project", {"key": k})
     assert p.cards[0]["tier"] == "Critical" and p.facts["tier"] == "Critical"
     assert p.facts["horizon_quarters"] == [2, 4] and "slip_months_90pct_range" in p.facts
-    e = tools.run(IPMD, "explain_prediction", {"key": k})
+    e = tools.run(DEV, "explain_prediction", {"key": k})
     card = e.cards[0]
     shap = serving.project(k)["scores"]["shap_top5"]
     assert [d["label"] for d in card["drivers"]] == [labels.feature_label(x["feature"]) for x in shap]
@@ -217,7 +218,7 @@ def test_knowledge_search_never_shows_a_research_agent_headline(fresh_db, monkey
 
 def test_public_outputs_are_redacted(keys):
     k = keys["critical"]
-    pub, full = tools.run(PUBLIC, "get_project", {"key": k}), tools.run(IPMD, "get_project", {"key": k})
+    pub, full = tools.run(PUBLIC, "get_project", {"key": k}), tools.run(DEV, "get_project", {"key": k})
     assert pub.facts["tier"] == full.facts["tier"]
     for f in ("slip_months_90pct_range", "flagged_checks"):
         assert f in full.facts and f not in pub.facts
@@ -303,7 +304,7 @@ def test_second_opinion_reads_the_cache_only(keys, monkeypatch):
     assert not r.found and "No AI second opinion yet" in r.summary and r.cards == []
     fake = types.ModuleType("llm.second_opinion")
     asked = []
-    fake.cached = lambda key: asked.append(key) or {
+    fake.cached = lambda key, numbers=False: asked.append(key) or {
         "concern": "concern", "headline": "Land still open on 4 km",
         "narrative": "Land is pending [E1] and [E2, E3]. Old [e4; E5] and [ E6 ].",   # older rows: forgiven forms
         "vs_model": "higher", "generated_at": "2026-09-20T10:00:00+00:00"}
@@ -314,7 +315,7 @@ def test_second_opinion_reads_the_cache_only(keys, monkeypatch):
     assert asked == [k] and r.cards[0]["type"] == "opinion" and r.cards[0]["concern"] == "concern"
     assert "[" not in r.facts["narrative"] and r.cards[0]["narrative"].count("[") == 4
     assert r.facts["narrative"] == "Land is pending and. Old and."
-    fake.cached = lambda key: None
+    fake.cached = lambda key, numbers=False: None
     assert not tools.run(IPMD, "second_opinion", {"key": k}).found
 
 

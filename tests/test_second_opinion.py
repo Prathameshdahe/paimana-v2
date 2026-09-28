@@ -238,7 +238,7 @@ def test_a_claims_numbers_must_be_in_the_items_it_cites(opinion_db):
 
 
 def test_numbers_are_checked_against_the_items_the_llm_was_shown(opinion_db):
-    p = so.pack(KEY)
+    p = so.pack(KEY, numbers=True)   # the developer's pack: its model item has the probabilities
     good, shown = so.parse(reply(p)), so.citable(p)
     hidden = [it for it in p["items"] if it not in shown]
     assert {it["kind"] for it in hidden} >= {"status", "model"}

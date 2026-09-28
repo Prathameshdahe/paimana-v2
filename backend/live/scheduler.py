@@ -172,13 +172,14 @@ def status() -> dict:
             "bhoomi_pull_enabled": bhoomi_enabled()}
 
 
-async def alert_stream(after: int | None, keys=None, alive=None):
+async def alert_stream(after: int | None, keys=None, alive=None, redact=None):
     """SSE lines: every alert with id > after (default: the newest at connect) as `event: alert`; with keys (a
-    viewer's project keys, backend/access.py) only the alerts on those projects. alive (a blocking callable, run in a
-    thread; backend/auth/sessions.py still_live) is asked before any alert goes out and at every heartbeat: once it
-    says False (the session ended, the account was disabled, its role or scope changed) the stream sends a last
-    comment and ends, so nothing goes out on a session that no longer holds; the browser's reconnect then meets the
-    session as it is now (401, or the new scope)."""
+    viewer's project keys, backend/access.py) only the alerts on those projects; redact(alert) -> alert, when given,
+    is applied to each one before it is sent (serving.plain_alert for a viewer without `numbers`). alive (a blocking
+    callable, run in a thread; backend/auth/sessions.py still_live) is asked before any alert goes out and at every
+    heartbeat: once it says False (the session ended, the account was disabled, its role or scope changed) the stream
+    sends a last comment and ends, so nothing goes out on a session that no longer holds; the browser's reconnect then
+    meets the session as it is now (401, or the new scope)."""
     last = after if after is not None else await asyncio.to_thread(db.max_alert_id)
     yield ": connected\n\n"
     beat = time.monotonic()
@@ -192,6 +193,7 @@ async def alert_stream(after: int | None, keys=None, alive=None):
             last = a["id"]
             if keys is not None and a["project_key"] not in keys:
                 continue
+            a = redact(a) if redact else a
             yield f"id: {a['id']}\nevent: alert\ndata: {Alert(**a).model_dump_json(by_alias=True)}\n\n"
         if due:
             beat = time.monotonic()

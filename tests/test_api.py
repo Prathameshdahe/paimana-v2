@@ -45,7 +45,7 @@ def test_meta_has_versions_and_caveats(client):
 
 
 def test_portfolio_kpis_and_tiers(client):
-    p = client.get("/api/portfolio").json()
+    p = client.get("/api/portfolio", headers=as_role(client, "developer")).json()   # the ranked probabilities
     n = p["kpis"]["nProjects"]
     assert sum(t["n"] for t in p["tiers"]) == n
     assert [t["tier"] for t in p["tiers"]] == ["Critical", "High", "Medium", "Low", "Watch"]
@@ -71,8 +71,9 @@ def test_pagination_bounds(client):
     for bad in ({"size": 101}, {"size": 0}, {"page": 0}, {"sort": "nope"}, {"tier": "Severe"}, {"flag": "x"}):
         assert client.get("/api/projects", params=bad).status_code == 422
     # pages do not overlap and follow the risk order
-    a = client.get("/api/projects", params={"size": 20}).json()["items"]
-    b = client.get("/api/projects", params={"size": 20, "page": 2}).json()["items"]
+    dev = as_role(client, "developer")   # the order by the chance of a slip: its numbers are the developer's
+    a = client.get("/api/projects", headers=dev, params={"size": 20}).json()["items"]
+    b = client.get("/api/projects", headers=dev, params={"size": 20, "page": 2}).json()["items"]
     assert not {r["key"] for r in a} & {r["key"] for r in b}
     assert a[-1]["pAny2q"] >= b[0]["pAny2q"]
 
@@ -113,7 +114,7 @@ def test_unknown_project_is_404(client):
 
 def test_detail_bundle_has_provenance(client):
     key = client.get("/api/projects", params={"size": 1}).json()["items"][0]["key"]
-    d = client.get(f"/api/projects/{key}").json()
+    d = client.get(f"/api/projects/{key}", headers=as_role(client, "developer")).json()   # with the model's numbers
     assert d["key"] == key
     prov = d["provenance"]
     for k in ("asof", "modelVersion", "goldVersion", "silverVersion", "sourceDocId", "sourcePage", "period"):

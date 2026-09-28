@@ -36,6 +36,7 @@ from .schemas import (
     JobRun,
     JobStarted,
     LiveStatus,
+    MapPage,
     Meta,
     ModelsOut,
     Portfolio,
@@ -65,6 +66,8 @@ from .schemas import (
 router = APIRouter(prefix="/api")
 # who is asking: the signed-in account of the session cookie, or the public without one (backend/access.py)
 Anyone = Depends(viewer)
+# the numbers policy (backend/serving.py, docs/ACCESS_CONTROL.md): a viewer without the `numbers` feature gets every
+# read below through serving.plain_* (the model's numbers null, words kept); v.can("numbers") decides
 # input bounds: a project key is PRJ- and six digits (400 otherwise, before any lookup); every free-text query or
 # path parameter has a length limit (422 past it), and paging is 1..100 rows a page
 KEY_RX = re.compile(r"PRJ-\d{6}")
@@ -100,7 +103,8 @@ def get_portfolio(ministry: str | None = Query(None, max_length=NAME_MAX),
                   sector: str | None = Query(None, max_length=SECTOR_MAX),
                   state: str | None = Query(None, max_length=SECTOR_MAX), tier: Tier | None = None,
                   v: Viewer = Anyone):
-    return serving.portfolio(ministry, sector, state, tier, scope=v.scope)
+    out = serving.portfolio(ministry, sector, state, tier, scope=v.scope)
+    return out if v.can("numbers") else serving.plain_portfolio(out)
 
 
 @router.get("/projects", response_model=ProjectPage)
@@ -113,14 +117,29 @@ def get_projects(q: str | None = Query(None, max_length=100), ministry: str | No
     """near_complete: 80-99% done and not past the anticipated completion (the public Home's short list)."""
     out = serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size, scope=v.scope,
                            near_complete=near_complete)
-    return out if v.can("insights") else serving.public_page(out)
+    out = out if v.can("insights") else serving.public_page(out)
+    return out if v.can("numbers") else serving.plain_page(out)
+
+
+@router.get("/projects/map", response_model=MapPage)
+def get_projects_map(q: str | None = Query(None, max_length=100),
+                     ministry: str | None = Query(None, max_length=NAME_MAX),
+                     sector: str | None = Query(None, max_length=SECTOR_MAX),
+                     state: str | None = Query(None, max_length=SECTOR_MAX), tier: Tier | None = None,
+                     flag: Flag | None = None, near_complete: bool = False, v: Viewer = Anyone):
+    """The command centre's risk map: every current project in scope matching the filters of /projects, unpaged
+    (at most serving.MAP_MAX), as MapRow; no model number for anyone."""
+    out = serving.projects_map(q, ministry, sector, state, tier, flag, scope=v.scope, near_complete=near_complete)
+    return out if v.can("insights") else serving.public_map(out)
 
 
 @router.get("/projects/{key}", response_model=ProjectDetail)
 def get_project(key: str, v: Viewer = Anyone):
-    """The project page; for the public without drivers, intervals and provenance (serving.public_project)."""
+    """The project page; for the public without drivers, intervals and provenance (serving.public_project), without
+    the model's numbers for anyone but the developer (serving.plain_project)."""
     out = serving.project(_key(key, v))
-    return out if v.can("insights") else serving.public_project(out)
+    out = out if v.can("insights") else serving.public_project(out)
+    return out if v.can("numbers") else serving.plain_project(out)
 
 
 @router.get("/projects/{key}/timeline", response_model=Timeline)
@@ -153,7 +172,7 @@ def get_forecast(key: str, v: Viewer = Depends(need("insights"))):
     out = serving.forecast(_key(key, v))
     if out is None:
         raise HTTPException(status_code=404, detail=f"project {key} is not in the current scored portfolio")
-    return out
+    return out if v.can("numbers") else serving.plain_forecast(out)
 
 
 @router.get("/projects/{key}/brief", response_model=BriefOut,
@@ -162,8 +181,8 @@ def get_forecast(key: str, v: Viewer = Depends(need("insights"))):
                        503: {"description": "status 'llm_unavailable': LM Studio is not reachable"}})
 def get_brief(key: str, v: Viewer = Depends(need("insights"))):
     """Two paragraphs from the local LLM citing only the payload's numbers (backend/brief.py), cached per
-    (project, asof, model_version)."""
-    out = brief.generate(_key(key, v))
+    (project, asof, model_version, view): the model's numbers for the developer, the outlook words for the rest."""
+    out = brief.generate(_key(key, v), numbers=v.can("numbers"))
     if out["status"] == "not_scored":
         raise HTTPException(status_code=404, detail=out["detail"])
     if out["status"] != "ok":
@@ -180,15 +199,15 @@ def get_second_opinion(key: str, cached: bool = False, v: Viewer = Depends(need(
     """The local LLM's cited second opinion on the project's evidence (llm/second_opinion.py): generated on demand
     and stored per evidence version; ?cached=1 never generates and says status 'none' when there is none. It never
     changes the tier."""
-    k = _key(key, v)
+    k, numbers = _key(key, v), v.can("numbers")   # each view is its own pack and cache (llm/second_opinion.py)
     if cached:
-        out = second_opinion.cached(k)
+        out = second_opinion.cached(k, numbers=numbers)
         if out is not None:
             return out
-        if second_opinion.pack(k) is None:
+        if second_opinion.pack(k, numbers=numbers) is None:
             raise HTTPException(status_code=404, detail=f"project {key} is not in the current scored portfolio")
         return {"status": "none", "key": k, "detail": "no second opinion for the current evidence yet"}
-    out = second_opinion.generate(k)
+    out = second_opinion.generate(k, numbers=numbers)
     if out["status"] == "not_scored":
         raise HTTPException(status_code=404, detail=out["detail"])
     if out["status"] == "rejected":
@@ -204,7 +223,8 @@ def get_agency_matrix(sector: str | None = Query(None, max_length=SECTOR_MAX),
                       v: Viewer = Depends(need("agencies"))):
     """Agency Performance Matrix: one point per canonical agency (n >= 5 unless include_hidden); a ministry
     official sees the agencies of their ministry, an agency official every agency with their own is_self."""
-    return serving.agency_matrix(sector, ministry, include_hidden, scope=v.scope)
+    out = serving.agency_matrix(sector, ministry, include_hidden, scope=v.scope)
+    return out if v.can("numbers") else serving.plain_agency_matrix(out)
 
 
 @router.get("/agencies/{agency}/projects", response_model=ProjectPage)
@@ -215,7 +235,8 @@ def get_agency_projects(agency: str = Path(max_length=NAME_MAX), page: int = Que
     name = agency.strip().upper()
     if not serving.agency_known(name):
         raise HTTPException(status_code=404, detail=f"agency {agency} not found")
-    return serving.projects(agency=name, page=page, size=size, scope=v.scope)
+    out = serving.projects(agency=name, page=page, size=size, scope=v.scope)
+    return out if v.can("numbers") else serving.plain_page(out)
 
 
 @router.get("/bottlenecks", response_model=BottleneckPage)
@@ -225,7 +246,8 @@ def get_bottlenecks(category: str | None = Query(None, max_length=40),
                     page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
                     v: Viewer = Depends(need("bottlenecks"))):
     """Bottleneck Intelligence: clusters by capital exposed, each with its top 5 members (members in scope)."""
-    return serving.bottlenecks(category, state, min_projects, level, page, size, scope=v.scope)
+    out = serving.bottlenecks(category, state, min_projects, level, page, size, scope=v.scope)
+    return out if v.can("numbers") else serving.plain_bottlenecks(out)
 
 
 @router.get("/bottlenecks/{bottleneck_id}", response_model=BottleneckDetail)
@@ -234,13 +256,14 @@ def get_bottleneck(bottleneck_id: str = Path(max_length=ID_MAX), page: int = Que
     out = serving.bottleneck(bottleneck_id, page, size, scope=v.scope)
     if out is None:
         raise HTTPException(status_code=404, detail=f"bottleneck {bottleneck_id} not found")
-    return out
+    return out if v.can("numbers") else serving.plain_bottleneck(out)
 
 
 @router.get("/external/summary", response_model=ExternalSummary)
 def get_external_summary(v: Viewer = Anyone):
     out = serving.external_summary(scope=v.scope)
-    return out if v.can("insights") else serving.public_external(out)
+    out = out if v.can("insights") else serving.public_external(out)
+    return out if v.can("numbers") else serving.plain_external(out)
 
 
 @router.get("/models", response_model=ModelsOut)
@@ -255,7 +278,8 @@ def get_alerts(since: datetime | None = None, kind: AlertKind | None = None, ack
                page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
                v: Viewer = Depends(need("alerts"))):
     """Alerts on the viewer's projects (project-less pipeline errors: IPMD only)."""
-    return db.alerts(since and since.isoformat(), kind, acked, page, size, keys=v.keys)
+    out = db.alerts(since and since.isoformat(), kind, acked, page, size, keys=v.keys)
+    return out if v.can("numbers") else {**out, "items": [serving.plain_alert(a) for a in out["items"]]}
 
 
 @router.post("/alerts/{alert_id}/ack", response_model=Alert)
@@ -264,11 +288,14 @@ def post_alert_ack(alert_id: int, body: RoleBody | None = None, v: Viewer = Depe
     out = db.ack(alert_id, role, keys=v.keys, actor=v.actor, named=role not in HIDDEN_ROLES)
     if out is None:
         raise HTTPException(status_code=404, detail=f"alert {alert_id} not found")
-    return out
+    return out if v.can("numbers") else serving.plain_alert(out)
 
 
 def _watchlist(v: Viewer, role: str) -> dict:
     out = db.watchlist(role)
+    if not v.can("numbers"):
+        out = {**out, "items": [{**i, "project": i["project"] and serving.plain_row(i["project"])}
+                                for i in out["items"]]}
     if v.scope is None:
         return out
     # one list per role, cut to the viewer's scope (docs/ACCESS_CONTROL.md, Scope)
@@ -448,8 +475,9 @@ def get_signal_feed(since: datetime | None = None, category: str | None = Query(
                     v: Viewer = Depends(need("radar"))):
     """External Evidence Radar: one page of signals (severity = at least) and the state heat. Only the developer
     sees the unlinked pool; everyone else the signals linked to their projects."""
-    return scout.feed(since and since.isoformat(), category, state, severity, linked, page, size,
-                      keys=_signal_keys(v))
+    out = scout.feed(since and since.isoformat(), category, state, severity, linked, page, size,
+                     keys=_signal_keys(v))
+    return out if v.can("numbers") else {**out, "items": [serving.plain_signal(s) for s in out["items"]]}
 
 
 def _signal_keys(v: Viewer) -> frozenset | None:
@@ -492,7 +520,8 @@ async def get_stream(request: Request, after: int | None = Query(None, ge=0), v:
     start = after if after is not None else int(last) if last and last.isdigit() else None
     s = sessions.session_of(request)   # the one the viewer came from (cached on the request)
     alive = sessions.still_live(s) if s is not None else None
-    return StreamingResponse(scheduler.alert_stream(start, v.keys, alive), media_type="text/event-stream",
+    redact = None if v.can("numbers") else serving.plain_alert
+    return StreamingResponse(scheduler.alert_stream(start, v.keys, alive, redact), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
@@ -501,7 +530,7 @@ def get_project_signals(key: str, v: Viewer = Depends(need("insights"))):
     out = db.project_signals(_key(key, v))
     for s in out["items"]:
         s.update(scout.lead_time(out["key"], s["published_at"]))
-    return out
+    return out if v.can("numbers") else {**out, "items": [serving.plain_signal(s) for s in out["items"]]}
 
 
 # ---------- assistant (llm/agent.py; docs/AI_ASSISTANT.md) ----------

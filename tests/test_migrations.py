@@ -14,7 +14,7 @@ from conftest import alembic_config  # noqa: E402
 
 HANDOFF = ["001_core_identity", "84b98df29a61", "b704a78e671f", "004_model_artifact_checksum",
            "005_ingestion_staging"]   # Manamrit's chain, byte-identical files
-OURS = ["1f3a9c2d7b40", "2c8d4e6f1a57", "3e5f7a9b2c68", "4a6b8c0d3e79", "5b7c9d1e4f80"]
+OURS = ["1f3a9c2d7b40", "2c8d4e6f1a57", "3e5f7a9b2c68", "4a6b8c0d3e79", "5b7c9d1e4f80", "6c8e0a2b4d91"]
 TABLES = {
     "ingest": {"source_documents", "load_runs", "staging_project_observations"},
     "core": {"projects", "project_keys", "project_timeline"},

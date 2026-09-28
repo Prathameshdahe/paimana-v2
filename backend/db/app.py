@@ -713,11 +713,12 @@ def save_second_opinion(row: dict) -> None:
                     _in({**{c: row.get(c) for c in SECOND_OPINION_COLS}, "json": body}))
 
 
-def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None:
-    """An accepted brief (backend/brief.py) for this data version, or None."""
+def cached_brief(project_key: str, asof: str, model_version: str, view: str = "numbers") -> dict | None:
+    """An accepted brief (backend/brief.py) for this data version and view ('numbers' | 'plain': the numbers
+    policy), or None."""
     with read() as con:
-        row = _one(con, "SELECT * FROM app.briefs WHERE project_key = :key AND asof = :asof AND model_version = :mv",
-                   {"key": project_key, "asof": _day(asof), "mv": model_version})
+        row = _one(con, "SELECT * FROM app.briefs WHERE project_key = :key AND asof = :asof AND model_version = :mv "
+                        "AND view = :view", {"key": project_key, "asof": _day(asof), "mv": model_version, "view": view})
     if row is None:
         return None
     row["key"] = row.pop("project_key")
@@ -725,14 +726,15 @@ def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None
 
 
 def save_brief(b: dict) -> None:
+    """Store an accepted brief under (project, asof, model_version, view; view 'numbers' when b has none)."""
     with connect() as con:
-        con.execute(sa.text("""INSERT INTO app.briefs (project_key, asof, model_version, generated_at, text,
+        con.execute(sa.text("""INSERT INTO app.briefs (project_key, asof, model_version, view, generated_at, text,
                 n_numbers_checked, attempts)
-            VALUES (:key, :asof, :model_version, :generated_at, :text, :n_numbers_checked, :attempts)
-            ON CONFLICT (project_key, asof, model_version) DO UPDATE SET generated_at = EXCLUDED.generated_at,
+            VALUES (:key, :asof, :model_version, :view, :generated_at, :text, :n_numbers_checked, :attempts)
+            ON CONFLICT (project_key, asof, model_version, view) DO UPDATE SET generated_at = EXCLUDED.generated_at,
             text = EXCLUDED.text, n_numbers_checked = EXCLUDED.n_numbers_checked, attempts = EXCLUDED.attempts"""),
-                    _in({k: b[k] for k in ("key", "asof", "model_version", "generated_at", "text",
-                                           "n_numbers_checked", "attempts")}))
+                    _in({"view": b.get("view") or "numbers", **{k: b[k] for k in (
+                        "key", "asof", "model_version", "generated_at", "text", "n_numbers_checked", "attempts")}}))
 
 
 # ---------------------------------------------------------------- audit

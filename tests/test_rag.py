@@ -402,15 +402,19 @@ def test_md_chunks_bounds_headings_and_fences():
 def test_project_card_is_plain_public_facts():
     r = {"key": "PRJ-X", "name": "Test Road", "sector": "Roads & Highways", "state": "Kerala",
          "ministry": "Ministry of Road Transport & Highways", "agency": "NHAI", "tier": "High", "stalled": True,
-         "p_any_2q": 0.4321, "anticipated_cost_cr": 1234.56, "original_cost_cr": 1000.0, "expenditure_cr": None,
+         "p_date_push_2q": 0.62, "p_cost_rev_2q": 0.03, "months_p50": 7.4, "anticipated_cost_cr": 1234.56,
+         "original_cost_cr": 1000.0, "expenditure_cr": None,
          "physical_progress_pct": 55.0, "anticipated_completion": "2027-03-31", "scheduled_completion": None,
          "slip_to_date_months": 12.0, "obs_period": "2026-07-01", "flags": ["land", "early_notice"],
          "sanction_date": None}
     text = rag.project_card(r, ["Land for the project is not fully acquired yet."])
-    assert "Risk tier: High." in text and "43%" in text and "Rs 1,234.6 crore" in text and "March 2027" in text
+    assert "Risk tier: High." in text and "Rs 1,234.6 crore" in text and "March 2027" in text
+    # the outlook in words, no model number (the numbers policy: the card is public)
+    assert ("Outlook over the next two quarters: a delay is likely, a cost rise is unlikely, the likely further slip "
+            "is 6 to 12 months.") in text and "0.62" not in text and "62%" not in text
     assert "Stalled" in text and "Land for the project" in text and "early notice" in text
     assert "spent" not in text and "None" not in text
-    assert "Watch" in rag.project_card({**r, "tier": "Watch", "p_any_2q": None}, [])
+    assert "Watch" in rag.project_card({**r, "tier": "Watch", "p_date_push_2q": None, "months_p50": None}, [])
 
 
 def test_research_chunks_from_the_sweep_and_the_agent(fresh_db, tmp_path, monkeypatch):
@@ -478,7 +482,9 @@ def test_real_chunks_visibility(real_chunks):
         by_kind.setdefault(c["kind"], set()).add(c["visibility"])
     assert {"help", "doc", "project", "event", "external", "glossary"} <= set(by_kind)
     assert by_kind["help"] == by_kind["project"] == by_kind["event"] == {"public"}
-    assert by_kind["doc"] == {"official"} and by_kind.get("news", {"official"}) == {"official"}
+    assert by_kind["doc"] == {"official", "numbers"} and by_kind.get("news", {"official"}) == {"official"}
+    # the docs with the model's evaluation statistics: the developer's (the numbers policy)
+    assert {c["source"] for c in real_chunks if c["visibility"] == "numbers"} == rag.NUMBERS_DOCS
     docs = {c["source"] for c in real_chunks if c["kind"] == "doc"}
     assert "README.md" in docs and not any("PROJECT_DOCUMENTATION" in d or "mock" in d for d in docs)
     public = [c for c in real_chunks if c["visibility"] == "public"]

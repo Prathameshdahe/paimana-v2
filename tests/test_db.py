@@ -254,7 +254,12 @@ def test_second_opinions_and_briefs(fresh_db):
          "generated_at": "2026-09-01T00:00:00+00:00"}
     db.save_brief(b)
     db.save_brief({**b, "text": "t2"})
-    assert db.cached_brief(KEY, "2026-07-01", "mv") == {**b, "text": "t2"}
+    assert db.cached_brief(KEY, "2026-07-01", "mv") == {**b, "text": "t2", "view": "numbers"}
+    # the numbers policy's two views of one brief are cached apart (backend/brief.py)
+    assert db.cached_brief(KEY, "2026-07-01", "mv", "plain") is None
+    db.save_brief({**b, "view": "plain", "text": "words"})
+    assert db.cached_brief(KEY, "2026-07-01", "mv", "plain")["text"] == "words"
+    assert db.cached_brief(KEY, "2026-07-01", "mv")["text"] == "t2"
 
 
 def test_audit_rows_and_health(fresh_db):

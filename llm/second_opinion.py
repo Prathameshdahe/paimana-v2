@@ -6,7 +6,8 @@ pack(key) collects the evidence as items E1..En, each {id, kind, date, direction
 (url: the research fact's or headline's link, for the officer; None on the rest):
   status    the latest CUF row (progress, cost against the original, spend, completion against the schedule, slip so
             far, share of the planned time elapsed); context;
-  model     the tier and probabilities (ranking scores, not calibrated frequencies); context, never evidence;
+  model     the tier and probabilities (ranking scores, not calibrated frequencies), in the plain view the tier and
+            the outlook in words; context, never evidence;
   check     flagged checklist rows (ml/risk_profile.py) with their evidence line, except the model's own two, the
             composite, rows another item states (PARIVESH, land register, web research) and sector headwind and agency
             optimism (the sector's and the agency's record, not the project's: the LLM read them as evidence either
@@ -83,6 +84,15 @@ which it was: down True (refused, or remembered as such: start LM Studio), busy 
 (up, but slow or erring: the detail says). cached(key) is the accepted opinion for the current evidence, without an
 LLM call (the chat reads only this). The result's n_evidence_read is how many items the LLM was shown (citable);
 evidence lists them all, the context included.
+
+Two views (the numbers policy, docs/ACCESS_CONTROL.md): pack(key, numbers) builds the model item with the
+probabilities and the median slip for a viewer with the `numbers` feature (the developer), and with the tier and the
+outlook in words (serving.outlook) for everyone else, the default ('plain'); the plain pack's checklist items quote
+their evidence in words (serving.plain_text: no 'P = 0.87 (High-tier cut ...)', no measured hidden-delay months).
+p['view'] names it. The plain view's evidence_hash covers the view as well, so its opinions are stored and served
+apart from the numbers view's; the numbers view hashes as before, so the opinions stored before the split stay the
+developer's. The nightly job asks for the plain view (what the officials read); the developer's is asked for on
+demand. The checks are the same in both, so a plain opinion cannot carry a model number either.
 
 Limits: the LLM reads summaries of the evidence, not the sources; the concern rules bound the level, not the
 reasoning; a headline-only news item is weak evidence and marked unverified; with no project-level evidence (only the
@@ -251,8 +261,17 @@ def _status(row: dict, latest: dict | None, sc: dict) -> dict:
     return _item("status", period, "context", f"CUF progress report {period or ''}".strip(), "; ".join(parts) + ".")
 
 
-def _model_item(sc: dict, asof) -> dict:
+def _model_item(sc: dict, asof, numbers: bool = True) -> dict:
     tier = sc["tier"] or "untiered"
+    if not numbers:   # the outlook in words (module docstring, two views)
+        o = sc.get("outlook") or serving.outlook(None, None, None)
+        cost = f"a cost revision is {o['cost'] or 'not rated'} within the {o['horizon']}"
+        if sc["no_completion_date"] or o["delay"] is None:
+            text = f"Model tier {tier}: no anticipated completion date, so no date-based rating; {cost}."
+        else:
+            text = (f"Model tier {tier} (tiers go by rank among current projects). Over the {o['horizon']}: a "
+                    f"completion-date push is {o['delay']}; {cost}; likely further slip {o['slip'] or 'unknown'}.")
+        return _item("model", _month(asof), "context", "PAIMANA model", text)
     if sc["no_completion_date"] or sc["p_any_2q"] is None:
         text = (f"Model tier {tier}: no anticipated completion date, so no date-based score; P(cost revised within 2 "
                 f"quarters) {_p(sc['p_cost_rev_2q'])}.")
@@ -264,9 +283,9 @@ def _model_item(sc: dict, asof) -> dict:
     return _item("model", _month(asof), "context", "PAIMANA model", text)
 
 
-def _checks(risk: list[dict], asof, portal: dict | None = None) -> list[dict]:
+def _checks(risk: list[dict], asof, portal: dict | None = None, numbers: bool = True) -> list[dict]:
     """The flagged checklist rows (module docstring); portal: the PARIVESH summary, whose proposals replace the
-    rulebook's estimate."""
+    rulebook's estimate; numbers False: the evidence in words (serving.plain_text)."""
     order = list(serving.PLAIN_RISK)
     on_portal = bool((portal or {}).get("n_proposals"))
     rows = sorted((r for r in risk if r["state"] == "flagged" and r["dimension"] not in SKIP_DIMS | CONTEXT_DIMS
@@ -276,7 +295,8 @@ def _checks(risk: list[dict], asof, portal: dict | None = None) -> list[dict]:
     for r in rows[:N_CHECKS]:
         stale = r["source"] in REPORT_SOURCES
         sev = 2 if r["dimension"] in STRONG_DIMS and not stale and r["source"] not in ESTIMATE_SOURCES else 1
-        text = f"Checklist row {r['dimension'].replace('_', ' ')} flagged: {_quote(r['evidence'])}"
+        ev = r["evidence"] if numbers else serving.plain_text(r["evidence"], r["dimension"])
+        text = f"Checklist row {r['dimension'].replace('_', ' ')} flagged: {_quote(ev)}"
         out.append(_item("check", _month(r["as_of_date"] or asof), "negative", CHECK_SOURCE.get(r["source"],
                          r["source"]), text, sev, stale))
     return out
@@ -385,8 +405,9 @@ def _news(key: str, res: dict, asof) -> list[dict]:
     return out
 
 
-def pack(key: str) -> dict | None:
-    """The evidence pack for one current project (module docstring); None when it is not in the scored portfolio."""
+def pack(key: str, numbers: bool = False) -> dict | None:
+    """The evidence pack for one current project in the view numbers asks for (module docstring); None when it is
+    not in the scored portfolio."""
     d = serving.project(key)
     sc = d["scores"]
     rows = serving.rows_for_keys((key,))
@@ -394,15 +415,15 @@ def pack(key: str) -> dict | None:
         return None
     row, asof = rows[0], d["provenance"]["asof"]
     res = serving.research(key)
-    items = ([_status(row, d["latest"], sc), _model_item(sc, asof)]
-             + _checks(d["risk_profile"], asof, d["external"]["portal"])
+    items = ([_status(row, d["latest"], sc), _model_item(sc, asof, numbers)]
+             + _checks(d["risk_profile"], asof, d["external"]["portal"], numbers)
              + _parivesh(d["external"]["portal"], asof) + _land(d["external"]["land"])
              + _events(d["external"]["events"], asof) + _research(res, asof) + _news(key, res, asof))
     tier = sc["tier"]
     items.sort(key=group)   # stable: the order above within a group
     return {"key": key, "name": row["name"], "sector": row["sector"], "state": row["state"], "agency": row["agency"],
             "asof": str(asof), "model_version": d["provenance"]["model_version"], "tier": tier,
-            "model_level": MODEL_LEVEL.get(tier, "watch"),
+            "model_level": MODEL_LEVEL.get(tier, "watch"), "view": "numbers" if numbers else "plain",
             "items": [{"id": f"E{i}", **it} for i, it in enumerate(items, 1)]}
 
 
@@ -420,8 +441,10 @@ def group(it: dict) -> int:
 
 def evidence_hash(p: dict) -> str:
     """sha256 of the pack's canonical JSON, the items' urls left out: a link is not evidence, and adding one to the
-    pack must not ask every stored opinion again."""
-    body = {**p, "items": [{k: v for k, v in it.items() if k != "url"} for it in p["items"]]}
+    pack must not ask every stored opinion again. The view is in it only when it is not 'numbers' (module docstring:
+    the numbers view keeps the hashes it had before the views)."""
+    body = {**{k: v for k, v in p.items() if k != "view" or v != "numbers"},
+            "items": [{k: v for k, v in it.items() if k != "url"} for it in p["items"]]}
     return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
 
@@ -666,7 +689,8 @@ def _out(row: dict, p: dict, cached: bool) -> dict:
             "cited": [c for c in cites(row["narrative"]) if c in {it["id"] for it in p["items"]}],
             "evidence": p["items"], "n_evidence_read": len(citable(p)),
             "evidence_hash": row["evidence_hash"], "model": row["model"],
-            "prompt_version": row["prompt_version"], "generated_at": row["generated_at"], "cached": cached}
+            "prompt_version": row["prompt_version"], "generated_at": row["generated_at"], "cached": cached,
+            "view": p["view"]}
 
 
 def _accepted(row: dict | None, p: dict) -> bool:
@@ -675,25 +699,25 @@ def _accepted(row: dict | None, p: dict) -> bool:
         {k: row[k] for k in ("concern", "headline", "narrative", "key_evidence", "gaps")}, p)[0]
 
 
-def cached(key: str) -> dict | None:
-    """The accepted opinion for the project's current evidence, without an LLM call; None when there is none (or the
-    project is not scored)."""
-    p = pack(key)
+def cached(key: str, numbers: bool = False) -> dict | None:
+    """The accepted opinion for the project's current evidence in the view numbers asks for, without an LLM call;
+    None when there is none (or the project is not scored)."""
+    p = pack(key, numbers)
     if p is None:
         return None
     row = db.second_opinion(key, evidence_hash(p), _model())
     return _out(row, p, True) if _accepted(row, p) else None
 
 
-def generate(key: str, *, interactive: bool = True, fresh: bool = False,
+def generate(key: str, *, numbers: bool = False, interactive: bool = True, fresh: bool = False,
              stop: threading.Event | None = None) -> dict:
     """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored' | 'stopped', ...} for one canonical key; an
     accepted opinion for the current evidence is returned from the cache (fresh: only one made under the current
     PROMPT_VERSION). interactive: a person is waiting (the LLM gate as a chat request, INTERACTIVE_WAIT_S); else the
     nightly job (JOB_WAIT_S, after any chat request), which passes its stop flag: set, no ask starts and a gate wait
     ends at once, and the call returns 'stopped' (only the job sees it). A rejection does not replace an accepted
-    opinion: it is noted on it (last_rejected)."""
-    p = pack(key)
+    opinion: it is noted on it (last_rejected). numbers: the view (module docstring), plain by default."""
+    p = pack(key, numbers)
     if p is None:
         return {"status": "not_scored", "detail": f"project {key} is not in the current scored portfolio"}
     h, model = evidence_hash(p), _model()
@@ -745,7 +769,8 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False,
         if op is not None or not kept:
             row = {"project_key": key, "evidence_hash": h, "model": model, "prompt_version": PROMPT_VERSION,
                    "asof": p["asof"], "generated_at": _now(), "status": "ok" if op else "rejected", "tier": p["tier"],
-                   "model_version": p["model_version"], "attempts": attempts, "n_numbers_checked": n, "llm_ms": ms,
+                   "model_version": p["model_version"], "view": p["view"], "attempts": attempts,
+                   "n_numbers_checked": n, "llm_ms": ms,
                    **(op or {"reasons": reasons}), "evidence": p["items"]}
             db.save_second_opinion(row)
         else:   # the accepted opinion stays; the rejection under this prompt is noted on it (the job reads it)
