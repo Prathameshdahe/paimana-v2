@@ -525,7 +525,8 @@ function retryLines(retries: string[][]): Array<{ text: string; reasons: string[
 /**
  * The tool calls of one answer as a compact list: open on the newest answer, folded to one line on older ones (so it
  * folds when the next question is asked, never under the viewer's eyes as an answer ends); the viewer can open or
- * fold it. New steps are announced politely to screen readers.
+ * fold it. While it streams, the stage, the newest step and a set-aside draft are announced politely from a hidden
+ * region of their own, so a folded list (display none) does not silence them.
  */
 export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: {
   steps: ChatTool[]
@@ -542,10 +543,22 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
   const now = streaming ? (detail || (stage ? STAGE_LABEL[stage] : 'Sending the question')) : null
   const summary = `${steps.length} step${steps.length === 1 ? '' : 's'}`
     + (retries.length ? ` · ${retries.length} draft${retries.length === 1 ? '' : 's'} set aside` : '')
+  const lines = retryLines(retries)
+  const newest = steps.at(-1)
+  const lastRetry = lines.at(-1)
   if (!streaming && steps.length === 0 && retries.length === 0) return null
 
   return (
     <div className="text-xs">
+      <div className="sr-only" aria-live="polite">
+        {streaming && (
+          <>
+            <div>{now}</div>
+            {newest && <div>{newest.label}{newest.status === 'done' ? ', done' : newest.status === 'error' ? ', failed' : ''}</div>}
+            {lastRetry && <div>{lastRetry.text}</div>}
+          </>
+        )}
+      </div>
       <button
         type="button"
         aria-expanded={expanded}
@@ -557,7 +570,7 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
         {streaming && <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" aria-hidden="true" />}
         <span className="truncate">{now ?? summary}</span>
       </button>
-      <ol id={listId} aria-live="polite" className={cn('mt-1 space-y-1 border-l border-border-default pl-3 ml-1.5', !expanded && 'hidden')}>
+      <ol id={listId} className={cn('mt-1 space-y-1 border-l border-border-default pl-3 ml-1.5', !expanded && 'hidden')}>
         {steps.map((s) => (
           <li key={s.id} className="flex items-start gap-1.5">
             {s.status === 'running' ? (
@@ -573,7 +586,7 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
             </span>
           </li>
         ))}
-        {retryLines(retries).map(({ text, reasons }, i) => (
+        {lines.map(({ text, reasons }, i) => (
           <li key={`retry-${i}`} className="flex items-start gap-1.5 text-warning" title={reasons.join('; ') || undefined}>
             <RotateCcw className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>{text}</span>
