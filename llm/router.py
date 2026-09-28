@@ -88,6 +88,7 @@ FACTOR_TO_FLAG = {"land": "land", "forest_clearance": "forest", "litigation": "l
 FACTOR_TO_CATEGORY = {"land": "land", "forest_clearance": "forest_env", "litigation": "litigation",
                       "contractor": "contractor", "utility_shifting": "utility_shifting",
                       "inter_agency": "inter_agency"}
+MOST_RX = re.compile(r"\bmost\b|\bfewest\b|\bhighest number\b|\bhow many\b", re.I)  # rank groups by count
 GROUP_RX = re.compile(r"\b(?:by|per|each|every|which)\s+(state|sector|ministry|tier)\b"
                       r"|\b(state|sector|ministry|tier)[- ]?wise\b", re.I)
 LIMIT_RX = re.compile(r"\btop\s+(\d{1,2})\b|\b(\d{1,2})\s+(?:riskiest|biggest|largest|most|worst|projects)\b", re.I)
@@ -448,12 +449,13 @@ def _portfolio_calls(viewer, r: Route, calls: list, official: bool) -> None:
     topical = it & {"external", "news", "agency", "bottleneck"}  # 'portfolio' / 'overview' alone is no breakdown
     if ("stats" in it and (f.get("group_by") or not topical)) or ("count" in it and not narrowed and not topical):
         calls.append(_call(viewer, "portfolio_stats", group_by=f.get("group_by") or "tier",
+                           rank_by="projects" if MOST_RX.search(q) else None,
                            **{k: f.get(k) for k in ("tier", "sector", "state", "ministry")}))
     if "external" in it and "bottleneck" not in it and f.get("factor"):
         calls.append(_call(viewer, "external_factors", factor=f["factor"], state=f.get("state"),
                            limit=f.get("limit") or 5))
-    elif "external" in it and not f.get("factor") and not narrowed:
-        calls.append(_call(viewer, "external_factors"))
+    elif "external" in it and not f.get("factor") and not narrowed and "news" not in it:
+        calls.append(_call(viewer, "external_factors"))  # 'research blockers' is the news side
     if "news" in it and not narrowed:
         calls.append(_call(viewer, "project_research"))
     covered = any(c and c["tool"] in ("external_factors", "portfolio_stats", "bottlenecks", "agency_scorecard")

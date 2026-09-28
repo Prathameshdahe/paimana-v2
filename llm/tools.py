@@ -281,6 +281,7 @@ class SearchArgs(Args):
 
 class StatsArgs(Args):
     group_by: Literal["state", "sector", "ministry", "tier"] = "state"
+    rank_by: Literal["capital", "projects"] = "capital"
     tier: Tier | None = None
     sector: Sector | None = None
     state: State | None = None
@@ -466,15 +467,18 @@ def search_projects(viewer, q=None, tier=None, sector=None, state=None, ministry
 @tool("portfolio_stats", "Counting the portfolio",
       "counts, capital and tier counts of the current projects, grouped by state, sector, ministry or tier",
       StatsArgs, public=True)
-def portfolio_stats(viewer, group_by="state", tier=None, sector=None, state=None, ministry=None) -> ToolResult:
+def portfolio_stats(viewer, group_by="state", rank_by="capital", tier=None, sector=None, state=None,
+                    ministry=None) -> ToolResult:
     p = serving.portfolio(ministry, sector, state, tier, scope=viewer.scope)
     k = p["kpis"]
     if group_by == "tier":
         rows = [{"name": t["tier"], "n": t["n"], "capital_cr": t["capital_cr"],
                  "n_critical": t["n"] if t["tier"] == "Critical" else 0,
                  "n_high": t["n"] if t["tier"] == "High" else 0} for t in p["tiers"]]
-    else:
+    else:  # serving orders by capital; 'which state has the most ...' ranks by the number of projects
         rows = p[f"by_{group_by}"]
+        if rank_by == "projects":
+            rows = sorted(rows, key=lambda r: -r["n"])
     filters = _compact({"tier": tier, "sector": sector, "state": state, "ministry": ministry})
     what = _filters_words(filters)
     title = f"Current projects by {group_by}" + (f" ({what})" if what else "")
@@ -482,6 +486,7 @@ def portfolio_stats(viewer, group_by="state", tier=None, sector=None, state=None
              "anticipated_cost_cr": _r(k["anticipated_cost_cr"], 0), "spent_cr": _r(k["expenditure_cr"], 0),
              "cost_overrun_pct": _r(k["overrun_pct"]), "average_progress_pct": _r(k["avg_progress_pct"]),
              "tiers": {t["tier"]: t["n"] for t in p["tiers"]}, "group_by": group_by,
+             "groups_ranked_by": "number of projects" if rank_by == "projects" else "capital",
              "groups": [_compact({"name": r["name"], "projects": r["n"], "capital_cr": _r(r["capital_cr"], 0),
                                   "critical": r["n_critical"], "high": r["n_high"]}) for r in rows[:10]],
              "groups_total": len(rows)}
@@ -489,7 +494,9 @@ def portfolio_stats(viewer, group_by="state", tier=None, sector=None, state=None
     summary = (f"{_plural(k['n_projects'], 'current project')}{' (' + what + ')' if what else ''}"
                + (f" with an anticipated cost of Rs {k['anticipated_cost_cr']:,.0f} crore"
                   if k["anticipated_cost_cr"] is not None else "")
-               + (f"; the largest {group_by} by capital is {top['name']} with {_plural(top['n'], 'project')}"
+               + (f"; the {group_by} with the most is {top['name']} with {_plural(top['n'], 'project')}"
+                  if top and group_by != "tier" and rank_by == "projects" else
+                  f"; the largest {group_by} by capital is {top['name']} with {_plural(top['n'], 'project')}"
                   if top and group_by != "tier" else "") + ".")
     return ToolResult(summary=summary, facts=_compact(facts),
                       cards=[{"type": "stats", "title": title, "groupBy": group_by,
@@ -860,8 +867,12 @@ def search_knowledge(viewer, q, k=5) -> ToolResult:
     if not hits:
         return ToolResult(summary="Nothing in PAIMANA's help or data matches that.", facts={"passages": []},
                           found=False)
-    return ToolResult(summary=f"{_plural(len(hits), 'passage')} found in PAIMANA's help and data.",
-                      facts={"found": len(hits), "passages": passages}, sources=sources,
+    # the deterministic answer quotes the best hit when it is PAIMANA's own help or glossary text
+    first = passages[0].get("text") if hits[0]["kind"] in ("help", "glossary", "doc") else None
+    excerpt = " ".join(re.split(r"(?<=[.!?])\s+", first)[:2])[:400] if first else None
+    summary = (f"From PAIMANA's {hits[0]['kind']} pages: {excerpt}" if excerpt else
+               f"{_plural(len(hits), 'passage')} found in PAIMANA's help and data.")
+    return ToolResult(summary=summary, facts={"found": len(hits), "passages": passages}, sources=sources,
                       keys=list(dict.fromkeys(h["project_key"] for h in hits if h["project_key"])))
 
 
