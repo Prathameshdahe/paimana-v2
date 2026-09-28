@@ -2,7 +2,8 @@
 an officer should be, next to the model's tier. It never changes the tier, sends nothing and decides nothing; it is a
 cited reading of the evidence, stored per evidence version so it can be checked against outcomes later.
 
-pack(key) collects the evidence as items E1..En, each {id, kind, date, direction, severity, stale, source, text}:
+pack(key) collects the evidence as items E1..En, each {id, kind, date, direction, severity, stale, source, text, url}
+(url: the research fact's or headline's link, for the officer; None on the rest):
   status    the latest CUF row (progress, cost against the original, spend, completion against the schedule, slip so
             far, share of the planned time elapsed); context;
   model     the tier and probabilities (ranking scores, not calibrated frequencies); context, never evidence;
@@ -30,8 +31,9 @@ pack(key) collects the evidence as items E1..En, each {id, kind, date, direction
 Outside text (remarks, portal lines, research summaries, headlines) is cut to one clean line of at most TEXT_CHARS at
 a word boundary, with the prompt's quote markers blanked, and goes into the prompt between markers as data. The pack
 is kept to about 1,800 tokens (measured on the richest projects: see docs/SECOND_OPINION.md). evidence_hash(pack) is
-the sha256 of its canonical JSON: the asof, the model version and every item, so new news, a new fact or a new report
-make a new hash and the opinion is asked again; nothing in the pack depends on the clock.
+the sha256 of its canonical JSON: the asof, the model version and every item but its url (a link, not evidence), so
+new news, a new fact or a new report make a new hash and the opinion is asked again; nothing in the pack depends on
+the clock.
 
 The LLM answers one JSON object {narrative <= 90 words citing [E#], key_evidence [E#], concern: none|watch|concern,
 headline <= 15 words, gaps <= 3} (MAX_TOKENS, compact one-line JSON: the model runs at about 3 to 4 tokens/s), the
@@ -60,7 +62,8 @@ of 10 tuning replies and each cost a retry. check() rejects a reply unless:
     allowed while a current negative item of severity >= 2 is in the pack. The prompt states the allowed levels and
     names the hold-ups, so a reply that follows it passes;
   - the lengths hold (headline, narrative, each gap); more than 3 gaps are cut to 3 and an empty key_evidence is
-    filled with the narrative's citations (neither adds content).
+    filled with the narrative's citations (neither adds content). parse() also writes every citation in the one
+    form the UI parses, '[E1, E2]' ('[e1; e2]' and '[ E5 ]' are accepted from the model, never stored).
 A rejected reply is asked again once: the same prompt with the reasons named after it, at RETRY_TEMPERATURE (given
 the rejected reply as the assistant's turn at TEMPERATURE, the model sent it back unchanged). A second rejection is
 stored as such and returned with its reasons; when an accepted opinion made under an older prompt is stored for the
@@ -75,8 +78,11 @@ takes the LLM gate (llm/client.py): a person asking (interactive) marks the gate
 jobs let it go first, waits at most INTERACTIVE_WAIT_S and holds it through the retry; the nightly job takes it as a
 background job for each ask, so a chat answer waiting for the LLM goes between its first ask and the retry. LM Studio
 refusing the connection is remembered for client.DOWN_S seconds (client.mark_down), so the next ask does not wait
-again; a slow answer (LLMTimeoutError) is llm_unavailable without marking it down. cached(key) is the accepted
-opinion for the current evidence, without an LLM call (the chat reads only this).
+again; a slow answer (LLMTimeoutError) is llm_unavailable without marking it down. An llm_unavailable result says
+which it was: down True (refused, or remembered as such: start LM Studio), busy True (the gate stayed taken), neither
+(up, but slow or erring: the detail says). cached(key) is the accepted opinion for the current evidence, without an
+LLM call (the chat reads only this). The result's n_evidence_read is how many items the LLM was shown (citable);
+evidence lists them all, the context included.
 
 Limits: the LLM reads summaries of the evidence, not the sources; the concern rules bound the level, not the
 reasoning; a headline-only news item is weak evidence and marked unverified; with no project-level evidence (only the
@@ -217,9 +223,9 @@ def _p(v) -> str:
     return "n/a" if v is None or pd.isna(v) else f"{v:.2f}"
 
 
-def _item(kind, date_, direction, source, text, severity=None, stale=False) -> dict:
+def _item(kind, date_, direction, source, text, severity=None, stale=False, url=None) -> dict:
     return {"kind": kind, "date": date_, "direction": direction, "severity": severity, "stale": bool(stale),
-            "source": source, "text": text}
+            "source": source, "text": text, "url": url or None}
 
 
 def _status(row: dict, latest: dict | None, sc: dict) -> dict:
@@ -353,7 +359,7 @@ def _research(res: dict, asof) -> list[dict]:
         when = f["event_date"] or f["published_date"]
         stale = not f["live"] if negative else when is None or pd.Timestamp(when) <= since
         out.append(_item("research", _fact_date(f), f["direction"], src, f"{f['category'].replace('_', ' ')}: {text}",
-                         f["severity"] if negative else None, stale))
+                         f["severity"] if negative else None, stale, f.get("url")))
     return out
 
 
@@ -372,7 +378,7 @@ def _news(key: str, res: dict, asof) -> list[dict]:
                else "keyword-classified, unverified")
         out.append(_item("news", pub, "negative", f"{_quote(s['source'], 60) or 'unknown'} (headline only, {how})",
                          f"{s['category'] or 'unclassified'}: \"{_quote(s['title'], 200)}\"",
-                         s["severity"] if judged else 1, stale))
+                         s["severity"] if judged else 1, stale, s.get("url")))
         if len(out) == N_NEWS:
             break
     return out
@@ -412,8 +418,10 @@ def group(it: dict) -> int:
 
 
 def evidence_hash(p: dict) -> str:
-    """sha256 of the pack's canonical JSON."""
-    return hashlib.sha256(json.dumps(p, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+    """sha256 of the pack's canonical JSON, the items' urls left out: a link is not evidence, and adding one to the
+    pack must not ask every stored opinion again."""
+    body = {**p, "items": [{k: v for k, v in it.items() if k != "url"} for it in p["items"]]}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
 
 def has_evidence(p: dict) -> bool:
@@ -592,14 +600,23 @@ def check(op: dict, p: dict) -> tuple[list[str], int]:
     return reasons, n_checked
 
 
+def canonical_cites(text: str) -> str:
+    """text with every citation written as '[E1, E2]': upper case, comma-separated, once each, no padding. The
+    model's '[e1; e2]' and '[ E5 ]' are forgiven (CITE), but only this form is stored: it is the one the UI parses
+    into chips and the chat strips from the narrative."""
+    return CITE.sub(lambda m: "[" + ", ".join(dict.fromkeys(x.upper() for x in re.split(r"\s*[,;]\s*", m[1]))) + "]",
+                    text or "")
+
+
 def parse(raw: str) -> dict:
     """The reply's opinion (Opinion fields, gaps cut to N_GAPS, key_evidence defaulting to the narrative's
-    citations); ValueError when there is no such JSON object."""
+    citations, citations in their canonical form); ValueError when there is no such JSON object."""
     try:
         op = Opinion.model_validate(client.extract_json(raw, dict)).model_dump()
     except ValidationError as e:
         raise ValueError(str(e)) from e
-    op["gaps"] = [" ".join(g.split()) for g in op["gaps"]][:N_GAPS]
+    op["headline"], op["narrative"] = canonical_cites(op["headline"]), canonical_cites(op["narrative"])
+    op["gaps"] = [canonical_cites(" ".join(g.split())) for g in op["gaps"]][:N_GAPS]
     op["key_evidence"] = list(dict.fromkeys(op["key_evidence"])) or cites(op["narrative"])[:4]
     return op
 
@@ -646,7 +663,8 @@ def _out(row: dict, p: dict, cached: bool) -> dict:
     return {"status": "ok", "key": p["key"], "name": p["name"], "asof": p["asof"], "model_version": p["model_version"],
             "tier": p["tier"], "model_level": p["model_level"], **{k: row.get(k) for k in keep},
             "cited": [c for c in cites(row["narrative"]) if c in {it["id"] for it in p["items"]}],
-            "evidence": p["items"], "evidence_hash": row["evidence_hash"], "model": row["model"],
+            "evidence": p["items"], "n_evidence_read": len(citable(p)),
+            "evidence_hash": row["evidence_hash"], "model": row["model"],
             "prompt_version": row["prompt_version"], "generated_at": row["generated_at"], "cached": cached}
 
 
@@ -683,7 +701,8 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
         kept = _accepted(row, p)
         return row, kept, kept and not (fresh and row.get("prompt_version") != PROMPT_VERSION)
 
-    down = {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
+    down = {"status": "llm_unavailable", "down": True,
+            "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
     row, kept, serve = stored()
     if serve:
         return _out(row, p, True)
@@ -710,7 +729,7 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
             except client.LLMConnectionError as e:
                 if e.down:
                     client.mark_down()
-                return {"status": "llm_unavailable", "detail": str(e)[:300]}
+                return {"status": "llm_unavailable", "down": e.down, "detail": str(e)[:300]}
             attempts, ms = attempts + 1, ms + t
         # stored before the gate opens, so the next one in line finds it
         if op is not None or not kept:

@@ -97,8 +97,13 @@ def test_generates_caches_and_asks_again_when_the_evidence_changes(client, monke
     out = r.json()
     assert out["status"] == "ok" and not out["cached"] and out["concern"] == "concern" and out["tier"] == "Medium"
     assert out["modelLevel"] == "watch" and out["vsModel"] == "higher" and out["keyEvidence"] and out["cited"]
-    assert out["evidence"][0]["id"] == "E1" and {"kind", "direction", "stale", "source", "text"} <= set(
+    assert out["evidence"][0]["id"] == "E1" and {"kind", "direction", "stale", "source", "text", "url"} <= set(
         out["evidence"][0]) and len(out["evidenceHash"]) == 64 and out["promptVersion"] == so.PROMPT_VERSION
+    # the count the card shows is what the LLM read; the news item links to its source, the status line to nothing
+    read = [e for e in out["evidence"] if e["direction"] != "context"]
+    assert out["nEvidenceRead"] == len(read) < len(out["evidence"])
+    assert next(e["url"] for e in out["evidence"] if e["kind"] == "news") == "https://n/stopped"
+    assert next(e["url"] for e in out["evidence"] if e["kind"] == "status") is None
     again = client.get(URL.format(KEY)).json()                      # same evidence: the stored opinion
     assert again["cached"] and again["narrative"] == out["narrative"] and len(chat.calls) == 1
     only = client.get(URL.format(KEY), params={"cached": 1}).json()
@@ -140,6 +145,15 @@ def test_llm_down_is_503_quickly_and_remembered(client, monkeypatch):
     t0 = time.time()
     r = client.get(URL.format(key))
     assert r.status_code == 503 and r.json()["status"] == "llm_unavailable" and time.time() - t0 < 10
+    assert r.json()["down"] is True and r.json()["busy"] is False       # refused: start LM Studio
     t0 = time.time()                                       # remembered: the next ask does not wait again
-    assert client.get(URL.format(key)).status_code == 503 and time.time() - t0 < 1
+    r = client.get(URL.format(key))
+    assert r.status_code == 503 and r.json()["down"] is True and time.time() - t0 < 1
     llm_client._down_at = -1e9                             # forget the outage for the next tests
+
+    def slow(messages, **kw):
+        raise llm_client.LLMTimeoutError("LM Studio did not answer in time (ReadTimeout)")
+    monkeypatch.setattr(llm_client, "chat", slow)
+    r = client.get(URL.format(key))                        # up, only slow: not 'down', so not 'start LM Studio'
+    assert r.status_code == 503 and r.json()["down"] is False and r.json()["busy"] is False
+    assert "did not answer in time" in r.json()["detail"]

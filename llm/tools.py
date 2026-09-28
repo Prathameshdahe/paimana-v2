@@ -981,7 +981,7 @@ def second_opinion(viewer, key) -> ToolResult:
     when = o.get("generated_at") or o.get("generatedAt")
     card = {"type": "opinion", "key": k, "concern": o.get("concern"), "headline": o.get("headline"),
             "narrative": o.get("narrative"), "generatedAt": when}
-    narrative = re.sub(r"\s*\[E\d+(?:\s*,\s*E?\d+)*\]", "", o.get("narrative") or "")
+    narrative = re.sub(r"\s*\[\s*E\d+(?:\s*[,;]\s*E?\d+)*\s*\]", "", o.get("narrative") or "", flags=re.I)
     facts = _compact({"key": k, "name": _short(name, 25), "concern": o.get("concern"),
                       "headline": quote(o.get("headline"), 160), "narrative": quote(narrative, 700),
                       "compared_with_the_model": o.get("vs_model"), "generated": _month(when),

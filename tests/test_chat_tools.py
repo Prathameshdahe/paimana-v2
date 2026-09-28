@@ -303,14 +303,16 @@ def test_second_opinion_reads_the_cache_only(keys, monkeypatch):
     fake = types.ModuleType("llm.second_opinion")
     asked = []
     fake.cached = lambda key: asked.append(key) or {
-        "concern": "concern", "headline": "Land still open on 4 km", "narrative": "Land is pending [E1] and [E2, E3].",
+        "concern": "concern", "headline": "Land still open on 4 km",
+        "narrative": "Land is pending [E1] and [E2, E3]. Old [e4; E5] and [ E6 ].",   # older rows: forgiven forms
         "vs_model": "higher", "generated_at": "2026-09-20T10:00:00+00:00"}
     fake.generate = lambda key: pytest.fail("the chat never generates an opinion")
     monkeypatch.setitem(sys.modules, "llm.second_opinion", fake)
     r = tools.run(IPMD, "second_opinion", {"key": k})
     check_result(r)
     assert asked == [k] and r.cards[0]["type"] == "opinion" and r.cards[0]["concern"] == "concern"
-    assert "[E" not in r.facts["narrative"] and r.cards[0]["narrative"].count("[E") == 2
+    assert "[" not in r.facts["narrative"] and r.cards[0]["narrative"].count("[") == 4
+    assert r.facts["narrative"] == "Land is pending and. Old and."
     fake.cached = lambda key: None
     assert not tools.run(IPMD, "second_opinion", {"key": k}).found
 

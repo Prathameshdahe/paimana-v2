@@ -85,6 +85,17 @@ def test_run_asks_what_is_due_up_to_the_limit_and_skips_the_rest(job_db, monkeyp
     assert opinions.run(evidence[2:])["no_evidence"] == 1 and len(job_db) == 2
 
 
+def test_due_reads_the_store_under_the_opinions_model_not_the_chats(job_db, monkeypatch):
+    """LLM_CHAT_MODEL changes only the chat: the job finds the opinion stored under LLM_MODEL, so setting a chat
+    model does not make it ask every project again each night."""
+    key = next(k for k in opinions.batch_keys() if so.has_evidence(so.pack(k)))
+    monkeypatch.setattr(client, "LLM_MODEL", "big-14b")
+    monkeypatch.setattr(client, "LLM_CHAT_MODEL", "small-7b")
+    assert opinions.due(key) == "due" and opinions.run([key])["asked"] == 1
+    assert db.second_opinions(key)[0]["model"] == "big-14b" and opinions.due(key) == "up_to_date"
+    assert opinions.run([key])["asked"] == 0 and len(job_db) == 1
+
+
 def test_rejections_wait_for_new_evidence_and_old_prompts_are_redone(job_db, monkeypatch):
     key = next(k for k in opinions.batch_keys() if so.has_evidence(so.pack(k)))
     monkeypatch.setattr(client, "chat", lambda messages, **kw: job_db.append(messages) or "not JSON")

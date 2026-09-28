@@ -57,7 +57,7 @@ def due(key: str) -> str:
         return "not_scored"
     if not so.has_evidence(p):
         return "no_evidence"
-    row = db.second_opinion(key, so.evidence_hash(p), client.LLM_CHAT_MODEL)
+    row = db.second_opinion(key, so.evidence_hash(p), so._model())   # noqa: SLF001 - the model the opinion is keyed by
     if row is None:
         return "due"
     if (row.get("last_rejected") or {}).get("prompt_version") == so.PROMPT_VERSION:

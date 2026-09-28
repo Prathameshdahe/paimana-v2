@@ -19,8 +19,9 @@ Code: `llm/second_opinion.py` (evidence pack, prompt, checks, cache), `backend/l
 | `keyEvidence` | The 1 to 3 items that decide the concern. |
 | `gaps` | Up to 3 short notes on what the evidence does not show. |
 | `vsModel` | `agrees`, `higher` or `lower`: the concern against the tier's level. Critical and High count as `concern`, Medium and the Watch tier as `watch`, Low as `none` (`modelLevel`). Computed, not asked of the LLM. |
-| `cited` | The ids the narrative cites. |
-| `evidence` | Every item of the pack, with its id, kind, date, direction, severity, stale flag, source and text. The LLM read the items whose direction is not `context` (all of them when the pack is nothing but context). The UI lists the cited ones. |
+| `cited` | The ids the narrative cites. Citations are stored in one form, `[E1, E2]` (the model's `[e1; e2]` or `[ E5 ]` are accepted and rewritten), so the UI's chip parser and the chat's strip see the same text. |
+| `evidence` | Every item of the pack, with its id, kind, date, direction, severity, stale flag, source, text and (research facts and headlines) `url`. The LLM read the items whose direction is not `context` (all of them when the pack is nothing but context). The UI lists the cited ones. |
+| `nEvidenceRead` | How many of the `evidence` items the LLM read: the count to show, since `evidence` also holds the context items it never saw. |
 | `tier`, `modelVersion`, `asof` | The rating it was set against. |
 | `evidenceHash`, `model`, `promptVersion`, `generatedAt`, `cached` | Which evidence, LLM and prompt produced it, when, and whether it came from the store. |
 | `attempts`, `nNumbersChecked`, `llmMs` | 1 or 2 asks, how many numbers and dates were checked, LLM time. |
@@ -136,7 +137,7 @@ That is why the evaluation below includes a human review.
 |---|---|---|
 | Accepted, generated now or stored for the current evidence | 200 | `SecondOpinionOut` (`status: 'ok'`, fields above) |
 | Both replies failed the checks | 422 | `SecondOpinionRejected {status: 'rejected', key, reasons, attempts, llmMs}` |
-| LM Studio unreachable, too slow, or busy | 503 | `SecondOpinionUnavailable {status: 'llm_unavailable', detail, busy}` |
+| LM Studio unreachable, too slow, or busy | 503 | `SecondOpinionUnavailable {status: 'llm_unavailable', detail, busy, down}`: `down` true when the connection was refused (start LM Studio; remembered 30 s), `busy` true when the gate stayed taken, neither when LM Studio is up but slow or erring (`detail` says, e.g. no model loaded) |
 | Not in the scored portfolio, or outside the viewer's scope | 404 | `{detail}` |
 | Public viewer | 403 | `{detail}` |
 | `?cached=1` and no accepted opinion for the current evidence | 200 | `SecondOpinionNone {status: 'none', key, detail}` |
@@ -144,8 +145,9 @@ That is why the evaluation below includes a human review.
 - On demand it takes about 20 to 40 seconds (up to about 1 minute with the retry) when LM Studio is free.
 - `?cached=1` never generates: the stored opinion, or `status: 'none'`.
 - A person asking takes the LLM gate as a chat request, so background jobs let it go first; it waits at most 90 s for
-  the gate (`busy: true` after that). An LM Studio that refuses connections is remembered for 30 s, so the next ask
-  returns at once.
+  the gate (`busy: true` after that). An LM Studio that refuses connections is remembered for 30 s through the
+  client's breaker, shared with the chat and the brief, so the next ask returns at once (`down: true`); a slow answer
+  does not trip it.
 
 **`llm.second_opinion.cached(key)`** returns the same dict as the 200 body (snake_case keys, `cached: True`) for the
 current evidence, or `None` (no accepted opinion, or not scored). It makes no LLM call.

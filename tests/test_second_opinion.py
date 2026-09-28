@@ -97,6 +97,13 @@ def test_pack_items_are_numbered_capped_and_hashed_stably(opinion_db):
     holdups = [it["id"] for it in items if so.group(it) == 0]
     assert f"Current hold-ups: {', '.join(holdups)}." in so.messages(p)[1]["content"]
     assert so.evidence_hash(p) == so.evidence_hash(so.pack(KEY)) and len(so.evidence_hash(p)) == 64
+    # research facts and headlines carry their link for the officer; the link is not part of the evidence hash
+    assert all("url" in it for it in items) and next(it for it in items if it["kind"] == "news")["url"] == \
+        "https://n/stopped"
+    assert all(it["url"] for it in items if it["kind"] == "research" and it["direction"] != "context")
+    assert all(it["url"] is None for it in items if it["kind"] in ("status", "model", "check", "event"))
+    relinked = {**p, "items": [{**it, "url": it["url"] and it["url"] + "?x"} for it in items]}
+    assert so.evidence_hash(relinked) == so.evidence_hash(p)
     user = so.messages(p)[1]["content"]
     assert len(user) < 1800 * 3.5          # about 1,800 tokens at most (Qwen: 3.5+ characters a token here)
     assert user.count("<<<EVIDENCE") == 1 and user.count("EVIDENCE>>>") == 1
@@ -259,6 +266,24 @@ def test_parse_forgives_case_brackets_and_extra_gaps():
     for bad in ("no json here", '{"concern": "none"}', '{"concern":"none","headline":"h","narrative":"n'):
         with pytest.raises(ValueError):
             so.parse(bad)
+    # the forms the model writes are forgiven, but only '[E1, E2]' is stored: what the UI parses into chips
+    op = so.parse('{"concern":"watch","headline":"h [ e9 ]","narrative":"Held up [E1; E2]. Done [ e5 ], [E2;e2].",'
+                  '"gaps":["g [e3 ,E4]"]}')
+    assert op["narrative"] == "Held up [E1, E2]. Done [E5], [E2]." and op["headline"] == "h [E9]"
+    assert op["gaps"] == ["g [E3, E4]"] and op["key_evidence"] == ["E1", "E2", "E5"]
+    assert so.canonical_cites("no citation [status] here") == "no citation [status] here"
+
+
+def test_check_accepts_the_forgiven_citation_forms_once_canonical(opinion_db):
+    p = so.pack(KEY)
+    strong = next(it["id"] for it in p["items"] if it["direction"] == "negative" and not it["stale"]
+                  and it["severity"] >= 2)
+    other = next(it["id"] for it in so.citable(p) if it["id"] != strong)
+    raw = reply(p, narrative=f"Work on site was reported stopped after a protest [ {strong.lower()}; {other} ]. "
+                             f"The report shows most of the work done [{other.lower()}].")
+    op = so.parse(raw)
+    assert f"[{strong}, {other}]" in op["narrative"] and f"[{other}]" in op["narrative"]
+    assert so.check(op, p)[0] == [] and so.cites(op["narrative"]) == [strong, other]
 
 
 # ------------------------------------------------------------------ generate and cache
@@ -271,6 +296,8 @@ def test_generate_retries_once_naming_the_reasons_then_caches(opinion_db, monkey
     out = so.generate(KEY)
     assert out["status"] == "ok" and not out["cached"] and out["attempts"] == 2 and out["concern"] == "concern"
     assert out["tier"] == "Medium" and out["evidence"] == p["items"]
+    # the card's count: the items the LLM read, not the pack with its context items (status, model, summary)
+    assert out["n_evidence_read"] == len(so.citable(p)) < len(out["evidence"])
     assert out["vs_model"] == "higher" == so.vs_model("concern", "watch")      # computed: concern above Medium
     assert out["cited"] and set(out["cited"]) <= {it["id"] for it in p["items"]}
     first, second = fake.calls[0]["messages"], fake.calls[1]["messages"]
@@ -328,10 +355,28 @@ def test_llm_down_is_quick_and_remembered(opinion_db, monkeypatch):
     monkeypatch.setattr(client, "LLM_BASE_URL", "http://127.0.0.1:9/v1")    # nothing listens there
     t0 = time.time()
     out = so.generate(KEY)
-    assert out["status"] == "llm_unavailable" and time.time() - t0 < 10
+    assert out["status"] == "llm_unavailable" and out["down"] is True and time.time() - t0 < 10
     t0 = time.time()
-    assert so.generate(KEY)["status"] == "llm_unavailable" and time.time() - t0 < 1
+    again = so.generate(KEY)
+    assert again["status"] == "llm_unavailable" and again["down"] is True and time.time() - t0 < 1
     assert stored() == []
+
+
+def test_a_slow_or_erring_lm_studio_is_unavailable_but_not_down(opinion_db, monkeypatch):
+    """The 503 says which it is: down (start LM Studio), busy, or neither (up, but slow or without a model): the
+    card told the officer to start software that was running (Segment 8 review, contract lens)."""
+    def slow(messages, **kw):
+        raise client.LLMTimeoutError("LM Studio did not answer in time (ReadTimeout)")
+    monkeypatch.setattr(client, "chat", slow)
+    out = so.generate(KEY)
+    assert out["status"] == "llm_unavailable" and out["down"] is False and "did not answer" in out["detail"]
+    assert not client.down_recently()
+
+    def no_model(messages, **kw):
+        raise client.LLMConnectionError("LM Studio failed: HTTP 400: No models loaded")
+    monkeypatch.setattr(client, "chat", no_model)
+    out = so.generate(KEY)
+    assert out["down"] is False and "No models loaded" in out["detail"] and not client.down_recently()
 
 
 def test_a_request_waiting_for_the_gate_sees_lm_studio_went_down(opinion_db, monkeypatch):
@@ -380,7 +425,7 @@ def test_busy_gate_is_unavailable_not_a_wait(opinion_db, monkeypatch):
         t = threading.Thread(target=lambda: seen.append(so.generate(KEY)))
         t.start()
         t.join(5)
-    assert seen[0]["status"] == "llm_unavailable" and seen[0]["busy"] is True
+    assert seen[0]["status"] == "llm_unavailable" and seen[0]["busy"] is True and not seen[0].get("down")
 
 
 def test_not_scored_has_no_pack(opinion_db):

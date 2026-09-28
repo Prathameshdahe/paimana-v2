@@ -654,7 +654,8 @@ class OpinionEvidence(CamelModel):
     when the pack is nothing but context; never grounds for a concern. stale: an old report remark, a resolved or old
     research fact, progress dated before the last 4 quarters, an old headline. severity 2 or 3 (a current hold-up)
     is an observed item; a land complexity rating, the forest rulebook's estimate and a news headline the research
-    agent has not judged about the project are at most 1."""
+    agent has not judged about the project are at most 1. url: the research fact's or headline's link (None on the
+    rest), for the officer; not part of the evidence hash."""
     id: str
     kind: Literal["status", "model", "check", "parivesh", "land", "event", "research", "news"]
     date: str | None
@@ -663,6 +664,7 @@ class OpinionEvidence(CamelModel):
     stale: bool
     source: str
     text: str
+    url: str | None = None
 
 
 class SecondOpinionOut(CamelModel):
@@ -670,7 +672,8 @@ class SecondOpinionOut(CamelModel):
     model_level is the tier's concern level (Critical and High 'concern', Medium and Watch 'watch', Low 'none') and
     vs_model compares the two. cited: the ids the narrative cites; evidence: every item of the pack, the context
     included, though the LLM read only the items whose direction is not context (all of them when there is nothing
-    else: OpinionEvidence). model is the LLM, model_version PAIMANA's scoring model."""
+    else: OpinionEvidence); n_evidence_read: how many of them it read (the count a card should show, not
+    len(evidence)). model is the LLM, model_version PAIMANA's scoring model."""
     status: Literal["ok"]
     key: str
     name: str
@@ -686,6 +689,7 @@ class SecondOpinionOut(CamelModel):
     gaps: list[str]
     cited: list[str]
     evidence: list[OpinionEvidence]
+    n_evidence_read: int
     evidence_hash: str
     model: str
     prompt_version: str | None
@@ -713,10 +717,12 @@ class SecondOpinionRejected(CamelModel):
 
 
 class SecondOpinionUnavailable(CamelModel):
-    """HTTP 503: LM Studio is unreachable (remembered for a short while) or busy with other answers (busy)."""
+    """HTTP 503: LM Studio refused the connection (down: start it; remembered for a short while), or it is up but
+    busy with other answers (busy), or up but slow or erring (neither: the detail says, e.g. no model loaded)."""
     status: Literal["llm_unavailable"]
     detail: str
     busy: bool = False
+    down: bool = False
 
 
 # ---------- app state (SQLite, backend/db.py) ----------
