@@ -13,6 +13,7 @@ from llm import agent, second_opinion, worker
 
 from . import brief, db, ratelimit, serving, store
 from .access import Viewer, in_scope, need, viewer
+from .auth import sessions
 from .live import opinions, portals, research, scheduler, scout, watcher
 from .schemas import (
     AgencyMatrix,
@@ -461,10 +462,14 @@ def get_live_status(v: Viewer = Depends(need("live"))):
 async def get_stream(request: Request, after: int | None = Query(None, ge=0), v: Viewer = Depends(need("alerts"))):
     """Server-Sent Events: each new alert as `event: alert` (id = alert id, data = the alert JSON), a comment line
     every 15 s. Resumes after Last-Event-ID (EventSource sends it on reconnect) or ?after=, else from now. The viewer
-    is the session cookie's (a same-origin EventSource sends it); only their projects' alerts."""
+    is the session cookie's (a same-origin EventSource sends it); only their projects' alerts. The session is checked
+    again before alerts go out and at every heartbeat: sign-out, expiry, a disabled account or a changed role or
+    scope ends the stream (scheduler.alert_stream)."""
     last = request.headers.get("last-event-id")
     start = after if after is not None else int(last) if last and last.isdigit() else None
-    return StreamingResponse(scheduler.alert_stream(start, v.keys), media_type="text/event-stream",
+    s = sessions.session_of(request)   # the one the viewer came from (cached on the request)
+    alive = sessions.still_live(s) if s is not None else None
+    return StreamingResponse(scheduler.alert_stream(start, v.keys, alive), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 

@@ -134,6 +134,22 @@ def start(user: dict, request: Request, response: Response, actor_role: str | No
     return s
 
 
+ACCOUNT_VIEW = ("id", "role", "ministry", "agency", "is_admin")   # what a viewer is made of (backend/access.py)
+
+
+def still_live(s: dict):
+    """A check for a response that outlives its request (the alert stream): a callable that is True while the session
+    s is live (accounts.session: not signed out, not expired or idle, the account active) and its account still has
+    the role, scope and admin flag it had when s was read. It reads the database, so an async caller runs it in a
+    thread."""
+    sid, was = s["session_id"], tuple(s[k] for k in ACCOUNT_VIEW)
+
+    def check() -> bool:
+        now_s = accounts.session(sid, idle())
+        return now_s is not None and tuple(now_s[k] for k in ACCOUNT_VIEW) == was
+    return check
+
+
 def expires_at(s: dict) -> str:
     """When the session ends if unused from now: the earlier of its absolute expiry and now plus the idle time."""
     absolute = datetime.fromisoformat(s["expires_at"])

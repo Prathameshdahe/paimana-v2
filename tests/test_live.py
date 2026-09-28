@@ -4,6 +4,7 @@ import socket
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
@@ -12,7 +13,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend import db  # noqa: E402
+from backend import db, serving  # noqa: E402
+from backend.db import accounts  # noqa: E402
 from backend.live import opinions, research, scheduler, scout, watcher  # noqa: E402
 from backend.main import app  # noqa: E402
 from viewers import as_role  # noqa: E402 - tests/viewers.py
@@ -140,9 +142,10 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def test_stream_pushes_a_new_alert(monkeypatch):
-    """A real server (TestClient buffers whole responses, an endless stream never returns)."""
-    monkeypatch.setattr(scheduler, "POLL_S", 0.1)
+@contextmanager
+def real_server():
+    """The app on a real server in a thread, for the streams (TestClient buffers whole responses, an endless stream
+    never returns); yields its base URL."""
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", ws="none",
                                            timeout_graceful_shutdown=1))
@@ -152,7 +155,16 @@ def test_stream_pushes_a_new_alert(monkeypatch):
     while not server.started and time.time() < deadline:
         time.sleep(0.05)
     try:
-        live = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10)
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(10)
+
+
+def test_stream_pushes_a_new_alert(monkeypatch):
+    monkeypatch.setattr(scheduler, "POLL_S", 0.1)
+    with real_server() as base:
+        live = httpx.Client(base_url=base, timeout=10)
         as_role(live, "ipmd")                     # the stream reads the session cookie, nothing else
         with live.stream("GET", "/api/stream") as r:
             assert r.headers["content-type"].startswith("text/event-stream")
@@ -169,6 +181,44 @@ def test_stream_pushes_a_new_alert(monkeypatch):
         body = json.loads(event[2].removeprefix("data: "))
         assert body["kind"] == "signal" and body["projectKey"] == "PRJ-000001" and body["id"] == db.max_alert_id()
         live.close()
-    finally:
-        server.should_exit = True
-        thread.join(10)
+
+
+def _until_closed(lines, seconds=8.0) -> list[str]:
+    """The stream's lines until the server closes it, or until `seconds` have passed (heartbeats keep them coming)."""
+    out, end = [], time.time() + seconds
+    for line in lines:
+        out.append(line)
+        if time.time() > end:
+            break
+    return out
+
+
+def test_stream_ends_when_its_session_ends_or_changes(monkeypatch):
+    """Review finding (unit B, round 1): the open stream re-checks its session before it sends alerts and at every
+    heartbeat. A disabled account gets no alert made after the change, and a changed scope ends the stream even when
+    no alert comes; the EventSource's reconnect then meets the session as it is now."""
+    monkeypatch.setattr(scheduler, "POLL_S", 0.1)
+    monkeypatch.setattr(scheduler, "HEARTBEAT_S", 0.5)
+    coal, other = "Ministry of Coal", "Ministry of Power"
+    key = sorted(serving.scope_keys(("ministry", coal)))[0]
+    with real_server() as base:
+        live = httpx.Client(base_url=base, timeout=10)
+        as_role(live, "ministry", ministry=coal)
+        uid = live.get("/api/auth/me").json()["userId"]
+        with live.stream("GET", "/api/stream") as r:
+            lines = r.iter_lines()
+            assert next(lines) == ": connected"
+            accounts.update_user(uid, {"status": "disabled"})
+            db.add_alerts([{"project_key": key, "kind": "signal", "severity": 2, "title": "after-disable"}])
+            rest = _until_closed(lines)
+        assert not [x for x in rest if x.startswith("data:")] and ": session ended" in rest, rest
+        assert live.get("/api/alerts").status_code == 401                  # and the reconnect is refused
+
+        as_role(live, "ministry", ministry=coal)                             # active again, a new session
+        with live.stream("GET", "/api/stream") as r:
+            lines = r.iter_lines()
+            assert next(lines) == ": connected"
+            accounts.update_user(uid, {"ministry": other})                  # no alert follows
+            rest = _until_closed(lines)
+        assert [x for x in rest if x] == [": session ended"], rest
+        live.close()

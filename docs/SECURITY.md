@@ -193,7 +193,9 @@ What every request goes through, outermost first (`backend/auth/middleware.py`, 
 RFC 9106 low-memory profile). A session is a 256-bit random cookie token (`paimana_session`: HttpOnly, SameSite=Lax,
 Secure in production); the database keeps only its sha256. Sessions end after 12 idle hours or 7 days, at sign-out,
 when the account is disabled, and when the password changes. Roles and scope are read from the account on every
-request, so a change or a disabled account takes effect at once. The public is simply no cookie, and a cookie that
+request, so a change or a disabled account takes effect at once; an open alert stream checks its session again
+before it sends alerts and at every heartbeat, and ends when the session no longer holds or the account's role or
+scope changed. The public is simply no cookie, and a cookie that
 names no live session gets 401. The prototype's trusted role headers are gone from the backend, the frontend
 and the tests. The administrator is an IPMD analyst with the admin flag. The developer account (every feature,
 including raw model numbers, job controls and the audit log) is created only by the bootstrap from `.env.db` and is

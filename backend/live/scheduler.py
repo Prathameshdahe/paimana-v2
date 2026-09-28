@@ -26,7 +26,8 @@ holding the restart for an hour, waits a little for the threads to end and then 
 
 alert_stream() is the Server-Sent Events body of GET /api/stream: it polls the database every POLL_S seconds for
 alerts with an id above the last one sent and writes a comment line every HEARTBEAT_S seconds so proxies keep it
-open.
+open; before it sends alerts and at every heartbeat it checks that the viewer's session still holds, and ends when
+it does not.
 """
 import asyncio
 import logging
@@ -171,19 +172,28 @@ def status() -> dict:
             "bhoomi_pull_enabled": bhoomi_enabled()}
 
 
-async def alert_stream(after: int | None, keys=None):
+async def alert_stream(after: int | None, keys=None, alive=None):
     """SSE lines: every alert with id > after (default: the newest at connect) as `event: alert`; with keys (a
-    viewer's project keys, backend/access.py) only the alerts on those projects."""
+    viewer's project keys, backend/access.py) only the alerts on those projects. alive (a blocking callable, run in a
+    thread; backend/auth/sessions.py still_live) is asked before any alert goes out and at every heartbeat: once it
+    says False (the session ended, the account was disabled, its role or scope changed) the stream sends a last
+    comment and ends, so nothing goes out on a session that no longer holds; the browser's reconnect then meets the
+    session as it is now (401, or the new scope)."""
     last = after if after is not None else await asyncio.to_thread(db.max_alert_id)
     yield ": connected\n\n"
     beat = time.monotonic()
     while True:
-        for a in await asyncio.to_thread(db.alerts_after, last):
+        batch = await asyncio.to_thread(db.alerts_after, last)
+        due = time.monotonic() - beat >= HEARTBEAT_S
+        if alive is not None and (batch or due) and not await asyncio.to_thread(alive):
+            yield ": session ended\n\n"
+            return
+        for a in batch:
             last = a["id"]
             if keys is not None and a["project_key"] not in keys:
                 continue
             yield f"id: {a['id']}\nevent: alert\ndata: {Alert(**a).model_dump_json(by_alias=True)}\n\n"
-        if time.monotonic() - beat >= HEARTBEAT_S:
+        if due:
             beat = time.monotonic()
             yield ": heartbeat\n\n"
         await asyncio.sleep(POLL_S)
