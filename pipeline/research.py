@@ -371,9 +371,12 @@ def tables(lines, asof) -> tuple[pd.DataFrame, pd.DataFrame]:
     projects = pd.DataFrame([p for p, _ in lines], columns=[c for c in PROJECT_COLS if not c.startswith("n_f")
                                                              and c != "n_negative_live"])
     projects["researched_on"] = pd.to_datetime(projects["researched_on"]).astype("datetime64[us]")
-    # typed even when a column is all null (the pilot sample), so the parquet schema does not depend on the data
+    # typed even when a column is all null (the pilot sample), so the parquet schema does not depend on the data;
+    # the nullable 'string' dtype keeps a missing value null under pandas 2 and 3 alike (2.x's astype('str') wrote
+    # the string 'None', which the page, the evidence pack and the search index then read as a status)
     num = {"land_acquired_pct", "cost_revision_cr"}
-    projects = projects.astype({c: "float64" if c in num else "str" for c in ["latest_status", *EXT_COLS.values()]})
+    projects = projects.astype({c: "float64" if c in num else "string"
+                                for c in ["latest_status", *EXT_COLS.values()]})
     projects["n_facts"] = projects["project_key"].map(facts.groupby("project_key").size()).fillna(0).astype(int)
     projects["n_negative_live"] = projects["project_key"].map(
         facts[facts["live"]].groupby("project_key").size()).fillna(0).astype(int)

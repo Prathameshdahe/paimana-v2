@@ -203,6 +203,33 @@ def test_tables_latest_line_wins_and_counts(tmp_path):
     json.dumps(s)   # JSON-safe
 
 
+@pytest.mark.parametrize("infer_string", [True, False])
+def test_missing_status_and_external_fields_stay_null_not_the_string_none(tmp_path, infer_string):
+    """The text columns are cast to the nullable 'string' dtype: a missing latest_status or external field is null
+    under pandas 3 and under pandas 2's string handling alike (astype('str') there wrote 'None', which the page, the
+    evidence pack and the search index read as a status: Segment 8 review, docs_data lens)."""
+    bare = line(key="PRJ-B", facts=[], latest_status=None,
+                external={k: None for k in ("land_acquired_pct", "forest_clearance", "court_case", "contractor",
+                                            "new_target", "cost_revision")})
+    path = tmp_path / "research_sweep_2026-09.jsonl"
+    path.write_text(json.dumps(line()) + "\n" + json.dumps(bare) + "\n", encoding="utf-8")
+    with pd.option_context("future.infer_string", infer_string):
+        lines, _ = R.load([path], {"PRJ-A", "PRJ-B"})
+        _, projects = R.tables(lines, ASOF)
+    text_cols = ["latest_status", *(c for c in R.EXT_COLS.values() if c not in ("land_acquired_pct",
+                                                                                 "cost_revision_cr"))]
+    b = projects.set_index("project_key").loc["PRJ-B", text_cols]
+    assert b.isna().all(), b.to_dict()
+    assert not projects[text_cols].map(lambda v: isinstance(v, str) and v in ("None", "nan", "<NA>")).any().any()
+    a = projects.set_index("project_key").loc["PRJ-A"]
+    assert a["latest_status"] == "Work continues on the open stretches." and a["contractor"] == "IRB Infrastructure"
+    assert pd.isna(a["court"]) and str(projects["latest_status"].dtype) == "string"   # typed even when all null
+    out = tmp_path / "projects.parquet"
+    projects.to_parquet(out, index=False)
+    assert pd.read_parquet(out).set_index("project_key").loc["PRJ-B", "latest_status"] is not None
+    assert pd.isna(pd.read_parquet(out).set_index("project_key").loc["PRJ-B", "latest_status"])
+
+
 def test_gold_outputs_match_the_committed_sweep():
     facts = pd.read_parquet(R.FACTS)
     projects = pd.read_parquet(R.PROJECTS)
