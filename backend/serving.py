@@ -211,7 +211,8 @@ RESEARCH_DDL = {
     "rfacts": (RESEARCH_FACTS, """fact_id VARCHAR, project_key VARCHAR, category VARCHAR, taxonomy VARCHAR,
         direction VARCHAR, severity TINYINT, event_date TIMESTAMP, date_precision VARCHAR, published_date TIMESTAMP,
         status VARCHAR, summary VARCHAR, headline VARCHAR, source VARCHAR, url VARCHAR, domain VARCHAR, match VARCHAR,
-        match_reason VARCHAR, verified VARCHAR, origin VARCHAR, researched_on TIMESTAMP, live BOOLEAN"""),
+        match_reason VARCHAR, verified VARCHAR, basis VARCHAR, origin VARCHAR, researched_on TIMESTAMP,
+        live BOOLEAN"""),
     "rprojects": (RESEARCH_PROJECTS, """project_key VARCHAR, researched_on TIMESTAMP, searched BOOLEAN,
         n_queries BIGINT, n_facts BIGINT, n_negative_live BIGINT, latest_status VARCHAR, land_acquired_pct DOUBLE,
         land_as_of VARCHAR, fc_stage VARCHAR, fc_as_of VARCHAR, court VARCHAR, court_status VARCHAR,
@@ -571,7 +572,7 @@ def _agent_fact(r: dict, asof) -> dict:
     """A research agent row (db.research_facts) in the gold fact shape, live at the served asof."""
     ev, pub = _day(r["event_date"]), _day(r["published_date"])
     return {**{k: v for k, v in r.items() if k not in ("model", "prompt_version")}, "event_date": ev,
-            "published_date": pub, "researched_on": _day(r["researched_on"]), "verified": None,
+            "published_date": pub, "researched_on": _day(r["researched_on"]), "verified": None, "basis": "headline",
             "live": is_live(r["direction"], r["status"], ev, pub, asof)}
 
 

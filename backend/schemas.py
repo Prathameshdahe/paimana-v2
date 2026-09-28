@@ -211,7 +211,8 @@ class ResearchFact(CamelModel):
     second one that re-opened the source (verified keep | fix); 'agent': a news item the in-app research agent judged
     relevant with the local LLM (signal_id, judged_at). live: negative, not resolved, within 4 quarters of asof.
     headline is the citation label; the public gets no match_reason, and no headline on agent facts (a raw news feed
-    title): label those by summary and source."""
+    title): label those by summary and source. basis: 'article' when the researcher read the source, 'headline' when
+    only a news-feed headline and its feed summary were judged (every agent fact, and the sweep's second pass)."""
     fact_id: str
     category: str
     taxonomy: str
@@ -229,6 +230,7 @@ class ResearchFact(CamelModel):
     match: str | None
     match_reason: str | None = None
     verified: str | None = None
+    basis: Literal["article", "headline"] | None = None
     origin: Literal["sweep", "agent"]
     researched_on: date | None
     live: bool

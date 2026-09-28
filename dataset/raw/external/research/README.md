@@ -10,16 +10,26 @@ stays true as the file grows from the pilot sample to the full portfolio.
 
 ## Method
 
-1. **Search.** For each current project a research agent ran web searches (2 to 10 queries, kept in `queries`) built
+Two passes, told apart per fact by `basis`:
+
+1. **Article pass** (`basis: article`). A research agent ran web searches (2 to 10 queries, kept in `queries`) built
    from the project's name, place names, agency and object (tunnel, bypass, terminal ...), then read the result
-   pages. It kept only items about this project (not a neighbouring package or a same-named place) and wrote for each
-   a category, direction, severity, dates, status, a headline, its own short paraphrase and the URL.
-2. **Adversarial check.** A second agent, told to find faults, re-opened every source URL and checked each fact
-   against the page: is it this project, is the date right, does the page say what the summary says, is the
-   category right. Its verdict is `keep`, `fix` (the fact is kept with the corrected fields) or `drop` (removed).
-   A batch without a verifier verdict is never merged, so every fact in the file carries `verified: keep | fix`.
-3. **Merge.** Facts, the `external` block and `latest_status` are merged with the verifier's corrections into this
-   file in the committed shape below.
+   pages. It kept only items about this project (not a neighbouring package or a same-named place; each project came
+   with the portfolio's similarly named projects to rule out) and wrote for each a category, direction, severity,
+   dates, status, a headline, its own short paraphrase and the URL. The session's web-search budget ran out after
+   the first projects, so this pass covers the pilot and the riskiest projects searched first.
+2. **Headline pass** (`basis: headline`). For every other project the news scout's own queries (backend/live/scout.py
+   `aliases`) were run against the Google News RSS feed at a polite rate, and an agent judged each project's
+   candidates from the headline and the feed summary alone: which items are about this project, and what they say.
+   Its summaries state only what the headline and feed summary say. These facts are thinner than article facts, and
+   their URLs are Google News links that open the publisher's page.
+3. **Adversarial check.** A second agent, told to find faults, checked each fact: is it this project, does the
+   summary say more than the source (the re-opened page for article facts, the headline and feed summary for headline
+   facts), are the dates and category right, does anything name a private person. Its verdict is `keep`, `fix` (the
+   fact is kept with the corrected fields) or `drop` (removed). A batch without a verifier verdict is never merged,
+   so every fact in the file carries `verified: keep | fix`.
+4. **Merge.** Per project the passes are unioned (deduplicated by URL, article facts first) with the verifier's
+   corrections into this file, one line per project, in the committed shape below.
 
 `researched_on` is the date the project was searched. A project searched with nothing found has `searched: true`
 and `facts: []`: that reads "searched, nothing found", which is not the same as "not searched" (a project with no
@@ -34,7 +44,7 @@ line). Neither is "clear": the web is not a register, and absence of news is not
               "court_case": {"court", "status", "as_of"} | null, "contractor": {"company", "status", "as_of"} | null,
               "new_target": {"date", "as_of"} | null, "cost_revision": {"new_cost_cr", "as_of"} | null},
  "facts": [{"category", "direction", "severity", "event_date", "published_date", "status", "summary", "headline",
-            "source", "url", "match", "match_reason", "verified"}]}
+            "source", "url", "match", "match_reason", "verified", "basis"}]}
 ```
 
 | Field | Meaning |
@@ -48,6 +58,7 @@ line). Neither is "clear": the web is not a register, and absence of news is not
 | `headline`, `source`, `url` | the citation: the page's headline as a label, the publisher, and the page address (`http` or `https`) |
 | `match`, `match_reason` | `high`, `medium` or `low`: how surely the item is about this project, and what in the page ties it to the project |
 | `verified` | the adversarial checker's verdict, `keep` or `fix` |
+| `basis` | `article` (the source page was read) or `headline` (only the news-feed headline and summary were judged); a line without it is `article` |
 | `external` | the latest figure the sources give for land acquired (%), the forest-clearance stage, a court case, the contractor and its state, a new completion target and a revised cost (Rs crore), each with the date it is as of; null when no source gives it |
 
 A fact is **live** in the gold table and the API when it is negative, not resolved, and its event date (else its

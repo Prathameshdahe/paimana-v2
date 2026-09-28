@@ -61,6 +61,9 @@ TAXONOMY_OF = {"land": "land", "forest_env": "forest_env", "litigation": "litiga
                "design_scope": "design_scope", "progress": "progress", "other": "other"}
 DIRECTIONS, STATUSES = ("negative", "positive", "neutral"), ("ongoing", "resolved", "unknown")
 MATCHES, VERDICTS = ("high", "medium", "low"), ("keep", "fix")
+# how deep the researcher read: 'article' opened the source, 'headline' judged a news-feed headline and its feed
+# summary only (the pass that took over when the web-search budget ran out); a line without it is 'article'
+BASES = ("article", "headline")
 # the brief's copyright rule is a paraphrase of 30 words or fewer, and the agents were asked for 30; the floor is
 # 40 so a verified paraphrase a word or two over (the pilot has one of 31) is not dropped. It is our own wording,
 # never quoted article text (dataset/raw/external/research/README.md records the same deviation)
@@ -101,7 +104,7 @@ EXT_COLS = {("land_acquired_pct", "value"): "land_acquired_pct", ("land_acquired
             ("cost_revision", "new_cost_cr"): "cost_revision_cr", ("cost_revision", "as_of"): "cost_revision_as_of"}
 FACT_COLS = ["fact_id", "project_key", "category", "taxonomy", "direction", "severity", "event_date",
              "date_precision", "published_date", "status", "summary", "headline", "source", "url", "domain", "match",
-             "match_reason", "verified", "origin", "researched_on", "live"]
+             "match_reason", "verified", "basis", "origin", "researched_on", "live"]
 PROJECT_COLS = (["project_key", "researched_on", "searched", "n_queries", "n_facts", "n_negative_live",
                  "latest_status"] + list(EXT_COLS.values()))
 
@@ -210,6 +213,9 @@ def validate_fact(key: str, f: dict) -> tuple[dict | None, str | None]:
             raise ValueError(f"severity {sev!r}")
         if f.get("verified") not in VERDICTS:
             raise ValueError(f"verified {f.get('verified')!r}")
+        basis = f.get("basis", "article")
+        if basis not in BASES:
+            raise ValueError(f"basis {basis!r}")
         url = _text(f.get("url"), "url")
         if urlsplit(url).scheme not in ("http", "https") or not urlsplit(url).hostname:
             raise ValueError("url is not http(s)")
@@ -231,7 +237,7 @@ def validate_fact(key: str, f: dict) -> tuple[dict | None, str | None]:
             "date_precision": precision, "published_date": pub,
             "status": status if status in STATUSES else "unknown", "summary": summary, "headline": headline,
             "source": source or domain(url), "url": url, "domain": domain(url), "match": match,
-            "match_reason": reason, "verified": f["verified"]}, None
+            "match_reason": reason, "verified": f["verified"], "basis": basis}, None
 
 
 def validate_external(ext) -> tuple[dict, list[tuple[str, str]]]:

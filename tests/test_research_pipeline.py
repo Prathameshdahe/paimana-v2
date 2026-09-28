@@ -107,6 +107,13 @@ def test_bad_facts_are_dropped_with_their_reason():
     assert proj["new_target"] == "2027-03" and proj["court"] is None and proj["n_queries"] == 2
 
 
+def test_basis_defaults_to_article_and_is_checked():
+    head = {**FACT, "basis": "headline", "url": "https://news.google.com/rss/articles/x"}
+    _, facts, issues = R.validate_line(line(facts=[FACT, head, {**FACT, "basis": "rumour"}]), {"PRJ-A"})
+    assert [f["basis"] for f in facts] == ["article", "headline"]
+    assert [why for _, why in issues] == ["basis 'rumour'"]
+
+
 def test_unknown_keys_bad_external_and_private_status():
     assert R.validate_line(line(key="PRJ-ZZZ"), {"PRJ-A"})[0] is None
     assert R.validate_line({**line(), "researched_on": "yesterday"}, {"PRJ-A"})[0] is None
