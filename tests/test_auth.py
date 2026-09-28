@@ -177,6 +177,44 @@ def test_slow_failures_do_not_lock_and_a_success_resets_the_count(client, coal):
     assert limits.locked_until(spread, at) is None           # five failures over 30 minutes: no lock
 
 
+def test_a_failed_sign_in_runs_the_same_queries_for_known_and_unknown_emails(client, coal):
+    """Review finding (unit B, round 1): up to its answer, a failed sign-in on an unknown email runs the very same
+    statements as one on a real account (the lock is computed for both); the account's counters are written after the
+    answer. So the time a failure takes does not tell which emails have accounts."""
+    from backend.db.engine import engine
+    _, email = official(ministry=coal)
+    log, answered = [], []
+
+    def seen(conn, cursor, statement, params, context, executemany):
+        log.append((bool(answered), " ".join(statement.split())))
+
+    async def marked(scope, receive, send):     # the app, noting when the answer has gone out
+        async def mark(message):
+            if message["type"] == "http.response.body" and not message.get("more_body"):
+                answered.append(1)
+            await send(message)
+        await app(scope, receive, mark)
+
+    def failed(who):
+        log.clear()
+        answered.clear()
+        r = TestClient(marked, client=(ADDRESS, 1)).post("/api/auth/login",
+                                                         json={"email": who, "password": "wrong password here"})
+        assert r.status_code == 401
+        return list(log)
+    sa.event.listen(engine(), "before_cursor_execute", seen)
+    try:
+        known, unknown = failed(email), failed("nobody.at.all@tests.paimana.local")
+    finally:
+        sa.event.remove(engine(), "before_cursor_execute", seen)
+    before = lambda rows: [q for after, q in rows if not after]  # noqa: E731
+    assert before(known) == before(unknown), (before(known), before(unknown))
+    assert any("INSERT INTO app.login_attempts" in q for q in before(known))
+    assert not any("UPDATE app.users" in q for q in before(known))
+    assert any(after and "UPDATE app.users" in q for after, q in known)
+    assert accounts.user(email=email)["failed_logins"] == 1                 # the counter is still kept
+
+
 def test_per_address_limit(fresh_db, coal):
     _, email = official(ministry=coal)
     with TestClient(app, client=("198.51.100.20", 1)) as c, TestClient(app, client=("198.51.100.21", 1)) as other:

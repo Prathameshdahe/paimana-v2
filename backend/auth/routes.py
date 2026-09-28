@@ -3,15 +3,16 @@ backend/schemas.py). /api/auth: signup, login, logout, me, password, reset. /api
 audit log `audit`): sign-up requests, accounts, one-time reset tokens, the audit log.
 
 Sign-in answers one generic 401 (GENERIC) for an unknown email, a wrong password and a disabled account alike, and
-spends the same argon2 time on each; 423 and 429 carry Retry-After (backend/auth/limits.py). The developer
-(backend/access.py) is invisible here to anyone else: not listed, 404 to fetch, change or reset, never a sign-up or
-approval role (the models allow the three official roles only).
+spends the same argon2 time and runs the same statements on each before answering (_fail); 423 and 429 carry
+Retry-After (backend/auth/limits.py). The developer (backend/access.py) is invisible here to anyone else: not listed,
+404 to fetch, change or reset, never a sign-up or approval role (the models allow the three official roles only).
 """
 from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from psycopg.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
@@ -81,10 +82,17 @@ def _locked(email: str) -> None:
                          f"{limits.minutes(wait)}", wait)
 
 
-def _fail(email: str, ip: str | None, user: dict | None) -> None:
-    """Record a failed password check on email (and the account's lock, when this failure starts one)."""
-    accounts.record_attempt(email, ip, False, user["id"] if user else None,
-                            limits.lock_after_failure(email) if user else None)
+def _fail(email: str, ip: str | None, background: BackgroundTasks | None = None) -> None:
+    """Record a failed password check on email: the attempt, and the account's counters with the lock this failure
+    starts. The lock is computed and the counters' statement run whether or not the email has an account, the
+    counters after the answer when background is given (a sign-in), so a failure takes as long for an unknown email
+    as for a real one and its timing tells nothing."""
+    lock = limits.lock_after_failure(email)
+    accounts.record_attempt(email, ip, False)
+    if background is not None:
+        background.add_task(accounts.count_failure, email, lock)
+    else:
+        accounts.count_failure(email, lock)
 
 
 # ---------------------------------------------------------------- /api/auth
@@ -117,7 +125,7 @@ def post_signup(body: SignupIn, request: Request):
 @router.post("/auth/login", response_model=Me,
              responses={401: {"description": GENERIC}, 423: {"description": "locked; Retry-After"},
                         429: {"description": "too many failures from this address; Retry-After"}})
-def post_login(body: LoginRequest, request: Request, response: Response):
+def post_login(body: LoginRequest, request: Request, response: Response, background: BackgroundTasks):
     """Sign in: sets the session cookie and answers Me (with the CSRF token)."""
     ip = sessions.client_ip(request)
     wait = limits.ip_wait(ip)
@@ -130,8 +138,8 @@ def post_login(body: LoginRequest, request: Request, response: Response):
     user = accounts.user(email=email, with_hash=True)
     ok = passwords.verify(user["password_hash"], body.password) if user else passwords.dummy_verify(body.password)
     if not ok or user["status"] != "active":
-        _fail(email, ip, user)
-        raise HTTPException(status_code=401, detail=GENERIC)
+        _fail(email, ip, background)
+        return JSONResponse(status_code=401, content={"detail": GENERIC})   # returned: a raise drops the background
     if passwords.needs_rehash(user["password_hash"]):
         accounts.rehash(user["id"], passwords.hash_password(body.password))
     accounts.record_attempt(email, ip, True, user["id"])
@@ -170,7 +178,7 @@ def post_password(body: PasswordChange, request: Request):
     _locked(s["email"])
     user = accounts.user(s["id"], with_hash=True)
     if not passwords.verify(user["password_hash"], body.current):
-        _fail(s["email"], ip, user)
+        _fail(s["email"], ip)
         raise HTTPException(status_code=401, detail="the current password is wrong")
     _policy(body.new, s["email"])
     if body.new == body.current:

@@ -32,7 +32,8 @@ email's local part. `frontend/src/lib/auth/password.ts` checks the rules before 
 is the backend's alone until the frontend adds it; the backend's 422 names it).
 
 **Failed sign-ins.** One generic 401 covers an unknown email, a wrong password and a disabled account alike: "email
-or password is wrong, or the account is locked or disabled". An unknown email costs the same argon2 time. Five
+or password is wrong, or the account is locked or disabled". An unknown email costs the same argon2 time and the same database work before the answer (the account's failure
+counter is written after it). Five
 failures on one email within 15 minutes lock that email for 15 minutes from the last one: 423 with `Retry-After`,
 even with the right password. Unknown emails lock the same way, so a lock tells nothing about an account. Twenty
 failures from one client address within a minute hold back that address's sign-ins (429 with `Retry-After`). A

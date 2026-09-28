@@ -153,6 +153,15 @@ def record_attempt(email: str, ip: str | None, ok: bool, user_id: int | None = N
                         {"until": locked_until, "id": user_id})
 
 
+def count_failure(email: str, locked_until: datetime | None) -> None:
+    """A failed sign-in on the account with this email, if there is one: one more failure, and locked_until when the
+    caller computed a lock (the same statement runs for an email without an account and changes nothing)."""
+    with connect() as con:
+        con.execute(sa.text("UPDATE app.users SET failed_logins = failed_logins + 1, "
+                            "locked_until = COALESCE(:until, locked_until) WHERE email = :email"),
+                    {"until": locked_until, "email": email})
+
+
 def failures(email: str, since: datetime) -> list[datetime]:
     """The failed attempts on email after since, after its last successful one and after the account's last password
     change (a reset lifts a lock), oldest first."""
@@ -361,6 +370,6 @@ def use_reset(token_hash: str, password_hash: str, ip: str | None) -> dict | Non
 
 
 __all__ = ["Conflict", "user", "users", "admins", "with_role", "create_user", "update_user", "set_password", "rehash",
-           "record_attempt", "failures", "ip_failures", "create_session", "session", "touch_session",
+           "record_attempt", "count_failure", "failures", "ip_failures", "create_session", "session", "touch_session",
            "revoke_session", "revoke_sessions", "create_signup", "signups", "signup", "pending_signup", "signups_from",
            "approve_signup", "reject_signup", "create_reset", "reset_owner", "use_reset"]

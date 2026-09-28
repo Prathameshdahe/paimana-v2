@@ -208,7 +208,8 @@ token in `X-CSRF-Token`, compared in constant time. The token comes from `GET /a
 second line. Cookie-less writes (the public's chat, sign-in, sign-up, reset) carry no token.
 
 **Guessing passwords.** One generic 401 covers an unknown email, a wrong password and a disabled account, with the
-same argon2 cost. Five failures within 15 minutes lock the email for 15 minutes (423). Unknown emails lock too, so a
+same argon2 cost and the same database statements before the answer (the account's counters are written after it),
+so timing does not reveal an account. Five failures within 15 minutes lock the email for 15 minutes (423). Unknown emails lock too, so a
 lock does not reveal an account. Twenty failures a minute from one address are refused (429). Sign-up allows three
 requests an hour per address and one pending request per email, enforced by a unique index. A reset allows ten
 attempts a minute per address. The password policy is at least 12 characters (whitespace at either end not counted), at
