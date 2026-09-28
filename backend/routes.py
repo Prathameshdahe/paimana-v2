@@ -450,11 +450,11 @@ async def post_chat(body: ChatRequest, request: Request, v: Viewer = Depends(nee
     """The assistant (every role): a stream of server-sent events answering the last question from the tools this
     viewer may use (llm/tools.py), cut to their scope. Rate limited per client IP and role before streaming starts
     (backend/ratelimit.py). Nothing is stored and the question is not logged."""
+    key = _key(body.project_key, v) if body.project_key else None  # a 404 uses no question of the limit
     wait = ratelimit.check(request.client.host if request.client else "unknown", v.role)
     if wait is not None:
         return JSONResponse(status_code=429, content={"detail": ratelimit.message(v.role, wait)},
                             headers={"Retry-After": str(math.ceil(wait))})
-    key = _key(body.project_key, v) if body.project_key else None
     messages = [{"role": m.role, "content": m.content[:CHAT_TEXT_MAX]} for m in body.messages]
     return StreamingResponse(_chat_events(v, messages, key), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

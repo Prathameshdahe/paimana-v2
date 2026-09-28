@@ -6,8 +6,8 @@ trusted header, docs/ACCESS_CONTROL.md).
 check(ip, role) records the request and returns None when it is allowed, else the seconds until the next one is
 allowed (the rejected request is not recorded, so waiting out the window always works). Sliding windows: the
 timestamps of the requests inside the longest window, per (ip, role). One process, one dict behind a lock; keys whose
-window has emptied are dropped once there are more than MAX_KEYS. A real deployment behind a proxy would key on the
-forwarded client address and keep the counters in a shared store.
+own role's longest window has emptied are dropped once there are more than MAX_KEYS. A real deployment behind a proxy
+would key on the forwarded client address and keep the counters in a shared store.
 """
 import math
 import threading
@@ -26,14 +26,18 @@ def limits(role: str) -> tuple[tuple[int, float], ...]:
     return PUBLIC if role == "public" else OFFICIAL
 
 
+def horizon(role: str) -> float:
+    """The longest window of role's limits: how long a request of that role counts."""
+    return max(w for _, w in limits(role))
+
+
 def check(ip: str, role: str, now: float | None = None) -> float | None:
     """None (allowed, recorded) or the seconds to wait (refused, not recorded)."""
     now = time.monotonic() if now is None else now
     rules = limits(role)
-    horizon = max(w for _, w in rules)
     with _lock:
         q = _hits.setdefault((ip, role), deque())
-        while q and now - q[0] >= horizon:
+        while q and now - q[0] >= horizon(role):
             q.popleft()
         wait = 0.0
         for n, window in rules:
@@ -43,8 +47,8 @@ def check(ip: str, role: str, now: float | None = None) -> float | None:
         if wait > 0:
             return wait
         q.append(now)
-        if len(_hits) > MAX_KEYS:
-            for k in [k for k, d in _hits.items() if not d or now - d[-1] >= horizon]:
+        if len(_hits) > MAX_KEYS:  # each key by its own role's horizon: a public hour outlives an official minute
+            for k in [k for k, d in _hits.items() if not d or now - d[-1] >= horizon(k[1])]:
                 del _hits[k]
     return None
 

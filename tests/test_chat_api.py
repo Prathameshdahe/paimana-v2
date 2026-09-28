@@ -119,6 +119,30 @@ def test_rate_limit_is_429_before_streaming(api):
     assert api.post("/api/chat", json=body(), headers=COAL).status_code == 429
 
 
+def test_a_404_uses_no_question_of_the_limit(api):
+    for _ in range(8):  # more than the public's 6 a minute
+        assert api.post("/api/chat", json=body(projectKey="PRJ-999999")).status_code == 404
+    assert api.post("/api/chat", json=body()).status_code == 200
+
+
+def test_rate_limit_cleanup_keeps_each_role_its_own_window(monkeypatch):
+    """Past MAX_KEYS keys the idle ones are dropped, each by its own role's longest window: an official's request
+    does not drop a public key idle for a minute, which still counts toward its 40 an hour."""
+    ratelimit.reset()
+    monkeypatch.setattr(ratelimit, "MAX_KEYS", 2)
+    t = 1000.0
+    for minute in range(7):  # 42 attempts in 7 minutes, 40 recorded
+        for i in range(6):
+            ratelimit.check("pub", "public", t + 61 * minute + i)
+    assert len(ratelimit._hits[("pub", "public")]) == 40
+    later = t + 61 * 7 + 70  # the public key idle for over a minute, well inside its hour
+    ratelimit.check("gone", "ministry_official", later - 100)
+    ratelimit.check("o1", "ministry_official", later)
+    ratelimit.check("o2", "ministry_official", later)  # more than MAX_KEYS keys: the cleanup runs
+    assert ("gone", "ministry_official") not in ratelimit._hits and ("pub", "public") in ratelimit._hits
+    assert ratelimit.check("pub", "public", later) is not None  # still at 40 in the hour
+
+
 def test_rate_limit_windows():
     ratelimit.reset()
     t = 1000.0
