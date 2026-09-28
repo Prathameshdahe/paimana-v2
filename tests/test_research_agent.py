@@ -4,6 +4,7 @@ import json
 import re
 import sys
 import threading
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -301,6 +302,42 @@ def test_llm_down_on_the_retry_keeps_the_first_verdicts(agent_db, monkeypatch):
     assert {r["signal_id"] for r in rows("SELECT signal_id FROM research_facts")} == {ids["landslide"], ids["tunnel"]}
     assert rows("SELECT * FROM researched") == []    # stopped mid-project: still first in the rotation
     assert [c["id"] for c in research.candidates(KEY, scout.index())] == [ids["stopped"]]
+
+
+def test_stop_flag_ends_the_run_between_projects_and_before_an_llm_call(agent_db, monkeypatch):
+    """stop() (the scheduler at shutdown or on an overrun) ends a run at its next check: a second project is not
+    started, and a batch's next LLM call is not made; resume() lets the next run go."""
+    fake, seen, real_judge = FakeJudge(), [], research._judge_llm
+
+    def stops_after_first(messages, max_tokens):
+        seen.append(1)
+        out = fake(messages, max_tokens)
+        research.stop()                   # set while the first call is in flight
+        return out
+    monkeypatch.setattr(research, "_judge_llm", stops_after_first)
+    try:
+        out = research.run([KEY, KEY], refresh=False)
+        assert research.stopping() and len(seen) == 1 and out["stopped"] == research.STOPPED
+        # the batch's first verdicts are kept; the retry was the call the stop cancelled, so its item comes back
+        assert out["projects"] == 0 and out["judged"] == 3 and job()["status"] == "partial"
+        assert rows("SELECT * FROM researched") == []                    # not finished: first in the rotation
+        assert research.run([KEY], refresh=False)["stopped"] == research.STOPPED and len(seen) == 1
+        with pytest.raises(research.StopRun):                            # before an LLM call: no call
+            research._ask_llm([], 10)
+        with client.gate(1) as ok:                                       # a gate wait ends at once (no call)
+            assert ok
+            t0 = time.monotonic()
+            with pytest.raises(research.LLMBusy):
+                real_judge([], 10)
+            assert time.monotonic() - t0 < 1
+        monkeypatch.setattr(research, "_chat_active", lambda: True)      # and the idle wait too
+        assert research._wait_idle(5)
+    finally:
+        research.resume()
+    assert not research.stopping()
+    monkeypatch.setattr(research, "_chat_active", lambda: False)
+    monkeypatch.setattr(research, "_judge_llm", fake)
+    assert research.run([KEY], refresh=False)["stopped"] is None
 
 
 def test_llm_shims_work_with_and_without_the_new_client(monkeypatch):

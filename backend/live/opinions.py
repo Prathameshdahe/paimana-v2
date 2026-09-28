@@ -11,9 +11,10 @@ accepted opinion that fails a check tightened since (second_opinion._accepted) i
 Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
 (second_opinion.generate as a background job: the gate lets chat requests go first, also between an opinion's first
 ask and its retry; fresh, so an opinion made under an older prompt is redone), until `limit` projects were asked
-(SECOND_OPINION_PER_RUN, default 15). LM Studio down, or
-busy past the waits, ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep
-their opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
+(SECOND_OPINION_PER_RUN, default 15). LM Studio down, busy past the waits, or the stop flag (stop(): the scheduler
+sets it at shutdown and when a run overruns its time limit; checked between projects, inside the waits and before
+each ask) ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep their
+opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
 db.record_job('second_opinion', ...), with the counts per status and concern level.
 
 Speed on the laptop (qwen2.5-coder-14b, about 3 to 4 tokens/s out): an opinion is one call of 20 to 40 s when LM
@@ -31,7 +32,24 @@ from llm import second_opinion as so
 
 RISKY_TIERS = ("Critical", "High", "Watch")
 PAUSE_MAX_S = 600.0
+STOPPED = "the run was stopped (shutdown, or past the job's time limit)"
 _lock = threading.Lock()
+_stop = threading.Event()   # the stop flag (module docstring)
+
+
+def stop() -> None:
+    """Set the stop flag: the run in flight ends at its next check, and no ask starts (wakes a gate wait)."""
+    _stop.set()
+    client.LLM_GATE.wake()
+
+
+def resume() -> None:
+    """Clear the stop flag (after the stopped run's thread has ended)."""
+    _stop.clear()
+
+
+def stopping() -> bool:
+    return _stop.is_set()
 
 
 def enabled() -> bool:
@@ -89,15 +107,18 @@ def run(keys: list[str], limit: int | None = None) -> dict:
         for key in keys:
             if limit is not None and len(asked) >= limit:
                 break
+            if _stop.is_set():
+                stopped = STOPPED
+                break
             why = due(key)
             if why != "due":
                 stats[why] += 1
                 continue
-            if not client.wait_chat_idle(PAUSE_MAX_S):
+            if not client.wait_chat_idle(PAUSE_MAX_S, stop=_stop):
                 stopped = f"a chat answer kept the LLM busy for {PAUSE_MAX_S:.0f} s"
                 break
-            out = so.generate(key, interactive=False, fresh=True)
-            if out["status"] == "llm_unavailable":
+            out = so.generate(key, interactive=False, fresh=True, stop=_stop)
+            if out["status"] in ("llm_unavailable", "stopped"):
                 stopped = out["detail"]
                 break
             asked.append(key)

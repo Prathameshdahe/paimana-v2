@@ -422,6 +422,49 @@ def test_a_chat_goes_before_background_takes_already_waiting():
         client.LLM_GATE.release()
 
 
+def test_a_stop_flag_ends_a_gate_wait_and_an_idle_wait_at_once():
+    """A job passes its stop flag: set (and LLM_GATE.wake() called), a wait for the gate ends with False well before
+    its wait_s, a take that would succeed gives the gate up, and wait_chat_idle returns at once."""
+    stop, got, t = threading.Event(), [], []
+
+    def waiter():
+        t0 = time.monotonic()
+        with client.gate(5, stop=stop) as ok:
+            got.append(ok)
+        t.append(time.monotonic() - t0)
+    with client.gate(1) as ok:
+        assert ok
+        th = threading.Thread(target=waiter)
+        th.start()
+        time.sleep(0.1)
+        stop.set()
+        client.LLM_GATE.wake()
+        th.join(5)
+    assert got == [False] and t[0] < 1
+    with client.gate(0, stop=stop) as ok:     # free, but stopped: not taken
+        assert not ok
+    with client.gate(0) as ok:                # nothing left held
+        assert ok
+        assert client.wait_chat_idle(max_s=5, stop=stop)
+        held, release = threading.Event(), threading.Event()
+
+        def chat_request():
+            with client.gate(5, chat=True) as ok:
+                held.set()
+                release.wait(5)
+        ch = threading.Thread(target=chat_request)
+        ch.start()
+        deadline = time.monotonic() + 5
+        while not client.chat_active() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        fresh = threading.Event()
+        t0 = time.monotonic()
+        assert not client.wait_chat_idle(max_s=0.1, poll_s=0.02, stop=fresh)    # a chat waits: not idle
+        assert client.wait_chat_idle(max_s=5, poll_s=0.02, stop=stop) and time.monotonic() - t0 < 1   # stopped
+    release.set()
+    ch.join(5)
+
+
 def test_circuit_breaker(monkeypatch):
     monkeypatch.setattr(client, "_down_at", -1e9)
     assert not client.down_recently()

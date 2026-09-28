@@ -28,9 +28,11 @@ recently researched first, per the `researched` table):
      already has one from that URL (the scout alerts on its own severe links);
   6. before each LLM call (a batch, a half of one, a retry) the job waits while a chat answer holds or waits for the
      LLM (client.chat_active) and takes the LLM gate; a gate taken meanwhile (a chat that started after the wait)
-     sends it back to waiting. PAUSE_MAX_S of waiting in all, or LM Studio down, ends the run early (status
-     'partial', or 'error' when nothing was judged). Projects finished before keep their rows, and so do the batch's
-     first verdicts when its retry is the call that stops (the retried items come back next run).
+     sends it back to waiting. PAUSE_MAX_S of waiting in all, LM Studio down, or the stop flag (stop(): the
+     scheduler sets it at shutdown and when a run overruns its time limit; checked between projects, before each
+     LLM call and inside the waits) ends the run early (status 'partial', or 'error' when nothing was judged).
+     Projects finished before keep their rows, and so do the batch's first verdicts when its retry is the call that
+     stops (the retried items come back next run).
 One run at a time (a module lock: a second call returns busy); a run with projects records db.record_job.
 
 Limits: Google News feeds carry no article text, so a verdict rests on a headline; match is 'high' only for a scout
@@ -103,8 +105,10 @@ STRICT = ("Your previous summaries broke the rules: {bad}. Judge these items aga
           "numbers and dates exactly as the item writes them or leave them out, and name no person.")
 Category = Literal[tuple(web_research.TAXONOMY_OF)]
 MARKER_RX = re.compile(r"<{3,}|>{3,}")   # the item quote's markers (<<<ITEMS ... ITEMS>>>)
+STOPPED = "the run was stopped (shutdown, or past the job's time limit)"
 _lock = threading.Lock()
 _llm_lock = threading.Lock()     # the gate when llm/client.py has none
+_stop = threading.Event()        # the stop flag (module docstring, point 6)
 
 
 class LLMBusy(Exception):
@@ -112,7 +116,29 @@ class LLMBusy(Exception):
 
 
 class StopRun(Exception):
-    """End the run early: a chat answer kept the LLM busy past PAUSE_MAX_S (_ask_llm)."""
+    """End the run early: a chat answer kept the LLM busy past PAUSE_MAX_S, or the stop flag is set (_ask_llm)."""
+
+
+def stop() -> None:
+    """Set the stop flag: the run in flight ends at its next check, and no LLM call starts (wakes a gate wait)."""
+    _stop.set()
+    wake = getattr(getattr(client, "LLM_GATE", None), "wake", None)
+    if wake is not None:
+        wake()
+
+
+def resume() -> None:
+    """Clear the stop flag (after the stopped run's thread has ended)."""
+    _stop.clear()
+
+
+def stopping() -> bool:
+    return _stop.is_set()
+
+
+def _check_stop() -> None:
+    if _stop.is_set():
+        raise StopRun(STOPPED)
 
 
 class Verdict(BaseModel):
@@ -207,10 +233,10 @@ def _chat_active() -> bool:
 
 @contextmanager
 def _gate(wait_s: float):
-    """client.gate(wait_s) (True when taken), or a module lock."""
+    """client.gate(wait_s) (True when taken; False at once when the stop flag is set), or a module lock."""
     fn = getattr(client, "gate", None)
     if fn is not None:
-        with fn(wait_s) as ok:
+        with fn(wait_s, stop=_stop) as ok:
             yield ok
         return
     ok = _llm_lock.acquire(timeout=wait_s)
@@ -230,25 +256,30 @@ def _judge_llm(messages: list[dict], max_tokens: int) -> str:
 
 
 def _wait_idle(max_s: float | None = None) -> bool:
-    """Wait while a chat answer is using the LLM; False when it is still active after max_s (PAUSE_MAX_S)."""
+    """Wait while a chat answer is using the LLM; False when it is still active after max_s (PAUSE_MAX_S). The
+    stop flag ends the wait at once (True: the caller checks the flag next)."""
     t0, max_s = time.monotonic(), PAUSE_MAX_S if max_s is None else max_s
-    while _chat_active():
+    while _chat_active() and not _stop.is_set():
         if time.monotonic() - t0 >= max_s:
             return False
-        time.sleep(PAUSE_POLL_S)
+        _stop.wait(PAUSE_POLL_S)
     return True
 
 
 def _ask_llm(messages: list[dict], max_tokens: int) -> str:
     """_judge_llm once the LLM is free: wait while a chat answer uses it, and wait again when the gate was taken
-    between the wait and the call (LLMBusy); StopRun when PAUSE_MAX_S of waiting runs out."""
+    between the wait and the call (LLMBusy); StopRun when PAUSE_MAX_S of waiting runs out or the stop flag is set
+    (checked before the call, and after a gate wait it cut short)."""
     deadline = time.monotonic() + PAUSE_MAX_S
     while True:
+        _check_stop()
         if not _wait_idle(deadline - time.monotonic()):
             raise StopRun("a chat answer kept the LLM busy")
+        _check_stop()
         try:
             return _judge_llm(messages, max_tokens)
         except LLMBusy:
+            _check_stop()
             if time.monotonic() >= deadline:
                 raise StopRun(f"the LLM stayed busy for {PAUSE_MAX_S:.0f} s (a chat answer)") from None
 
@@ -485,6 +516,9 @@ def run(keys: list[str], get=None, refresh: bool = True) -> dict:
         for key in keys:
             if key not in idx["projects"]:
                 continue
+            if _stop.is_set():
+                stopped = STOPPED
+                break
             try:
                 got = research_project(key, idx, stats, get=get, refresh=refresh)
             except (LLMBusy, StopRun) as e:

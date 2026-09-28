@@ -17,10 +17,18 @@ work runs in a thread (asyncio.to_thread), and every job holds its own lock, so 
 started from the API. A run that ingests, scouts or fetches writes its job_runs row; an idle tick (nothing in the
 inbox, today already archived, pull not due) only updates STATUS.
 
+Each run has a time limit (MAX_RUNTIME_S per job): past it the loop logs the overrun, records it in STATUS as the
+job's last_error, tells the job to stop (the LLM jobs' stop flags; a pipeline step or a fetch cannot be interrupted
+and finishes on its own) and moves on to the next tick; the thread is never killed and the process is never taken
+down with it. stop() (the lifespan's shutdown) sets the LLM jobs' stop flags before cancelling the loops, so a
+research or second-opinion batch in flight ends at its next check instead of holding the restart for an hour, waits
+a little for the threads to end and then clears the flags.
+
 alert_stream() is the Server-Sent Events body of GET /api/stream: it polls SQLite every POLL_S seconds for alerts
 with an id above the last one sent and writes a comment line every HEARTBEAT_S seconds so proxies keep it open.
 """
 import asyncio
+import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -35,8 +43,15 @@ PORTALS_FIRST_DELAY_S = 120
 RESEARCH_FIRST_DELAY_S = 1800
 SECOND_OPINION_FIRST_DELAY_S = 2700
 POLL_S, HEARTBEAT_S = 2.0, 15.0
+STOP_WAIT_S = 30.0   # stop() waits this long for the LLM jobs' threads to end before clearing their flags
+# a run's time limit in seconds (module docstring); an ingest is about 2 minutes, a research batch about an hour
+MAX_RUNTIME_S = {"watch": 4 * 3600.0, "scout": 2 * 3600.0, "parivesh_snapshot": 3600.0,
+                 "bhoomi_rashi_pull": 4 * 3600.0, "research": 3 * 3600.0, "second_opinion": 2 * 3600.0}
+STOPPERS = {"research": (research.stop, research.resume), "second_opinion": (opinions.stop, opinions.resume)}
 STATUS = {job: {"interval_s": None, "running": False, "last_tick": None, "next_due": None, "last_error": None}
-          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull", "research", "second_opinion")}
+          for job in MAX_RUNTIME_S}
+_inflight: set[asyncio.Future] = set()   # the runs in their threads (an overrunning one too, until it ends)
+log = logging.getLogger(__name__)
 
 
 def _iso(t: datetime) -> str:
@@ -52,15 +67,41 @@ def bhoomi_enabled() -> bool:
     return os.environ.get("BHOOMI_PULL", "0") == "1"
 
 
+def _overrun(job: str, fut: asyncio.Future, max_s: float) -> None:
+    """A run past its time limit: log it, tell the job to stop (the LLM jobs), and when its thread does end, log
+    that and clear the flag; the thread itself is left alone (module docstring)."""
+    log.error("%s: the run exceeded %.0f s; it was told to stop and is left to finish on its own", job, max_s)
+    stopper, resumer = STOPPERS.get(job, (None, None))
+    if stopper is not None:
+        stopper()
+
+    def finished(f: asyncio.Future) -> None:
+        e = None if f.cancelled() else f.exception()
+        log.warning("%s: the overrunning run ended%s", job, f" with {type(e).__name__}: {e}" if e else "")
+        if resumer is not None:
+            resumer()
+    fut.add_done_callback(finished)
+
+
 async def _every(job: str, fn, interval_s: float, first_delay_s: float) -> None:
     st = STATUS[job]
     st.update(interval_s=interval_s, next_due=_iso(datetime.now(timezone.utc) + timedelta(seconds=first_delay_s)))
     await asyncio.sleep(first_delay_s)
     while True:
         st["running"] = True
+        max_s = MAX_RUNTIME_S.get(job)
+        fut = asyncio.ensure_future(asyncio.to_thread(fn))
+        _inflight.add(fut)
+        fut.add_done_callback(_inflight.discard)
         try:
-            await asyncio.to_thread(fn)
+            await asyncio.wait_for(asyncio.shield(fut), max_s)   # shielded: a timeout or a cancel leaves it running
             st["last_error"] = None
+        except TimeoutError as e:
+            if fut.done():   # the job's own TimeoutError, not the limit
+                st["last_error"] = f"{type(e).__name__}: {e}"[:500]
+            else:
+                st["last_error"] = f"TimeoutError: the run exceeded {max_s:.0f} s and was told to stop"
+                _overrun(job, fut, max_s)
         except Exception as e:  # a failing run is reported in the status and must not end the loop
             st["last_error"] = f"{type(e).__name__}: {e}"[:500]
         finally:
@@ -92,10 +133,22 @@ def start() -> list[asyncio.Task]:
 
 
 async def stop(tasks: list[asyncio.Task]) -> None:
-    """Cancel the loops. A run already in its thread finishes first (a pipeline step is not interrupted)."""
+    """Set the LLM jobs' stop flags, cancel the loops, wait up to STOP_WAIT_S for the runs in flight to end (an
+    LLM batch stops at its next check; a pipeline step or a fetch finishes first: it is not interrupted) and clear
+    the flags again when they have, so a later start() runs the jobs."""
+    for stopper, _ in STOPPERS.values():
+        stopper()
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+    pending = [f for f in _inflight if not f.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=STOP_WAIT_S)
+    if not _inflight:
+        for _, resumer in STOPPERS.values():
+            resumer()
+    else:
+        log.warning("a job run is still in its thread; the process waits for it at exit")
 
 
 def status() -> dict:

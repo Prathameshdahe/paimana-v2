@@ -3,6 +3,7 @@ pauses, the job route and the scheduler loop."""
 import asyncio
 import json
 import sys
+import time
 from contextlib import closing
 from itertools import islice
 from pathlib import Path
@@ -147,12 +148,41 @@ def test_an_opinion_a_tightened_check_rejects_is_redone(job_db):
     assert opinions.due(key) == "up_to_date"
 
 
+def test_stop_flag_ends_the_run_between_projects_and_before_an_ask(job_db, monkeypatch):
+    """stop() (the scheduler at shutdown or on an overrun) ends a run at its next check: the project after the one
+    in flight is not asked, an ask never starts once set, and a gate wait ends at once instead of after JOB_WAIT_S."""
+    keys = with_evidence(opinions.batch_keys(), 2)
+    chat = client.chat
+
+    def stops_during_first(messages, **kw):
+        opinions.stop()
+        return chat(messages, **kw)
+    monkeypatch.setattr(client, "chat", stops_during_first)
+    try:
+        out = opinions.run(keys)
+        assert out["asked"] == 1 and out["keys"] == keys[:1] and out["stopped"] == opinions.STOPPED
+        assert job()["status"] == "partial" and len(job_db) == 1
+        assert so.cached(keys[0])["status"] == "ok"                       # the opinion in flight was kept
+        out = so.generate(keys[1], interactive=False, fresh=True, stop=opinions._stop)   # noqa: SLF001
+        assert out["status"] == "stopped" and len(job_db) == 1
+        with client.gate(1) as ok:                                        # a gate wait ends at once
+            assert ok
+            t0 = time.monotonic()
+            out = so.generate(keys[1], interactive=False, fresh=True, stop=opinions._stop)   # noqa: SLF001
+            assert out["status"] == "stopped" and time.monotonic() - t0 < 1
+        assert opinions.run(keys)["asked"] == 0 and len(job_db) == 1
+    finally:
+        opinions.resume()
+    monkeypatch.setattr(client, "chat", chat)
+    assert opinions.run(keys)["asked"] == 1 and len(job_db) == 2
+
+
 def test_run_stops_for_a_busy_chat_and_for_lm_studio_down(job_db, monkeypatch):
     keys = with_evidence(opinions.batch_keys(), 2)
-    monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5: False)
+    monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5, stop=None: False)
     out = opinions.run(keys)
     assert out["asked"] == 0 and "chat" in out["stopped"] and job()["status"] == "error" and not job_db
-    monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5: True)
+    monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5, stop=None: True)
     monkeypatch.setattr(client, "down_recently", lambda s=30: True)
     out = opinions.run(keys)
     assert out["asked"] == 0 and "unreachable" in out["stopped"] and not job_db

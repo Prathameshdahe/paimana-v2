@@ -92,6 +92,7 @@ checked yet (docs/SECOND_OPINION.md says how to do it prospectively).
 import hashlib
 import json
 import re
+import threading
 import time
 from contextlib import ExitStack
 from datetime import date, datetime, timezone
@@ -684,16 +685,19 @@ def cached(key: str) -> dict | None:
     return _out(row, p, True) if _accepted(row, p) else None
 
 
-def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict:
-    """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} for one canonical key; an accepted
-    opinion for the current evidence is returned from the cache (fresh: only one made under the current
+def generate(key: str, *, interactive: bool = True, fresh: bool = False,
+             stop: threading.Event | None = None) -> dict:
+    """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored' | 'stopped', ...} for one canonical key; an
+    accepted opinion for the current evidence is returned from the cache (fresh: only one made under the current
     PROMPT_VERSION). interactive: a person is waiting (the LLM gate as a chat request, INTERACTIVE_WAIT_S); else the
-    nightly job (JOB_WAIT_S, after any chat request). A rejection does not replace an accepted opinion: it is noted
-    on it (last_rejected)."""
+    nightly job (JOB_WAIT_S, after any chat request), which passes its stop flag: set, no ask starts and a gate wait
+    ends at once, and the call returns 'stopped' (only the job sees it). A rejection does not replace an accepted
+    opinion: it is noted on it (last_rejected)."""
     p = pack(key)
     if p is None:
         return {"status": "not_scored", "detail": f"project {key} is not in the current scored portfolio"}
     h, model = evidence_hash(p), _model()
+    halted = {"status": "stopped", "key": key, "detail": "the job was stopped before the ask"}
 
     def stored() -> tuple[dict | None, bool, bool]:
         """(the stored row, whether it is an accepted opinion, whether it answers this call)."""
@@ -716,7 +720,11 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
             # a chat answer waiting for the LLM goes first instead of timing out as 'busy' behind the retry
             if attempts == 0 or not interactive:
                 held.close()
-                if not held.enter_context(client.gate(wait, chat=interactive)):
+                if stop is not None and stop.is_set():
+                    return halted
+                if not held.enter_context(client.gate(wait, chat=interactive, stop=stop)):
+                    if stop is not None and stop.is_set():
+                        return halted
                     return {"status": "llm_unavailable", "busy": True, "detail": f"the local LLM stayed busy with "
                             f"other answers for {wait:.0f} s; try again shortly"}
                 row, kept, serve = stored()   # a request that held the gate before this one may have just made it
@@ -724,6 +732,8 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
                     return _out(row, p, True)
                 if client.down_recently():    # or found LM Studio down: the ones behind it do not try it in turn
                     return down
+            if stop is not None and stop.is_set():
+                return halted
             try:
                 op, reasons, n, t = _attempt(p, reasons)
             except client.LLMConnectionError as e:
