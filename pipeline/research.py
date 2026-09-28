@@ -73,7 +73,9 @@ DATE_RX = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
 PRECISION = {1: "year", 2: "month", 3: "day"}
 # an honorific ('Mr', 'Mr.', 'Mr.Singh'), then its run of capitalised words (initials and 'of' / 'the' / 'and' inside
 # the run)
-HONORIFIC = re.compile(r"\b(?:Mr|Mrs|Ms|Mx|Shri|Shrimati|Smt|Sri|Sh|Dr|Kumari|Km|Prof|MR|MRS|SHRI|SMT|SRI|DR)\b"
+# not after a number: '12 Km Corridor' or '4.94-Km stretch' is a length, not Kumari
+HONORIFIC = re.compile(r"(?<!\d)(?<!\d[ -])\b(?:Mr|Mrs|Ms|Mx|Shri|Shrimati|Smt|Sri|Sh|Dr|Kumari|Km|Prof|MR|MRS|SHRI|SMT"
+                       r"|SRI|DR)\b"
                        r"(?:\.\s*|\s+)([A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|of|the|and|&))*)")
 # the head of a run is its words before the first of / the / and / & ('Ramesh Kumar' of 'Ramesh Kumar of the
 # Municipal Corporation'); the run names a thing, not a person, only when its head ENDS in one of these words: an
@@ -85,6 +87,7 @@ ORG_WORDS = re.compile(
     r"|projects?|pariyojana|yojana|scheme|mission|memorial|park|temple|mandir|shrine|complex|bhawan|bhavan|hall"
     r"|cent(?:re|er)|library|museum|market|corporation|limited|ltd|authority|council|commission|department"
     r"|ministry|district|municipal|medical|garden|expressway|highway|lanka|city|ganganagar|sahib|kalahasti"
+    r"|navami|jayanti|puja|mela|utsav|mahotsav"
     r"|nellore|puttaparthi|constructions?|contractors?|builders|developers|engineers|engineering|enterprises?"
     r"|industries|infra|infrastructure|infratech|associates|company|pvt|private|group|laboratories)\b", re.I)
 # place words that are also surnames ('Mr. Ramesh Nagar', 'Dr. Anil Sagar'): they end a thing's name only after

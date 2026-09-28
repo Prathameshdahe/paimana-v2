@@ -82,6 +82,12 @@ def test_committed_sweep_validates_without_drops():
     ("Dr. Ambedkar Nagar Road widening", False),
     ("Sri Avantika Contractors won the package", False),
     ("Sri Lanka and India signed the port deal", False),
+    # a length after a number is not Kumari; a festival is not a person
+    ("162-Km Khammam-Devarapalle Greenfield Highway Nears Completion", False),
+    ("DMRC floats tender for the 4.94-Km Underground Stretch", False),
+    ("A 41 Km Corridor From Prahladpura To Todi", False),
+    ("Km Sunita Devi filed a petition", True),
+    ("Traffic curbs for Sri Rama Navami near the site", False),
 ])
 def test_privacy_floor(text, private):
     assert bool(R.private_names(text)) is private
