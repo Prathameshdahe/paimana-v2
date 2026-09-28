@@ -4,17 +4,22 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useSession } from '@/lib/auth/SessionContext'
+import { can } from '@/lib/auth/access'
 import type { DispatchDraft } from '@/contracts/workers'
 import { apiPost } from '@/lib/api'
 import { useDispatchDrafts } from '@/lib/queries'
+import { plainMemo } from '@/lib/outlook'
 
 /**
  * Memos from the worker cell. The backend sends only what the role may see (ported from Pranjal's
  * frontend-dev: an agency or ministry official sees the memos addressed to their role, on their own
- * projects; IPMD sees all) and lets only the addressee decide.
+ * projects; IPMD sees all) and lets only the addressee decide. A memo and its evidence notes read in words for the
+ * four roles (lib/outlook plainMemo: memos stored before the numbers policy quote the model's probability, a risk
+ * exposure figure and SHAP); the developer reads them as stored.
  */
 export function ApprovalInbox() {
   const { role } = useSession()
+  const numbers = can(role, 'canSeeNumbers')
   const queryClient = useQueryClient()
   const { data: drafts, isError } = useDispatchDrafts()
 
@@ -72,7 +77,7 @@ export function ApprovalInbox() {
                   </div>
 
                   <p className="whitespace-pre-wrap font-sans text-xs text-fg-muted">
-                    {draft.draftMemo}
+                    {plainMemo(draft.draftMemo, numbers)}
                   </p>
 
                   {draft.evidence.length > 0 && (
@@ -84,7 +89,7 @@ export function ApprovalInbox() {
                             href={ev.sourceUrl}
                             target="_blank"
                             rel="noreferrer"
-                            title={ev.note}
+                            title={plainMemo(ev.note, numbers) ?? undefined}
                             className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-accent hover:border-accent"
                           >
                             {ev.tag}
@@ -92,7 +97,7 @@ export function ApprovalInbox() {
                         ) : (
                           <span
                             key={i}
-                            title={ev.note}
+                            title={plainMemo(ev.note, numbers) ?? undefined}
                             className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-fg-dimmed"
                           >
                             {ev.tag}

@@ -218,3 +218,30 @@ export function plainText(text: string | null | undefined, numbers: boolean): st
   if (numbers) return text
   return scrubModelNumbers(text) || null
 }
+
+// the worker memos (unit G's serving.plain_memo, pattern for pattern): 'slip probability of 0.7636', '69.47%'
+const ABOUT = '(?:approximately |about |around )?'
+const MEMO_P_RX = new RegExp(String.raw`\b(probability|chance|likelihood) of ${ABOUT}(\d*\.?\d+)(\s?%)?`, 'g')
+// 'risk exposure of Cr1454.89', 'of approximately 517 million Cr'
+const MEMO_EXPOSURE_RX = new RegExp(String.raw`\brisk exposure of ${ABOUT}(?:Rs\.?\s?|INR\s?|Cr\.?\s?)?\d[\d,]*(?:\.\d+)?`
+  + String.raw`(?:\s?(?:million|lakh|crore))?(?:\s?Cr\b)?`, 'g')
+const MEMO_SHAP_RX = /\s?\(SHAP\)|\bSHAP\b\s*/g
+
+/**
+ * A worker memo or its evidence note as the viewer may read it (null if empty): as stored for the developer; for the
+ * four roles without the model's numbers that memos written before the numbers policy quote (database/
+ * dispatch_drafts.json): the probability becomes the outlook's chance word ('slip probability (rated likely)'), the
+ * risk exposure figure and the word SHAP go. Report facts (names, km, MW) and the memo's lines stay. It mirrors
+ * unit G's serving.plain_memo, so a memo G already cleaned passes through unchanged.
+ */
+export function plainMemo(text: string | null | undefined, numbers: boolean): string | null {
+  if (!text) return null
+  if (numbers) return text
+  return text
+    .replace(MEMO_P_RX, (_, noun: string, v: string, pct?: string) => {
+      const p = Number(v)
+      return `${noun} (rated ${bandOf(pct || p > 1 ? p / 100 : p)})`
+    })
+    .replace(MEMO_EXPOSURE_RX, 'risk exposure')
+    .replace(MEMO_SHAP_RX, '')
+}

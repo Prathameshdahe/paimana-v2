@@ -83,6 +83,10 @@ missing). Such a backend also writes statistics into free text (the checklist's
 a measured prior's months and intervals, the chat's chance of a slip); every
 place that shows such text reads it through `plainText` (`src/lib/outlook.ts`),
 which drops them for the four roles and keeps the report facts around them.
+The worker memos on Approvals read through `plainMemo` (the same file,
+mirroring the backend's `serving.plain_memo`): a stored memo's "slip
+probability of 0.7636" reads "slip probability (rated very likely)", and its
+risk exposure figure and the word SHAP go.
 `src/lib/outlook.ts` is the one place that picks words over numbers;
 `src/lib/headline.ts` writes the opening sentences (the week's brief, a
 project's headline) from facts, tiers and words, never a number.
