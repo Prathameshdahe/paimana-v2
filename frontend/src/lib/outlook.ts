@@ -152,14 +152,69 @@ export function likelyOrWorse(word: OutlookWord | null | undefined): boolean {
   return word === 'likely' || word === 'very likely'
 }
 
+const N = String.raw`[+-]?\d+`   // pipeline/hidden_delay.fmt: '+3', '-2', '0'
+const MO = String.raw`(${N}) months? over the next year \(CI ${N} to ${N}\)`
+const PTS = String.raw`(${N}) pts date-push risk \(CI ${N} to ${N}\)`
+
+/** a measured prior's months and push as their direction only (the size is a hidden number) */
+function priorWords(_: string, months?: string, pushWith?: string, pushAlone?: string, n?: string): string {
+  const m = months === undefined ? 0 : Number(months)
+  const p = Number(pushWith ?? pushAlone ?? 0)
+  const parts = [
+    m > 0 ? 'more delay than matched projects' : m < 0 ? 'less delay than matched projects' : null,
+    p > 0 ? 'a higher chance of a date push' : p < 0 ? 'a lower chance of a date push' : null,
+  ].filter(Boolean)
+  return `${parts.length ? parts.join(' and ') : 'no clear difference from matched projects'}, measured on ${n} projects`
+}
+
+/** [pattern, replacement] per free-text form a backend from before the numbers policy writes a statistic in */
+const MODEL_TEXT: Array<[RegExp, string | ((match: string, ...groups: string[]) => string)]> = [
+  // ml/risk_profile.py, the model checks: 'P = 0.77 (High-tier cut 0.62); velocity ...'
+  [/P\s*=\s*\d*\.?\d+\s*\(High-tier cut\s*\d*\.?\d+\)(?:;\s*)?/g, ''],
+  // the watcher and the seed alerts: '; P(date push or cost revision, 2q) = 0.81'
+  [/;?\s*P\([^)]*\)\s*=\s*\d*\.?\d+%?/g, ''],
+  // the watcher's slip_realised: '(P = 0.81)'
+  [/\s*\(P\s*=\s*\d*\.?\d+%?\)/g, ''],
+  // any other 'P = 0.81'
+  [/;?\s*\bP\s*=\s*\d*\.?\d+%?/g, ''],
+  // agency_optimism: 'agency timelines run +23% vs schedule (median of 12 projects); 2q slip rate 40%'
+  [/agency timelines run [+-]?\d+(?:\.\d+)?% vs schedule \(median of (\d+) projects\)(?:; 2q slip rate \d+(?:\.\d+)?%)?/g,
+    'agency timelines checked against schedule on $1 past projects'],
+  // external_composite: 'score 0.63 (fc+la): '
+  [/\bscore (?:\d*\.?\d+|n\/a) \([^)]*\):\s*/g, ''],
+  // pipeline/hidden_delay.text, not significant: 'no measurable extra delay (+1 month over the next year, CI -2 to
+  // +4; +3 pts date-push risk, CI -1 to +5; 43 projects)'
+  [new RegExp(String.raw`no measurable extra delay \(${N} months? over the next year, CI ${N} to ${N}; ${N} pts `
+    + String.raw`date-push risk, CI ${N} to ${N}; (\d+) projects\)`, 'g'), 'no measurable extra delay ($1 projects)'],
+  // pipeline/hidden_delay.text, measured: '+3 months over the next year (CI +1 to +5) and +8 pts date-push risk (CI +2
+  // to +14), measured on 16 projects'
+  [new RegExp(String.raw`(?:${MO}(?: and ${PTS})?|${PTS}), measured on (\d+) projects`, 'g'), priorWords],
+  // the chat's project summary (llm/tools._tier_words): ', with a 81% chance of a schedule or cost slip within 2 quarters'
+  [/,?\s*with an? \d+(?:\.\d+)?% chance of a[^;.]*/g, ''],
+  // the chat's agency summary: ', median schedule overrun 23%, cost overrun 12%'
+  [/,\s*(?:median schedule overrun|cost overrun) [+-]?\d+(?:\.\d+)?%/g, ''],
+]
+
 /**
- * An alert's or a stored note's text without the model numbers the watcher writes into it ("; P(date push or cost
- * revision, 2q) = 0.81", "(P = 0.81)"): stored alerts keep them, so the four roles' lists read the text through this.
+ * A text without the model's numbers and statistics that a backend from before the numbers policy writes into it:
+ * the model checks' 'P = 0.77 (High-tier cut 0.62)', an alert's 'P(date push or cost revision, 2q) = 0.81' or
+ * '(P = 0.81)', the agency's timeline bias and slip rate, the composite score, a measured prior's months, push and
+ * intervals (their direction and project count stay), and the chat's chance of a slip and agency overruns. Report
+ * facts (progress, spend, velocity, dates, counts) stay as written. Unit G's backend writes these in words already.
  */
 export function scrubModelNumbers(text: string): string {
-  return text
-    .replace(/;?\s*P\([^)]*\)\s*=\s*\d+(?:\.\d+)?%?/g, '')
-    .replace(/\s*\(P\s*=\s*\d+(?:\.\d+)?%?\)/g, '')
+  let out = text
+  for (const [rx, to] of MODEL_TEXT) out = typeof to === 'string' ? out.replace(rx, to) : out.replace(rx, to)
+  return out
+    .replace(/\s*;\s*(?=;|$)/g, '')
+    .replace(/^\s*[;,]\s*/, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+/** a stored text as the viewer may read it: as sent for the developer, else without the model's numbers; null if empty */
+export function plainText(text: string | null | undefined, numbers: boolean): string | null {
+  if (!text) return null
+  if (numbers) return text
+  return scrubModelNumbers(text) || null
 }

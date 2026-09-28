@@ -61,7 +61,7 @@ function Briefing({ detail, timeline, forecast, signals, insights, opinion, numb
             </div>
             <OutlookTiles outlook={outlook} tier={tier} />
           </section>
-          <WhyBlock drivers={driversOf(s, numbers)} checks={detail.riskProfile} />
+          <WhyBlock drivers={driversOf(s, numbers)} checks={detail.riskProfile} numbers={numbers} />
         </div>
         <div className="space-y-4">
           {insights ? (

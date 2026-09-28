@@ -14,6 +14,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, RISK_STATE_CHIP, tierKey } from '@/lib/riskPalette'
 import { cn, formatDate, formatINR, formatProb, orDash } from '@/lib/formatters'
 import { LIVE_QUARTERS, details, formatQuarter, fromMatch, isLive, verdict } from '@/lib/external'
+import { plainText } from '@/lib/outlook'
 import type {
   Flag, HiddenDelayMatch, ProjectDetail, ResearchBrief, RiskRow, RiskState, Scores, Timeline,
 } from '@/contracts/project'
@@ -390,9 +391,15 @@ const STATE_WORD: Record<RiskState, string> = { flagged: 'Flagged', clear: 'Clea
 
 /**
  * The 13 checklist dimensions as icon tiles: red flagged, green clear, dashed grey no data; hover shows the
- * evidence line. plain (the public): state only on hover, and the top risks in plain words below.
+ * evidence line (without the model's numbers unless `numbers`). plain (the public): state only on hover, and the top
+ * risks in plain words below.
  */
-export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; plain: boolean; className?: string }) {
+export function RiskGrid({ detail, plain, numbers, className }: {
+  detail: ProjectDetail
+  plain: boolean
+  numbers: boolean
+  className?: string
+}) {
   const byDim = new Map<string, RiskRow>(detail.riskProfile.map((r) => [r.dimension, r]))
   const n = (st: RiskState) => detail.riskProfile.filter((r) => r.state === st).length
 
@@ -412,11 +419,12 @@ export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; 
           {Object.entries(RISK_DIMENSION).map(([dim, { label, short, icon: Icon }]) => {
             const r = byDim.get(dim)
             const st: RiskState = r?.state ?? 'unknown'
+            const evidence = plainText(r?.evidence, numbers)
             return (
               <Tooltip key={dim} content={
                 <div className="space-y-1">
                   <div className="font-semibold">{label} · {STATE_WORD[st]}</div>
-                  {!plain && r?.evidence && <div className="text-fg-muted">{r.evidence}</div>}
+                  {!plain && evidence && <div className="text-fg-muted">{evidence}</div>}
                   {!plain && r?.asOfDate && <div className="text-fg-dimmed">as of {formatDate(r.asOfDate)}</div>}
                 </div>
               }>

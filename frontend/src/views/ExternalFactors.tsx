@@ -15,7 +15,7 @@ import { ResearchPanel } from './external-factors/ResearchPanel'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
-import { outlookOf } from '@/lib/outlook'
+import { outlookOf, plainText } from '@/lib/outlook'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
 import { EXTERNAL_FACTORS as FACTORS, EVENT_CATEGORY, FLAG_ICON } from '@/lib/riskPalette'
 import { details, formatQuarter, fromPrior, verdict } from '@/lib/external'
@@ -30,9 +30,11 @@ const FACTOR: Partial<Record<string, (typeof FACTORS)[number]>> = Object.fromEnt
 const COMPOSITE_HIGH = 0.6
 
 /** "land: open in reports, mentioned ...: 'quote'" -> ["land", "open in reports, ..."] */
-function splitEvidence(line: string): [string, string] {
+/** 'factor: evidence', the evidence without the model's numbers an older backend writes into it unless `numbers` */
+function splitEvidence(line: string, numbers: boolean): [string, string] {
   const i = line.indexOf(': ')
-  return i < 0 ? ['', line] : [line.slice(0, i), line.slice(i + 2)]
+  const [f, e] = i < 0 ? ['', line] : [line.slice(0, i), line.slice(i + 2)]
+  return [f, plainText(e, numbers) ?? '']
 }
 
 const pct = (v: number | null) => orDash(v, (x) => formatProb(x))
@@ -134,7 +136,8 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 /** One project from a summary top list, linking to its project page. */
 function ProjectLine({ p, factor }: { p: ExternalProject; factor: ExternalFactorKey }) {
   const panel = useProjectPanel()
-  const lines = p.evidence.map(splitEvidence).filter(([f]) => f === factor)
+  const numbers = useNumbers()
+  const lines = p.evidence.map((l) => splitEvidence(l, numbers)).filter(([f]) => f === factor)
 
   return (
     <button onClick={() => panel.open(p.project_key)} className="block w-full bg-surface-panel px-5 py-3 text-left transition-colors hover:bg-surface-elevated">
@@ -263,7 +266,7 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
         </thead>
         <tbody>
           {rows.map((p) => {
-            const lines = p.evidence.map(splitEvidence)
+            const lines = p.evidence.map((l) => splitEvidence(l, numbers))
             return (
               <tr
                 key={p.project_key}

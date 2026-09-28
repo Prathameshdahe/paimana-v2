@@ -129,7 +129,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
           <>
             <p className="text-base leading-relaxed text-fg-base">{detailHeadline(detail, numbers)}</p>
             <OutlookTiles outlook={outlookOf(detail.scores, numbers)} tier={detail.scores?.tier ?? null} />
-            <WhyBlock drivers={driversOf(detail.scores, numbers)} checks={detail.riskProfile} compact />
+            <WhyBlock drivers={driversOf(detail.scores, numbers)} checks={detail.riskProfile} numbers={numbers} compact />
             {k && insights && <FoldedBrief key={`b-${k}`} projectKey={k} />}
             {k && can(role, 'canSeeSecondOpinion') && (
               <SecondOpinionCard key={k} projectKey={k} variant="panel" tier={detail.scores?.tier} />
@@ -145,7 +145,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
               news={signals.data && { n: signals.data.items.length, scouted: !!signals.data.lastScoutAt }}
               research={detail.research}
             />
-            <RiskGrid detail={detail} plain={!insights} />
+            <RiskGrid detail={detail} plain={!insights} numbers={numbers} />
             <ResearchNews projectKey={k} variant="panel" />
           </>
         )}

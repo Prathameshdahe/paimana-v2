@@ -13,7 +13,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
-import { driversOf, outlookLine, outlookOf, strengthDots } from '@/lib/outlook'
+import { driversOf, outlookLine, outlookOf, plainText, strengthDots } from '@/lib/outlook'
 import { webUrl } from '@/lib/citations'
 import { CONCERN, FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, TIER_COLOR, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import {
@@ -312,6 +312,7 @@ function ExplainCardView({ card }: { card: ExplainCard }) {
   const drivers = numbers ? [...card.drivers].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)) : []
   const plain = numbers && drivers.length ? [] : driversOf({ driversPlain: card.driversPlain }, false)
   const max = Math.max(...drivers.map((d) => Math.abs(d.contribution)), 1e-4)
+  const evidenceOf = (e: string | null) => plainText(e, numbers)
   return (
     <Shell title={<>Why {card.name ?? card.key} is <span className="whitespace-nowrap">{TIER_LABEL[tierKey(card.tier)]}</span></>} right={<Badge tier={card.tier} />}>
       {plain.length > 0 && (
@@ -365,7 +366,7 @@ function ExplainCardView({ card }: { card: ExplainCard }) {
                 <Icon className="mt-0.5 size-4 shrink-0 text-critical" strokeWidth={2} aria-hidden="true" />
                 <div className="min-w-0">
                   <div className="text-sm font-medium leading-snug text-fg-base">{f.label}</div>
-                  {f.evidence && <div className="line-clamp-3 text-xs leading-snug text-fg-muted" title={f.evidence}>{f.evidence}</div>}
+                  {evidenceOf(f.evidence) && <div className="line-clamp-3 text-xs leading-snug text-fg-muted" title={evidenceOf(f.evidence) ?? undefined}>{evidenceOf(f.evidence)}</div>}
                 </div>
               </div>
             )
@@ -601,6 +602,8 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
 }) {
   const [open, setOpen] = useState<boolean | null>(null)
   const listId = useId()
+  // an older backend writes the chance of a slip and agency overruns into the summaries: the developer's alone
+  const numbers = useNumbers()
   const expanded = open ?? (streaming || latest)
   const now = streaming ? (detail || (stage ? STAGE_LABEL[stage] : 'Sending the question')) : null
   const summary = `${steps.length} step${steps.length === 1 ? '' : 's'}`
@@ -644,7 +647,7 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
             )}
             <span className="min-w-0">
               <span className="text-fg-base">{s.label}</span>
-              {s.summary && <span className="text-fg-dimmed"> · {s.summary}</span>}
+              {plainText(s.summary, numbers) && <span className="text-fg-dimmed"> · {plainText(s.summary, numbers)}</span>}
             </span>
           </li>
         ))}

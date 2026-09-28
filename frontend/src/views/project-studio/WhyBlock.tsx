@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronDown } from 'lucide-react'
 import { RISK_DIMENSION, SOURCE_LABEL } from '@/lib/riskPalette'
-import { strengthDots } from '@/lib/outlook'
+import { plainText, strengthDots } from '@/lib/outlook'
 import { cn, formatDate } from '@/lib/formatters'
 import type { PlainDriver, RiskRow } from '@/contracts/project'
 
@@ -21,11 +21,13 @@ const label = (dim: string) => RISK_DIMENSION[dim]?.label ?? dim.replace(/_/g, '
  * Why it is happening: up to five model drivers in words, ranked, each with the way it pushes (an arrow) and how hard
  * (dots, no bar lengths); then what the checks found — each flagged check as a sentence with its evidence, source and
  * date, the clear ones folded, and the ones without data named as such (not the same as clear). compact: the side
- * panel's tighter spacing.
+ * panel's tighter spacing. numbers: the developer reads the evidence as stored; the four roles read it without the
+ * model's numbers an older backend writes into it (lib/outlook plainText).
  */
-export function WhyBlock({ drivers, checks, compact, className }: {
+export function WhyBlock({ drivers, checks, numbers, compact, className }: {
   drivers: PlainDriver[]
   checks: RiskRow[]
+  numbers: boolean
   compact?: boolean
   className?: string
 }) {
@@ -71,6 +73,7 @@ export function WhyBlock({ drivers, checks, compact, className }: {
               <ul className="mt-2 space-y-2">
                 {flagged.map((r) => {
                   const Icon = RISK_DIMENSION[r.dimension]?.icon
+                  const evidence = plainText(r.evidence, numbers)
                   const meta = [r.source ? (SOURCE_LABEL[r.source] ?? r.source) : null, r.asOfDate ? formatDate(r.asOfDate) : null]
                     .filter(Boolean).join(', ')
                   return (
@@ -78,7 +81,7 @@ export function WhyBlock({ drivers, checks, compact, className }: {
                       {Icon && <Icon className="mt-0.5 size-4 shrink-0 text-critical" strokeWidth={2} aria-hidden="true" />}
                       <span className="text-fg-base">
                         <span className="font-medium">{label(r.dimension)}</span>: flagged
-                        {r.evidence && <> — {r.evidence}</>}
+                        {evidence && <> — {evidence}</>}
                         {meta && <span className="text-fg-dimmed"> ({meta})</span>}
                       </span>
                     </li>
