@@ -39,6 +39,8 @@ export const FEATURE_ROLES = {
   canSeeLive: OFFICIALS,
   /** the linked news feed (External Evidence Radar data) */
   canSeeNews: OFFICIALS,
+  /** the AI second opinion on a project (backend: need insights); it never changes the tier */
+  canSeeSecondOpinion: OFFICIALS,
   /** check inbox, run scout, worker trigger */
   canRunJobs: IPMD,
   /** pipeline-error alerts (backend: IPMD only) */

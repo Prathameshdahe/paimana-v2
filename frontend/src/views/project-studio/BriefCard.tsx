@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useBrief } from '@/lib/queries'
 import { ApiError, isOffline } from '@/lib/api'
-import { formatDateTime } from '@/lib/formatters'
+import { cn, formatDateTime } from '@/lib/formatters'
 import type { BriefRejected } from '@/contracts/project'
 
 function BriefError({ error }: { error: unknown }) {
@@ -43,12 +43,12 @@ function BriefError({ error }: { error: unknown }) {
  * rejects any text with a number that is not in the facts it was given, so what shows here is
  * either validated or the reasons it was not.
  */
-export function BriefCard({ projectKey }: { projectKey: string }) {
+export function BriefCard({ projectKey, className }: { projectKey: string; className?: string }) {
   const [requested, setRequested] = useState(false)
   const { data, error, isFetching, refetch } = useBrief(projectKey, requested)
 
   return (
-    <div className="bg-surface-panel border border-border-subtle rounded-xl shadow-card overflow-hidden">
+    <div className={cn('bg-surface-panel border border-border-subtle rounded-xl shadow-card overflow-hidden', className)}>
       <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
         <span className="text-sm font-semibold text-fg-base">Brief <span className="font-normal text-fg-dimmed">· local LLM</span></span>
         {data ? (

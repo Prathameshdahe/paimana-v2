@@ -14,11 +14,13 @@ import {
   VisualsSkeleton,
 } from '@/views/project-studio/ProjectVisuals'
 import { ResearchNews } from '@/views/project-studio/ResearchNews'
+import { SecondOpinionCard } from '@/views/project-studio/SecondOpinionCard'
 
 /**
- * The project side panel: a visual summary of one project (/api/projects/{key} + /timeline), opened from any
- * list through useProjectPanel (?project=KEY) and mounted once in App. Radix Dialog gives ESC, backdrop close,
- * focus trap and labels; motion slides it (not under reduced motion). The public gets the redacted blocks.
+ * The project side panel: a visual summary of one project (/api/projects/{key} + /timeline + /research; officials
+ * also the AI second opinion), opened from any list through useProjectPanel (?project=KEY) and mounted once in App.
+ * Radix Dialog gives ESC, backdrop close, focus trap and labels; motion slides it (not under reduced motion). The
+ * public gets the redacted blocks.
  */
 export function ProjectDetailDrawer() {
   const { key, close } = useProjectPanel()
@@ -101,6 +103,9 @@ function PanelBody({ projectKey }: { projectKey: string }) {
         ) : (
           <>
             <RiskRingCard detail={detail} full={full} />
+            {k && can(role, 'canSeeSecondOpinion') && (
+              <SecondOpinionCard key={k} projectKey={k} variant="panel" tier={detail.scores?.tier} />
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <TimeVsWork detail={detail} />
               <MoneyBar detail={detail} />

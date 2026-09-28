@@ -13,6 +13,7 @@ import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
 import { BriefCard } from './project-studio/BriefCard'
 import { ResearchNews } from './project-studio/ResearchNews'
+import { SecondOpinionCard } from './project-studio/SecondOpinionCard'
 import {
   ExternalChips, MoneyBar, ProgressTrend, ProjectChips, RiskGrid, RiskRingCard, TimelineStrip, TimeVsWork, VisualsSkeleton,
 } from './project-studio/ProjectVisuals'
@@ -118,9 +119,20 @@ export function ProjectStudio() {
           />
         </div>
 
-        <div className="col-span-1 lg:col-span-3">
-          <BriefCard key={detail.key} projectKey={detail.key} />
-        </div>
+        {can(role, 'canSeeSecondOpinion') ? (
+          <>
+            <div className="col-span-1 lg:col-span-2">
+              <BriefCard key={detail.key} projectKey={detail.key} className="h-full" />
+            </div>
+            <div className="col-span-1">
+              <SecondOpinionCard key={detail.key} projectKey={detail.key} variant="page" tier={detail.scores?.tier} className="h-full" />
+            </div>
+          </>
+        ) : (
+          <div className="col-span-1 lg:col-span-3">
+            <BriefCard key={detail.key} projectKey={detail.key} />
+          </div>
+        )}
 
         <div className="col-span-1 lg:col-span-2">
           <RiskChecklist rows={detail.riskProfile} />
