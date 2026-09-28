@@ -66,6 +66,19 @@ def pr_auc_gains(new, old):
             if get(new, k) is not None and get(old, k) is not None}
 
 
+def rule(gains, margin, ece_new, ece_old):
+    """The promotion rule on block -> PR-AUC gain: not lower on any block, at least margin on one, and validation
+    ECE at most ece_old + ECE_SLACK. Returns (ok, reason). Shared with the experiment harness (ml/experiment.py)."""
+    not_worse = all(g >= 0 for g in gains.values())
+    better = any(g >= margin for g in gains.values())
+    calibrated = ece_new <= ece_old + ECE_SLACK
+    why = ("PR-AUC gain " + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
+           + f" ({'not lower on any block' if not_worse else 'lower on a block'}, "
+           f"{'clears' if better else 'no block clears'} the noise margin {margin:.4f}); "
+           f"ECE {ece_new:.4f} vs {ece_old:.4f} + {ECE_SLACK} ({'ok' if calibrated else 'too high'})")
+    return not_worse and better and calibrated, why
+
+
 def promote(reg, entry):
     """Apply the champion/challenger rule to one new entry; record and return the decision."""
     key = f"{entry['target']}_h{entry['horizon']}"
@@ -80,17 +93,8 @@ def promote(reg, entry):
                "folds or gold_version differ from the champion's; not comparable, champion kept")
     else:
         old = cur["metrics"]["pooled"]
-        margin = NOISE_SDS * SEED_SD.get(key, 0.0)
-        gains = pr_auc_gains(entry, cur)
-        not_worse = all(g >= 0 for g in gains.values())
-        better = any(g >= margin for g in gains.values())
-        calibrated = new["ece"] <= old["ece"] + ECE_SLACK
-        ok = not_worse and better and calibrated
-        why = (f"pooled PR-AUC {new['pr_auc']:.4f} vs champion {old['pr_auc']:.4f}; PR-AUC gain "
-               + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
-               + f" ({'not lower on any block' if not_worse else 'lower on a block'}, "
-               f"{'clears' if better else 'no block clears'} the noise margin {margin:.4f}); "
-               f"ECE {new['ece']:.4f} vs {old['ece']:.4f} + {ECE_SLACK} ({'ok' if calibrated else 'too high'})")
+        ok, why = rule(pr_auc_gains(entry, cur), NOISE_SDS * SEED_SD.get(key, 0.0), new["ece"], old["ece"])
+        why = f"pooled PR-AUC {new['pr_auc']:.4f} vs champion {old['pr_auc']:.4f}; " + why
     decision = {"at": entry["created_at"], "target": entry["target"], "horizon": entry["horizon"],
                 "challenger": entry["entry_id"], "champion_before": cur_id,
                 "decision": "promoted" if ok else "rejected", "reason": why}
