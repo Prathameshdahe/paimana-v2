@@ -7,7 +7,7 @@ first, one pipeline run per file:
      copy goes into its source folder in the Dataset drive folder, the folder the extractor rebuilds the family
      from and records source_file, hence source_doc_id, relative to).
   2. the extractor, pipeline/build_clean_projects.py, then python -m pipeline.run silver (which resolves identity
-     first), external, gold, score and profile. train is the monthly run and is started by hand.
+     first), external, research, gold, score and profile. train is the monthly run and is started by hand.
   3. success: the inbox file moves to dataset/raw/<csv|pdf>/<fiscal year>/, the old and new predictions are diffed
      into tier_up / tier_down / new_project alerts, and prediction_log rows whose t + 2q is now labelled get their
      realised outcome (a slip_realised alert when they were High / Critical and slipped).
@@ -41,7 +41,7 @@ INBOX = RAW / "inbox"
 CLEAN = ROOT / "dataset" / "clean"
 POINTER = serving.POINTER
 LOG, LABELS = serving.GOLD / "prediction_log.parquet", serving.GOLD / "labels_h2.parquet"
-PIPELINE = ["silver", "external", "gold", "score", "profile"]
+PIPELINE = ["silver", "external", "research", "gold", "score", "profile"]
 PORTAL_HEADER = ["Sr. No.", "Sector Name", "Line Ministry", "Implementing Agency", "Project Code", "Project Name"]
 UPLOAD_SUFFIXES = (".csv", ".pdf")
 MAX_UPLOAD = 100 << 20

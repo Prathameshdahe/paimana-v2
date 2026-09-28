@@ -143,7 +143,7 @@ The backend runs two background loops (`backend/live/scheduler.py`):
 - **Report watcher**, every `WATCH_INTERVAL_S` seconds (60). Drop a portal
   `Projects_Report.csv` export or a PAIMANA flash PDF into `dataset/raw/inbox/`,
   or upload one with `POST /api/jobs/ingest`. The watcher runs the extractor,
-  the clean merge and `pipeline.run` silver, external, gold, score and profile,
+  the clean merge and `pipeline.run` silver, external, research, gold, score and profile,
   then raises tier-change and new-project alerts and fills realised outcomes
   in `gold/prediction_log.parquet`. `train` is not part of it; retrain by hand
   each month. One portal file takes about two minutes. If a step fails, the old

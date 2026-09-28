@@ -121,7 +121,8 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     (watcher.INBOX / "Projects_Report.csv").write_text(PORTAL_CSV, encoding="utf-8")
     out = watcher.watch_once()
     assert [f["status"] for f in out["files"]] == ["ok"], out
-    assert calls == ["portal_csv", "build_clean_projects", "silver", "external", "gold", "score", "profile"]
+    assert calls == ["portal_csv", "build_clean_projects", "silver", "external", "research", "gold", "score",
+                     "profile"]
     row = out["files"][0]
     assert row["kind"] == "portal_csv" and row["rows"] == 2
     assert (live / row["archived_as"]).exists() and row["archived_as"].startswith("raw/csv/")
@@ -132,7 +133,7 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     # the same bytes again: nothing to do
     (watcher.INBOX / "copy.csv").write_text(PORTAL_CSV, encoding="utf-8")
     assert watcher.pending() == [] and watcher.watch_once()["files"] == []
-    assert len(calls) == 7
+    assert len(calls) == 8
     # a new pipeline version ingests it again
     monkeypatch.setattr(watcher, "pipeline_version", lambda: "next")
     assert [p.name for p, _ in watcher.pending()] == ["copy.csv"]
