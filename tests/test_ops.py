@@ -181,11 +181,12 @@ def test_env_production_example_documents_every_variable():
     compose = _text("docker-compose.yml") + _text("docker-compose.dev.yml")
     interpolated = set(re.findall(r"\$\{([A-Z][A-Z0-9_]+)", compose))
     assert interpolated <= documented, interpolated - documented
-    # the app settings of .env.example, minus the ones the stack sets itself or that only the dev servers use
-    app = _env_names(".env.example") - {"VITE_API_BASE", "LLM_BASE_URL", "PAIMANA_DB"}
+    # the app settings of .env.example, minus the ones the stack sets itself, the dev servers' own, and the
+    # database credentials, which live in .env.db and never here
+    db = {"DATABASE_URL", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "POSTGRES_PORT", "POSTGRES_HOST"}
+    app = _env_names(".env.example") - {"VITE_API_BASE", "LLM_BASE_URL", "PAIMANA_DB"} - db
     assert app <= documented, app - documented
-    # the database credentials live in .env.db, never here
-    assert not {"POSTGRES_PASSWORD", "DATABASE_URL"} & documented
+    assert not db & documented, db & documented
 
 
 def test_gitignore_keeps_local_state_out():
