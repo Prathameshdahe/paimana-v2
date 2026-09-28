@@ -8,7 +8,7 @@
  */
 import { formatINRShort } from './formatters'
 import { likelyOrWorse, outlookOf } from './outlook'
-import type { AlertKind, Kpis, TierCount } from '@/contracts/portfolio'
+import type { AlertKind, GroupStat, Kpis, TierCount } from '@/contracts/portfolio'
 import type { Flag, Outlook, ProjectDetail, Tier } from '@/contracts/project'
 
 /** whole months from asof to date (calendar months, UTC): negative when the date has passed */
@@ -167,6 +167,9 @@ export interface WeekBriefInput {
   partial?: { shown: number; total: number } | null
   kpis?: Kpis | null
   tiers?: TierCount[] | null
+  /** the public's opening reads where the Critical and High projects are (the portfolio line gives the totals) */
+  bySector?: GroupStat[] | null
+  byState?: GroupStat[] | null
   /** alert counts since last Monday by kind; null for the public (no alerts) */
   alerts?: Partial<Record<AlertKind, number>> | null
 }
@@ -176,8 +179,9 @@ const SIX_MONTHS = 6
 /**
  * At most three sentences for the top of a home or the command centre: what is due soon and likely to slip (or, with
  * no outlook words yet, what is Critical or High and due soon), how many of those have an outside issue with no
- * slip yet, and what changed since last Monday (officials). With no rows (the public, or loading) it is the
- * portfolio in facts: projects, money, built share, overrun.
+ * slip yet, and what changed since last Monday (officials). With no rows (the public) it says where the Critical and
+ * High projects are, by sector and state, which the portfolio line under it does not; the portfolio in facts only
+ * when those groups are missing. The 100-row fallback says "all of them" and drops a tier clause every row meets.
  */
 export function weekBrief(input: WeekBriefInput): string[] {
   const out: string[] = []
@@ -194,14 +198,21 @@ export function weekBrief(input: WeekBriefInput): string[] {
     const prefix = input.partial ? `Of the ${plural(input.partial.shown, 'project')} most at risk, ` : ''
     const n = hot.length
     const are = n === 1 ? 'is' : 'are'
+    // in the fallback, a count of every row shown is "all of them"
+    const all = input.partial?.shown ?? rows.length
+    const who = (k: number) => (k === 0 ? 'none is' : k === all ? 'all are' : `${k.toLocaleString('en-IN')} ${k === 1 ? 'is' : 'are'}`)
     if (withWords) {
       out.push(n === 0
         ? `${prefix}${prefix ? 'none is' : 'No project is'} due within six months with a delay likely.`
-        : `${prefix}${prefix ? n.toLocaleString('en-IN') : plural(n, 'project')} ${are} due within six months `
-          + 'and likely to slip.')
+        : prefix
+          ? `${prefix}${who(n)} due within six months and likely to slip.`
+          : `${plural(n, 'project')} ${are} due within six months and likely to slip.`)
     } else if (prefix) {
-      const who = n === 0 ? 'none is' : `${n.toLocaleString('en-IN')} ${are}`
-      out.push(`${prefix}${who} Critical or High and due within six months.`)
+      // the riskiest rows are often all Critical or High: then the tier clause says nothing and is dropped
+      const allHot = rows.every((r) => r.tier === 'Critical' || r.tier === 'High')
+      out.push(allHot
+        ? `${prefix}${who(soon.length)} due within six months.`
+        : `${prefix}${who(n)} Critical or High and due within six months.`)
     } else {
       out.push(n === 0
         ? 'No Critical or High project is due within six months.'
@@ -213,6 +224,25 @@ export function weekBrief(input: WeekBriefInput): string[] {
       const who = notice === n ? (one ? 'It' : 'All of them') : `${notice.toLocaleString('en-IN')} of them`
       out.push(`${who} ${one ? 'shows' : 'show'} no slip in the reports yet but ${one ? 'has' : 'have'} `
         + 'a land, forest, court or contractor issue on record.')
+    }
+  } else if (input.bySector?.length) {
+    const ch = (g: GroupStat) => g.nCritical + g.nHigh
+    const total = input.bySector.reduce((s, g) => s + ch(g), 0)
+    const top = (gs: GroupStat[] | null | undefined) =>
+      [...(gs ?? [])].filter((g) => g.name).sort((a, b) => ch(b) - ch(a))[0]
+    const sector = top(input.bySector)
+    const state = top(input.byState)
+    if (total === 0 || !sector?.name) {
+      out.push('No open project is rated Critical or High for a delay or a cost rise.')
+    } else {
+      const share = fractionWord(ch(sector), total)
+      out.push(share === 'all'
+        ? `All ${plural(total, 'project')} rated Critical or High are in ${sector.name}.`
+        : `${sector.name} carries ${share} of the ${plural(total, 'project')} rated Critical or High for a delay or `
+          + 'a cost rise.')
+      if (state?.name && ch(state) > 0) {
+        out.push(`${state.name} has more of them than any other state: ${ch(state).toLocaleString('en-IN')}.`)
+      }
     }
   } else if (input.kpis) {
     const k = input.kpis

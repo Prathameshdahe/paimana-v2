@@ -58,7 +58,7 @@ function MoreLink({ to, children }: { to: string; children: React.ReactNode }) {
 type Row = { key: string; name: string | null; state: string | null; tier: string | null; override?: boolean | null }
 
 /** A short project list: tier dot, name, state, one thing on the right; a row opens the side panel. */
-function ProjectList<T extends Row>({ title, info, more, rows, error, right, empty }: {
+function ProjectList<T extends Row>({ title, info, more, rows, error, right, empty, className }: {
   title: React.ReactNode
   info?: React.ReactNode
   more?: React.ReactNode
@@ -66,10 +66,11 @@ function ProjectList<T extends Row>({ title, info, more, rows, error, right, emp
   error: unknown
   right: (r: T) => React.ReactNode
   empty: string
+  className?: string
 }) {
   const panel = useProjectPanel()
   return (
-    <Card title={title} info={info} titleRight={more}>
+    <Card title={title} info={info} titleRight={more} className={className}>
       {error ? (
         <ApiErrorNote error={error} />
       ) : !rows ? (
@@ -108,13 +109,14 @@ function ProjectList<T extends Row>({ title, info, more, rows, error, right, emp
 }
 
 /** the riskiest projects in scope with their delay outlook in words */
-function MostAtRisk({ n }: { n: number }) {
+function MostAtRisk({ n, className }: { n: number; className?: string }) {
   const { data: p, error } = usePortfolio()
   const { role } = useSession()
   const numbers = can(role, 'canSeeNumbers')
   return (
     <ProjectList
       title="Most at risk"
+      className={className}
       info="The projects the risk model ranks highest in your view, with how likely a delay is over the next two quarters."
       more={<MoreLink to="/command">All projects</MoreLink>}
       rows={p?.top.slice(0, n)}
@@ -282,10 +284,13 @@ export function MinistryHome({ ministry }: { ministry: string }) {
       />
       <WeekBrief />
       <LiveStatus />
+      {/* one lead card: the riskiest projects run wide, the agencies and early notice stack beside them */}
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        <MostAtRisk n={7} />
-        <AgenciesRanked />
-        <EarlyNoticeCard />
+        <MostAtRisk n={7} className="lg:col-span-2" />
+        <div className="grid grid-cols-1 gap-4">
+          <AgenciesRanked />
+          <EarlyNoticeCard />
+        </div>
       </div>
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
         <IndiaMap />
