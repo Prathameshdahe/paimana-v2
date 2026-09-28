@@ -4,7 +4,9 @@ visibility and a project, ranked by keywords and by meaning.
 A chunk is {id, kind, project_key, visibility, title, text, source, url, date}; official_source, when set, replaces
 source for signed-in officials, and mentions lists the other projects its text names (by PRJ key, and in a chunk bound
 to no project also by a linked PARIVESH proposal number): a scoped official reads a chunk only when its project and
-every project it mentions are in scope. Kinds, and who may read them:
+every project it mentions are in scope. Outside text (remarks, headlines, research notes, register and portal lines)
+goes through _quote before it is spliced into a chunk: one line, no tags, code fences or double quotes, at most
+QUOTE_MAX characters; hits of the kinds that carry it have trusted False. Kinds, and who may read them:
   help      docs/HELP.md, by section ............................................................. public
   doc       the maintained docs in DOCS (not docs/PROJECT_DOCUMENTATION.md, which is stale, nor the mock-data notes)
             .................................................................................... official
@@ -206,6 +208,25 @@ def _chunk(id_, kind, visibility, title, text, source, *, project_key=None, offi
     return {"id": id_, "kind": kind, "project_key": project_key, "visibility": visibility, "title": title[:200],
             "text": text.strip(), "source": source, "official_source": official_source, "url": url,
             "date": _iso(date_), "mentions": None}
+
+
+QUOTE_MAX = 500                 # characters of one outside text (the longest remark, headline or portal line is less)
+TRUSTED_KINDS = frozenset({"help", "doc", "glossary", "project"})  # PAIMANA's own words; the others quote outside text
+_TAG = re.compile(r"<\|[^<>]*\|>|</?[A-Za-z][^<>]*>")
+_SPACE = re.compile(r"[\s\x00-\x1f\x7f-\x9f]+")  # \s covers U+2028, U+2029 and U+0085 too
+
+
+def _quote(s, n: int = QUOTE_MAX) -> str | None:
+    """Outside text (a remark, a headline, a research note, a register or portal line) made safe to splice into
+    PAIMANA's own sentences: no <tags> or <|special tokens|>, no backticks (no code fences), double quotes turned
+    single (the chunk quotes it in double quotes), every run of whitespace, line or paragraph separator and control
+    characters one space, at most n characters. The words stay: the chat still fences such hits as quoted data
+    (Hit trusted False)."""
+    if s is None:
+        return None
+    s = _TAG.sub(" ", str(s)).replace("`", "'").replace('"', "'")
+    s = _SPACE.sub(" ", s).strip()
+    return s if len(s) <= n else s[:n - 3].rstrip() + "..."
 
 
 def _sentences(*parts) -> str:
@@ -437,10 +458,10 @@ def event_chunks(s: dict, names: dict) -> list[dict]:
             f"{ref}: {what} issue in the report remarks" + (f" ({sub})" if sub else "") + f", {state}.",
             f"First reported {_month(e['first_seen'])}, last reported {_month(e['last_seen'])} "
             f"({e['n_quarters']} {'quarter' if e['n_quarters'] == 1 else 'quarters'} with a mention).",
-            e.get("authority") and f"Authority: {e['authority']}.",
+            e.get("authority") and f"Authority: {_quote(e['authority'])}.",
             area is not None and not pd.isna(area) and f"Forest area {area:g} ha.",
             e.get("violation") and "A violation is reported.",
-            e.get("evidence") and f"Remark: \"{e['evidence']}\"")
+            e.get("evidence") and f"Remark: \"{_quote(e['evidence'])}\"")
         doc = e.get("source_doc_id")
         out.append(_chunk(f"event:{key}:{cat}:{e['event_no']}", "event", "public",
                           f"{name}: {what} issue ({'open' if e['status'] == 'open' else 'closed'})", text,
@@ -486,20 +507,21 @@ def research_chunks(names: dict) -> list[dict]:
         if not key or not r.get("summary"):
             continue
         (name, ref), when = _ref(names, key), _fact_date(r)
-        cat = CATEGORY_WORDS.get(r.get("category"), r.get("category") or "other")
+        cat = CATEGORY_WORDS.get(r.get("category"), _quote(r.get("category"), 40) or "other")
         sev = r.get("severity")
-        kind = ", ".join(x for x in (cat, r.get("direction"),
+        kind = ", ".join(x for x in (cat, _quote(r.get("direction"), 40),
                                      sev is not None and not pd.isna(sev) and f"severity {int(sev)} of 3",
-                                     r.get("status") and f"status {r['status']}",
+                                     r.get("status") and f"status {_quote(r['status'], 40)}",
                                      r.get("live") in (True, 1) and "a live blocker") if x)
         pub = _iso(r.get("published_date"))
-        text = _sentences(f"{ref}, web research: {r['summary']}",
+        summary, headline, source = _quote(r["summary"], 800), _quote(r.get("headline")), _quote(r.get("source"), 100)
+        text = _sentences(f"{ref}, web research: {summary}",
                           f"({kind}" + (f"; event date {when})." if when else ")."),
-                          r.get("source") and f"Source: {r['source']}" + (f", {pub}" if pub else "")
-                          + (f": \"{r['headline']}\"" if r.get("headline") else "") + ".")
+                          source and f"Source: {source}" + (f", {pub}" if pub else "")
+                          + (f": \"{headline}\"" if headline else "") + ".")
         fid = r.get("fact_id") or hashlib.sha256(f"{key}|{r.get('url')}".encode()).hexdigest()[:12]
-        out.append(_chunk(f"research:{fid}", "research", "public", r.get("headline") or r["summary"][:100], text,
-                          r.get("source") or "web research", project_key=key, url=r.get("url"), date_=when or pub))
+        out.append(_chunk(f"research:{fid}", "research", "public", headline or summary[:100], text,
+                          source or "web research", project_key=key, url=r.get("url"), date_=when or pub))
     if RESEARCH_PROJECTS.exists():
         for r in _no_nan(pd.read_parquet(RESEARCH_PROJECTS)).to_dict("records"):
             key, status = r.get("project_key"), r.get("latest_status")
@@ -507,7 +529,7 @@ def research_chunks(names: dict) -> list[dict]:
                 on, (name, ref) = _iso(r.get("researched_on")), _ref(names, key)
                 out.append(_chunk(f"research:{key}:status", "research", "public", f"{name}: latest status",
                                   f"{ref}, latest status from web research"
-                                  + (f" on {on}" if on else "") + f": {status.strip()}", "web research",
+                                  + (f" on {on}" if on else "") + f": {_quote(status, 800)}", "web research",
                                   project_key=key, date_=on))
     return out
 
@@ -527,17 +549,18 @@ def news_chunks(names: dict) -> list[dict]:
             WHERE n <= ? ORDER BY id, project_key""", [NEWS_PER_PROJECT])]
     out = []
     for r in rows:
-        if not r["title"]:
+        title, source = _quote(r["title"]), _quote(r["source"], 100)
+        if not title:
             continue
         key, day = r["project_key"], (r["published_at"] or "")[:10] or None
         sev = SEVERITY_WORDS.get(r["severity"])
-        text = _sentences(f"News linked to {_ref(names, key)[1]}: \"{r['title']}\"",
-                          f"({r['source'] or 'unknown publisher'}" + (f", {day})." if day else ")."),
-                          f"Category: {CATEGORY_WORDS.get(r['category'], r['category'] or 'unclassified')}"
+        text = _sentences(f"News linked to {_ref(names, key)[1]}: \"{title}\"",
+                          f"({source or 'unknown publisher'}" + (f", {day})." if day else ")."),
+                          f"Category: {CATEGORY_WORDS.get(r['category'], _quote(r['category'], 40) or 'unclassified')}"
                           + (f"; {sev}." if sev else "."),
                           "Linked automatically by place names; a headline is a lead, not a confirmed fact.")
-        out.append(_chunk(f"news:{r['id']}:{key}", "news", "official", r["title"], text,
-                          r["source"] or "news", project_key=key, url=r["url"], date_=day))
+        out.append(_chunk(f"news:{r['id']}:{key}", "news", "official", title, text,
+                          source or "news", project_key=key, url=r["url"], date_=day))
     return out
 
 
@@ -550,14 +573,14 @@ def external_chunks(s: dict, names: dict) -> list[dict]:
         WHERE l.la_state IN ('flagged', 'clear', 'possible') OR f.fc_mentioned OR f.fc_pending
         ORDER BY c.project_key"""):
         la, (name, ref) = r["la_state"] if r["la_state"] in LA_WORDS else None, _ref(names, r["key"])
+        la_ev, fc_ev, score_ev = _quote(r["la_evidence"]), _quote(r["fc_evidence"]), _quote(r["ext_score_evidence"])
         text = _sentences(
             f"{ref}, outside factors.",
-            la and f"Land acquisition ({LA_WORDS[la]})" + (f": {r['la_evidence']}." if r["la_evidence"] else "."),
-            r["fc_evidence"] and f"Forest clearance route by the rulebook: {r['fc_evidence']}.",
+            la and f"Land acquisition ({LA_WORDS[la]})" + (f": {la_ev}." if la_ev else "."),
+            fc_ev and f"Forest clearance route by the rulebook: {fc_ev}.",
             r["fc_mentioned"] and "A forest clearance is mentioned in the report remarks.",
             r["fc_pending"] and "A forest clearance is reported pending.",
-            r["coverage"] == "fc+la" and r["ext_score_evidence"]
-            and f"Land and forest score: {r['ext_score_evidence']}.")
+            r["coverage"] == "fc+la" and score_ev and f"Land and forest score: {score_ev}.")
         out.append(_chunk(f"external:{r['key']}", "external", "public", f"{name}: land and forest evidence", text,
                           "Bhoomi Rashi land register; PARIVESH rulebook", project_key=r["key"]))
     lines: dict[str, list[str]] = {}
@@ -574,7 +597,8 @@ def external_chunks(s: dict, names: dict) -> list[dict]:
                 "limit.", p.get("stage_at_asof") and f"Stage at the as-of date: {p['stage_at_asof']}"
                 + (f" for {p['months_in_stage']:g} months." if p.get("months_in_stage") is not None else "."))
         items = ((p or {}).get("evidence") or "").split(" | ") + lines.get(key, [])
-        items = [i for i in items if i and i != "and 1 more" and not re.fullmatch(r"and \d+ more", i)]
+        items = [_quote(i) for i in items if i and not re.fullmatch(r"and \d+ more", i.strip())]
+        items = [i for i in items if i]
         for i, part in enumerate(_split_long("\n".join(items), MAX_WORDS - _words(head)) if items else [""]):
             out.append(_chunk(f"parivesh:{key}:{i}", "external", "official", f"{name}: PARIVESH proposals",
                               f"{head}\n{part}".strip(), "PARIVESH forest clearance portal", project_key=key))
@@ -837,7 +861,8 @@ class Index:
         r = self.rows[i]
         return {"id": r["id"], "kind": r["kind"], "title": r["title"], "text": r["text"],
                 "source": (r.get("official_source") or r["source"]) if official else r["source"],
-                "url": r["url"], "date": r["date"], "project_key": r["project_key"], "score": round(float(score), 6)}
+                "url": r["url"], "date": r["date"], "project_key": r["project_key"], "score": round(float(score), 6),
+                "trusted": r["kind"] in TRUSTED_KINDS}
 
     def search(self, q: str, viewer, k: int = 6, kinds=None, project_key=None) -> list[dict]:
         cand = self.candidates(viewer, kinds, project_key)
@@ -1106,7 +1131,9 @@ def ensure_index(background: bool = True) -> Index | None:
 def search(query: str, viewer, k: int = 6, kinds: set[str] | None = None,
            project_key: str | None = None) -> list[dict]:
     """The k best chunks for query that viewer may read (backend.access.Viewer: role, keys), as Hits {id, kind,
-    title, text, source, url, date, project_key, score}; kinds and project_key narrow the candidates before ranking.
+    title, text, source, url, date, project_key, score, trusted}; kinds and project_key narrow the candidates before
+    ranking. trusted is False for the kinds that quote outside text (event, research, news, external): the chat
+    passes their text as quoted data, never as instructions.
     [] when there is no index yet (after waiting up to WAIT_S while the first one is being built)."""
     q = (query or "").strip()[:1000]
     if not q or k <= 0:
