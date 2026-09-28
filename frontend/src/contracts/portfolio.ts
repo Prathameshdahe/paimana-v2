@@ -4,7 +4,7 @@
  * Portfolio-level shapes as served by the FastAPI backend (backend/schemas.py;
  * keys are camelCase): data version, aggregates, alerts, external rollup.
  */
-import type { TierFilter } from './project'
+import type { DatePrecision, TierFilter } from './project'
 
 export interface Meta {
   asof: string
@@ -408,6 +408,78 @@ export interface ExternalSummary {
     by_state?: LandState[]
   } | null
   hiddenDelayPriors: { note: string; min_projects: number; rows: HiddenDelayPrior[] } | null
+}
+
+/* GET /api/research/summary: web research over the current projects in the viewer's scope (evidence, not a model input) */
+
+export interface ResearchCoverage {
+  nCurrent: number
+  /** searched by the sweep or the in-app agent */
+  nSearched: number
+  nWithFacts: number
+  nFacts: number
+  nNegativeLive: number
+  nProjectsNegativeLive: number
+  nAgentFacts: number
+  nAgentProjects: number
+}
+
+/** facts of one research category by direction, and the live blockers among them */
+export interface ResearchCategoryRow {
+  category: string
+  taxonomy: string
+  negative: number
+  positive: number
+  neutral: number
+  nLive: number
+  nProjectsLive: number
+}
+
+export interface ResearchStateRow {
+  state: string | null
+  nCurrent: number
+  nSearched: number
+  nWithFacts: number
+  nNegativeLive: number
+  nProjectsNegativeLive: number
+}
+
+/**
+ * A live negative fact of severity 2 or more with its project, newest first. The public gets the sweep's blockers
+ * only, as headline, url and dates: every other field is null. Date it by eventDate (datePrecision), else publishedDate.
+ */
+export interface ResearchBlocker {
+  headline: string
+  url: string
+  eventDate: string | null
+  datePrecision: DatePrecision | null
+  publishedDate: string | null
+  factId: string | null
+  projectKey: string | null
+  projectName: string | null
+  state: string | null
+  tier: string | null
+  category: string | null
+  severity: number | null
+  summary: string | null
+  source: string | null
+  origin: 'sweep' | 'agent' | null
+}
+
+export interface ResearchSummary {
+  asof: string
+  /** a fact is live within this many quarters of the as-of quarter */
+  liveWindowQuarters: number
+  /** when the sweep searched (its first and last day) */
+  researchedOn: { first: string | null; last: string | null }
+  coverage: ResearchCoverage
+  byCategory: ResearchCategoryRow[]
+  byState: ResearchStateRow[]
+  topRecentBlockers: ResearchBlocker[]
+  /** the in-app research agent's last run on a project in scope */
+  agentLastRun: string | null
+  /** method and caveats in one paragraph */
+  note: string
 }
 
 /** GET /api/scopes: the sign-in picker */

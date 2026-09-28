@@ -18,6 +18,7 @@ import type {
   Meta,
   Portfolio,
   RadarSummary,
+  ResearchSummary,
   Scopes,
   SignalFeed,
 } from '@/contracts/portfolio'
@@ -27,8 +28,11 @@ import type {
   Forecast,
   ProjectDetail,
   ProjectPage,
+  ProjectResearch,
   ProjectSignals,
   ProjectSort,
+  SecondOpinionNone,
+  SecondOpinionOut,
   TierFilter,
   Timeline,
 } from '@/contracts/project'
@@ -141,6 +145,51 @@ export function useBrief(key: string | null, requested: boolean) {
     queryFn: () => apiGet<BriefOut>(`/api/projects/${enc(key ?? '')}/brief`),
     enabled: !!key && requested,
     staleTime: Infinity,
+  })
+}
+
+/** Every web research fact of one project, newest first (every role; the public gets the redacted facts). */
+export function useResearch(key: string | null) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['project', key, 'research', scope],
+    queryFn: () => apiGet<ProjectResearch>(`/api/projects/${enc(key ?? '')}/research`),
+    enabled: !!key,
+  })
+}
+
+/** Web research over the viewer's current projects: coverage, blockers by category and state, the newest blockers. */
+export function useResearchSummary() {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['research', 'summary', scope],
+    queryFn: () => apiGet<ResearchSummary>('/api/research/summary'),
+  })
+}
+
+/**
+ * The AI second opinion, generated on demand like the brief (a minute or two on the local model); only fetched
+ * once asked for. The fetch keeps going when its panel closes, and the answer lands in this cache. Errors: 422
+ * with a SecondOpinionRejected body, 503 when LM Studio is not running, 404 when the project is not scored.
+ */
+export function useSecondOpinion(key: string | null, requested: boolean) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['project', key, 'second-opinion', scope],
+    queryFn: () => apiGet<SecondOpinionOut>(`/api/projects/${enc(key ?? '')}/second-opinion`),
+    enabled: !!key && requested,
+    staleTime: Infinity,
+  })
+}
+
+/** The stored second opinion for the project's current evidence, never generating one; status 'none' when absent. */
+export function useCachedSecondOpinion(key: string | null) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['project', key, 'second-opinion', 'cached', scope],
+    queryFn: () =>
+      apiGet<SecondOpinionOut | SecondOpinionNone>(`/api/projects/${enc(key ?? '')}/second-opinion`, { cached: 1 }),
+    enabled: !!key,
   })
 }
 

@@ -229,6 +229,102 @@ export interface ReviewBadge {
   note: string
 }
 
+/* web research (backend/serving.py research; pipeline/research.py): cited evidence, never a model input */
+
+/** the sweep's categories (pipeline/research.py TAXONOMY_OF keys) */
+export type ResearchCategory =
+  | 'land'
+  | 'forest_env'
+  | 'litigation'
+  | 'contractor'
+  | 'funds'
+  | 'utility_shifting'
+  | 'inter_agency'
+  | 'law_order'
+  | 'natural_event'
+  | 'approvals_other'
+  | 'design_scope'
+  | 'progress'
+  | 'other'
+
+export type DatePrecision = 'day' | 'month' | 'year'
+
+/**
+ * A cited web fact. origin 'sweep': found by a research agent and checked by a second one that re-opened the source
+ * (verified keep | fix); 'agent': a news item the in-app research agent judged with the local LLM from its headline
+ * and feed summary. live: negative, not resolved, dated within 4 quarters of the as-of quarter. headline is the
+ * citation label; the public gets no matchReason and no headline on agent facts (label those by source).
+ */
+export interface ResearchFact {
+  factId: string
+  category: ResearchCategory | string
+  /** the pipeline/external.py taxonomy name (funds -> funding, natural_event -> weather; the rest as is) */
+  taxonomy: string
+  direction: 'negative' | 'positive' | 'neutral'
+  /** 1-3 */
+  severity: number
+  /** the first of the month or year when datePrecision is coarser than a day */
+  eventDate: string | null
+  datePrecision: DatePrecision | null
+  publishedDate: string | null
+  /** ongoing | resolved | unknown */
+  status: string
+  /** our own paraphrase, never the article text */
+  summary: string
+  headline: string | null
+  source: string | null
+  url: string
+  domain: string | null
+  /** high | medium: how surely the item is about this project */
+  match: string | null
+  matchReason: string | null
+  verified: 'keep' | 'fix' | null
+  origin: 'sweep' | 'agent'
+  researchedOn: string | null
+  live: boolean
+  signalId: number | null
+  judgedAt: string | null
+}
+
+/** the latest figure the researched sources give, each as of its own date ('YYYY-MM' or 'YYYY-MM-DD'); null when none */
+export interface ResearchExternal {
+  landAcquiredPct: { value: number | null; asOf: string | null } | null
+  forestClearance: { stage: string | null; asOf: string | null } | null
+  courtCase: { court: string | null; status: string | null; asOf: string | null } | null
+  contractor: { company: string | null; status: string | null; asOf: string | null } | null
+  /** date: 'YYYY-MM' as the source gives it */
+  newTarget: { date: string | null; asOf: string | null } | null
+  costRevision: { newCostCr: number | null; asOf: string | null } | null
+}
+
+/**
+ * The project page's research block (in ProjectDetail). searched false: not researched yet; searched with nFacts 0:
+ * searched, nothing found (not the same as clear). top: up to 3 facts, live blockers first.
+ */
+export interface ResearchBrief {
+  researchedOn: string | null
+  searched: boolean
+  /** the in-app agent's last run on this project (ISO time) */
+  agentResearchedAt: string | null
+  latestStatus: string | null
+  nFacts: number
+  nNegativeLive: number
+  top: ResearchFact[]
+}
+
+/** GET /api/projects/{key}/research (every role; the public gets the redacted facts): newest first */
+export interface ProjectResearch {
+  key: string
+  researchedOn: string | null
+  searched: boolean
+  agentResearchedAt: string | null
+  latestStatus: string | null
+  external: ResearchExternal
+  nFacts: number
+  nNegativeLive: number
+  facts: ResearchFact[]
+}
+
 export interface ProjectDetail {
   key: string
   master: MasterRecord | null
@@ -242,6 +338,8 @@ export interface ProjectDetail {
   external: External
   provenance: Provenance
   review: ReviewBadge | null
+  /** the web research counts and top facts; null when the backend has none for it */
+  research: ResearchBrief | null
 }
 
 export interface TimelinePoint {
@@ -374,6 +472,70 @@ export interface BriefOut {
 
 /** the 422 body: numbers in the text that are not in the payload */
 export interface BriefRejected {
+  status: 'rejected'
+  reasons: string[]
+  attempts: number
+}
+
+/* the AI second opinion (llm/second_opinion.py, SPEC section 5): officials, never changes the tier */
+
+/** the second opinion's reading of the evidence */
+export type OpinionConcern = 'none' | 'watch' | 'concern'
+/** against the model's tier: the same, more worried, less worried */
+export type OpinionVsModel = 'agrees' | 'higher' | 'lower'
+
+/** one item of the evidence pack the model read, cited as [E#] */
+export interface OpinionEvidence {
+  /** 'E1' .. 'En' */
+  id: string
+  /** status | model | check | event | parivesh | land | research | news */
+  kind: string
+  date: string | null
+  text: string
+  /** negative | positive | neutral (the pack may call it stance) */
+  direction?: string | null
+  stance?: string | null
+  source?: string | null
+  url?: string | null
+}
+
+/**
+ * GET /api/projects/{key}/second-opinion, status 200 (need insights): the LLM's JSON after validation — every [E#]
+ * exists, numbers traced to the pack, a 'concern' cites at least one negative item. 422 carries
+ * SecondOpinionRejected, 503 LM Studio down, 404 not scored. The fields after `gaps` are the envelope; the evidence
+ * list may come as `evidence` or `pack.items`.
+ */
+export interface SecondOpinionOut {
+  status: 'ok'
+  key: string
+  concern: OpinionConcern
+  /** at most 15 words */
+  headline: string
+  /** at most 90 words with [E#] citations */
+  narrative: string
+  keyEvidence: string[]
+  vsModel: OpinionVsModel
+  /** up to 3: what the evidence does not tell */
+  gaps: string[]
+  asof?: string | null
+  model?: string | null
+  promptVersion?: string | null
+  evidenceHash?: string | null
+  generatedAt?: string | null
+  cached?: boolean | null
+  attempts?: number | null
+  nNumbersChecked?: number | null
+  evidence?: OpinionEvidence[] | null
+  pack?: { items?: OpinionEvidence[] | null } | null
+}
+
+/** ?cached=1 with no opinion for the current evidence yet */
+export interface SecondOpinionNone {
+  status: 'none'
+}
+
+/** the 422 body: why the opinion was rejected after its retry */
+export interface SecondOpinionRejected {
   status: 'rejected'
   reasons: string[]
   attempts: number
