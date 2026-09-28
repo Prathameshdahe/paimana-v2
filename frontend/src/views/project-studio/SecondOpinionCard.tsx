@@ -24,6 +24,8 @@ const KIND_LABEL: Record<string, string> = {
   research: 'Web research', news: 'News',
 }
 
+const STALE_NOTE = 'An old item: it may have been resolved since, so it is not today’s state'
+
 const TIER_NOTE = 'AI second opinion — it does not change the tier, which stays the model’s ranking.'
 
 function evidenceOf(o: SecondOpinionOut): OpinionEvidence[] {
@@ -121,6 +123,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
             {cited.map((id) => {
               const e = byId.get(id)
               const stance = e?.direction ?? e?.stance
+              const stale = e?.stale === true
               const href = webUrl(e?.url)
               return (
                 <li key={id} id={anchor(id)} tabIndex={-1}
@@ -130,14 +133,20 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
                   )}>
                   <span className={cn(
                     'mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-semibold leading-none',
-                    stance === 'negative' ? 'bg-critical/10 text-critical' : stance === 'positive' ? 'bg-stable/10 text-stable' : 'bg-accent/15 text-accent'
+                    stale ? 'bg-surface-input text-fg-muted'
+                      : stance === 'negative' ? 'bg-critical/10 text-critical' : stance === 'positive' ? 'bg-stable/10 text-stable' : 'bg-accent/15 text-accent'
                   )}>
                     {id}
                   </span>
                   {e ? (
                     <div className="min-w-0 space-y-0.5">
-                      <div className="leading-snug text-fg-base">{e.text}</div>
+                      <div className={cn('leading-snug', stale ? 'text-fg-muted' : 'text-fg-base')}>{e.text}</div>
                       <div className="text-fg-dimmed">
+                        {stale && (
+                          <span className="mr-1 rounded bg-surface-input px-1 py-px font-medium text-fg-muted" title={STALE_NOTE}>
+                            Old
+                          </span>
+                        )}
                         {KIND_LABEL[e.kind] ?? e.kind}
                         {e.date && ` · ${formatLooseDate(e.date)}`}
                         {href ? (

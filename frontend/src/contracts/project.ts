@@ -492,9 +492,19 @@ export interface OpinionEvidence {
   kind: string
   date: string | null
   text: string
-  /** negative | positive | neutral (the pack may call it stance) */
+  /**
+   * negative | positive | neutral | context (the status line, the model and the research summary: never grounds
+   * for a concern); the pack may call it stance
+   */
   direction?: string | null
   stance?: string | null
+  /** 1-3 for negative items (a concern needs a current one of 2 or more) */
+  severity?: number | null
+  /**
+   * an old item: a report remark past the live window, a resolved or old research fact, old progress or an old
+   * headline; it may since have been resolved, so it is not today's state
+   */
+  stale?: boolean | null
   source?: string | null
   url?: string | null
 }
