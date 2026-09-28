@@ -33,7 +33,8 @@ recently researched first, per the `researched` table):
      LLM call and inside the waits) ends the run early (status 'partial', or 'error' when nothing was judged).
      Projects finished before keep their rows, and so do the batch's first verdicts when its retry is the call that
      stops (the retried items come back next run).
-One run at a time (a module lock: a second call returns busy); a run with projects records db.record_job.
+One run at a time (a module lock: a second call returns busy); a run with projects records db.record_job with counts
+only (the projects it covered go to the log: officials of every scope read the summary in /api/jobs).
 
 Limits: Google News feeds carry no article text, so a verdict rests on a headline; match is 'high' only for a scout
 link with a context anchor (its NH number, object or agency), else 'medium'; the agent's facts show on the project
@@ -54,6 +55,7 @@ request client.complete sends with a max_tokens cap, a local JSON parse, 'never 
 runs before and after those land. _judge_llm is the one LLM call (tests replace it).
 """
 import json
+import logging
 import os
 import re
 import threading
@@ -74,6 +76,7 @@ from pipeline import research as web_research
 from . import scout
 
 PROMPT_VERSION = "research-agent-v1"
+log = logging.getLogger(__name__)
 # 4 items a call keep the reply inside the client's 120 s read timeout at ~3 tokens/s (8 did not, measured)
 BATCH, MAX_CANDIDATES = 4, 16
 MAX_SUMMARY_WORDS = 25
@@ -530,12 +533,13 @@ def run(keys: list[str], get=None, refresh: bool = True) -> dict:
             done.append(key)
             stats["candidates"] += got["candidates"]
         llm_ms = stats.pop("llm_ms", 0)
-        out = {"projects": len(done), "keys": done, **stats, "llm_seconds": round(llm_ms / 1000, 1),
-               "seconds": round(time.time() - t0, 1), "stopped": stopped}
+        counts = {"projects": len(done), **stats, "llm_seconds": round(llm_ms / 1000, 1),
+                  "seconds": round(time.time() - t0, 1), "stopped": stopped}
         if keys:
             status = "ok" if stopped is None else "partial" if stats["judged"] or done else "error"
-            db.record_job("research", started, status, out)
-        return out
+            log.info("research run covered %d project(s): %s", len(done), ", ".join(done) or "none")
+            db.record_job("research", started, status, counts)   # counts only: officials of every scope read it
+        return {**counts, "keys": done}
     finally:
         _lock.release()
 

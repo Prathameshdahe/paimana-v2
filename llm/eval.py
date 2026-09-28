@@ -9,7 +9,8 @@ as their role, against the real served data and, for the LLM part, the real LM S
 A question: {id, role, ministry?, agency?, question, messages? (earlier turns), project_key?, tools: the tools it
 should use (all rounds), route?: the router's own tools when they differ (a question the planner takes over),
 checks: [...], llm?}. Its expectations are read from the API at run time as the same viewer (an
-in-process TestClient, no lifespan), so they follow the data:
+in-process TestClient, no lifespan, the route's viewer dependency set to the question's viewer: no sign-in, no
+account), so they follow the data:
   count          {path, params, field}: the number at field (dotted, camelCase) of GET path; passes when the answer
                  states it or a card carries it (a list's total, a stats row); a zero also as 'no' / 'none'
   top_group      {path, params, field, by?}: the group of GET path's list field with the most projects (or the most
@@ -32,11 +33,12 @@ import re
 import statistics
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi.testclient import TestClient
 
+from backend import access
 from backend.access import make_viewer
 from backend.main import app
 from llm import agent, router
@@ -49,12 +51,16 @@ def load(path: Path = QUESTIONS) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def headers(q: dict) -> dict:
-    h = {"X-Paimana-Role": q["role"]}
-    for f in ("ministry", "agency"):
-        if q.get(f):
-            h[f"X-Paimana-{f.capitalize()}"] = quote(q[f])
-    return h
+@contextmanager
+def viewing_as(q: dict):
+    """The in-process API answers as the question's viewer (the eval is a developer tool on this machine: it sets
+    the viewer dependency itself instead of signing in)."""
+    v = make_viewer(q["role"], q.get("ministry"), q.get("agency"))
+    app.dependency_overrides[access.viewer] = lambda: v
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(access.viewer, None)
 
 
 def _field(d, path: str):
@@ -79,9 +85,14 @@ def _names(text: str, key: str, name: str) -> bool:
 
 def expect(api: TestClient, q: dict, check: dict):
     """The value a check compares with, read from the API as the question's viewer."""
-    h, kind = headers(q), check["kind"]
+    with viewing_as(q):
+        return _expect(api, check)
+
+
+def _expect(api: TestClient, check: dict):
+    kind = check["kind"]
     if kind in ("count", "top_group", "first_project"):
-        r = api.get(check["path"], params=check.get("params") or {}, headers=h)
+        r = api.get(check["path"], params=check.get("params") or {})
         r.raise_for_status()
         body = r.json()
         if kind == "count":
@@ -92,11 +103,11 @@ def expect(api: TestClient, q: dict, check: dict):
         groups = _field(body, check["field"])
         return max(groups, key=lambda g: (g[check.get("by", "n")] or 0))["name"]
     if kind == "last_completion":
-        pts = api.get(f"/api/projects/{check['key']}/timeline", headers=h).json()["points"]
+        pts = api.get(f"/api/projects/{check['key']}/timeline").json()["points"]
         d = pts[-1]["anticipatedCompletion"]
         return time.strftime("%B %Y", time.strptime(d[:7], "%Y-%m"))
     if kind == "worst_agency":
-        pts = [p for p in api.get("/api/agencies/matrix", headers=h).json()["points"]
+        pts = [p for p in api.get("/api/agencies/matrix").json()["points"]
                if not p["hidden"] and p["scheduleBias"] is not None]
         return max(pts, key=lambda p: p["scheduleBias"])["agency"]
     return None

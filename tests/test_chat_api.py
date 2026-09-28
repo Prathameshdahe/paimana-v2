@@ -7,7 +7,6 @@ import sys
 import threading
 import time
 from pathlib import Path
-from urllib.parse import quote
 
 import httpx
 import pytest
@@ -21,11 +20,25 @@ from backend.access import POLICY  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import agent, client, rag  # noqa: E402
 from test_live import free_port  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
-COAL = {"X-Paimana-Role": "ministry_official", "X-Paimana-Ministry": quote("Ministry of Coal")}
-IPMD = {"X-Paimana-Role": "ipmd_analyst"}
-POWERGRID = {"X-Paimana-Role": "agency_official", "X-Paimana-Agency": "POWERGRID"}
 Q = "How many Critical projects are in Odisha?"
+
+
+def public(c):
+    return as_role(c, "public")
+
+
+def coal(c):
+    return as_role(c, "ministry", ministry="Ministry of Coal")
+
+
+def ipmd(c):
+    return as_role(c, "ipmd")
+
+
+def powergrid(c):
+    return as_role(c, "agency", agency="POWERGRID")
 
 
 def body(q=Q, **kw):
@@ -66,8 +79,8 @@ def events(text: str) -> list[tuple[str, dict]]:
 
 def test_chat_is_open_to_every_role(api):
     assert all("chat" in p["features"] for p in POLICY.values())
-    for headers in ({}, COAL, IPMD, POWERGRID):
-        r = api.post("/api/chat", json=body(), headers=headers)
+    for sign_in in (public, coal, ipmd, powergrid):
+        r = api.post("/api/chat", json=body(), headers=sign_in(api))
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
         ev = events(r.text)
         assert ev[0] == ("status", {"stage": "routing", "detail": "Reading the question"})
@@ -85,42 +98,49 @@ def test_chat_is_open_to_every_role(api):
     {"messages": "hi"},
 ])
 def test_bad_requests_are_422(api, payload):
-    assert api.post("/api/chat", json=payload).status_code == 422
+    assert api.post("/api/chat", json=payload, headers=public(api)).status_code == 422
 
 
 def test_a_long_earlier_answer_is_accepted_and_cut(api):
     turns = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "y" * 1500},
              {"role": "user", "content": Q}]
-    assert api.post("/api/chat", json={"messages": turns}).status_code == 200
+    assert api.post("/api/chat", json={"messages": turns}, headers=public(api)).status_code == 200
 
 
 def test_the_open_project_must_be_in_scope(api):
-    rail = api.get("/api/projects", headers=IPMD, params={"ministry": "Ministry of Railways", "size": 1}).json()
+    rail = api.get("/api/projects", headers=ipmd(api), params={"ministry": "Ministry of Railways", "size": 1}).json()
     key = rail["items"][0]["key"]
-    assert api.post("/api/chat", json=body(projectKey=key), headers=COAL).status_code == 404
-    assert api.post("/api/chat", json=body(projectKey="PRJ-999999"), headers=COAL).status_code == 404
-    assert api.post("/api/chat", json=body(projectKey=key), headers=IPMD).status_code == 200
-    r = api.post("/api/chat", json=body("what are the risks of this project?", projectKey=key), headers=IPMD)
+    assert api.post("/api/chat", json=body(projectKey=key), headers=coal(api)).status_code == 404
+    assert api.post("/api/chat", json=body(projectKey="PRJ-999999"), headers=coal(api)).status_code == 404
+    assert api.post("/api/chat", json=body(projectKey=key), headers=ipmd(api)).status_code == 200
+    r = api.post("/api/chat", json=body("what are the risks of this project?", projectKey=key), headers=ipmd(api))
     assert ("tool", {"id": "t1", "name": "get_project", "label": "Reading the project page", "args": {"key": key},
                      "status": "running", "summary": None}) in events(r.text)
 
 
 def test_rate_limit_is_429_before_streaming(api):
+    """The public is limited per client address, a signed-in official per account (from any address)."""
+    h = public(api)
     for _ in range(6):
-        assert api.post("/api/chat", json=body()).status_code == 200
-    r = api.post("/api/chat", json=body())
+        assert api.post("/api/chat", json=body(), headers=h).status_code == 200
+    r = api.post("/api/chat", json=body(), headers=h)
     assert r.status_code == 429 and r.headers["content-type"].startswith("application/json")
     assert "6 a minute and 40 an hour" in r.json()["detail"] and int(r.headers["Retry-After"]) > 0
-    assert api.post("/api/chat", json=body(), headers=IPMD).status_code == 200  # another role, another bucket
+    assert api.post("/api/chat", json=body(), headers=ipmd(api)).status_code == 200  # an account's own bucket
+    h = coal(api)
     for _ in range(20):
-        assert api.post("/api/chat", json=body(), headers=COAL).status_code == 200
-    assert api.post("/api/chat", json=body(), headers=COAL).status_code == 429
+        assert api.post("/api/chat", json=body(), headers=h).status_code == 200
+    assert api.post("/api/chat", json=body(), headers=h).status_code == 429
+    with TestClient(app, client=("198.51.100.7", 4000)) as other:   # another address: the public's own budget,
+        assert other.post("/api/chat", json=body()).status_code == 200
+        assert other.post("/api/chat", json=body(), headers=coal(other)).status_code == 429   # the account's spent
 
 
 def test_a_404_uses_no_question_of_the_limit(api):
+    h = public(api)
     for _ in range(8):  # more than the public's 6 a minute
-        assert api.post("/api/chat", json=body(projectKey="PRJ-999999")).status_code == 404
-    assert api.post("/api/chat", json=body()).status_code == 200
+        assert api.post("/api/chat", json=body(projectKey="PRJ-999999"), headers=h).status_code == 404
+    assert api.post("/api/chat", json=body(), headers=h).status_code == 200
 
 
 def test_rate_limit_cleanup_keeps_each_role_its_own_window(monkeypatch):

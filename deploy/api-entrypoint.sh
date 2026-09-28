@@ -14,4 +14,11 @@ if [ -n "${POSTGRES_HOST:-}" ]; then
     DATABASE_URL="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB}"
     export DATABASE_URL
 fi
+# The api's own start (not migrate, not a one-off command): make sure the hidden developer account exists and has the
+# password .env.db gives it (PAIMANA_DEVELOPER_EMAIL / PAIMANA_DEVELOPER_PASSWORD; nothing happens without them). It
+# never prompts and never prints a password; a failure is logged and the api starts anyway.
+if [ "${1:-}" = "uvicorn" ]; then
+    python -m backend.auth.bootstrap --developer-only \
+        || echo "api-entrypoint: the developer bootstrap failed (see above); starting the api anyway" >&2
+fi
 exec "$@"

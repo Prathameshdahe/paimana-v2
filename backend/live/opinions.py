@@ -15,11 +15,13 @@ ask and its retry; fresh, so an opinion made under an older prompt is redone), u
 sets it at shutdown and when a run overruns its time limit; checked between projects, inside the waits and before
 each ask) ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep their
 opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
-db.record_job('second_opinion', ...), with the counts per status and concern level.
+db.record_job('second_opinion', ...) with counts only (per status and concern level): the projects it asked are
+logged, never stored in the summary, which officials of every scope read in /api/jobs and /api/live/status.
 
 Speed on the laptop (qwen2.5-coder-14b, about 3 to 4 tokens/s out): an opinion is one call of 20 to 40 s when LM
 Studio is free, about twice that with the retry, so a run of 15 takes about 5 to 15 minutes.
 """
+import logging
 import os
 import threading
 import time
@@ -35,6 +37,7 @@ PAUSE_MAX_S = 600.0
 STOPPED = "the run was stopped (shutdown, or past the job's time limit)"
 _lock = threading.Lock()
 _stop = threading.Event()   # the stop flag (module docstring)
+log = logging.getLogger(__name__)
 
 
 def stop() -> None:
@@ -127,12 +130,13 @@ def run(keys: list[str], limit: int | None = None) -> dict:
             if out["status"] == "ok":
                 stats[f"concern_{out['concern']}"] += 1
         llm_ms = stats.pop("llm_ms", 0)
-        out = {"asked": len(asked), "keys": asked, **stats, "llm_seconds": round(llm_ms / 1000, 1),
-               "seconds": round(time.time() - t0, 1), "stopped": stopped}
+        counts = {"asked": len(asked), **stats, "llm_seconds": round(llm_ms / 1000, 1),
+                  "seconds": round(time.time() - t0, 1), "stopped": stopped}
         if keys:
+            log.info("second opinion run asked %d project(s): %s", len(asked), ", ".join(asked) or "none")
             db.record_job("second_opinion", started, "ok" if stopped is None else "partial" if asked else "error",
-                          out)
-        return out
+                          counts)
+        return {**counts, "keys": asked}
     finally:
         _lock.release()
 

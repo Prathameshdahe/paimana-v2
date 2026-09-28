@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import routes  # noqa: E402
 from backend.live import watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
-IPMD = {"X-Paimana-Role": "ipmd_analyst"}
 BAD_KEYS = ["PRJ-1", "prj-000698", "PRJ-0000001", "PRJ-00069a", "nonsense", "PRJ-000698%00",
             "PRJ-000698 OR 1=1", "PRJ-000698;", " PRJ-000698"]
 # in a body or a query string a path can arrive as given (in a URL path the router drops it before any route)
@@ -28,7 +28,8 @@ KEY_ROUTES = ["/api/projects/{}", "/api/projects/{}/timeline", "/api/projects/{}
 def client(tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app, headers=IPMD) as c:
+        with TestClient(app) as c:
+            c.headers.update(as_role(c, "developer"))   # the job routes are the developer's
             yield c
 
 

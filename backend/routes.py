@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from llm import agent, second_opinion, worker
 
 from . import brief, db, ratelimit, serving, store
-from .access import Viewer, in_scope, need, stream_viewer, viewer
+from .access import Viewer, in_scope, need, viewer
 from .live import opinions, portals, research, scheduler, scout, watcher
 from .schemas import (
     AgencyMatrix,
@@ -60,7 +60,7 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
-# who is asking: role and scope from the X-Paimana-* headers (backend/access.py; prototype, no authentication)
+# who is asking: the signed-in account of the session cookie, or the public without one (backend/access.py)
 Anyone = Depends(viewer)
 # input bounds: a project key is PRJ- and six digits (400 otherwise, before any lookup); every free-text query or
 # path parameter has a length limit (422 past it), and paging is 1..100 rows a page
@@ -245,7 +245,7 @@ def get_models(_: Viewer = Depends(need("models"))):
     return serving.models()
 
 
-# ---------- app state (SQLite) ----------
+# ---------- app state (PostgreSQL, backend/db) ----------
 
 @router.get("/alerts", response_model=AlertPage)
 def get_alerts(since: datetime | None = None, kind: AlertKind | None = None, acked: bool | None = None,
@@ -257,7 +257,7 @@ def get_alerts(since: datetime | None = None, kind: AlertKind | None = None, ack
 
 @router.post("/alerts/{alert_id}/ack", response_model=Alert)
 def post_alert_ack(alert_id: int, body: RoleBody | None = None, v: Viewer = Depends(need("ack"))):
-    out = db.ack(alert_id, v.acting_as(body and body.role), keys=v.keys)
+    out = db.ack(alert_id, v.acting_as(body and body.role), keys=v.keys, actor=v.actor)
     if out is None:
         raise HTTPException(status_code=404, detail=f"alert {alert_id} not found")
     return out
@@ -267,7 +267,7 @@ def _watchlist(v: Viewer, role: str) -> dict:
     out = db.watchlist(role)
     if v.scope is None:
         return out
-    # ponytail: one list per role cut to the viewer's scope; one per person once there is real sign-in
+    # one list per role, cut to the viewer's scope (docs/ACCESS_CONTROL.md, Scope)
     items = [i for i in out["items"] if v.sees(i["project_key"])]
     return {"total": len(items), "items": items}
 
@@ -280,7 +280,7 @@ def get_watchlist(role: Role | None = None, v: Viewer = Depends(need("watchlist"
 @router.post("/watchlist", response_model=Watchlist)
 def post_watchlist(body: WatchRequest, v: Viewer = Depends(need("watchlist"))):
     role = v.acting_as(body.role)
-    db.watch(role, _key(body.project_key, v))
+    db.watch(role, _key(body.project_key, v), actor=v.actor)
     return _watchlist(v, role)
 
 
@@ -288,13 +288,31 @@ def post_watchlist(body: WatchRequest, v: Viewer = Depends(need("watchlist"))):
 def delete_watchlist(role: Role | None = None, project_key: str = Query(max_length=32),
                      v: Viewer = Depends(need("watchlist"))):
     role = v.acting_as(role)
-    db.unwatch(role, _key(project_key, v))
+    db.unwatch(role, _key(project_key, v), actor=v.actor)
     return _watchlist(v, role)
 
 
+# job-summary fields that name projects or carry per-project text: a scoped viewer never gets them (the jobs record
+# counts only; this is the second line, for older rows and any job that adds such a field)
+PER_PROJECT = frozenset({"keys", "key", "project_key", "project_keys", "errors", "error", "detail"})
+
+
+def _scrub(summary, v: Viewer):
+    """A job summary as this viewer may read it: whole for a viewer without a scope, else without PER_PROJECT fields
+    and without any other value that names a project key."""
+    if v.scope is None or not isinstance(summary, dict):
+        return summary
+    return {k: x for k, x in summary.items()
+            if k not in PER_PROJECT and not KEY_RX.search(json.dumps(x, default=str))}
+
+
+def _scrubbed_run(run: dict | None, v: Viewer) -> dict | None:
+    return None if run is None else {**run, "summary": _scrub(run.get("summary"), v)}
+
+
 @router.get("/jobs", response_model=list[JobRun])
-def get_jobs(_: Viewer = Depends(need("live"))):
-    return db.latest_jobs()
+def get_jobs(v: Viewer = Depends(need("live"))):
+    return [_scrubbed_run(r, v) for r in db.latest_jobs()]
 
 
 @router.post("/jobs/ingest", response_model=Ingested)
@@ -304,7 +322,7 @@ def post_ingest(file: UploadFile, v: Viewer = Depends(need("jobs"))):
         out = watcher.save_upload(file.filename, file.file)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    db.audit(v.role, "jobs.ingest", out["saved_as"] or file.filename, out["sha256"])
+    db.audit(v.role, "jobs.ingest", out["saved_as"] or file.filename, out["sha256"], v.actor)
     return out
 
 
@@ -314,7 +332,7 @@ def post_watch(background: BackgroundTasks, v: Viewer = Depends(need("jobs"))):
     if watcher.busy():
         return {"started": False, "detail": "a watch run is already in progress"}
     n = len(watcher.pending())
-    db.audit(v.role, "jobs.watch", "inbox", f"{n} pending")
+    db.audit(v.role, "jobs.watch", "inbox", f"{n} pending", v.actor)
     background.add_task(watcher.watch_once)
     return {"started": True, "detail": f"{n} inbox file(s) to ingest", "pending": n}
 
@@ -329,11 +347,11 @@ def post_scout(background: BackgroundTasks, project_key: str | None = Query(None
         k = _key(project_key)
         if k not in scout.index()["projects"]:
             raise HTTPException(status_code=404, detail=f"project {project_key} is not in the current portfolio")
-        db.audit(v.role, "jobs.scout", k)
+        db.audit(v.role, "jobs.scout", k, actor=v.actor)
         out = scout.run([k], pib=False)
         return {"started": not out.get("busy"), "detail": f"scouted {k}", "summary": out}
     keys = scout.batch_keys()
-    db.audit(v.role, "jobs.scout", "batch", f"{len(keys)} projects")
+    db.audit(v.role, "jobs.scout", "batch", f"{len(keys)} projects", v.actor)
     background.add_task(scout.run, keys)
     return {"started": True, "detail": f"scouting {len(keys)} projects in the background", "pending": len(keys)}
 
@@ -352,7 +370,7 @@ def post_research(background: BackgroundTasks, project_key: str | None = Query(N
         keys = [k]
     else:
         keys = research.batch_keys()
-    db.audit(v.role, "jobs.research", keys[0] if project_key else "batch", f"{len(keys)} projects")
+    db.audit(v.role, "jobs.research", keys[0] if project_key else "batch", f"{len(keys)} projects", v.actor)
     background.add_task(research.run, keys)
     return {"started": True, "detail": f"researching {keys[0] if project_key else f'{len(keys)} projects'} in the "
                                        "background", "pending": len(keys)}
@@ -370,11 +388,11 @@ def post_second_opinion(background: BackgroundTasks, project_key: str | None = Q
         k = _key(project_key)
         if not serving.rows_for_keys((k,)):
             raise HTTPException(status_code=404, detail=f"project {project_key} is not in the current portfolio")
-        db.audit(v.role, "jobs.second_opinion", k)
+        db.audit(v.role, "jobs.second_opinion", k, actor=v.actor)
         background.add_task(opinions.run, [k])
         return {"started": True, "detail": f"asking for a second opinion on {k} in the background", "pending": 1}
     keys, n = opinions.batch_keys(), opinions.per_run()
-    db.audit(v.role, "jobs.second_opinion", "batch", f"up to {n} of {len(keys)} projects")
+    db.audit(v.role, "jobs.second_opinion", "batch", f"up to {n} of {len(keys)} projects", v.actor)
     background.add_task(opinions.run, keys, n)
     return {"started": True, "detail": f"asking for up to {n} second opinions in the background", "pending": n}
 
@@ -387,7 +405,7 @@ def post_parivesh_snapshot(background: BackgroundTasks, v: Viewer = Depends(need
     path = portals.snapshot_path()
     if path.exists():
         return {"started": False, "detail": f"{path.name} is already archived"}
-    db.audit(v.role, "jobs.parivesh_snapshot", path.name)
+    db.audit(v.role, "jobs.parivesh_snapshot", path.name, actor=v.actor)
     background.add_task(portals.snapshot_once)
     return {"started": True, "detail": f"archiving the PARIVESH dashboard as {path.name}"}
 
@@ -401,7 +419,7 @@ def post_bhoomi_pull(background: BackgroundTasks, state: str | None = Query(None
     if portals.pull_busy():
         return {"started": False, "detail": "a Bhoomi Rashi pull is already running"}
     states = [state.strip()] if state else None
-    db.audit(v.role, "jobs.bhoomi_pull", state or "all states")
+    db.audit(v.role, "jobs.bhoomi_pull", state or "all states", actor=v.actor)
     background.add_task(portals.bhoomi_pull, states)
     return {"started": True, "detail": f"pulling {states[0] if states else 'every state'} in the background"}
 
@@ -412,15 +430,18 @@ def get_signal_feed(since: datetime | None = None, category: str | None = Query(
                     severity: int | None = Query(None, ge=1, le=3),
                     linked: bool | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
                     v: Viewer = Depends(need("radar"))):
-    """External Evidence Radar: one page of signals (severity = at least) and the state heat. Outside IPMD only the
-    signals linked to the viewer's projects (no unlinked pool)."""
+    """External Evidence Radar: one page of signals (severity = at least) and the state heat. Only the developer
+    sees the unlinked pool; everyone else the signals linked to their projects."""
     return scout.feed(since and since.isoformat(), category, state, severity, linked, page, size,
                       keys=_signal_keys(v))
 
 
 def _signal_keys(v: Viewer) -> frozenset | None:
-    """None (every signal, the unlinked pool too) for IPMD, else the viewer's project keys."""
-    return None if v.can("unlinked_signals") else v.keys or frozenset()
+    """None (every signal, the unlinked pool too) with `unlinked_signals`, else the keys of the viewer's projects
+    (every project's for a viewer without a scope): the signals linked to them."""
+    if v.can("unlinked_signals"):
+        return None
+    return v.keys if v.scope is not None else serving.scope_keys(None)
 
 
 @router.get("/radar/summary", response_model=RadarSummary)
@@ -430,17 +451,17 @@ def get_radar_summary(v: Viewer = Depends(need("radar"))):
 
 
 @router.get("/live/status", response_model=LiveStatus)
-def get_live_status(_: Viewer = Depends(need("live"))):
-    return scheduler.status()
+def get_live_status(v: Viewer = Depends(need("live"))):
+    out = scheduler.status()
+    return {k: {**x, "last_run": _scrubbed_run(x.get("last_run"), v)} if isinstance(x, dict) else x
+            for k, x in out.items()}
 
 
 @router.get("/stream")
-async def get_stream(request: Request, after: int | None = Query(None, ge=0), v: Viewer = Depends(stream_viewer)):
+async def get_stream(request: Request, after: int | None = Query(None, ge=0), v: Viewer = Depends(need("alerts"))):
     """Server-Sent Events: each new alert as `event: alert` (id = alert id, data = the alert JSON), a comment line
-    every 15 s. Resumes after Last-Event-ID (EventSource sends it on reconnect) or ?after=, else from now. The
-    viewer comes as ?role=&ministry=&agency= (EventSource sends no headers); only their projects' alerts."""
-    if not v.can("alerts"):
-        raise HTTPException(status_code=403, detail=f"the alert stream is not available to {v.role}")
+    every 15 s. Resumes after Last-Event-ID (EventSource sends it on reconnect) or ?after=, else from now. The viewer
+    is the session cookie's (a same-origin EventSource sends it); only their projects' alerts."""
     last = request.headers.get("last-event-id")
     start = after if after is not None else int(last) if last and last.isdigit() else None
     return StreamingResponse(scheduler.alert_stream(start, v.keys), media_type="text/event-stream",
@@ -510,13 +531,13 @@ async def _chat_events(v: Viewer, messages: list[dict], key: str | None):
     200: {"content": {"text/event-stream": {}}, "description": "events status, tool, card, token, retry, done, error"},
     404: {"description": "projectKey unknown or outside the viewer's scope"},
     422: {"description": "messages: 1-12 turns, the last the user's question of 1-1000 characters"},
-    429: {"description": "rate limit (per client IP and role); detail says when to ask again"}})
-async def post_chat(body: ChatRequest, request: Request, v: Viewer = Depends(need("chat"))):
+    429: {"description": "rate limit (per account, or per client address for the public); detail says when"}})
+async def post_chat(body: ChatRequest, v: Viewer = Depends(need("chat"))):
     """The assistant (every role): a stream of server-sent events answering the last question from the tools this
-    viewer may use (llm/tools.py), cut to their scope. Rate limited per client IP and role before streaming starts
-    (backend/ratelimit.py). Nothing is stored and the question is not logged."""
+    viewer may use (llm/tools.py), cut to their scope. Rate limited per account (the public: per client address)
+    before streaming starts (backend/ratelimit.py). Nothing is stored and the question is not logged."""
     key = _key(body.project_key, v) if body.project_key else None  # a 404 uses no question of the limit
-    wait = ratelimit.check(request.client.host if request.client else "unknown", v.role)
+    wait = ratelimit.check(v.who, v.role)
     if wait is not None:
         return JSONResponse(status_code=429, content={"detail": ratelimit.message(v.role, wait)},
                             headers={"Retry-After": str(math.ceil(wait))})
@@ -556,14 +577,14 @@ def post_approval(body: ApprovalRequest, v: Viewer = Depends(need("approvals")))
     if draft["recommended_recipient_role"] != role:
         raise HTTPException(status_code=403, detail=f"this memo is addressed to {draft['recommended_recipient_role']}")
     updated = store.update_dispatch_draft(body.draft_id, body.decision)
-    db.audit(role, f"dispatch.{body.decision}", body.draft_id)
+    db.audit(role, f"dispatch.{body.decision}", body.draft_id, actor=v.actor)
     return updated
 
 
 @router.post("/worker-runs/trigger", response_model=TriggerResult)
 def trigger_worker_cycle(v: Viewer = Depends(need("workers"))):
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    db.audit(v.role, "worker.trigger", "worker_cycle")
+    db.audit(v.role, "worker.trigger", "worker_cycle", actor=v.actor)
     try:
         out = worker.run_worker_cycle()
     except Exception as e:

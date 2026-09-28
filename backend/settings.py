@@ -46,6 +46,7 @@ class Settings:
     llm_embed_model: str = "text-embedding-nomic-embed-text-v1.5"
     admin_email: str | None = None
     allowed_email_domains: tuple[str, ...] = ()
+    api_docs: bool = True             # /docs, /redoc and /openapi.json (0 in production)
 
     @property
     def database_name(self) -> str:
@@ -127,6 +128,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         llm_embed_model=e.get("LLM_EMBED_MODEL") or d["llm_embed_model"].default,
         admin_email=e.get("ADMIN_EMAIL") or None,
         allowed_email_domains=_list(e.get("ALLOWED_EMAIL_DOMAINS"), ()),
+        api_docs=_bool(e.get("API_DOCS"), d["api_docs"].default),
     )
 
 

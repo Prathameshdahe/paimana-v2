@@ -14,14 +14,14 @@ from conftest import alembic_config  # noqa: E402
 
 HANDOFF = ["001_core_identity", "84b98df29a61", "b704a78e671f", "004_model_artifact_checksum",
            "005_ingestion_staging"]   # Manamrit's chain, byte-identical files
-OURS = ["1f3a9c2d7b40", "2c8d4e6f1a57", "3e5f7a9b2c68", "4a6b8c0d3e79"]
+OURS = ["1f3a9c2d7b40", "2c8d4e6f1a57", "3e5f7a9b2c68", "4a6b8c0d3e79", "5b7c9d1e4f80"]
 TABLES = {
     "ingest": {"source_documents", "load_runs", "staging_project_observations"},
     "core": {"projects", "project_keys", "project_timeline"},
     "ml": {"model_registry", "predictions", "risk_flags", "forecasts", "agency_stats"},
     "app": {"sources", "job_runs", "alerts", "watchlist", "signals", "signal_projects", "scouted", "audit_log",
             "briefs", "research_facts", "researched", "signal_judgements", "second_opinions", "users", "sessions",
-            "signup_requests", "login_attempts", "rag_chunks", "rag_meta"},
+            "signup_requests", "login_attempts", "rag_chunks", "rag_meta", "password_resets"},
 }
 SQL = """SELECT table_schema, table_name FROM information_schema.tables
          WHERE table_schema IN ('ingest', 'core', 'ml', 'app') AND table_type = 'BASE TABLE'"""
@@ -54,6 +54,13 @@ def test_upgrade_downgrade_upgrade():
         idx = con.execute(sa.text("SELECT indexdef FROM pg_indexes WHERE schemaname = 'app' AND indexname = "
                                   "'rag_chunks_embedding'")).scalar()
         assert "hnsw" in idx and "vector_cosine_ops" in idx
+        roles = con.execute(sa.text("SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                                    "WHERE conname = 'ck_users_role'")).scalar()
+        assert "developer" in roles   # the hidden role (backend/access.py); sign-up requests keep three
+        assert "developer" not in con.execute(sa.text("SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                                                      "WHERE conname = 'ck_signup_requests_role'")).scalar()
+        one = con.execute(sa.text("SELECT indexdef FROM pg_indexes WHERE indexname = 'signup_requests_one_pending'"))
+        assert "UNIQUE" in one.scalar()
     command.downgrade(c, "base")
     with e.connect() as con:
         assert tables(con) == {}

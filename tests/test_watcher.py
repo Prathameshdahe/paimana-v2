@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db, serving  # noqa: E402
 from backend.live import watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 PORTAL_CSV = ('"Projects Details"\n\n"Sr. No.","Sector Name","Line Ministry","Implementing Agency","Project Code",'
               '"Project Name","Original Cost\n(in cr.)","Revised Cost\n(in cr.)","Expenditure\n(in cr.)",'
@@ -186,7 +187,8 @@ def test_unknown_file_is_an_error_not_a_run(live, monkeypatch):
 
 
 def test_upload_endpoint(live, monkeypatch):
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         r = c.post("/api/jobs/ingest", files={"file": ("../../Projects_Report.csv", io.BytesIO(PORTAL_CSV.encode()))})
         assert r.status_code == 200 and r.json()["kind"] == "portal_csv", r.text
         assert r.json()["savedAs"].endswith("inbox/Projects_Report.csv")

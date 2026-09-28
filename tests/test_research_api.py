@@ -5,7 +5,6 @@ import sys
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import quote
 
 import duckdb
 import pandas as pd
@@ -17,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db, serving  # noqa: E402
 from backend.main import app  # noqa: E402
 from pipeline.research import EXT_COLS  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
-IPMD = {"X-Paimana-Role": "ipmd_analyst"}
 AGENT_URL, AGENT_OLD_URL = "https://news.google.com/rss/articles/x1", "https://news.google.com/rss/articles/x0"
 AGENT_SAME_URL = "https://news.google.com/rss/articles/x2"
 
@@ -28,12 +27,23 @@ def camel(name):
     return head + "".join(w.capitalize() for w in tail)
 
 
+_client = None   # the module's client (fixture below); the helpers sign it in as their viewer
+
+
+def public():
+    return as_role(_client, "public")
+
+
+def ipmd():
+    return as_role(_client, "ipmd")
+
+
 def ministry(name):
-    return {"X-Paimana-Role": "ministry_official", "X-Paimana-Ministry": quote(name)}
+    return as_role(_client, "ministry", ministry=name)
 
 
 def agency(name):
-    return {"X-Paimana-Role": "agency_official", "X-Paimana-Agency": quote(name)}
+    return as_role(_client, "agency", agency=name)
 
 
 def add_agent_fact(key, url, fact_id, **kw):
@@ -65,7 +75,9 @@ def sweep():
 
 @pytest.fixture(scope="module")
 def client(sweep):
+    global _client
     with TestClient(app) as c:
+        _client = c
         add_agent_fact(sweep.key, AGENT_URL, "agentfact001")
         # the sweep cites this story already: the agent has it as a Google News link, its headline with the
         # feed's ' - Source' tail, other case and punctuation
@@ -79,11 +91,12 @@ def client(sweep):
                        judged_at="2026-09-29T10:00:00+00:00")
         db.mark_researched(sweep.key, 5, 2, researched_at="2026-09-30T10:00:00+00:00")
         yield c
+    _client = None
 
 
 def test_project_research_merges_sweep_and_agent_facts(client, sweep):
     key = sweep.key
-    d = client.get(f"/api/projects/{key}/research", headers=IPMD).json()
+    d = client.get(f"/api/projects/{key}/research", headers=ipmd()).json()
     facts = d["facts"]
     assert d["searched"] and d["researchedOn"] == str(sweep.row["researched_on"].date())
     assert d["agentResearchedAt"].startswith("2026-09-30")
@@ -101,18 +114,18 @@ def test_project_research_merges_sweep_and_agent_facts(client, sweep):
         assert got == (None if pd.isna(want) else want), (entry, field)
     assert d["latestStatus"] == (None if pd.isna(sweep.row["latest_status"]) else sweep.row["latest_status"])
 
-    pub = client.get(f"/api/projects/{key}/research").json()
+    pub = client.get(f"/api/projects/{key}/research", headers=public()).json()
     assert [f["factId"] for f in pub["facts"]] == [f["factId"] for f in facts]
     assert all(f["matchReason"] is None for f in pub["facts"])
     # the research agent's headline is a raw feed title: not for the public; the sweep's (checked) headline stays
     assert all((f["headline"] is None) == (f["origin"] == "agent") for f in pub["facts"])
     assert all(f["summary"] and f["url"] for f in pub["facts"])
 
-    brief = client.get(f"/api/projects/{key}", headers=IPMD).json()["research"]
+    brief = client.get(f"/api/projects/{key}", headers=ipmd()).json()["research"]
     top = brief["top"]
     assert brief["nFacts"] == d["nFacts"] and len(top) == min(3, d["nFacts"]) and top[0]["live"]
     assert [f["live"] for f in top] == sorted((f["live"] for f in top), reverse=True)   # live blockers first
-    pub_top = client.get(f"/api/projects/{key}").json()["research"]["top"]
+    pub_top = client.get(f"/api/projects/{key}", headers=public()).json()["research"]["top"]
     assert [f["factId"] for f in pub_top] == [f["factId"] for f in top]
     assert all(f["matchReason"] is None and (f["headline"] is None) == (f["origin"] == "agent") for f in pub_top)
 
@@ -121,12 +134,12 @@ def test_not_researched_is_not_searched(client, sweep):
     s = serving.state()
     key = next(r["k"] for r in serving._rows(s, "SELECT project_key AS k FROM master ORDER BY project_key")
                if r["k"] not in set(sweep.projects["project_key"]))
-    d = client.get(f"/api/projects/{key}/research", headers=IPMD).json()
+    d = client.get(f"/api/projects/{key}/research", headers=ipmd()).json()
     assert d["searched"] is False and d["facts"] == [] and d["researchedOn"] is None
     assert all(v is None for v in d["external"].values())
     empty = sweep.projects[sweep.projects["n_facts"].eq(0) & sweep.projects["searched"]]
     if len(empty):   # searched, nothing found
-        got = client.get(f"/api/projects/{empty['project_key'].iloc[0]}/research").json()
+        got = client.get(f"/api/projects/{empty['project_key'].iloc[0]}/research", headers=public()).json()
         assert got["searched"] is True and got["nFacts"] == 0
 
 
@@ -145,7 +158,7 @@ def test_research_is_scoped(client, sweep):
 
 
 def test_summary_counts_add_up_across_ministries(client, sweep):
-    full = client.get("/api/research/summary", headers=IPMD).json()
+    full = client.get("/api/research/summary", headers=ipmd()).json()
     cov = full["coverage"]
     assert cov["nSearched"] == int(sweep.projects["searched"].sum()) and cov["nCurrent"] == len(sweep.cur)
     assert cov["nFacts"] == len(sweep.facts) + 2 and cov["nAgentFacts"] == 2 and cov["nAgentProjects"] == 1
@@ -162,8 +175,8 @@ def test_summary_counts_add_up_across_ministries(client, sweep):
 
 
 def test_public_summary_is_counts_and_citations(client):
-    full = client.get("/api/research/summary", headers=IPMD).json()
-    pub = client.get("/api/research/summary").json()
+    full = client.get("/api/research/summary", headers=ipmd()).json()
+    pub = client.get("/api/research/summary", headers=public()).json()
     assert pub["coverage"] == full["coverage"] and pub["byCategory"] == full["byCategory"]
     # the sweep's blockers only: a public blocker is its headline, and an agent headline is a raw feed title
     assert [b["url"] for b in pub["topRecentBlockers"]] == [b["url"] for b in full["topRecentBlockers"]

@@ -15,11 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db  # noqa: E402
 from backend.live import opinions, research, scheduler, scout, watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 
 def test_scheduler_is_off_in_tests():
     assert scheduler.start() == []  # LIVE_JOBS=0 from conftest.py
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        as_role(c, "ipmd")
         s = c.get("/api/live/status").json()
     assert s["enabled"] is False and s["watch"]["lastRun"] is None and s["scout"]["nextDue"] is None
     assert isinstance(s["inboxPending"], int)
@@ -150,7 +152,9 @@ def test_stream_pushes_a_new_alert(monkeypatch):
     while not server.started and time.time() < deadline:
         time.sleep(0.05)
     try:
-        with httpx.stream("GET", f"http://127.0.0.1:{port}/api/stream?role=ipmd_analyst", timeout=10) as r:
+        live = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=10)
+        as_role(live, "ipmd")                     # the stream reads the session cookie, nothing else
+        with live.stream("GET", "/api/stream") as r:
             assert r.headers["content-type"].startswith("text/event-stream")
             lines = r.iter_lines()
             assert next(lines) == ": connected"  # the stream has taken its starting id
@@ -164,6 +168,7 @@ def test_stream_pushes_a_new_alert(monkeypatch):
         assert event[0] == f"id: {db.max_alert_id()}" and event[1] == "event: alert"
         body = json.loads(event[2].removeprefix("data: "))
         assert body["kind"] == "signal" and body["projectKey"] == "PRJ-000001" and body["id"] == db.max_alert_id()
+        live.close()
     finally:
         server.should_exit = True
         thread.join(10)

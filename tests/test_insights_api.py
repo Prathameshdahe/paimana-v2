@@ -12,13 +12,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import brief, serving  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import client as llm_client  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 MAX_ROWS = 100
 
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        as_role(c, "developer")   # the models page and the model numbers are the developer's
         yield c
 
 

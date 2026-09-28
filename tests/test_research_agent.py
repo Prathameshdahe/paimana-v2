@@ -16,6 +16,7 @@ from backend import db  # noqa: E402
 from backend.live import research, scheduler, scout  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import client  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 KEY = "PRJ-000698"      # Vishnugad Pipalkoti Hydro Electric Project (THDC); place words vishnugad, pipalkoti ...
 VERDICTS = {  # headline start -> the fake LLM's entry (without i)
@@ -115,7 +116,9 @@ def test_judges_links_stores_and_alerts(agent_db, monkeypatch):
     assert [(a["project_key"], a["source"], a["severity"]) for a in alerts] == [(KEY, "https://n/landslide", 2)]
     assert alerts[0]["title"].startswith("Research (natural_event): Vishnugad")
     assert [(r["n_candidates"], r["n_relevant"]) for r in db.researched_rows(KEY)] == [(4, 2)]
-    assert job()["status"] == "ok" and job()["summary"]["keys"] == [KEY]
+    # the recorded summary holds counts only (officials of every scope read it); the run's own answer the keys
+    assert job()["status"] == "ok" and job()["summary"]["projects"] == 1 and "keys" not in job()["summary"]
+    assert KEY not in json.dumps(job()["summary"])
 
     # judged once per project: a second run has nothing to judge and raises nothing
     again = research.run([KEY], refresh=False)
@@ -404,7 +407,8 @@ def test_long_watchlists_do_not_starve_the_risky_rotation(agent_db):
 def test_api_job_and_live_status(agent_db, monkeypatch):
     monkeypatch.setattr(research, "_judge_llm", FakeJudge())
     monkeypatch.setattr(scout, "run", lambda keys, pib=True, get=None: {"errors": []})
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         r = c.post("/api/jobs/research", params={"project_key": KEY}).json()
         assert r["started"] is True and r["pending"] == 1
         facts = c.get(f"/api/projects/{KEY}/research").json()["facts"]    # the background task has run

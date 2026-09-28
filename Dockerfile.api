@@ -31,5 +31,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD ["python", "-c", "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4); sys.exit(0 if r.status == 200 else 1)"]
 ENTRYPOINT ["/app/deploy/api-entrypoint.sh"]
+# --no-proxy-headers: the api itself believes X-Forwarded-For / -Proto, and only from TRUSTED_PROXIES
+# (backend/auth/middleware.py); uvicorn's own reading with --forwarded-allow-ips * would take the left-most hop, which
+# the client writes. --no-access-log: the api writes its own access log (JSON, no query strings of /api/auth).
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", \
-     "--timeout-graceful-shutdown", "10", "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--timeout-graceful-shutdown", "10", "--no-proxy-headers", "--no-access-log"]

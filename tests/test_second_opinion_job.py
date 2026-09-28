@@ -17,6 +17,7 @@ from backend.live import opinions, research, scheduler  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import client  # noqa: E402
 from llm import second_opinion as so  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 KEY = "PRJ-000698"      # Medium: never in the batch, but it can be asked for by key
 
@@ -189,7 +190,8 @@ def test_run_stops_for_a_busy_chat_and_for_lm_studio_down(job_db, monkeypatch):
 
 
 def test_job_route_live_status_and_access(job_db):
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         r = c.post("/api/jobs/second-opinion", params={"project_key": KEY}).json()
         assert r["started"] is True and r["pending"] == 1
         got = c.get(f"/api/projects/{KEY}/second-opinion", params={"cached": 1}).json()   # the task has run
@@ -197,6 +199,7 @@ def test_job_route_live_status_and_access(job_db):
         assert c.post("/api/jobs/second-opinion", params={"project_key": "PRJ-999999"}).status_code == 404
         live = c.get("/api/live/status").json()
         assert live["secondOpinion"]["lastRun"]["job"] == "second_opinion"
+        assert "keys" not in live["secondOpinion"]["lastRun"]["summary"]    # counts only
         assert live["secondOpinion"]["intervalS"] is None                     # LIVE_JOBS=0: no loop
         with opinions._lock:
             assert c.post("/api/jobs/second-opinion").json()["started"] is False
@@ -207,6 +210,8 @@ def test_job_route_live_status_and_access(job_db):
             assert r["started"] and ran == [(len(opinions.batch_keys()), opinions.per_run())]
     with TestClient(app) as pub:
         assert pub.post("/api/jobs/second-opinion", params={"project_key": KEY}).status_code == 403
+        h = as_role(pub, "ipmd")
+        assert pub.post("/api/jobs/second-opinion", params={"project_key": KEY}, headers=h).status_code == 403
     assert db.audit_rows(action="jobs.second_opinion")["total"] == 2
 
 

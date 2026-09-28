@@ -6,11 +6,13 @@ strings of the *_at columns -> aware datetimes (a bare date is midnight UTC), of
 lists of the json columns -> jsonb text, NUL bytes out of every string (outside text can carry them; text columns
 refuse them). A viewer's project keys (backend/access.py) are one array parameter:
 `project_key = ANY(:keys)`. Every write that comes from a person also writes an audit_log row in the same
-transaction. The reads that serving and the pipeline make before the schema exists (serving used from a script)
-return nothing rather than fail (_rows_or_none).
+transaction, with the actor ({user_id, email, ip} of the signed-in person, backend/access.py Viewer.actor; ip None
+when it is not an address) next to the role. The reads that serving and the pipeline make before the schema exists
+(serving used from a script) return nothing rather than fail (_rows_or_none).
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -32,7 +34,7 @@ __all__ = ["ALERT_KINDS", "SECOND_OPINION_COLS", "RESEARCH_FACT_COLS", "init", "
            "radar_counts", "news_for_index", "linked_signals", "index_marks", "research_facts", "researched",
            "researched_rows", "research_candidates", "save_research", "mark_researched", "add_alerts_once",
            "signal_verdicts", "signal_judgements", "second_opinion", "second_opinions", "second_opinion_times",
-           "save_second_opinion", "cached_brief", "save_brief", "audit", "audit_rows"]
+           "save_second_opinion", "cached_brief", "save_brief", "audit", "audit_rows", "inet"]
 
 ALERT_KINDS = ("tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice", "pipeline_error")
 SECOND_OPINION_COLS = ("project_key", "evidence_hash", "model", "prompt_version", "asof", "generated_at")
@@ -117,6 +119,9 @@ def _out(row: Mapping[str, Any]) -> dict:
             v = int(v)
         elif isinstance(v, Decimal):
             v = float(v)
+        elif isinstance(v, (ipaddress.IPv4Address, ipaddress.IPv6Address, ipaddress.IPv4Interface,
+                            ipaddress.IPv6Interface)):
+            v = str(getattr(v, "ip", v))
         out[k] = v
     return out
 
@@ -146,10 +151,21 @@ def _keys(keys) -> list[str]:
     return sorted(keys)
 
 
-def _audit(con, role, action, target, detail=None) -> None:
-    con.execute(sa.text('INSERT INTO app.audit_log ("at", role, action, target, detail) VALUES (:at, :role, :action, '
-                        ":target, :detail)"),
-                {"at": now(), "role": role, "action": action, "target": target, "detail": detail})
+def inet(v) -> str | None:
+    """v when it is an IP address (the inet columns), else None: a test client's 'testclient', a missing peer."""
+    try:
+        return str(ipaddress.ip_address(str(v).strip())) if v else None
+    except ValueError:
+        return None
+
+
+def _audit(con, role, action, target, detail=None, actor: Mapping | None = None) -> None:
+    """One audit_log row. actor: {user_id, email, ip} of the person (None: the system or a script)."""
+    a = actor or {}
+    con.execute(sa.text('INSERT INTO app.audit_log ("at", role, action, target, detail, user_id, email, ip) VALUES '
+                        "(:at, :role, :action, :target, :detail, :user_id, :email, CAST(:ip AS inet))"),
+                {"at": now(), "role": role, "action": action, "target": target, "detail": detail,
+                 "user_id": a.get("user_id"), "email": a.get("email"), "ip": inet(a.get("ip"))})
 
 
 def init() -> int:
@@ -245,9 +261,9 @@ def alerts_after(alert_id: int, limit=100) -> list[dict]:
                      {"id": alert_id, "limit": limit})
 
 
-def ack(alert_id: int, role: str, keys=None) -> dict | None:
+def ack(alert_id: int, role: str, keys=None, actor: Mapping | None = None) -> dict | None:
     """Mark an alert acknowledged by role (the first ack stands); None if there is no such alert (or it is not on
-    one of keys, when given)."""
+    one of keys, when given). actor: who, for the audit row."""
     with connect() as con:
         row = _one(con, "SELECT * FROM app.alerts WHERE id = :id FOR UPDATE", {"id": alert_id})
         if row is None or (keys is not None and row["project_key"] not in keys):
@@ -255,9 +271,9 @@ def ack(alert_id: int, role: str, keys=None) -> dict | None:
         if row["acked_at"] is None:
             con.execute(sa.text("UPDATE app.alerts SET acked_by = :role, acked_at = :at WHERE id = :id"),
                         {"role": role, "at": now(), "id": alert_id})
-            _audit(con, role, "alert.ack", str(alert_id))
+            _audit(con, role, "alert.ack", str(alert_id), actor=actor)
         else:
-            _audit(con, role, "alert.ack", str(alert_id), f"already acked by {row['acked_by']}")
+            _audit(con, role, "alert.ack", str(alert_id), f"already acked by {row['acked_by']}", actor=actor)
         return _one(con, "SELECT * FROM app.alerts WHERE id = :id", {"id": alert_id})
 
 
@@ -282,22 +298,22 @@ def watchlist(role: str, limit=100) -> dict:
     return {"total": total, "items": [{**i, "project": rows.get(i["project_key"])} for i in items]}
 
 
-def watch(role: str, project_key: str) -> bool:
+def watch(role: str, project_key: str, actor: Mapping | None = None) -> bool:
     """Add to role's watchlist; False if it was already there."""
     with connect() as con:
         added = con.execute(sa.text("INSERT INTO app.watchlist (role, project_key, added_at) VALUES (:role, :key, :at) "
                                     "ON CONFLICT DO NOTHING"),
                             {"role": role, "key": project_key, "at": now()}).rowcount == 1
-        _audit(con, role, "watchlist.add", project_key, None if added else "already on the watchlist")
+        _audit(con, role, "watchlist.add", project_key, None if added else "already on the watchlist", actor)
     return added
 
 
-def unwatch(role: str, project_key: str) -> bool:
+def unwatch(role: str, project_key: str, actor: Mapping | None = None) -> bool:
     """Remove from role's watchlist; False if it was not there."""
     with connect() as con:
         removed = con.execute(sa.text("DELETE FROM app.watchlist WHERE role = :role AND project_key = :key"),
                               {"role": role, "key": project_key}).rowcount == 1
-        _audit(con, role, "watchlist.remove", project_key, None if removed else "was not on the watchlist")
+        _audit(con, role, "watchlist.remove", project_key, None if removed else "was not on the watchlist", actor)
     return removed
 
 
@@ -718,26 +734,32 @@ def save_brief(b: dict) -> None:
 
 # ---------------------------------------------------------------- audit
 
-def audit(role, action, target, detail=None) -> None:
+def audit(role, action, target, detail=None, actor: Mapping | None = None) -> None:
     with connect() as con:
-        _audit(con, role, action, target, detail)
+        _audit(con, role, action, target, detail, actor)
 
 
-def audit_rows(since=None, user=None, action=None, page=1, size=50) -> dict:
-    """One page of the audit log, oldest first (user: the role or the email; action: exact)."""
+def audit_rows(since=None, user=None, action=None, page=1, size=50, hide_roles: Iterable[str] = ()) -> dict:
+    """One page of the audit log, newest first. user: a user id (digits), an email or a role; action: exact;
+    hide_roles: rows recorded under these roles are left out (the developer's, for anyone else)."""
     conds, params = [], {}
     if since:
         conds.append('"at" >= :since')
         params["since"] = _ts(since)
     if user:
-        conds.append("(role = :user OR email = :user)")
-        params["user"] = user
+        conds.append("(user_id = :uid OR role = :user OR email = :user)" if user.isdigit()
+                     else "(role = :user OR email = :user)")
+        params.update(user=user, uid=int(user) if user.isdigit() else None)
     if action:
         conds.append("action = :action")
         params["action"] = action
+    if hide_roles:
+        conds.append("(role IS NULL OR NOT role = ANY(:hide))")
+        params["hide"] = list(hide_roles)
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
     with read() as con:
         total = con.execute(sa.text(f"SELECT count(*) FROM app.audit_log{where}"), params).scalar()
-        items = _rows(con, f"SELECT * FROM app.audit_log{where} ORDER BY id LIMIT :limit OFFSET :offset",
+        items = _rows(con, f"""SELECT id, "at", role, action, target, detail, user_id, email, host(ip) AS ip
+            FROM app.audit_log{where} ORDER BY id DESC LIMIT :limit OFFSET :offset""",
                       {**params, "limit": size, "offset": (page - 1) * size})
     return {"total": total, "page": page, "size": size, "items": items}

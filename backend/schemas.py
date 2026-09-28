@@ -725,7 +725,7 @@ class SecondOpinionUnavailable(CamelModel):
     down: bool = False
 
 
-# ---------- app state (SQLite, backend/db.py) ----------
+# ---------- app state (PostgreSQL, backend/db/) ----------
 
 Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]
 AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice",
@@ -769,7 +769,7 @@ class Scopes(CamelModel):
 
 
 class RoleBody(CamelModel):
-    """role: optional, and when sent it must be the signed-in one (X-Paimana-Role, backend/access.py)."""
+    """role: optional, and when sent it must be the signed-in one (backend/access.py Viewer.acting_as)."""
     role: Role | None = None
 
 
@@ -1004,6 +1004,163 @@ class ApprovalRequest(CamelModel):
 class TriggerResult(BaseModel):
     worker_runs: list[WorkerRun]
     dispatch_drafts: list[DispatchDraft]
+
+
+# ---------- sign-in, accounts and administration (backend/auth; frontend/src/contracts/auth.ts) ----------
+
+OfficialRole = Literal["agency_official", "ministry_official", "ipmd_analyst"]
+AccountStatus = Literal["active", "disabled"]
+SignupStatus = Literal["pending", "approved", "rejected"]
+EMAIL_MAX, NAME_LEN, NOTE_MAX, PASSWORD_MAX, SCOPE_MAX = 254, 120, 500, 256, 200
+
+
+class StrictBody(CamelModel):
+    """A request body: unknown fields are refused (422), not ignored."""
+    model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True, extra="forbid")
+
+
+class LoginRequest(StrictBody):
+    email: str = Field(max_length=EMAIL_MAX)
+    password: str = Field(max_length=PASSWORD_MAX)
+
+
+class SignupIn(StrictBody):
+    """POST /api/auth/signup: a request for an account an administrator approves; the password is the account's
+    from the start (only its argon2 hash is kept)."""
+    email: str = Field(min_length=3, max_length=EMAIL_MAX)
+    display_name: str = Field(min_length=1, max_length=NAME_LEN)
+    role: OfficialRole
+    ministry: str | None = Field(None, max_length=SCOPE_MAX)
+    agency: str | None = Field(None, max_length=SCOPE_MAX)
+    justification: str = Field("", max_length=NOTE_MAX)
+    password: str = Field(max_length=PASSWORD_MAX)
+
+
+class SignupAccepted(CamelModel):
+    id: int
+
+
+class PasswordChange(StrictBody):
+    current: str = Field(max_length=PASSWORD_MAX)
+    new: str = Field(max_length=PASSWORD_MAX)
+
+
+class PasswordReset(StrictBody):
+    token: str = Field(min_length=1, max_length=200)
+    password: str = Field(max_length=PASSWORD_MAX)
+
+
+class Me(CamelModel):
+    """GET /api/auth/me and the answer of a sign-in. role: one of the official roles, or 'developer' (only ever
+    to the developer). csrf_token goes back as X-CSRF-Token on every write; session_expires_at: when the session
+    ends if left idle from now (never after its absolute end)."""
+    user_id: int
+    email: str
+    display_name: str | None
+    role: str
+    ministry: str | None
+    agency: str | None
+    is_admin: bool
+    csrf_token: str
+    session_expires_at: str | None
+
+
+class SignupRow(CamelModel):
+    id: int
+    email: str
+    display_name: str | None
+    role: str
+    ministry: str | None
+    agency: str | None
+    justification: str | None
+    status: SignupStatus
+    created_at: str
+    reviewed_by: int | None
+    reviewed_at: str | None
+    review_note: str | None
+    ip: str | None
+
+
+class ApproveSignup(StrictBody):
+    """The role and scope may be corrected before the account is created; a field left out keeps the request's."""
+    note: str | None = Field(None, max_length=NOTE_MAX)
+    role: OfficialRole | None = None
+    ministry: str | None = Field(None, max_length=SCOPE_MAX)
+    agency: str | None = Field(None, max_length=SCOPE_MAX)
+
+
+class RejectSignup(StrictBody):
+    note: str = Field(min_length=1, max_length=NOTE_MAX)
+
+
+class User(CamelModel):
+    id: int
+    email: str
+    display_name: str | None
+    role: str
+    ministry: str | None
+    agency: str | None
+    is_admin: bool
+    status: AccountStatus
+    locked_until: str | None
+    password_changed_at: str | None
+    created_at: str | None
+    last_login_at: str | None
+
+
+class UserPage(CamelModel):
+    total: int
+    page: int
+    size: int
+    items: list[User]
+
+
+class UserUpdate(StrictBody):
+    """POST /api/admin/users/{id}: a field left out is left alone; an administrator cannot disable or demote their
+    own account, and only an IPMD analyst can hold the admin flag."""
+    status: AccountStatus | None = None
+    role: OfficialRole | None = None
+    ministry: str | None = Field(None, max_length=SCOPE_MAX)
+    agency: str | None = Field(None, max_length=SCOPE_MAX)
+    is_admin: bool | None = None
+
+
+class ResetToken(CamelModel):
+    """Shown once to the administrator who asked; only its sha256 is kept."""
+    token: str
+    expires_at: str | None
+
+
+class AuditRow(CamelModel):
+    id: int
+    at: str
+    user_id: int | None
+    email: str | None
+    role: str | None
+    ip: str | None
+    action: str
+    target: str | None
+    detail: str | None
+
+
+class AuditPage(CamelModel):
+    total: int
+    page: int
+    size: int
+    items: list[AuditRow]
+
+
+class Health(CamelModel):
+    status: Literal["ok"]
+
+
+class Ready(CamelModel):
+    """GET /readyz: ready = the data version is loaded and the database answers; the local LLM is reported, not
+    required (the app works without it)."""
+    ready: bool
+    data: str | None
+    database: bool
+    llm: Literal["reachable", "unreachable"]
 
 
 # ---------- LLM structured-output schemas (one per worker LLM call) ----------

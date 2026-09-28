@@ -21,11 +21,12 @@ Each run has a time limit (MAX_RUNTIME_S per job): past it the loop logs the ove
 job's last_error, tells the job to stop (the LLM jobs' stop flags; a pipeline step or a fetch cannot be interrupted
 and finishes on its own) and moves on to the next tick; the thread is never killed and the process is never taken
 down with it. stop() (the lifespan's shutdown) sets the LLM jobs' stop flags before cancelling the loops, so a
-research or second-opinion batch in flight ends at its next check instead of holding the restart for an hour, waits
-a little for the threads to end and then clears the flags.
+research or second-opinion batch in flight (scheduled, or started from the API) ends at its next check instead of
+holding the restart for an hour, waits a little for the threads to end and then clears the flags.
 
-alert_stream() is the Server-Sent Events body of GET /api/stream: it polls SQLite every POLL_S seconds for alerts
-with an id above the last one sent and writes a comment line every HEARTBEAT_S seconds so proxies keep it open.
+alert_stream() is the Server-Sent Events body of GET /api/stream: it polls the database every POLL_S seconds for
+alerts with an id above the last one sent and writes a comment line every HEARTBEAT_S seconds so proxies keep it
+open.
 """
 import asyncio
 import logging
@@ -132,19 +133,28 @@ def start() -> list[asyncio.Task]:
     return [asyncio.create_task(_every(job, fn, s, first), name=job) for job, fn, s, first in loops]
 
 
+def _llm_jobs_busy() -> bool:
+    """A research or second-opinion run is in flight, scheduled or started from the API (POST /api/jobs/...)."""
+    return research.busy() or opinions.busy()
+
+
 async def stop(tasks: list[asyncio.Task]) -> None:
-    """Set the LLM jobs' stop flags, cancel the loops, wait up to STOP_WAIT_S for the runs in flight to end (an
-    LLM batch stops at its next check; a pipeline step or a fetch finishes first: it is not interrupted) and clear
-    the flags again when they have, so a later start() runs the jobs."""
+    """Set the LLM jobs' stop flags, cancel the loops, wait up to STOP_WAIT_S for the runs in flight to end (the
+    scheduled ones and an LLM run started from the API: an LLM batch stops at its next check; a pipeline step or a
+    fetch finishes first, it is not interrupted) and clear the flags again when they have, so a later start() runs
+    the jobs."""
     for stopper, _ in STOPPERS.values():
         stopper()
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+    deadline = time.monotonic() + STOP_WAIT_S
     pending = [f for f in _inflight if not f.done()]
     if pending:
         await asyncio.wait(pending, timeout=STOP_WAIT_S)
-    if not _inflight:
+    while _llm_jobs_busy() and time.monotonic() < deadline:
+        await asyncio.sleep(0.2)
+    if not _inflight and not _llm_jobs_busy():
         for _, resumer in STOPPERS.values():
             resumer()
     else:

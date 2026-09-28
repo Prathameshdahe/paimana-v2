@@ -9,6 +9,7 @@ pyyaml>=6.0                # tests/test_ops.py reads the compose files and the C
 sqlalchemy>=2.0            # app state and serving tables in PostgreSQL (backend/db/, docs/DATABASE.md)
 psycopg[binary]>=3.2
 alembic>=1.13              # database/postgres/migrations
+argon2-cffi>=23.1          # password hashes, argon2id (backend/auth/passwords.py)
 
 # data pipeline + ml
 pandas>=2.2

@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db  # noqa: E402
 from backend.live import scout  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 ROWS = [
     {"project_key": "PRJ-A", "project_name": "Upgradation and 4L of Haridwar Bypass from Km 0.000 Km 188.100 of NH-58 "
@@ -135,7 +136,8 @@ def test_cuf_changes_on_real_panel():
 
 
 def test_feed_endpoint_bounds(tmp_db):
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         assert c.get("/api/signals/feed", params={"size": 101}).status_code == 422
         assert c.get("/api/signals/feed", params={"severity": 4}).status_code == 422
         body = c.get("/api/signals/feed").json()

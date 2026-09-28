@@ -3,7 +3,6 @@ import json
 import sys
 import time
 from pathlib import Path
-from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +13,7 @@ from backend import db, serving  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import client as llm_client  # noqa: E402
 from llm import second_opinion as so  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 KEY = "PRJ-000698"      # Vishnugad Pipalkoti (THDC India Limited, Ministry of Power)
 URL = "/api/projects/{}/second-opinion"
@@ -21,7 +21,8 @@ URL = "/api/projects/{}/second-opinion"
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        as_role(c, "ipmd")
         yield c
     llm_client._down_at = -1e9
 
@@ -61,12 +62,15 @@ def test_public_is_403_and_an_agency_outside_its_scope_404(client):
     own = serving.rows_for_keys((KEY,))[0]["agency"]
     mine = serving.state()["con"].execute("SELECT canonical FROM amap WHERE raw = ?", [own]).fetchone()[0]
     assert mine in agencies and "NHAI" in agencies and KEY not in serving.scope_keys(("agency", "NHAI"))
-    h = {"X-Paimana-Role": "agency_official", "X-Paimana-Agency": quote("NHAI")}
-    assert client.get(URL.format(KEY), headers=h, params={"cached": 1}).status_code == 404
-    assert client.get(URL.format(KEY), headers=h).status_code == 404
-    h = {"X-Paimana-Role": "agency_official", "X-Paimana-Agency": quote(mine)}
-    assert client.get(URL.format(KEY), headers=h, params={"cached": 1}).json()["status"] == "none"
-    assert client.get(URL.format("PRJ-999999")).status_code == 404
+    try:
+        as_role(client, "agency", agency="NHAI")
+        assert client.get(URL.format(KEY), params={"cached": 1}).status_code == 404
+        assert client.get(URL.format(KEY)).status_code == 404
+        as_role(client, "agency", agency=mine)
+        assert client.get(URL.format(KEY), params={"cached": 1}).json()["status"] == "none"
+        assert client.get(URL.format("PRJ-999999")).status_code == 404
+    finally:
+        as_role(client, "ipmd")     # the module's other tests read as IPMD
 
 
 def test_cached_only_never_generates(client, monkeypatch):
