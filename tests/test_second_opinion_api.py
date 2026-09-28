@@ -117,7 +117,7 @@ def test_citations_that_do_not_exist_are_422(client, monkeypatch):
     monkeypatch.setattr(llm_client, "chat", chat)
     r = client.get(URL.format(key))
     assert r.status_code == 422 and r.json()["status"] == "rejected" and r.json()["attempts"] == 2
-    assert any("do not exist" in x and "E77" in x for x in r.json()["reasons"]) and len(chat.calls) == 2
+    assert any("not in the list" in x and "E77" in x for x in r.json()["reasons"]) and len(chat.calls) == 2
     assert client.get(URL.format(key), params={"cached": 1}).json()["status"] == "none"
 
 
@@ -131,7 +131,7 @@ def test_numbers_not_in_the_pack_are_422_and_the_retry_names_them(client, monkey
     monkeypatch.setattr(llm_client, "chat", chat)
     r = client.get(URL.format(key))
     assert r.status_code == 422 and any("'97.5' is not in the evidence items" in x for x in r.json()["reasons"])
-    assert "97.5" in chat.calls[1][3]["content"]
+    assert "97.5" in chat.calls[1][1]["content"]
 
 
 def test_llm_down_is_503_quickly_and_remembered(client, monkeypatch):

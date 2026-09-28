@@ -1,5 +1,6 @@
 """llm/second_opinion.py with a fake LLM (client.chat): the evidence pack, its hash, the checks, generate and cache."""
 import json
+import re
 import sys
 import threading
 import time
@@ -15,6 +16,7 @@ from llm import client  # noqa: E402
 from llm import second_opinion as so  # noqa: E402
 
 KEY = "PRJ-000698"      # Vishnugad Pipalkoti Hydro Electric Project (THDC), Medium; web research facts in gold
+NUM = re.compile(r"\b\d+(?:,\d{3})*(?:\.\d+)?\b")   # a number as validate reads one
 
 
 def add_signal(url, title, published="2026-08-02T06:00:00+00:00", severity=2, key=KEY, relevant=None):
@@ -57,7 +59,7 @@ class FakeLLM:
         self.replies, self.calls = list(replies), []
 
     def __call__(self, messages, max_tokens=400, temperature=0.2, model=None):
-        self.calls.append({"messages": messages, "max_tokens": max_tokens})
+        self.calls.append({"messages": messages, "max_tokens": max_tokens, "temperature": temperature})
         r = self.replies[min(len(self.calls), len(self.replies)) - 1]
         return r(messages) if callable(r) else r
 
@@ -84,11 +86,15 @@ def test_pack_items_are_numbered_capped_and_hashed_stably(opinion_db):
     assert all(len(it["text"]) <= so.TEXT_CHARS + 120 for it in items)
     assert p["tier"] == "Medium" and p["model_level"] == "watch"
     assert so.has_evidence(p) and so.allowed(p) == ("watch", "concern")
+    holdups = [it["id"] for it in items if so.group(it) == 0]
+    assert f"Current hold-ups: {', '.join(holdups)}." in so.messages(p)[1]["content"]
     assert so.evidence_hash(p) == so.evidence_hash(so.pack(KEY)) and len(so.evidence_hash(p)) == 64
     user = so.messages(p)[1]["content"]
     assert len(user) < 1800 * 3.5          # about 1,800 tokens at most (Qwen: 3.5+ characters a token here)
     assert user.count("<<<EVIDENCE") == 1 and user.count("EVIDENCE>>>") == 1
-    assert user.index(so.GROUPS[0]) < user.index("E1 |") < user.index(so.GROUPS[4]) < user.index(model["id"] + " |")
+    assert user.index(so.GROUPS[0]) < user.index("E1 |") and so.GROUPS[4] not in user   # the context is not shown
+    assert model["text"] not in user and status["text"] not in user and so.citable(p) == [
+        it for it in items if it["direction"] != "context"]
 
 
 def test_news_items_skip_judged_private_and_minor_and_quote_the_rest(opinion_db):
@@ -114,9 +120,11 @@ def test_old_news_is_stale_and_allows_no_concern_alone(opinion_db, monkeypatch):
     p = so.pack(KEY)
     only = {**p, "items": [it for it in p["items"] if it["kind"] in ("status", "model")]}
     assert so.allowed(only) == ("none",) and not so.has_evidence(only)
+    assert so.citable(only) == only["items"] and f"{only['items'][0]['id']} |" in so.messages(only)[1]["content"]
     old = {**only, "items": only["items"] + [{**so._item("news", "2024-01-02", "negative", "PTI", "x", 2, True),
                                               "id": "E3"}]}
     assert so.allowed(old) == ("none", "watch") and so.has_evidence(old)
+    assert "Current hold-ups" not in so.messages(old)[1]["content"]      # named only when there are some
 
 
 # ------------------------------------------------------------------ checks
@@ -127,9 +135,12 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
     assert so.check(good, p)[0] == []
     negative = next(it["id"] for it in p["items"] if it["direction"] == "negative" and not it["stale"])
     positive = [it["id"] for it in p["items"] if it["direction"] in ("positive", "neutral", "context")]
-    n = len(p["items"])
+    n, n_ctx = len(p["items"]), next(it["id"] for it in p["items"] if it["direction"] == "context")
     faults = {
-        "do not exist": {"narrative": f"Work stopped after a protest on the site [E{n + 7}] and more words here."},
+        "not in the list: E": {"narrative": f"Work stopped after a protest on the site [E{n + 7}] and more words."},
+        f"not in the list: {n_ctx}": {"narrative": f"Work stopped after a protest [{negative}] with most work done "
+                                                   f"[{n_ctx}]."},
+        "not [status, model]": {"narrative": f"Work stopped after a protest [{negative}], most done [status, model]."},
         "'97.5' is not in the evidence items": {"narrative": f"Work stopped for 97.5 days after a protest [{negative}] "
                                                              "on the dam site."},
         "cites no item": {"narrative": "Work on the site stopped after a protest and nothing says it restarted."},
@@ -145,6 +156,22 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
         op = {**good, **change}
         reasons, _ = so.check(op, p)
         assert any(want in r for r in reasons), (want, reasons)
+
+
+def test_a_claims_numbers_must_be_in_the_items_it_cites(opinion_db):
+    p = so.pack(KEY)
+    good = so.parse(reply(p))
+    status = next(it for it in p["items"] if it["kind"] == "status")
+    pct = status["text"].split("Physical progress ")[1].split("%")[0]            # in the pack, in the status line
+    neg = next(it for it in so.citable(p) if it["direction"] == "negative" and not it["stale"]
+               and pct not in it["text"] and NUM.search(it["text"]))
+    num = NUM.search(neg["text"])[0]                                              # a number in that item
+    assert so.claims("A [E1]. B 5 km, C [E2, E3]; D.") == [("A", ["E1"]), ("B 5 km, C", ["E2", "E3"])]
+    wrong = {**good, "narrative": f"Work stopped after a protest with {pct}% of the work done [{neg['id']}]."}
+    assert so.check(wrong, p)[0] == [f"'{pct}%' is not in {neg['id']}: cite the item it comes from, or leave it out"]
+    for fine in (f"Work was reported stopped at {num} on the site [{neg['id']}].",
+                 f"The report shows {pct}% done. Work stopped after a protest on the site [{neg['id']}]."):
+        assert so.check({**good, "narrative": fine}, p)[0] == [], fine     # cited where it is, or not cited at all
 
 
 def test_parse_forgives_case_brackets_and_extra_gaps():
@@ -171,8 +198,10 @@ def test_generate_retries_once_naming_the_reasons_then_caches(opinion_db, monkey
     assert out["tier"] == "Medium" and out["evidence"] == p["items"]
     assert out["vs_model"] == "higher" == so.vs_model("concern", "watch")      # computed: concern above Medium
     assert out["cited"] and set(out["cited"]) <= {it["id"] for it in p["items"]}
-    second = fake.calls[1]["messages"]
-    assert second[2]["role"] == "assistant" and "E99" in second[3]["content"] and "rejected" in second[3]["content"]
+    first, second = fake.calls[0]["messages"], fake.calls[1]["messages"]
+    assert len(second) == 2 and second[1]["content"].startswith(first[1]["content"])   # the same prompt, plus:
+    assert "E99" in second[1]["content"] and "rejected" in second[1]["content"]
+    assert (fake.calls[0]["temperature"], fake.calls[1]["temperature"]) == (so.TEMPERATURE, so.RETRY_TEMPERATURE)
     assert fake.calls[0]["max_tokens"] == so.MAX_TOKENS
     row = stored()[0]
     assert (row["project_key"], row["evidence_hash"], row["model"], row["prompt_version"]) == (
@@ -190,7 +219,7 @@ def test_rejected_twice_is_stored_and_never_served(opinion_db, monkeypatch):
     monkeypatch.setattr(client, "chat", fake)
     out = so.generate(KEY)
     assert out["status"] == "rejected" and out["attempts"] == 2 and len(fake.calls) == 2
-    assert any("97.5" in r for r in out["reasons"]) and "97.5" in fake.calls[1]["messages"][3]["content"]
+    assert any("97.5" in r for r in out["reasons"]) and "97.5" in fake.calls[1]["messages"][1]["content"]
     assert json.loads(stored()[0]["json"])["status"] == "rejected" and so.cached(KEY) is None
     malformed = FakeLLM("I think the project is fine.")
     monkeypatch.setattr(client, "chat", malformed)

@@ -23,7 +23,7 @@ KEY = "PRJ-000698"      # Medium: never in the batch, but it can be asked for by
 
 def fake_chat(calls):
     """client.chat answering as the evidence in the prompt allows: 'concern' on a current hold-up, else 'watch' on a
-    minor or stale issue, else 'none'; it cites the first item of that group."""
+    minor or old issue, else 'none'; it cites the first item of that group."""
     def chat(messages, max_tokens=400, temperature=0.2, model=None):
         calls.append(messages)
         user = messages[1]["content"]
@@ -36,7 +36,7 @@ def fake_chat(calls):
         ok = user.split("This evidence allows concern ")[1].split(".")[0]
         concern, cite = next(((c, groups[g][0]) for c, g in (("concern", "Current hold-ups"),
                                                                ("watch", "Minor current issues"),
-                                                               ("watch", "Stale items")) if g in groups and c in ok),
+                                                               ("watch", "Old items")) if g in groups and c in ok),
                              ("none", next(iter(groups.values()))[0]))
         return json.dumps({"concern": concern, "headline": "The evidence is read",
                            "narrative": f"The evidence on the project is read here [{cite}], and the latest report "

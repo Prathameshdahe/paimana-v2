@@ -13,8 +13,8 @@ busy past the waits, ends the run early (status 'partial', or 'error' when nothi
 their opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
 db.record_job('second_opinion', ...), with the counts per status and concern level.
 
-Speed on the laptop (qwen2.5-coder-14b, about 3 tokens/s out): an opinion is one call of about 1 minute, 2 with the
-retry, so a run of 15 takes about 15 to 30 minutes.
+Speed on the laptop (qwen2.5-coder-14b, about 3 to 4 tokens/s out): an opinion is one call of 20 to 40 s when LM
+Studio is free, about twice that with the retry, so a run of 15 takes about 5 to 15 minutes.
 """
 import os
 import threading

@@ -647,9 +647,11 @@ Concern = Literal["none", "watch", "concern"]
 
 
 class OpinionEvidence(CamelModel):
-    """One item of a second opinion's evidence pack (llm/second_opinion.py), cited as [E#]. direction context: the
-    status line and the model, never grounds for a concern; stale: an old report remark, a resolved or old research
-    fact, an old headline."""
+    """One item of a second opinion's evidence pack (llm/second_opinion.py), cited as [E#], in the pack's order:
+    current hold-ups, minor current issues, progress, old items, context. direction context: the status line, the
+    model and the web research summary, shown to the LLM without an id when there is other evidence (so not cited)
+    and never grounds for a concern; stale: an old report remark, a resolved or old research fact, progress dated
+    before the last 4 quarters, an old headline."""
     id: str
     kind: Literal["status", "model", "check", "parivesh", "land", "event", "research", "news"]
     date: str | None
