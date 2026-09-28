@@ -21,7 +21,8 @@ mock files stayed what they are, formula fixtures: we never trained, calibrated 
   data: 3,026 NH stretches and 1.58 million parcels. Its area tracks what Parliament says was acquired through the
   portal (93% of it, state-level correlation 0.977).
 - **Forest clearance is now visible at proposal level.** 10,025 proposals from the PARIVESH 1.0 online list, their
-  timeline pages, and a hand review of 1,312 automatic project matches, of which we kept 470 links.
+  timeline pages, and a hand review of 1,312 automatic project matches, of which we kept 470 links. The repo keeps
+  only the 377 linked proposals; the full pull stays out because many private applicants' titles name a person.
 - **None of it improves the model.** Every backtest of the new data as model features came out within noise or
   worse. The data is therefore evidence and display only: the risk-profile checklist, the External Factors page and
   the early notice. The model's inputs did not change.
@@ -43,7 +44,7 @@ individuals; a user agency name is kept only when it is plainly a government bod
 | Source | What we took | Access |
 |---|---|---|
 | Bhoomi Rashi Highway Register, whole state | parcels by state, NH, chainage, district, village, area and Publish Date, aggregated to stretches | public form, no login or captcha |
-| PARIVESH 1.0 online proposal list | 10,025 Form-A proposals received 2014 to mid-2022: state, number, name, category, area, status, Stage-I and Stage-II dates | public search, 30 rows a page, 2,970 rows per query (Road was split by state) |
+| PARIVESH 1.0 online proposal list | 10,025 Form-A proposals received 2014 to mid-2022: state, number, name, category, area, status, Stage-I and Stage-II dates (the repo keeps the 377 linked ones) | public search, 30 rows a page, 2,970 rows per query (Road was split by state) |
 | PARIVESH 1.0 timeline pages | the date each level received a proposal (150-proposal sample, plus the proposals our remarks name) | public page per proposal; some newer ones redirect to an error page |
 | PARIVESH 2.0 FC Authority Dashboard | proposals pending by state and level (31,474 on 27 Sep 2026) | public page, refreshed daily |
 | Lok Sabha answers | pending land-dispute cases, hectares acquired through Bhoomi Rashi, delayed NH projects by state; Railways land required and acquired by state | public PDFs on sansad.in |
@@ -143,15 +144,15 @@ with fewer than 15 projects are not measured.
 
 | Group | Garvit's band (months) | Projects | Extra push, next year (months) | Extra date-push risk (points) |
 |---|---|---|---|---|
-| Pending at state level | 15-32 | 53 | +0.1 (-2.7 to +3.2) | -5 (-16 to +6) |
+| Pending at state level | 15-32 | 53 | +0.1 (-2.6 to +3.1) | -5 (-16 to +6) |
 | Pending at FAC / MoEFCC | 28-63 | 13 | too few to measure | too few to measure |
-| Stage-I granted, awaiting Stage-II | 4-20 | 38 | +2.5 (+0.5 to +4.3) | +19 (+7 to +30) |
-| Stage-II or final approval | 0-16 | 28 | +3.0 (-1.2 to +8.5) | +16 (+1 to +31) |
-| Forest clearance awaited, no stage named | 15-32 | 105 | +1.5 (-0.7 to +3.5) | +12 (+4 to +21) |
-| Land 50-80% acquired | about 12-29 | 31 | +1.1 (-2.4 to +4.7) | +4 (-10 to +16) |
-| Land 80-95% acquired | about 3-12 | 24 | +0.3 (-3.3 to +4.2) | -5 (-20 to +8) |
+| Stage-I granted, awaiting Stage-II | 4-20 | 38 | +2.5 (+0.5 to +4.4) | +19 (+7 to +30) |
+| Stage-II or final approval | 0-16 | 28 | +3.0 (-1.1 to +8.6) | +16 (-1 to +31) |
+| Forest clearance awaited, no stage named | 15-32 | 105 | +1.5 (-0.7 to +3.5) | +12 (+4 to +20) |
+| Land 50-80% acquired | about 12-29 | 31 | +1.1 (-2.3 to +4.7) | +4 (-10 to +17) |
+| Land 80-95% acquired | about 3-12 | 24 | +0.3 (-3.6 to +4.3) | -5 (-20 to +9) |
 | Land complexity 4-5, km-matched stretch | none (factor only) | 69 | -1.2 (-3.3 to +0.5) | +3 (-6 to +11) |
-| Land complexity 4-5, NH or district link | none (factor only) | 184 | +0.3 (-0.8 to +1.1) | +6 (+1 to +11) |
+| Land complexity 4-5, NH or district link | none (factor only) | 184 | +0.3 (-0.7 to +1.2) | +6 (+1 to +11) |
 
 The full table, with every group, is in docs/EXTERNAL_DATA_CROSSCHECK.md. What it says:
 
@@ -159,8 +160,10 @@ The full table, with every group, is in docs/EXTERNAL_DATA_CROSSCHECK.md. What i
   the next year, so they are not the same quantity, but no group comes near his bands.
 - The clearest forest signal is Stage-I granted and Stage-II still awaited: about 2.5 extra months and 19 points
   more date-push risk. "Forest clearance awaited" with no stage adds 12 points. The groups were chosen after
-  looking at the data, so these are exploratory; after a Holm correction over all groups and both outcomes only
-  "awaited" stays below 0.05.
+  looking at the data, so these are exploratory. After a Holm correction over all groups and both outcomes both are
+  borderline and neither is clearly below 0.05: with 10,000 bootstrap replicates the adjusted date-push p is
+  0.05-0.12 for Stage-I and 0.12-0.16 for "awaited" across five seeds (at 1,000 replicates the seed alone decided
+  which of the two came under 0.05).
 - Land share has no measurable effect in any band. His 0.59 months per point of land still to acquire is not
   supported; the real slope is 0.00 to 0.19 months per point.
 - The land-complexity effect depends on the link. On the looser NH or district links it reproduces the earlier
@@ -170,7 +173,10 @@ The full table, with every group, is in docs/EXTERNAL_DATA_CROSSCHECK.md. What i
   label leaves 13 projects, so we show it as too few to measure.
 
 The checklist now prints the matching line next to each project's forest and land rows, with the quarter the stage
-or share is as of, and projects linked to PARIVESH also get the portal stage and the rule limit.
+or share is as of, and projects linked to PARIVESH also get the portal stage and the rule limit. A remark status
+reads as an expected delay only within four quarters of its report. Remark free text ends in 2023-Q2, so today every
+remark line is labelled as the status at the last report, and a remark forest stage that PARIVESH shows as finally
+approved gets no line.
 
 ## Norms against reality
 

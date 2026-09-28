@@ -154,9 +154,10 @@ def test_evidence_of_a_dimension_no_project_flags_is_null():
 
 
 def test_measured_hidden_delay_and_overdue_parivesh_reach_the_checklist():
-    remark_status = pd.DataFrame({"project_key": ["P2", "P3"], "fc_stage": ["central_fac_moef", "stage1_granted"],
-                                  "fc_stage_as_of": T("2023-04-01"), "la_pct": [np.nan, 60.0],
-                                  "la_pct_as_of": [pd.NaT, T("2022-10-01")]})
+    remark_status = pd.DataFrame({"project_key": ["P1", "P2", "P3"],
+                                  "fc_stage": ["stage1_granted", "central_fac_moef", "stage1_granted"],
+                                  "fc_stage_as_of": T("2023-04-01"), "la_pct": [np.nan, np.nan, 60.0],
+                                  "la_pct_as_of": [pd.NaT, pd.NaT, T("2026-04-01")]})
     ci = {"strata": "x", "n_rows": 50, "extra_months_lo": 1.0, "extra_months_hi": 9.0, "extra_push": 0.1,
           "extra_push_lo": -0.05, "extra_push_hi": 0.25}
     priors = pd.DataFrame([
@@ -167,19 +168,26 @@ def test_measured_hidden_delay_and_overdue_parivesh_reach_the_checklist():
          **ci | {"extra_months_lo": -2.0}},
         {"factor": "land_complexity", "group": "cx_0_3", "measurable": True, "n_projects": 212, "extra_months": -1.0,
          **ci | {"extra_months_lo": -2.0, "extra_months_hi": 0.1}}])
-    portal = pd.DataFrame({"project_key": ["P2"], "n_overdue": [1],
-                           "evidence": ["FP/XX/RAIL/1/2019 (a line, 70 ha): filed Jan 2019, no Stage-I after 90 months"]})
+    portal = pd.DataFrame({"project_key": ["P1", "P2"], "n_overdue": [0, 1], "n_final": [1, 0], "n_open": [0, 1],
+                           "evidence": ["FP/XX/ROAD/2/2018 (a road, 5 ha): filed Jan 2018, Stage-II Mar 2020",
+                                        "FP/XX/RAIL/1/2019 (a line, 70 ha): filed Jan 2019, no Stage-I after 90 "
+                                        "months"]})
     r = checklist(remark_status=remark_status, priors=priors, portal=portal)
     p2 = r.loc[("P2", "forest_clearance")]
     assert p2["state"] == "flagged" and p2["source"] == "parivesh_portal"
     assert p2["evidence"].startswith("open on PARIVESH past its rule limit; ")
     assert "; PARIVESH: FP/XX/RAIL/1/2019" in p2["evidence"]
-    assert p2["evidence"].endswith("expected hidden delay, pending at FAC / MoEFCC (as of 2023-Q2): too few projects "
-                                   "to measure (13, need 15)")
-    # P3's clearance is reported done: its old remark stage gets no prior; its land share does
-    assert "expected hidden delay" not in r.loc[("P3", "forest_clearance"), "evidence"]
+    # a remark stage over four quarters old is the last report's status, never an expected delay now
+    assert p2["evidence"].endswith("; forest stage at the last report (2023-Q2, not current): pending at FAC / "
+                                   "MoEFCC; projects at that stage then: too few projects to measure (13, need 15)")
+    assert "expected hidden delay" not in p2["evidence"]
+    # P1's PARIVESH proposal is final with nothing open: its older remark stage gets no prior at all
+    p1 = r.loc[("P1", "forest_clearance"), "evidence"]
+    assert "; PARIVESH: FP/XX/ROAD/2/2018" in p1 and "hidden delay" not in p1 and "last report" not in p1
+    # P3's clearance is reported done: its old remark stage gets no prior; its current land share does
+    assert "hidden delay" not in r.loc[("P3", "forest_clearance"), "evidence"]
     assert r.loc[("P3", "land_acquisition"), "evidence"].endswith(
-        "; land 60% acquired in the remarks (as of 2022-Q4): no measurable extra delay (+1 month over the next year, "
+        "; land 60% acquired in the remarks (as of 2026-Q2): no measurable extra delay (+1 month over the next year, "
         "CI -2 to +9; +10 pts date-push risk, CI -5 to +25; 31 projects)")
     # P1 is rated clear on its stretch: the complexity 0-3 prior; the unrated P2 gets none
     assert "measured hidden delay at the same deadline distance, complexity 0-3/5" in r.loc[

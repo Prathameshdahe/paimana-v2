@@ -193,6 +193,8 @@ export interface HiddenDelayMatch {
   basis: string
   /** the remark quarter it is as of; null for the land register */
   asOf: string | null
+  /** the status still describes the project at asof (a remark within 4 quarters, or the land register); else it is the last report's */
+  current: boolean
 }
 
 /** portal, proposals, remarkStatus and hiddenDelay are empty on the public page */

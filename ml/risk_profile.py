@@ -148,31 +148,43 @@ def quarter_label(t):
     return f"{t.year}-Q{(t.month - 1) // 3 + 1}" if pd.notna(t) else "n/a"
 
 
-def hidden_delay_lines(keys, remark_status, priors, land):
+def hidden_delay_lines(keys, remark_status, priors, land, portal, asof):
     """Per project, the measured hidden-delay phrases (pipeline/hidden_delay.py) for its land and forest rows:
-    (land line, forest line), empty strings where nothing applies. Remark stages and shares carry the quarter they
-    are as of (remarks end in 2023-Q2); a land complexity prior applies only to km-matched (rated) links."""
+    (land line, forest line), empty strings where nothing applies. The priors are hidden_delay.applicable's: a remark
+    stage or share carries its quarter and reads as an expected delay only while current (within LIVE_Q quarters of
+    asof); an older one is the status at the last report, with what projects at that status showed then. A remark
+    forest stage PARIVESH has overtaken (final approval, nothing open) drops out; a land complexity prior applies
+    only to km-matched (rated) links."""
     empty = pd.Series("", index=keys.index)
     if priors is None or remark_status is None:
         return empty, empty
     pri = priors.set_index(["factor", "group"])
     get = lambda f, g: hidden_delay.text(pri.loc[(f, g)] if (f, g) in pri.index else None)  # noqa: E731
     rs = remark_status.set_index("project_key").reindex(keys).set_axis(keys.index)
-    la = land.set_index("project_key").reindex(keys).set_axis(keys.index)
-    cx = la["la_state"].map({"flagged": "cx_4_5", "clear": "cx_0_3"})
-    lab = {"cx_4_5": "complexity 4+/5 on the linked stretch", "cx_0_3": "complexity 0-3/5 on the linked stretch"}
-    land_line = pd.Series([f"; measured hidden delay at the same deadline distance, {lab[g]}: "
-                           f"{get('land_complexity', g)}" if isinstance(g, str) else "" for g in cx], index=keys.index)
-    bands = pd.cut(rs["la_pct"], [b[0] for b in hidden_delay.LA_BANDS] + [100],
-                   labels=[b[2] for b in hidden_delay.LA_BANDS]).astype("str")
-    land_line += pd.Series([f"; land {v:.0f}% acquired in the remarks (as of {quarter_label(t)}): "
-                            f"{get('land_progress', b)}" if pd.notna(v) else ""
-                            for v, t, b in zip(rs["la_pct"], rs["la_pct_as_of"], bands)], index=keys.index)
-    groups = {k: (v[0], v[1]) for k, v in hidden_delay.FOREST_GROUPS.items()}
-    forest_line = pd.Series([f"; expected hidden delay, {groups[st][1]} (as of {quarter_label(t)}): "
-                             f"{get('forest_clearance', groups[st][0])}" if st in groups else ""
-                             for st, t in zip(rs["fc_stage"], rs["fc_stage_as_of"])], index=keys.index)
-    return land_line, forest_line
+    la = land.set_index("project_key")["la_state"].reindex(keys).set_axis(keys.index)
+    po = (portal if portal is not None else pd.DataFrame(columns=["project_key"])).set_index("project_key")
+    po = po.reindex(columns=["n_final", "n_open"]).reindex(keys).set_axis(keys.index)
+    fc_label = {v[0]: v[1] for v in hidden_delay.FOREST_GROUPS.values()}
+    cx_label = {"cx_4_5": "complexity 4+/5 on the linked stretch", "cx_0_3": "complexity 0-3/5 on the linked stretch"}
+    land_line, forest_line = [], []
+    for i in keys.index:
+        r = rs.loc[i]
+        ln, fl = "", ""
+        for f, g, _, as_of, current in hidden_delay.applicable(r.to_dict(), la.loc[i], po.loc[i].to_dict(), asof):
+            q, t = quarter_label(as_of), get(f, g)
+            if f == "land_complexity":
+                ln = f"; measured hidden delay at the same deadline distance, {cx_label[g]}: {t}" + ln
+            elif f == "land_progress":
+                ln += (f"; land {r['la_pct']:.0f}% acquired in the remarks (as of {q}): {t}" if current else
+                       f"; land {r['la_pct']:.0f}% acquired at the last report ({q}, not current); projects with that "
+                       f"share then: {t}")
+            else:
+                fl = (f"; expected hidden delay, {fc_label[g]} (as of {q}): {t}" if current else
+                      f"; forest stage at the last report ({q}, not current): {fc_label[g]}; projects at that stage "
+                      f"then: {t}")
+        land_line.append(ln)
+        forest_line.append(fl)
+    return pd.Series(land_line, index=keys.index), pd.Series(forest_line, index=keys.index)
 
 
 def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_status=None, priors=None, portal=None):
@@ -250,7 +262,7 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_s
     la_flag, la_clear = la["la_state"].eq("flagged"), la["la_state"].eq("clear")
     la_line = la["la_evidence"].fillna(la["la_match_method"].map(LA_REASON)).fillna("not in the land linkage")
     land_flag = opened | la_flag
-    land_prior, forest_prior = hidden_delay_lines(k, remark_status, priors, land)
+    land_prior, forest_prior = hidden_delay_lines(k, remark_status, priors, land, portal, asof)
     add("land_acquisition", land_flag, la_clear,
         pd.Series(np.where(opened, line + np.where(la["la_evidence"].notna(), "; " + la_line, ""),
                            la_line + "; " + line), index=cur.index) + land_prior,

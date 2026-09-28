@@ -517,16 +517,21 @@ const FACT_TONE = {
 } as const
 const INK = { critical: 'text-critical', warning: 'text-warning', stable: 'text-stable', muted: 'text-fg-muted' } as const
 
-/** the expected hidden delay of one matched prior, its n and CI behind a tip */
+/**
+ * The measured hidden delay of one matched prior, its n and CI behind a tip. A remark status still current at asof
+ * reads as the expected hidden delay; an older one only as what projects at that status showed, in muted ink.
+ */
 function DelayLine({ m }: { m: HiddenDelayMatch }) {
   const e = fromMatch(m)
   const v = verdict(e)
+  const q = m.asOf ? formatQuarter(m.asOf) : null
   return (
-    <div className="flex items-center gap-1.5 text-xs text-fg-muted">
-      <span>Expected hidden delay:</span>
-      <span className={cn('font-semibold', v.tone === 'muted' ? 'text-fg-muted' : INK[v.tone])}>{v.text}</span>
-      <InfoTip label="About the expected hidden delay">
-        <p className="font-medium">{m.label}, from the {m.basis}{m.asOf ? ` (as of ${formatQuarter(m.asOf)})` : ''}.</p>
+    <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+      <span>{m.current ? `Expected hidden delay${q ? ` (status as of ${q})` : ''}:` : `At the last report (${q ?? 'date unknown'}), projects at that status:`}</span>
+      <span className={cn('font-semibold', !m.current || v.tone === 'muted' ? 'text-fg-muted' : INK[v.tone])}>{v.text}</span>
+      <InfoTip label="About the measured hidden delay">
+        <p className="font-medium">{m.label}, from the {m.basis}{q ? ` (as of ${q})` : ''}.</p>
+        {!m.current && <p>That status is more than {LIVE_QUARTERS} quarters old, so it is not an expected delay for the coming year.</p>}
         {details(e).map((line) => <p key={line}>{line}</p>)}
       </InfoTip>
     </div>
@@ -555,18 +560,22 @@ function Fact({ icon: Icon, title, tone, lines, delays }: {
   )
 }
 
-function forestFact(x: ProjectDetail['external']) {
+function forestFact(x: ProjectDetail['external'], asof: string) {
   const po = x.portal
   const rs = x.remarkStatus
   const delays = x.hiddenDelay.filter((m) => m.factor === 'forest_clearance')
   const lines: React.ReactNode[] = []
   let tone: keyof typeof FACT_TONE = 'muted'
   if (po) {
+    // the roll-up reads open first, then final, then dropped (pipeline/parivesh.ROLLUP_RANK); a withdrawn part of
+    // a cleared project is counted, not shown as its stage
     tone = po.nOverdue > 0 ? 'critical' : po.nOpen > 0 ? 'warning' : po.nFinal > 0 ? 'stable' : 'muted'
+    const alsoDropped = po.nDropped > 0 && (po.nOpen > 0 || po.nFinal > 0)
     lines.push(
       <span className={cn('font-medium', INK[tone])}>
         PARIVESH: {po.stageAtAsof}
         {po.nOpen > 0 && po.monthsInStage !== null && ` for ${Math.round(po.monthsInStage)} mo${po.normMonths !== null ? ` (limit ${Math.round(po.normMonths)})` : ''}`}
+        {alsoDropped && ` · ${po.nDropped} more withdrawn or dropped`}
       </span>
     )
   }
@@ -583,12 +592,15 @@ function forestFact(x: ProjectDetail['external']) {
   }
   if (rs?.fcStage && rs.fcStageAsOf) {
     lines.push(`Report remarks: ${FC_STAGE[rs.fcStage] ?? rs.fcStage} (last known ${formatQuarter(rs.fcStageAsOf)})`)
-    if (!po) tone = rs.fcStage === 'stage2_granted' || rs.fcStage === 'approved_generic' ? 'stable' : 'warning'
+    // a remark status older than the live window is the last known state, so it takes no warning colour
+    if (!po && isLive(rs.fcStageAsOf, asof)) {
+      tone = rs.fcStage === 'stage2_granted' || rs.fcStage === 'approved_generic' ? 'stable' : 'warning'
+    }
   }
   return lines.length || delays.length ? { tone, lines, delays } : null
 }
 
-function landFact(x: ProjectDetail['external']) {
+function landFact(x: ProjectDetail['external'], asof: string) {
   const la = (x.land ?? {}) as Record<string, unknown>
   const rs = x.remarkStatus
   const delays = x.hiddenDelay.filter((m) => m.factor !== 'forest_clearance')
@@ -608,7 +620,7 @@ function landFact(x: ProjectDetail['external']) {
   }
   if (rs?.laPct !== null && rs?.laPct !== undefined && rs.laPctAsOf) {
     lines.push(`Report remarks: ${rs.laPct.toFixed(0)}% acquired (last known ${formatQuarter(rs.laPctAsOf)})`)
-    if (tone === 'muted') tone = rs.laPct < 95 ? 'warning' : 'stable'
+    if (tone === 'muted' && isLive(rs.laPctAsOf, asof)) tone = rs.laPct < 95 ? 'warning' : 'stable'
   } else if (rs?.laStep && rs.laStepAsOf) {
     lines.push(`Report remarks: last step ${LA_STEP[rs.laStep] ?? rs.laStep} (last known ${formatQuarter(rs.laStepAsOf)})`)
   }
@@ -630,8 +642,8 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
     return { f, n: ev.length, live: live.length, last }
   }).filter((x) => x.n > 0)
   const until = x.events.find((e) => e.remarksLastSeen)?.remarksLastSeen
-  const forest = forestFact(x)
-  const land = landFact(x)
+  const forest = forestFact(x, asof)
+  const land = landFact(x, asof)
 
   return (
     <Section title="External issues"

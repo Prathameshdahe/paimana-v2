@@ -24,8 +24,9 @@ completion moved by t + 4 quarters; y_date_push: moved 3 months or more).
 The estimate is the group-minus-baseline difference within strata, weighted by the group's rows (strata without
 baseline rows drop out; matched_share says how much of the group is kept). 95% CI: project-cluster bootstrap
 (projects resampled with replacement, group and baseline apart). Groups with fewer than MIN_PROJECTS projects are
-'too few to measure' and show no estimate. p is the two-sided bootstrap p; Holm adjusts it over every measured
-group and both outcomes. The groups were chosen after looking at the data, so all of this is exploratory.
+'too few to measure' and show no estimate. p is the two-sided bootstrap p (B replicates); Holm adjusts it over
+every measured group and both outcomes. The groups were chosen after looking at the data, so all of this is
+exploratory. applicable() says which priors describe a project today: a remark status only while it is current.
 """
 import sys
 import time
@@ -42,8 +43,12 @@ GOLD = ROOT / "dataset" / "gold"
 PK = ["project_key", "period"]
 START = pd.Timestamp("2014-01-01")
 MIN_PROJECTS = 15
-B = 1000
+# 10,000 replicates: Holm multiplies the smallest p by up to 24, so at 1,000 (p resolution 0.001) one replicate moved
+# an adjusted p across 0.05 and the seed decided which group 'survived'
+B = 10_000
+CHUNK = 1_000
 SEED = 0
+LIVE_Q = 4  # pipeline/gold.OPEN_MAX_AGE_Q: a remark status describes the project today within this many quarters
 # remark forest stage -> (group, label, Garvit's mock status and its hidden-delay band in months: min-max, median)
 FOREST_GROUPS = {
     "applied": ("fc_applied", "applied or preparing the proposal", "Pending Clearances", "15-32 (median 25.5)"),
@@ -161,9 +166,13 @@ def stratified_diff(g, b, col, strata, rng, n_boot=B):
     ok = (gc > 0) & (bc > 0)
     matched = float(gc[ok].sum() / gc.sum()) if gc.sum() else np.nan
     base_mean = float((bs[ok] / bc[ok] * gc[ok]).sum() / gc[ok].sum()) if ok.any() else np.nan
-    wg = rng.multinomial(len(GS), np.full(len(GS), 1 / len(GS)), size=n_boot)
-    wb = rng.multinomial(len(BS), np.full(len(BS), 1 / len(BS)), size=n_boot)
-    res = _est(wg @ GS, wg @ GC, wb @ BS, wb @ BC)
+    res = []
+    for k in range(0, n_boot, CHUNK):  # chunks keep the replicate weight matrices small
+        m = min(CHUNK, n_boot - k)
+        wg = rng.multinomial(len(GS), np.full(len(GS), 1 / len(GS)), size=m)
+        wb = rng.multinomial(len(BS), np.full(len(BS), 1 / len(BS)), size=m)
+        res.append(_est(wg @ GS, wg @ GC, wb @ BS, wb @ BC))
+    res = np.concatenate(res)
     res = res[~np.isnan(res)]
     lo, hi = np.percentile(res, [2.5, 97.5])
     p = min(1.0, 2 * min((res <= 0).mean(), (res >= 0).mean()))
@@ -214,6 +223,32 @@ def priors(d, n_boot=B, seed=SEED):
     adj = holm(both)
     t["holm_months"], t["holm_push"] = adj.iloc[:len(t)].to_numpy(), adj.iloc[len(t):].to_numpy()
     return t
+
+
+def applicable(remarks, la_state, portal, asof):
+    """The priors that apply to one project at asof, as (factor, group, basis, as_of, current): the forest stage and
+    the land share the remarks last gave, and the land complexity of a km-matched (rated) link. A remark status is
+    current only within LIVE_Q calendar quarters of asof (remark free text ends in 2023-Q2, so none is in 2026); an
+    older one is what the project looked like at its last report, never an expected delay now. The remark forest
+    stage drops out once PARIVESH shows every linked proposal closed with a final approval (portal: n_final, n_open).
+    remarks and portal are dicts (a remark_status and an external_fc_portal row) or None."""
+    rs, po = remarks or {}, portal or {}
+    since = pd.Timestamp(asof) - pd.DateOffset(months=3 * LIVE_Q)
+    current = lambda t: bool(pd.notna(t) and pd.Timestamp(t) > since)  # noqa: E731
+    cleared = (po.get("n_final") or 0) > 0 and (po.get("n_open") or 0) == 0
+    out = []
+    st, v = rs.get("fc_stage"), rs.get("la_pct")
+    if st in FOREST_GROUPS and not cleared:
+        out.append(("forest_clearance", FOREST_GROUPS[st][0], "forest stage in the report remarks",
+                    rs.get("fc_stage_as_of"), current(rs.get("fc_stage_as_of"))))
+    if v is not None and pd.notna(v):  # pd.cut bins of frame(): (lo, hi]
+        band = next((b[2] for b in LA_BANDS if b[0] < v <= b[1]), None)
+        out.append(("land_progress", band, "land share acquired in the report remarks", rs.get("la_pct_as_of"),
+                    current(rs.get("la_pct_as_of"))))
+    cx = {"flagged": "cx_4_5", "clear": "cx_0_3"}.get(la_state)
+    if cx:
+        out.append(("land_complexity", cx, "land complexity on the km-matched NH stretch", None, True))
+    return out
 
 
 def text(r, as_of=None):

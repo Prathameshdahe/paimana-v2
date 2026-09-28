@@ -26,7 +26,7 @@ from pathlib import Path
 import duckdb
 
 from pipeline import external
-from pipeline.hidden_delay import FOREST_GROUPS, LA_BANDS
+from pipeline.hidden_delay import LIVE_Q, applicable
 from pipeline.identity.config import IdentityConfig
 from pipeline.identity.identity_map import IdentityMap
 
@@ -427,6 +427,7 @@ def project(s, key):
     flagged = {r["dimension"] for r in risk if r["state"] == "flagged"}
     land = _one(s, "SELECT * EXCLUDE (project_key) FROM land WHERE project_key = ?", [key])
     remarks = _one(s, "SELECT * EXCLUDE (project_key) FROM rstat WHERE project_key = ?", [key])
+    portal = _one(s, "SELECT * EXCLUDE (project_key, evidence) FROM portal WHERE project_key = ?", [key])
     return {
         "key": key, "master": master, "latest": latest, "scores": scores,
         "flags": cur["flags"] if cur else [],
@@ -440,11 +441,11 @@ def project(s, key):
             "composite": _one(s, "SELECT * EXCLUDE (project_key) FROM composite WHERE project_key = ?", [key]),
             "events": _rows(s, """SELECT * EXCLUDE (project_key, state, sector) FROM events WHERE project_key = ?
                 ORDER BY status DESC, last_seen DESC, category""", [key]),
-            "portal": _one(s, "SELECT * EXCLUDE (project_key, evidence) FROM portal WHERE project_key = ?", [key]),
+            "portal": portal,
             "proposals": _rows(s, """SELECT * EXCLUDE (project_key, name, evidence) FROM fcprop WHERE project_key = ?
                 ORDER BY received""", [key]),
             "remark_status": remarks,
-            "hidden_delay": hidden_delay(land, remarks),
+            "hidden_delay": hidden_delay(land, remarks, portal, s["asof"]),
         },
         "provenance": {
             "asof": s["asof"], "model_version": s["model_version"] if cur else None,
@@ -466,22 +467,14 @@ def _priors(s):
             for r in _rows(s, "SELECT * FROM priors")}
 
 
-def hidden_delay(land: dict | None, remarks: dict | None) -> list[dict]:
-    """The measured hidden-delay priors that apply to one project, as ml/risk_profile.hidden_delay_lines picks them:
-    the forest stage and the land share the remarks last gave (with the quarter they are as of) and the land
-    complexity of a km-matched (rated) link; basis says which."""
-    pri, out = _priors(), []
-    rs = remarks or {}
-    if rs.get("fc_stage") in FOREST_GROUPS:
-        out.append(("forest_clearance", FOREST_GROUPS[rs["fc_stage"]][0], "forest stage in the report remarks",
-                    rs["fc_stage_as_of"]))
-    if rs.get("la_pct") is not None:  # pd.cut bins of the risk profile: (lo, hi]
-        band = next((b[2] for b in LA_BANDS if b[0] < rs["la_pct"] <= b[1]), None)
-        out.append(("land_progress", band, "land share acquired in the report remarks", rs["la_pct_as_of"]))
-    cx = {"flagged": "cx_4_5", "clear": "cx_0_3"}.get((land or {}).get("la_state"))
-    if cx:
-        out.append(("land_complexity", cx, "land complexity on the km-matched NH stretch", None))
-    return [{**pri[(f, g)], "basis": basis, "as_of": as_of} for f, g, basis, as_of in out if (f, g) in pri]
+def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, asof) -> list[dict]:
+    """The measured hidden-delay priors that apply to one project (pipeline/hidden_delay.applicable, as the
+    checklist picks them): basis says what it was matched on, as_of the remark quarter, current whether that status
+    still describes the project at asof (else it is the status at the last report, not an expected delay)."""
+    pri = _priors()
+    return [{**pri[(f, g)], "basis": basis, "as_of": as_of, "current": cur}
+            for f, g, basis, as_of, cur in applicable(remarks, (land or {}).get("la_state"), portal, asof)
+            if (f, g) in pri]
 
 
 def public_project(d: dict) -> dict:
@@ -680,17 +673,19 @@ def external_summary(s, scope=None):
 
 
 def _priors_in_scope(s, block, inscope, params):
-    """The measured priors with n_current: how many current projects in scope each one applies to (hidden_delay);
-    None for the NH/district grouping, which the checklist does not rate."""
-    rows = _rows(s, f"""SELECT r.fc_stage, r.fc_stage_as_of, r.la_pct, r.la_pct_as_of, l.la_state
-        FROM cur c LEFT JOIN rstat r USING (project_key) LEFT JOIN land l USING (project_key) WHERE c.{inscope}""",
-                 params)
-    n = Counter((h["factor"], h["group"]) for r in rows for h in hidden_delay({"la_state": r["la_state"]}, r))
+    """The measured priors with n_current: how many current projects in scope each one describes today
+    (hidden_delay with current set; a remark status older than LIVE_Q quarters does not count); None for the
+    NH/district grouping, which the checklist does not rate."""
+    rows = _rows(s, f"""SELECT r.fc_stage, r.fc_stage_as_of, r.la_pct, r.la_pct_as_of, l.la_state, p.n_final,
+            p.n_open
+        FROM cur c LEFT JOIN rstat r USING (project_key) LEFT JOIN land l USING (project_key)
+        LEFT JOIN portal p USING (project_key) WHERE c.{inscope}""", params)
+    n = Counter((h["factor"], h["group"]) for r in rows
+                for h in hidden_delay({"la_state": r["la_state"]}, r, r, s["asof"]) if h["current"])
     return {**block, "rows": [{**r, "n_current": None if r["factor"] == "land_complexity_nh"
                                else n[(r["factor"], r["group"])]} for r in block["rows"]]}
 
 
-LIVE_Q = 4  # pipeline/gold.OPEN_MAX_AGE_Q: a remark flag counts as open today within this many quarters of its mention
 REMARK_CATS = "'land', 'forest_env', 'litigation', 'contractor'"  # ml/risk_profile.EVENT_DIMENSION
 STATE_KEY = "trim(regexp_replace(replace(upper({}), '&', ' AND '), '[^A-Z]+', ' ', 'g'))"  # external.state_key
 

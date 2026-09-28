@@ -475,7 +475,7 @@ function HiddenDelayPanel({ s }: { s: ExternalSummary }) {
   return (
     <Card
       title="Measured hidden delay"
-      info={<>{h.note} Each tile: the extra completion push over the next 4 quarters where its 95% interval excludes zero (else the extra chance of a 3+ month push, else none measurable). &ldquo;Current&rdquo;: projects in view it applies to, on their last remark status.</>}
+      info={<>{h.note} Each tile: the extra completion push over the next 4 quarters where its 95% interval excludes zero (else the extra chance of a 3+ month push, else none measurable). &ldquo;Current&rdquo;: projects in view whose status is current today. A remark stage or share counts only within {s.remarkFlags?.live_window_quarters ?? 4} quarters of its report, and remark free text ends in {s.remarkFlags?.last_remark_quarter ?? '2023'}, so the remark groups count none now; a forest stage PARIVESH shows as finally approved does not count either.</>}
       titleRight={<span>measured on real projects · replaces the guessed bands</span>}
     >
       <div className="divide-y divide-border-subtle">

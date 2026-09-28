@@ -2,7 +2,7 @@
 import asyncio
 import sys
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -175,11 +175,19 @@ def test_parivesh_details_and_hidden_delay_are_redacted_for_the_public(client):
 
 
 def test_hidden_delay_matches_the_risk_profile_groups():
-    got = serving.hidden_delay({"la_state": "flagged"}, {"fc_stage": "stage2_pending", "fc_stage_as_of": None,
-                                                         "la_pct": 50.0, "la_pct_as_of": None})
-    assert [(h["factor"], h["group"]) for h in got] == [
-        ("forest_clearance", "fc_stage1"), ("land_progress", "la_lt50"), ("land_complexity", "cx_4_5")]
-    assert serving.hidden_delay({"la_state": "possible"}, {"fc_stage": "not_applicable", "la_pct": None}) == []
+    asof = date(2026, 7, 1)
+    rs = {"fc_stage": "stage2_pending", "fc_stage_as_of": date(2023, 4, 1), "la_pct": 50.0,
+          "la_pct_as_of": date(2026, 4, 1)}
+    got = serving.hidden_delay({"la_state": "flagged"}, rs, None, asof)
+    # a remark status older than four quarters is the last report's, not a current one
+    assert [(h["factor"], h["group"], h["current"]) for h in got] == [
+        ("forest_clearance", "fc_stage1", False), ("land_progress", "la_lt50", True),
+        ("land_complexity", "cx_4_5", True)]
+    # PARIVESH shows a final approval and nothing open: the remark forest stage no longer applies
+    assert [h["factor"] for h in serving.hidden_delay(None, rs, {"n_final": 1, "n_open": 0}, asof)] == ["land_progress"]
+    assert len(serving.hidden_delay(None, rs, {"n_final": 1, "n_open": 1}, asof)) == 2
+    assert serving.hidden_delay({"la_state": "possible"}, {"fc_stage": "not_applicable", "la_pct": None}, None,
+                                asof) == []
 
 
 def test_bottlenecks_matrix_and_memos_in_scope(client, scopes):
