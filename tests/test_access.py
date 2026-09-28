@@ -150,6 +150,36 @@ def test_scoped_external_summary_adds_up(client, scopes):
     keys = serving.scope_keys(("ministry", scopes["ministries"][0]["name"]))
     top = parts[0]["earlyNotice"]["top"]
     assert top and all(r["project_key"] in keys and r["evidence"] for r in top)
+    # the PARIVESH open list, remark staleness and land states are recounted in scope too
+    assert sum(p["portal"]["n_open"] for p in parts) == full["portal"]["n_open"] == len(full["portal"]["open_list"])
+    assert all(r["project_key"] in keys for r in parts[0]["portal"]["open_list"])
+    assert sum(p["remarkFlags"]["n_projects_stale"] for p in parts) == full["remarkFlags"]["n_projects_stale"]
+    rated = [sum(s["n_rated"] for s in x["landCoverage"]["by_state"]) for x in [full, *parts]]
+    assert rated[0] == sum(rated[1:]) == full["coverage"]["land_linked"]
+
+
+def test_parivesh_details_and_hidden_delay_are_redacted_for_the_public(client):
+    full = client.get("/api/external/summary", headers=IPMD).json()["portal"]
+    pub = client.get("/api/external/summary").json()["portal"]
+    assert full["open_list"] and full["cases"] and pub["n_open"] == full["n_open"]
+    assert pub["open_list"] == [] and pub["cases"] == [] and all(r["evidence"] == [] for r in pub["top_overdue"])
+    pub_notice = client.get("/api/external/summary").json()["earlyNotice"]["top"]
+    assert pub_notice and all(r["evidence"] == [] and r["factors"] for r in pub_notice)
+    key = next(c["project_key"] for c in full["cases"] if c["current"])  # a remark-named PARIVESH proposal
+    ext = client.get(f"/api/projects/{key}", headers=IPMD).json()["external"]
+    assert ext["portal"]["stageAtAsof"] and ext["proposals"][0]["proposalNo"] and ext["remarkStatus"]
+    assert ext["hiddenDelay"] and all(h["basis"] for h in ext["hiddenDelay"])
+    pub_ext = client.get(f"/api/projects/{key}").json()["external"]
+    assert pub_ext["portal"] is None and pub_ext["remarkStatus"] is None
+    assert pub_ext["proposals"] == [] and pub_ext["hiddenDelay"] == []
+
+
+def test_hidden_delay_matches_the_risk_profile_groups():
+    got = serving.hidden_delay({"la_state": "flagged"}, {"fc_stage": "stage2_pending", "fc_stage_as_of": None,
+                                                         "la_pct": 50.0, "la_pct_as_of": None})
+    assert [(h["factor"], h["group"]) for h in got] == [
+        ("forest_clearance", "fc_stage1"), ("land_progress", "la_lt50"), ("land_complexity", "cx_4_5")]
+    assert serving.hidden_delay({"la_state": "possible"}, {"fc_stage": "not_applicable", "la_pct": None}) == []
 
 
 def test_bottlenecks_matrix_and_memos_in_scope(client, scopes):

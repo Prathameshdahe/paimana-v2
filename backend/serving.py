@@ -25,6 +25,8 @@ from pathlib import Path
 
 import duckdb
 
+from pipeline import external
+from pipeline.hidden_delay import FOREST_GROUPS, LA_BANDS
 from pipeline.identity.config import IdentityConfig
 from pipeline.identity.identity_map import IdentityMap
 
@@ -125,14 +127,26 @@ def _load() -> dict:
         "land_pairs": GOLD / "external_land_links.parquet", "composite": GOLD / "external_composite.parquet",
         "scen": GOLD / f"scenarios_{ym}.parquet", "ana": GOLD / f"analogues_{ym}.parquet",
         "scurve": GOLD / "sector_scurve.parquet",
+        # PARIVESH links (per project), the remark-named proposals, the remark status with its as-of quarters and
+        # the measured hidden-delay priors (pipeline/parivesh.py, pipeline/external.py, pipeline/hidden_delay.py)
+        "portal": GOLD / "external_fc_portal.parquet", "fcprop": GOLD / "fc_proposal_status.parquet",
+        "rstat": GOLD / "remark_status.parquet",
     }
     for name, path in files.items():
         # sorted by key so a one-project filter skips most row groups
         order = "ORDER BY project_key" if name not in ("scurve",) else ""
         con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}') {order}")
     for name, path in (("agencies", GOLD / "agency_matrix.parquet"), ("bottlenecks", GOLD / "bottlenecks.parquet"),
-                       ("bmembers", GOLD / "bottleneck_members.parquet")):
+                       ("bmembers", GOLD / "bottleneck_members.parquet"),
+                       ("priors", GOLD / "hidden_delay_priors.parquet")):
         con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}')")
+    # the Bhoomi Rashi register per state (every stretch table load_land reads, newest pull first)
+    la = external.load_land()
+    register = la.assign(k=external.state_key(la["state"])).groupby("k", as_index=False).agg(  # noqa: F841 (SQL)
+        stretches=("highway_name", "size"), parcels=("num_parcels", "sum"), area_ha=("total_area_ha", "sum"),
+        last_notif=("last_notif_date", "max"))
+    con.execute("CREATE TABLE register AS SELECT k, stretches, parcels, area_ha, last_notif::DATE AS last_notif "
+                "FROM register")
     con.execute(f"CREATE TABLE amap AS SELECT * FROM read_csv_auto('{_posix(GOLD / 'agency_map.csv')}')")
     con.execute(f"""CREATE TABLE review AS SELECT project_key, count(*) AS n_rows, min(period) AS first_period,
         max(period) AS last_period FROM read_parquet('{_posix(SILVER / "observations_review.parquet")}') GROUP BY 1""")
@@ -345,7 +359,8 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
             FROM cur{where} GROUP BY 1 ORDER BY capital_cr DESC NULLS LAST, n DESC""", params)
 
     top = _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, tier, p_any_2q,
-        anticipated_cost_cr FROM cur{where} ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params)
+        anticipated_cost_cr, stagnation_override AS override FROM cur{where}
+        ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params)
     return {
         "asof": s["asof"], "filters": {"ministry": ministry, "sector": sector, "state": state_, "tier": tier},
         "kpis": k,
@@ -404,6 +419,8 @@ def project(s, key):
                           "under review; they are not in the numbers shown.")
     risk = _rows(s, "SELECT dimension, state, evidence, source, as_of_date FROM rp WHERE project_key = ?", [key])
     flagged = {r["dimension"] for r in risk if r["state"] == "flagged"}
+    land = _one(s, "SELECT * EXCLUDE (project_key) FROM land WHERE project_key = ?", [key])
+    remarks = _one(s, "SELECT * EXCLUDE (project_key) FROM rstat WHERE project_key = ?", [key])
     return {
         "key": key, "master": master, "latest": latest, "scores": scores,
         "flags": cur["flags"] if cur else [],
@@ -411,12 +428,17 @@ def project(s, key):
         "top_risks_plain": [text for dim, text in PLAIN_RISK.items() if dim in flagged][:3],
         "external": {
             "fc": _one(s, "SELECT * EXCLUDE (project_key) FROM fc WHERE project_key = ?", [key]),
-            "land": _one(s, "SELECT * EXCLUDE (project_key) FROM land WHERE project_key = ?", [key]),
+            "land": land,
             "land_pairs": _rows(s, """SELECT * EXCLUDE (project_key) FROM land_pairs WHERE project_key = ?
                 ORDER BY nh, stretch_id""", [key]),
             "composite": _one(s, "SELECT * EXCLUDE (project_key) FROM composite WHERE project_key = ?", [key]),
             "events": _rows(s, """SELECT * EXCLUDE (project_key, state, sector) FROM events WHERE project_key = ?
                 ORDER BY status DESC, last_seen DESC, category""", [key]),
+            "portal": _one(s, "SELECT * EXCLUDE (project_key, evidence) FROM portal WHERE project_key = ?", [key]),
+            "proposals": _rows(s, """SELECT * EXCLUDE (project_key, name, evidence) FROM fcprop WHERE project_key = ?
+                ORDER BY received""", [key]),
+            "remark_status": remarks,
+            "hidden_delay": hidden_delay(land, remarks),
         },
         "provenance": {
             "asof": s["asof"], "model_version": s["model_version"] if cur else None,
@@ -428,10 +450,39 @@ def project(s, key):
     }
 
 
+PRIOR_COLS = ("factor", "group", "label", "n_rows", "n_projects", "measurable", "extra_months", "extra_months_lo",
+              "extra_months_hi", "extra_push", "extra_push_lo", "extra_push_hi", "holm_months", "holm_push")
+
+
+@cached
+def _priors(s):
+    return {(r["factor"], r["group"]): {c: r[c] for c in PRIOR_COLS}
+            for r in _rows(s, "SELECT * FROM priors")}
+
+
+def hidden_delay(land: dict | None, remarks: dict | None) -> list[dict]:
+    """The measured hidden-delay priors that apply to one project, as ml/risk_profile.hidden_delay_lines picks them:
+    the forest stage and the land share the remarks last gave (with the quarter they are as of) and the land
+    complexity of a km-matched (rated) link; basis says which."""
+    pri, out = _priors(), []
+    rs = remarks or {}
+    if rs.get("fc_stage") in FOREST_GROUPS:
+        out.append(("forest_clearance", FOREST_GROUPS[rs["fc_stage"]][0], "forest stage in the report remarks",
+                    rs["fc_stage_as_of"]))
+    if rs.get("la_pct") is not None:  # pd.cut bins of the risk profile: (lo, hi]
+        band = next((b[2] for b in LA_BANDS if b[0] < rs["la_pct"] <= b[1]), None)
+        out.append(("land_progress", band, "land share acquired in the report remarks", rs["la_pct_as_of"]))
+    cx = {"flagged": "cx_4_5", "clear": "cx_0_3"}.get((land or {}).get("la_state"))
+    if cx:
+        out.append(("land_complexity", cx, "land complexity on the km-matched NH stretch", None))
+    return [{**pri[(f, g)], "basis": basis, "as_of": as_of} for f, g, basis, as_of in out if (f, g) in pri]
+
+
 def public_project(d: dict) -> dict:
     """The project page for the public: no SHAP drivers, quantile intervals, identity review, risk evidence lines
-    (model probabilities, tier cuts) or provenance internals (model, data versions, source documents); tier,
-    progress, cost, completion, risk states and top risks stay."""
+    (model probabilities, tier cuts), PARIVESH proposal details, remark status or measured hidden delay, or
+    provenance internals (model, data versions, source documents); tier, progress, cost, completion, risk states
+    and top risks stay."""
     no_src = {"source_doc_id": None, "source_page": None}
     scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
                               **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
@@ -439,7 +490,21 @@ def public_project(d: dict) -> dict:
     return {**d, "scores": scores, "provenance": prov, "review": None,
             "latest": d["latest"] and {**d["latest"], **no_src},
             "risk_profile": [{**r, "evidence": None} for r in d["risk_profile"]],
-            "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]]}}
+            "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]],
+                         "portal": None, "proposals": [], "remark_status": None, "hidden_delay": []}}
+
+
+def public_external(d: dict) -> dict:
+    """The External Factors summary for the public, redacted as the public project page: the counts, factors and
+    measured priors stay; the evidence lines of every project card (risk-profile text with PARIVESH proposals and
+    hidden delay) and the per-project PARIVESH lists (open list, the remark-named proposals) go."""
+    def bare(cards):
+        return [{**r, "evidence": []} for r in cards]
+
+    po = d.get("portal")
+    return {**d, "factors": {n: {**f, "top": bare(f["top"])} for n, f in d["factors"].items()},
+            "early_notice": {**d["early_notice"], "top": bare(d["early_notice"]["top"])},
+            "portal": po and {**po, "open_list": [], "cases": [], "top_overdue": bare(po["top_overdue"])}}
 
 
 def public_page(page: dict) -> dict:
@@ -583,10 +648,110 @@ def external_summary(s, scope=None):
         FROM cur LEFT JOIN land l USING (project_key) LEFT JOIN fc f USING (project_key)
         LEFT JOIN composite c USING (project_key)
         WHERE project_key IN (SELECT project_key FROM cur WHERE {sql})""", params)
+    stalled = {r["k"] for r in _rows(s, "SELECT project_key AS k FROM cur WHERE stagnation_override")}
+
+    def mark(cards):  # the stagnation badge and the flagged factors (from the evidence lines) on every card
+        return [{**r, "stalled": r["project_key"] in stalled,
+                 "factors": list(dict.fromkeys(ln.split(": ", 1)[0] for ln in r.get("evidence") or []))}
+                for r in cards]
+
+    inscope = f"project_key IN (SELECT project_key FROM cur WHERE {sql})"
+    portal = summary.get("portal") and {**summary["portal"], **_portal_block(s, inscope, params, scope, mark),
+                                        "top_overdue": mark(summary["portal"]["top_overdue"])}
     return {**summary, "coverage": cov, "caveats": CAVEATS[:2] + [
         f"Land is rated for {cov['land_linked']} of {cov['n_current']} current projects ({cov['land_possible']} more "
         f"have a possible link, not rated) and forest area is known for {cov['forest_area_known']}; everything else "
-        "is unknown, not clear."]}
+        "is unknown, not clear."],
+        "factors": {n: {**f, "top": mark(f["top"])} for n, f in summary["factors"].items()},
+        "early_notice": {**summary["early_notice"], "top": mark(summary["early_notice"]["top"])},
+        "portal": portal,
+        "remark_flags": summary.get("remark_flags") and {**summary["remark_flags"],
+                                                         **_remark_block(s, inscope, params)},
+        "land_coverage": summary.get("land_coverage") and {**summary["land_coverage"],
+                                                           "by_state": _land_states(s, inscope, params)},
+        "hidden_delay_priors": summary.get("hidden_delay_priors") and _priors_in_scope(
+            s, summary["hidden_delay_priors"], inscope, params)}
+
+
+def _priors_in_scope(s, block, inscope, params):
+    """The measured priors with n_current: how many current projects in scope each one applies to (hidden_delay);
+    None for the NH/district grouping, which the checklist does not rate."""
+    rows = _rows(s, f"""SELECT r.fc_stage, r.fc_stage_as_of, r.la_pct, r.la_pct_as_of, l.la_state
+        FROM cur c LEFT JOIN rstat r USING (project_key) LEFT JOIN land l USING (project_key) WHERE c.{inscope}""",
+                 params)
+    n = Counter((h["factor"], h["group"]) for r in rows for h in hidden_delay({"la_state": r["la_state"]}, r))
+    return {**block, "rows": [{**r, "n_current": None if r["factor"] == "land_complexity_nh"
+                               else n[(r["factor"], r["group"])]} for r in block["rows"]]}
+
+
+LIVE_Q = 4  # pipeline/gold.OPEN_MAX_AGE_Q: a remark flag counts as open today within this many quarters of its mention
+REMARK_CATS = "'land', 'forest_env', 'litigation', 'contractor'"  # ml/risk_profile.EVENT_DIMENSION
+STATE_KEY = "trim(regexp_replace(replace(upper({}), '&', ' AND '), '[^A-Z]+', ' ', 'g'))"  # external.state_key
+
+
+def _remark_block(s, inscope, params):
+    """Open remark events of the current projects in scope, live (last mention within LIVE_Q calendar quarters of
+    asof) against stale, per category with the newest last mention of the stale ones (ml/risk_profile.remark_flags
+    recounted in scope)."""
+    rows = _rows(s, f"""WITH e AS (
+            SELECT project_key, category, last_seen,
+                   last_seen > DATE '{s["asof"]}' - INTERVAL {3 * LIVE_Q} MONTH AS live
+            FROM events WHERE status = 'open' AND category IN ({REMARK_CATS}) AND {inscope})
+        SELECT category, count(DISTINCT project_key) AS open,
+               count(DISTINCT project_key) FILTER (WHERE live) AS live,
+               count(DISTINCT project_key) FILTER (WHERE NOT live) AS stale,
+               max(last_seen) FILTER (WHERE NOT live) AS last_known
+        FROM e GROUP BY GROUPING SETS ((category), ()) ORDER BY category NULLS FIRST""", params)
+    total = next((r for r in rows if r["category"] is None), {"open": 0, "live": 0, "stale": 0})
+    return {"n_projects_open_by_remark_rule": total["open"], "n_projects_live": total["live"],
+            "n_projects_stale": total["stale"],
+            "by_category": {r["category"]: {k: r[k] for k in ("open", "live", "last_known")}
+                            for r in rows if r["category"]}}
+
+
+def _portal_block(s, inscope, params, scope, mark):
+    """PARIVESH-linked current projects in scope: the counts of ml/risk_profile.portal_summary, every still-open one
+    (overdue first, then longest in its stage) and the proposals the remarks name (past projects too)."""
+    n = _one(s, f"""SELECT count(*) AS n_linked, count(*) FILTER (WHERE p.n_open > 0) AS n_open,
+            count(*) FILTER (WHERE p.n_overdue > 0) AS n_overdue,
+            count(*) FILTER (WHERE p.open_not_in_report) AS n_open_not_in_report,
+            round(coalesce(sum(c.anticipated_cost_cr) FILTER (WHERE p.n_open > 0), 0), 1) AS capital_open_cr
+        FROM portal p JOIN cur c USING (project_key) WHERE p.{inscope}""", params)
+    by_stage = {r["stage_at_asof"]: r["n"] for r in _rows(s, f"""SELECT stage_at_asof, count(*) AS n FROM portal
+        WHERE {inscope} GROUP BY 1 ORDER BY n DESC, 1""", params)}
+    open_list = _rows(s, f"""SELECT {", ".join("c." + k for k in CARD)}, p.stage_at_asof, p.months_in_stage,
+            p.norm_months, p.n_overdue > 0 AS overdue, p.oldest_open_received, p.open_not_in_report, p.n_open,
+            p.proposals
+        FROM portal p JOIN cur c USING (project_key) WHERE p.n_open > 0 AND p.{inscope}
+        ORDER BY overdue DESC, p.months_in_stage DESC NULLS LAST, c.anticipated_cost_cr DESC NULLS LAST""", params)
+    keys, cases = scope_keys(scope) if scope else None, {}
+    for r in _rows(s, """SELECT f.* EXCLUDE (name, evidence), m.project_name, c.project_key IS NOT NULL AS current
+            FROM fcprop f LEFT JOIN master m USING (project_key) LEFT JOIN cur c USING (project_key)
+            ORDER BY f.project_key, f.received"""):
+        if keys is None or r["project_key"] in keys:
+            c = cases.setdefault(r["project_key"], {k: r[k] for k in ("project_key", "project_name", "current")}
+                                 | {"proposals": []})
+            c["proposals"].append({k: v for k, v in r.items() if k not in c})
+    return {**n, "by_stage": by_stage, "open_list": mark(open_list), "cases": list(cases.values())}
+
+
+def _land_states(s, inscope, params):
+    """Per state: the Bhoomi Rashi register (stretches, parcels, hectares, latest notification) and the current
+    road projects in scope, rated (km match), flagged (complexity 4+) and possible (NH or district only)."""
+    return _rows(s, f"""WITH p AS (
+            SELECT {STATE_KEY.format("c.state")} AS k, any_value(c.state) AS name,
+                   count(*) FILTER (WHERE l.la_match_method <> 'not_road') AS n_road,
+                   count(*) FILTER (WHERE l.la_linked) AS n_rated,
+                   count(*) FILTER (WHERE l.la_state = 'flagged') AS n_flagged,
+                   count(*) FILTER (WHERE l.la_state = 'possible') AS n_possible
+            FROM cur c JOIN land l USING (project_key) WHERE c.state IS NOT NULL AND c.{inscope}
+            GROUP BY 1)
+        SELECT coalesce(p.name, r.k) AS state, r.k IS NOT NULL AS has_data, r.stretches, r.parcels,
+               round(r.area_ha, 1) AS area_ha, r.last_notif, coalesce(p.n_road, 0) AS n_road,
+               coalesce(p.n_rated, 0) AS n_rated, coalesce(p.n_flagged, 0) AS n_flagged,
+               coalesce(p.n_possible, 0) AS n_possible
+        FROM register r FULL JOIN p USING (k) WHERE r.k IS NOT NULL OR p.n_road > 0
+        ORDER BY r.area_ha DESC NULLS LAST, state""", params)
 
 
 @cached

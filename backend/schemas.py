@@ -74,6 +74,7 @@ class TopProject(CamelModel):
     tier: str | None
     p_any_2q: float | None
     anticipated_cost_cr: float | None
+    override: bool | None = None  # the stagnation badge
 
 
 class Portfolio(CamelModel):
@@ -178,6 +179,12 @@ class External(CamelModel):
     land_pairs: list[Record]
     composite: Record | None
     events: list[EventRow]
+    # PARIVESH link, remark-named proposals, remark status (as-of quarters), measured hidden-delay priors that apply;
+    # empty on the public page
+    portal: Record | None = None
+    proposals: list[Record] = []
+    remark_status: Record | None = None
+    hidden_delay: list[Record] = []
 
 
 class Provenance(CamelModel):

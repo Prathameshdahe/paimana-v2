@@ -54,7 +54,7 @@ list per role, cut to the scope; it becomes per person once there is real sign-i
 | Project list and search (`/command`) | ✓ | ✓ scoped | ✓ scoped | ✓ |
 | Project page | simple: tier, progress, cost, completion, top 3 risks in plain words, progress history | ✓ full, scoped | ✓ full, scoped | ✓ full |
 | SHAP drivers, analogues, quantile intervals, provenance, forecast, brief, project news | – | ✓ | ✓ | ✓ |
-| External Factors summary | ✓ | ✓ scoped | ✓ scoped | ✓ |
+| External Factors summary | counts, factors, map and measured delays; no evidence lines or PARIVESH lists | ✓ scoped | ✓ scoped | ✓ |
 | External Factors news feed | – | ✓ scoped | ✓ scoped | ✓ |
 | Bottlenecks | – | ✓ scoped | ✓ scoped | ✓ |
 | Agencies | – | ✓ all agencies, own highlighted | ✓ their ministry's agencies | ✓ |
@@ -76,7 +76,10 @@ review note and the provenance internals (model, gold and silver versions, sourc
 document and page). It keeps the tier, the p50 estimates, the latest report's
 progress, cost and completion, the risk checklist and `topRisksPlain`: up to three
 flagged checklist rows as short sentences ("Land for the project is not fully
-acquired yet."). The timeline drops its source documents too.
+acquired yet."). The timeline drops its source documents too, and the external block drops the PARIVESH link
+and proposals, the remark status and the measured hidden delay. The public External Factors summary keeps the
+counts, the flagged factors per project, the land map and the measured priors; it drops every evidence line and
+the per-project PARIVESH lists (open proposals, the proposals named in the remarks).
 
 ## API
 

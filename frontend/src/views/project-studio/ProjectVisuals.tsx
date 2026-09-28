@@ -6,7 +6,7 @@
  */
 import React from 'react'
 import { motion } from 'motion/react'
-import { AlertTriangle, ArrowDown, ArrowUp, Newspaper } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, LandPlot, Newspaper, Trees } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts'
 import { Tooltip, InfoTip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
@@ -15,7 +15,8 @@ import {
 } from '@/lib/riskPalette'
 import { featureLabel } from '@/lib/featureLabels'
 import { cn, formatDate, formatINR, formatProb, orDash } from '@/lib/formatters'
-import type { EventRow, Flag, ProjectDetail, RiskRow, RiskState, ShapValue, Timeline } from '@/contracts/project'
+import { LIVE_QUARTERS, details, formatQuarter, fromMatch, isLive, verdict } from '@/lib/external'
+import type { Flag, HiddenDelayMatch, ProjectDetail, RiskRow, RiskState, ShapValue, Timeline } from '@/contracts/project'
 
 const EASE = [0.22, 1, 0.36, 1] as const
 const GROW = { duration: 0.7, ease: EASE }
@@ -91,7 +92,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /**
  * Donut of P(date push or cost revision, 2q) in the tier colour, tier inside. full: three gauges beside it;
- * the public: work done, cost and completion instead. Watch (no completion date): a grey-violet ring and no
+ * the public: work done, cost and completion instead. The stalled badge sits in the header. Watch (no completion date): a grey-violet ring and no
  * date-based gauges.
  */
 export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: boolean }) {
@@ -136,12 +137,6 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
               <Gauge label="Cost revision · 2q" value={s.pCostRev2q} />
               {!untiered && <Gauge label="Any slip · 4q" value={s.pAny4q} />}
             </div>
-            {s.stagnationOverride && (
-              <span className="self-center rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning"
-                title={`${orDash(s.stagnationQuarters, (v) => v.toFixed(0))} quarters without progress; the tier stays by rank`}>
-                Work has stalled
-              </span>
-            )}
           </div>
         ) : (
           <div className="grid flex-1 grid-cols-2 gap-3">
@@ -509,26 +504,164 @@ export function TopDrivers({ drivers }: { drivers: ShapValue[] }) {
 
 const OPEN_CATEGORIES: [string, Flag][] = [['land', 'land'], ['forest_env', 'forest'], ['litigation', 'litigation'], ['contractor', 'contractor']]
 
-/** Open land, forest, court and contractor issues from the report remarks; news: the linked-news count (officials). */
-export function ExternalChips({ events, news }: { events: EventRow[]; news?: { n: number; scouted: boolean } }) {
-  const open = OPEN_CATEGORIES
-    .map(([c, f]) => ({ f, n: events.filter((e) => e.category === c && e.status === 'open').length }))
-    .filter((x) => x.n > 0)
-  const until = events.find((e) => e.remarksLastSeen)?.remarksLastSeen
+/** remark forest stage (pipeline/external.py) in words */
+const FC_STAGE: Record<string, string> = {
+  applied: 'applied or preparing', state_level: 'pending at state level', stage1_pending: 'Stage-I pending',
+  regional_iro: 'pending at the regional office', central_fac_moef: 'pending at FAC / MoEFCC',
+  stage1_granted: 'Stage-I granted', stage2_pending: 'Stage-II pending', wp_pending: 'working permission pending',
+  working_permission: 'working permission granted', stage2_granted: 'Stage-II granted', approved_generic: 'approved',
+  fc_awaited: 'clearance awaited', rejected: 'rejected or in appeal', not_applicable: 'no forest land',
+}
+const LA_STEP: Record<string, string> = {
+  notification: 'notification', declaration: 'declaration', compensation_paid: 'compensation paid', possession: 'possession',
+}
+
+const FACT_TONE = {
+  critical: 'border-critical/30 bg-critical/5', warning: 'border-warning/30 bg-warning/5',
+  stable: 'border-stable/25 bg-stable/5', muted: 'border-border-subtle bg-surface-elevated/40',
+} as const
+const INK = { critical: 'text-critical', warning: 'text-warning', stable: 'text-stable', muted: 'text-fg-muted' } as const
+
+/** the expected hidden delay of one matched prior, its n and CI behind a tip */
+function DelayLine({ m }: { m: HiddenDelayMatch }) {
+  const e = fromMatch(m)
+  const v = verdict(e)
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-fg-muted">
+      <span>Expected hidden delay:</span>
+      <span className={cn('font-semibold', v.tone === 'muted' ? 'text-fg-muted' : INK[v.tone])}>{v.text}</span>
+      <InfoTip label="About the expected hidden delay">
+        <p className="font-medium">{m.label}, from the {m.basis}{m.asOf ? ` (as of ${formatQuarter(m.asOf)})` : ''}.</p>
+        {details(e).map((line) => <p key={line}>{line}</p>)}
+      </InfoTip>
+    </div>
+  )
+}
+
+/** a two- or three-line fact chip: what the outside source says, its dates, the measured hidden delay */
+function Fact({ icon: Icon, title, tone, lines, delays }: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  title: string
+  tone: keyof typeof FACT_TONE
+  lines: React.ReactNode[]
+  delays: HiddenDelayMatch[]
+}) {
+  return (
+    <div className={cn('rounded-lg border px-3 py-2', FACT_TONE[tone])}>
+      <div className="flex items-center gap-1.5 text-xs">
+        <Icon className={cn('size-3.5 shrink-0', INK[tone])} strokeWidth={2} />
+        <span className="font-semibold text-fg-base">{title}</span>
+      </div>
+      <div className="mt-1 space-y-0.5 pl-5">
+        {lines.map((l, i) => <div key={i} className="text-xs text-fg-muted">{l}</div>)}
+        {delays.map((m) => <DelayLine key={m.group} m={m} />)}
+      </div>
+    </div>
+  )
+}
+
+function forestFact(x: ProjectDetail['external']) {
+  const po = x.portal
+  const rs = x.remarkStatus
+  const delays = x.hiddenDelay.filter((m) => m.factor === 'forest_clearance')
+  const lines: React.ReactNode[] = []
+  let tone: keyof typeof FACT_TONE = 'muted'
+  if (po) {
+    tone = po.nOverdue > 0 ? 'critical' : po.nOpen > 0 ? 'warning' : po.nFinal > 0 ? 'stable' : 'muted'
+    lines.push(
+      <span className={cn('font-medium', INK[tone])}>
+        PARIVESH: {po.stageAtAsof}
+        {po.nOpen > 0 && po.monthsInStage !== null && ` for ${Math.round(po.monthsInStage)} mo${po.normMonths !== null ? ` (limit ${Math.round(po.normMonths)})` : ''}`}
+      </span>
+    )
+  }
+  const named = x.proposals.find((p) => p.openAtAsof) ?? x.proposals[0]
+  if (named) {
+    lines.push(
+      <>
+        {named.proposalNo}: filed {orDash(named.received, formatDate)} · Stage-I {orDash(named.stage1, formatDate)} · Stage-II {orDash(named.stage2, formatDate)}
+        {x.proposals.length > 1 && ` · +${x.proposals.length - 1} more`}
+      </>
+    )
+  } else if (po) {
+    lines.push(`${po.nProposals} proposal${po.nProposals === 1 ? '' : 's'}${po.oldestOpenReceived ? `, open since ${formatDate(po.oldestOpenReceived)}` : ''}${po.openNotInReport ? ' · not in the report remarks' : ''}`)
+  }
+  if (rs?.fcStage && rs.fcStageAsOf) {
+    lines.push(`Report remarks: ${FC_STAGE[rs.fcStage] ?? rs.fcStage} (last known ${formatQuarter(rs.fcStageAsOf)})`)
+    if (!po) tone = rs.fcStage === 'stage2_granted' || rs.fcStage === 'approved_generic' ? 'stable' : 'warning'
+  }
+  return lines.length || delays.length ? { tone, lines, delays } : null
+}
+
+function landFact(x: ProjectDetail['external']) {
+  const la = (x.land ?? {}) as Record<string, unknown>
+  const rs = x.remarkStatus
+  const delays = x.hiddenDelay.filter((m) => m.factor !== 'forest_clearance')
+  const lines: React.ReactNode[] = []
+  let tone: keyof typeof FACT_TONE = 'muted'
+  const st = la.laState as string | undefined
+  if (st === 'flagged' || st === 'clear') {
+    tone = st === 'flagged' ? 'warning' : 'stable'
+    lines.push(
+      <span className={cn('font-medium', INK[tone])}>
+        Bhoomi Rashi: NH-{String(la.laNh)} at its km range, complexity {String(la.laComplexityMax)}/5
+      </span>
+    )
+    lines.push(`${Number(la.laParcels ?? 0).toLocaleString('en-IN')} parcels · notified ${orDash(la.laFirstNotif as string | null, formatDate)} to ${orDash(la.laLastNotif as string | null, formatDate)}`)
+  } else if (st === 'possible') {
+    lines.push(`Bhoomi Rashi: possible link on NH-${String(la.laNh)} or its district only, not rated`)
+  }
+  if (rs?.laPct !== null && rs?.laPct !== undefined && rs.laPctAsOf) {
+    lines.push(`Report remarks: ${rs.laPct.toFixed(0)}% acquired (last known ${formatQuarter(rs.laPctAsOf)})`)
+    if (tone === 'muted') tone = rs.laPct < 95 ? 'warning' : 'stable'
+  } else if (rs?.laStep && rs.laStepAsOf) {
+    lines.push(`Report remarks: last step ${LA_STEP[rs.laStep] ?? rs.laStep} (last known ${formatQuarter(rs.laStepAsOf)})`)
+  }
+  return lines.length || delays.length ? { tone, lines, delays } : null
+}
+
+/**
+ * External issues: the forest and land facts from outside the reports (PARIVESH stage and dates, the Bhoomi Rashi
+ * stretch) with the remark status and the measured hidden delay, then the remark issues, live or stale (last known
+ * quarter), and the linked-news count (officials). The public API sends no PARIVESH details or hidden delay.
+ */
+export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: { n: number; scouted: boolean } }) {
+  const x = detail.external
+  const asof = detail.provenance.asof
+  const open = OPEN_CATEGORIES.map(([c, f]) => {
+    const ev = x.events.filter((e) => e.category === c && e.status === 'open')
+    const live = ev.filter((e) => isLive(e.lastSeen, asof))
+    const last = ev.map((e) => e.lastSeen).filter((d): d is string => !!d).sort().at(-1) ?? null
+    return { f, n: ev.length, live: live.length, last }
+  }).filter((x) => x.n > 0)
+  const until = x.events.find((e) => e.remarksLastSeen)?.remarksLastSeen
+  const forest = forestFact(x)
+  const land = landFact(x)
+
   return (
     <Section title="External issues"
-      info={`Open issues found in the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}${news ? ', and news the scout linked to this project' : ''}.`}>
-      <div className="flex flex-wrap gap-2">
-        {open.map(({ f, n }) => {
+      info={`Forest and land facts from PARIVESH and the Bhoomi Rashi register, with the measured hidden delay for that status on real projects. Remark issues come from the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}; one not mentioned for ${LIVE_QUARTERS} quarters is stale and shows the quarter it was last known${news ? '. News: items the scout linked to this project' : ''}.`}>
+      <div className="space-y-2">
+        {forest && <Fact icon={Trees} title="Forest clearance" {...forest} />}
+        {land && <Fact icon={LandPlot} title="Land acquisition" {...land} />}
+      </div>
+      <div className={cn('flex flex-wrap gap-2', (forest || land) && 'mt-3')}>
+        {open.map(({ f, n, live, last }) => {
           const Icon = FLAG_ICON[f]
-          return (
+          return live > 0 ? (
             <span key={f} className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning ring-1 ring-inset ring-warning/20">
               <Icon className="size-3.5" strokeWidth={2} />
-              {FLAG_LABEL[f]}{n > 1 && ` ×${n}`}
+              {FLAG_LABEL[f]} open{n > 1 && ` ×${n}`}
+            </span>
+          ) : (
+            <span key={f} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-fg-dimmed/60 px-2.5 py-1 text-xs text-fg-muted"
+              title="open when last mentioned; not mentioned since, so not counted as open today">
+              <Icon className="size-3.5" strokeWidth={2} />
+              {FLAG_LABEL[f]} · last known {last ? formatQuarter(last) : 'n/a'}
             </span>
           )
         })}
-        {open.length === 0 && (
+        {open.length === 0 && !forest && !land && (
           <span className="rounded-full bg-fg-dimmed/10 px-2.5 py-1 text-xs text-fg-muted">No open issue in the remarks</span>
         )}
         {news && (

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Pause } from 'lucide-react'
 import { cn } from '@/lib/formatters'
 import { TIER_LABEL, TIER_SENTIMENT, TONE_CHIP, tierKey } from '@/lib/riskPalette'
 
@@ -34,6 +35,20 @@ export function Badge({ variant = 'muted', tier, className, children, ...props }
     >
       {children ?? (t ? TIER_LABEL[t] : null)}
     </span>
+  )
+}
+
+/** The stagnation badge: no progress for 2+ quarters. A badge only; the tier stays by rank. */
+export function StalledBadge({ quarters, className }: { quarters?: number | null; className?: string }) {
+  return (
+    <Badge
+      variant="warning"
+      className={className}
+      title={`${quarters ? `${quarters.toFixed(0)} quarters` : '2+ quarters'} without progress; a badge only, the tier stays by rank (stalled projects slipped no more often in the backtest)`}
+    >
+      <Pause className="size-3" strokeWidth={2.5} aria-hidden="true" />
+      Stalled
+    </Badge>
   )
 }
 

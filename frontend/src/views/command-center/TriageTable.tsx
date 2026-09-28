@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Columns3, Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Badge, IconChip } from '@/components/ui/Badge'
+import { Badge, IconChip, StalledBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Input'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -236,11 +236,12 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                         </div>
                         <div className="mt-0.5 max-w-[280px] truncate text-xs text-fg-dimmed xl:max-w-[440px]">
                           {p.key} · {p.sector ?? 'sector unknown'}
-                          {p.override && <span className="text-warning" title="no progress for 2+ quarters; the tier is by rank"> · stalled</span>}
                         </div>
                       </td>
 
-                      <td className="px-4 py-3"><Badge tier={p.tier} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1"><Badge tier={p.tier} />{p.override && <StalledBadge />}</div>
+                      </td>
 
                       <td className="px-4 py-3">
                         {p.pAny2q === null ? (

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { ExternalLink, X } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { ApiError } from '@/lib/api'
 import { useProject, useSignals, useTimeline } from '@/lib/queries'
@@ -65,6 +65,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs text-fg-dimmed">{k ?? projectKey}</span>
             {detail?.scores && <Badge tier={detail.scores.tier} />}
+            {detail?.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
           </div>
           <Dialog.Title className="line-clamp-2 text-lg font-semibold leading-snug text-fg-base">
             {detail?.master?.projectName ?? projectKey}
@@ -106,13 +107,11 @@ function PanelBody({ projectKey }: { projectKey: string }) {
             <ProgressTrend timeline={timeline.data} error={timeline.error} />
             <TimelineStrip detail={detail} />
             <RiskGrid detail={detail} plain={!full} />
-            <div className={full ? 'grid gap-4 sm:grid-cols-2' : ''}>
-              {full && <TopDrivers drivers={detail.scores?.shapTop5 ?? []} />}
-              <ExternalChips
-                events={detail.external.events}
-                news={signals.data && { n: signals.data.items.length, scouted: !!signals.data.lastScoutAt }}
-              />
-            </div>
+            <ExternalChips
+              detail={detail}
+              news={signals.data && { n: signals.data.items.length, scouted: !!signals.data.lastScoutAt }}
+            />
+            {full && <TopDrivers drivers={detail.scores?.shapTop5 ?? []} />}
           </>
         )}
       </div>

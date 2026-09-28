@@ -1,14 +1,18 @@
 import { Card } from '@/components/ui/Card'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { formatDate, orDash, cn } from '@/lib/formatters'
+import { formatQuarter, isLive } from '@/lib/external'
 import type { EventRow, ProjectSignals } from '@/contracts/project'
 
 function basename(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-/** Issues found in the report remarks (pipeline project_events), each quoted with its document and page. */
-export function ExternalEvents({ events }: { events: EventRow[] }) {
+/**
+ * Issues found in the report remarks (pipeline project_events), each quoted with its document and page. An open one
+ * not mentioned within the live window is stale: it shows the quarter it was last known, not 'open'.
+ */
+export function ExternalEvents({ events, asof }: { events: EventRow[]; asof: string }) {
   const remarksUntil = events.find((e) => e.remarksLastSeen)?.remarksLastSeen
 
   return (
@@ -34,10 +38,15 @@ export function ExternalEvents({ events }: { events: EventRow[] }) {
                   <span
                     className={cn(
                       'border px-1 py-0.5 text-xs',
-                      e.status === 'open' ? 'border-critical/40 text-critical' : 'border-border-default text-fg-dimmed'
+                      e.status === 'open' && isLive(e.lastSeen, asof)
+                        ? 'border-critical/40 text-critical'
+                        : e.status === 'open' ? 'border-dashed border-fg-dimmed/60 text-fg-muted' : 'border-border-default text-fg-dimmed'
                     )}
+                    title={e.status === 'open' && !isLive(e.lastSeen, asof) ? 'open when last mentioned; not mentioned since' : undefined}
                   >
-                    {e.status ?? 'status unknown'}
+                    {e.status === 'open' && !isLive(e.lastSeen, asof)
+                      ? `stale · last known ${e.lastSeen ? formatQuarter(e.lastSeen) : 'n/a'}`
+                      : (e.status ?? 'status unknown')}
                   </span>
                 </div>
                 <div className="text-xs text-fg-dimmed">

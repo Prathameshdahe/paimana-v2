@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Building2, FileText, Gauge, IndianRupee, Landmark, Siren, TrendingUp } from 'lucide-react'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { InfoTip, Tooltip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { KPIRibbon, Meter, Tile, TierBar } from '@/views/command-center/KPIRibbon'
@@ -53,7 +53,7 @@ function MoreLink({ to, children }: { to: string; children: React.ReactNode }) {
   )
 }
 
-type Row = { key: string; name: string | null; state: string | null; tier: string | null }
+type Row = { key: string; name: string | null; state: string | null; tier: string | null; override?: boolean | null }
 
 /** A short project list: tier dot, name, state, one visual on the right; a row opens the side panel. */
 function ProjectList<T extends Row>({ title, info, more, rows, error, right, empty }: {
@@ -89,7 +89,10 @@ function ProjectList<T extends Row>({ title, info, more, rows, error, right, emp
                 <span className="size-2.5 shrink-0 rounded-full" style={{ background: TIER_COLOR[t] }} title={TIER_LABEL[t]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-fg-base" title={r.name ?? undefined}>{r.name ?? r.key}</span>
-                  <span className="block truncate text-xs text-fg-dimmed">{r.state ?? 'state unknown'}</span>
+                  <span className="flex items-center gap-1.5 truncate text-xs text-fg-dimmed">
+                    {r.state ?? 'state unknown'}
+                    {r.override && <StalledBadge className="py-0" />}
+                  </span>
                 </span>
                 {right(r)}
               </button>

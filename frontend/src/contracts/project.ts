@@ -124,12 +124,88 @@ export interface ObservationRecord {
   [field: string]: unknown
 }
 
+/** gold/external_fc_portal: the project's PARIVESH-linked proposals at as-of */
+export interface PortalLink {
+  linkSource: string
+  nProposals: number
+  proposals: string
+  areaHa: number | null
+  nOpen: number
+  nStage1Only: number
+  nFinal: number
+  nDropped: number
+  nOverdue: number
+  stageAtAsof: string
+  monthsInStage: number | null
+  normMonths: number | null
+  oldestOpenReceived: string | null
+  openNotInReport: boolean
+}
+
+/** a proposal named in the report remarks, as the portal shows it */
+export interface ProposalRow {
+  proposalNo: string
+  category: string | null
+  areaHa: number | null
+  received: string | null
+  stage1: string | null
+  stage2: string | null
+  stageAtAsof: string
+  openAtAsof: boolean
+  monthsInStage: number | null
+  normMonths: number | null
+  overdue: boolean
+  lastQueryOn: string | null
+  lastQueryBy: string | null
+  lastQueryReplied: boolean | null
+  statusRetrieved: string | null
+  retrieved: string | null
+}
+
+/** the last forest stage, land share and land step the remarks gave, each with the quarter it is as of */
+export interface RemarkStatus {
+  fcStage: string | null
+  fcStageAsOf: string | null
+  laPct: number | null
+  laPctAsOf: string | null
+  laStep: string | null
+  laStepAsOf: string | null
+  proposalNo: string | null
+}
+
+/** a measured hidden-delay prior that applies to the project (pipeline/hidden_delay.py) */
+export interface HiddenDelayMatch {
+  factor: 'forest_clearance' | 'land_progress' | 'land_complexity'
+  group: string
+  label: string
+  nRows: number
+  nProjects: number
+  measurable: boolean
+  extraMonths: number | null
+  extraMonthsLo: number | null
+  extraMonthsHi: number | null
+  extraPush: number | null
+  extraPushLo: number | null
+  extraPushHi: number | null
+  holmMonths: number | null
+  holmPush: number | null
+  /** what it was matched on */
+  basis: string
+  /** the remark quarter it is as of; null for the land register */
+  asOf: string | null
+}
+
+/** portal, proposals, remarkStatus and hiddenDelay are empty on the public page */
 export interface External {
   fc: Record<string, unknown> | null
   land: Record<string, unknown> | null
   landPairs: Record<string, unknown>[]
   composite: Record<string, unknown> | null
   events: EventRow[]
+  portal: PortalLink | null
+  proposals: ProposalRow[]
+  remarkStatus: RemarkStatus | null
+  hiddenDelay: HiddenDelayMatch[]
 }
 
 export interface Provenance {

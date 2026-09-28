@@ -166,7 +166,8 @@ def get_bottleneck(bottleneck_id: str, page: int = Query(1, ge=1), size: int = Q
 
 @router.get("/external/summary", response_model=ExternalSummary)
 def get_external_summary(v: Viewer = Anyone):
-    return serving.external_summary(scope=v.scope)
+    out = serving.external_summary(scope=v.scope)
+    return out if v.can("insights") else serving.public_external(out)
 
 
 @router.get("/models", response_model=ModelsOut)

@@ -14,7 +14,7 @@ import {
 } from 'recharts'
 import { Info } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
@@ -315,6 +315,7 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
               <div className="truncate text-sm text-fg-base" title={p.name ?? undefined}>{p.name ?? p.key}</div>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-fg-dimmed">
                 <Badge tier={p.tier} />
+                {p.override && <StalledBadge />}
                 <span className="truncate">
                   {p.key} · P(slip, 2q) {orDash(p.pAny2q, (x) => formatProb(x))} · {orDash(p.anticipatedCostCr, formatINR)} · {p.state ?? 'state unknown'}
                 </span>

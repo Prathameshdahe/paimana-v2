@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { MonoFigure } from '@/components/ui/MonoFigure'
 import { formatDate, formatINR, formatPct, orDash } from '@/lib/formatters'
 import type { MasterRecord, ObservationRecord, ProjectDetail } from '@/contracts/project'
@@ -50,6 +50,7 @@ export function ProjectIdentityStrip({ detail }: { detail: ProjectDetail }) {
             <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
               <span className="text-fg-base font-medium">{detail.key}</span>
               <Badge tier={detail.scores ? detail.scores.tier : undefined} />
+              {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
               <span className="text-fg-dimmed">{m.sector ?? 'sector unknown'}</span>
               {codes.length > 0 && <span className="text-fg-dimmed">codes {codes.join(' · ')}</span>}
             </div>

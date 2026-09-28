@@ -17,7 +17,7 @@ import {
 import { Page } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
+import { Badge, StalledBadge } from '@/components/ui/Badge'
 
 /**
  * Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief.
@@ -74,6 +74,7 @@ export function ProjectStudio() {
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs text-fg-dimmed">{detail.key}</span>
             {detail.scores && <Badge tier={detail.scores.tier} />}
+            {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-fg-base">{detail.master?.projectName ?? detail.key}</h1>
           <ProjectChips detail={detail} />
@@ -87,7 +88,7 @@ export function ProjectStudio() {
         <ProgressTrend timeline={timeline.data} error={timeline.error} height={200} />
         <div className="grid items-start gap-4 lg:grid-cols-3">
           <RiskGrid detail={detail} plain className="lg:col-span-2" />
-          <ExternalChips events={detail.external.events} />
+          <ExternalChips detail={detail} />
         </div>
       </Page>
     )
@@ -128,8 +129,11 @@ export function ProjectStudio() {
           <LinkedSignals data={signals.data} error={signals.error} />
         </div>
 
-        <div className="col-span-1 lg:col-span-3">
-          <ExternalEvents events={detail.external.events} />
+        <div className="col-span-1 lg:col-span-2">
+          <ExternalEvents events={detail.external.events} asof={detail.provenance.asof} />
+        </div>
+        <div className="col-span-1">
+          <ExternalChips detail={detail} />
         </div>
       </div>
     </Page>

@@ -51,6 +51,8 @@ export interface TopProject {
   tier: string | null
   pAny2q: number | null
   anticipatedCostCr: number | null
+  /** the stagnation badge */
+  override: boolean | null
 }
 
 export interface Portfolio {
@@ -212,8 +214,70 @@ export interface ExternalProject {
   tier: string | null
   p_any_2q: number | null
   slip_to_date_months: number | null
-  /** "factor: evidence" lines from the risk profile */
+  /** "factor: evidence" lines from the risk profile; empty for the public (as the public project page) */
   evidence: string[]
+  /** the factors flagged on it (the evidence lines' names; kept for the public) */
+  factors?: string[]
+  /** the stagnation badge (no progress for 2+ quarters; the tier stays by rank) */
+  stalled?: boolean
+}
+
+/** a PARIVESH-linked current project with a proposal still open at as-of */
+export interface PortalOpen extends Omit<ExternalProject, 'evidence' | 'factors'> {
+  stage_at_asof: string
+  months_in_stage: number | null
+  /** the rule limit for that stage, months */
+  norm_months: number | null
+  overdue: boolean
+  oldest_open_received: string | null
+  open_not_in_report: boolean
+  n_open: number
+  /** ';'-separated proposal numbers */
+  proposals: string
+}
+
+/** one proposal named in the report remarks, looked up on PARIVESH (gold/fc_proposal_status) */
+export interface ProposalStatus {
+  proposal_no: string
+  found_in: string
+  category: string | null
+  area_ha: number | null
+  received: string | null
+  stage1: string | null
+  stage2: string | null
+  stage_at_asof: string
+  open_at_asof: boolean
+  months_in_stage: number | null
+  norm_months: number | null
+  norm_rule: string | null
+  overdue: boolean
+  last_query_on: string | null
+  last_query_by: string | null
+  last_query_replied: boolean | null
+  status_retrieved: string | null
+  retrieved: string | null
+}
+
+export interface ProposalCase {
+  project_key: string
+  project_name: string | null
+  /** in the current portfolio (else a past project) */
+  current: boolean
+  proposals: ProposalStatus[]
+}
+
+/** one state: the Bhoomi Rashi register and the current road projects there */
+export interface LandState {
+  state: string
+  has_data: boolean
+  stretches: number | null
+  parcels: number | null
+  area_ha: number | null
+  last_notif: string | null
+  n_road: number
+  n_rated: number
+  n_flagged: number
+  n_possible: number
 }
 
 export interface ExternalFactor {
@@ -280,6 +344,8 @@ export interface HiddenDelayPrior {
   extra_push_hi: number | null
   holm_months: number | null
   holm_push: number | null
+  /** current projects in scope it applies to; null for the NH/district grouping (not rated) */
+  n_current?: number | null
   garvit_status: string
   garvit_band: string
   as_of_note: string
@@ -315,6 +381,8 @@ export interface ExternalSummary {
     n_projects_open_by_remark_rule: number
     n_projects_live: number
     n_projects_stale: number
+    /** per category: projects open by the remark rule, live today, the newest last mention of the stale ones */
+    by_category?: Record<string, { open: number; live: number; last_known: string | null }>
   } | null
   /** PARIVESH-linked current projects */
   portal: {
@@ -326,6 +394,10 @@ export interface ExternalSummary {
     capital_open_cr: number
     by_stage: Record<string, number>
     top_overdue: ExternalProject[]
+    /** every open one in scope, overdue first; empty for the public */
+    open_list?: PortalOpen[]
+    /** proposals the report remarks name, with their portal dates; empty for the public */
+    cases?: ProposalCase[]
   } | null
   landCoverage: {
     states_with_data: number
@@ -333,6 +405,7 @@ export interface ExternalSummary {
     n_flagged: number
     n_possible: number
     link_check?: Record<string, { n: number; correct: number; ci_lo: number; ci_hi: number }>
+    by_state?: LandState[]
   } | null
   hiddenDelayPriors: { note: string; min_projects: number; rows: HiddenDelayPrior[] } | null
 }
