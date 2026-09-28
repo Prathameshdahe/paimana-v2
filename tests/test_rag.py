@@ -250,6 +250,16 @@ def test_fingerprint_follows_the_served_state_not_the_files(env, monkeypatch):
     assert changed != idx.fingerprint               # every part of the served version counts
 
 
+def test_fingerprint_covers_the_chunkers_texts(env, monkeypatch):
+    fp = rag.fingerprint()
+    monkeypatch.setitem(serving.PLAIN_RISK, "litigation", "A court case may hold up the project.")
+    fp2 = rag.fingerprint()
+    monkeypatch.setattr(serving, "CAVEATS", [*serving.CAVEATS, "One more caveat."])
+    assert len({fp, fp2, rag.fingerprint()}) == 3   # texts the chunks copy rebuild the index without a VERSION bump
+    rule = rag.CHECK_RULES["execution_stagnation"]
+    assert "30%" in rule and "95%" in rule            # the whole stagnation rule of ml/score.py
+
+
 def test_background_build_serves_when_done(env):
     rag.ensure_index(background=True)
     hits = rag.search("Watch tier", PUBLIC)       # waits for the first index (WAIT_S)

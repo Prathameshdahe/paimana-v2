@@ -32,7 +32,9 @@ computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-
 raises for an LLM outage.
 
 Artifacts in dataset/rag/ (gitignored): chunks.parquet, embeddings.npy (float16, row i for chunk i, zeros where
-missing), meta.json with the input fingerprint: chunker VERSION, embedding model, the served data state (its version,
+missing), meta.json with the input fingerprint: chunker VERSION, a hash of this file and of the texts it copies from
+serving and the delay taxonomy (so an edit to them rebuilds without a VERSION bump), embedding model, the served data
+state (its version,
 the external_summary.json mtime, and its gold and model version and asof), the docs and research file mtimes, and the
 max signal id and link and agent-fact counts of the app database. The data part is read from the same
 serving.state() the chunks are built from, never from the files: while the report watcher pins the old version
@@ -117,8 +119,9 @@ SEVERITY_WORDS = {1: "a mention", 2: "a negative development",
 CHECK_RULES = {
     "schedule_slip": "the chance of a completion-date push within 2 quarters is in the top 20% of current projects",
     "cost_escalation": "the chance of a cost revision within 2 quarters is in the top 20% of current projects",
-    "execution_stagnation": "progress has not moved for 2 or more quarters, or progress is far behind the time "
-                            "used (schedule performance index below 0.1 after 30% of the planned time)",
+    "execution_stagnation": "progress has not moved for 2 or more quarters after 30% of the planned time and is "
+                            "below 95%, or progress is far behind the time used (schedule performance index below "
+                            "0.1 after 30% of the planned time)",
     "expenditure_lag": "the share of cost spent runs more than 25 points ahead of, or 15 points behind, the share "
                        "of work done",
     "repeated_revisions": "the cost (up 5% or more) or the completion date (3 months or more) has been revised at "
@@ -666,12 +669,20 @@ def _app_marks() -> dict:
         return {"error": str(e)}
 
 
+def _code_mark() -> str:
+    """Hash of the chunker's code (this file: CHECK_RULES, the word tables, the glossary text) and of the texts it
+    copies from elsewhere (serving's plain risks, caveats and method notes, the delay taxonomy)."""
+    texts = json.dumps([serving.PLAIN_RISK, serving.CAVEATS, serving.BAND_METHOD, serving.AGENCY_METHOD,
+                        serving.LIVE_NOTE, serving.WATCH, TAXONOMY], sort_keys=True, default=str)
+    return hashlib.sha256(Path(__file__).read_bytes() + texts.encode()).hexdigest()[:16]
+
+
 def fingerprint(s: dict | None = None) -> str:
     """Hash of everything the chunks are built from (module docstring); a change means the index is stale. The data
     part comes from s, the served data state (serving.state() by default) that build_chunks(s) reads, not from the
     files on disk, which run ahead of it while serving is pinned or a reload failed."""
     s = serving.state() if s is None else s
-    parts = {"version": VERSION, "embed_model": client.LLM_EMBED_MODEL,
+    parts = {"version": VERSION, "code": _code_mark(), "embed_model": client.LLM_EMBED_MODEL,
              "data": [s.get("version"), s.get("gold_version"), s.get("model_version"), s.get("asof")],
              "files": {f: _mtime(ROOT / f) for f in (HELP, *DOCS, FEATURE_LABELS)},
              "research": [_mtime(RESEARCH_FACTS), _mtime(RESEARCH_PROJECTS)], "app": _app_marks()}
