@@ -766,11 +766,13 @@ def outlook(p_date_push, p_cost_rev, months_p50) -> dict:
 def drivers_plain(shap: list[dict] | None) -> list[dict]:
     """The SHAP drivers in words, largest first: {label (labels.driver_label), direction 'raises' | 'lowers' (the
     chance of a slip), strength 'strong' | 'moderate' | 'slight' (its tercile by |contribution| among the project's
-    own drivers: of five, two strong, two moderate, one slight)}; a driver with no effect is left out."""
+    own drivers: of five, two strong, two moderate, one slight; drivers of equal |contribution| share the strength of
+    the first of them)}; a driver with no effect is left out."""
     ds = sorted((d for d in shap or [] if _finite(d.get("contribution")) and d["contribution"]),
                 key=lambda d: -abs(d["contribution"]))
+    size = [abs(d["contribution"]) for d in ds]
     return [{"label": labels.driver_label(d["feature"]), "direction": "raises" if d["contribution"] > 0 else "lowers",
-             "strength": STRENGTHS[3 * i // len(ds)]} for i, d in enumerate(ds)]
+             "strength": STRENGTHS[3 * size.index(size[i]) // len(ds)]} for i, d in enumerate(ds)]
 
 
 @cached

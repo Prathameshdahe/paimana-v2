@@ -57,8 +57,8 @@ class Outlook(CamelModel):
 class PlainDriver(CamelModel):
     """One SHAP driver in words (serving.drivers_plain), largest first: label (backend/labels.py DRIVER_LABELS: no
     digits or units), direction (what it does to the chance of a slip), strength (its tercile by |contribution|
-    among the project's own five: two strong, two moderate, one slight). Viewers with `insights` get them; the
-    public gets an empty list."""
+    among the project's own five: two strong, two moderate, one slight; equal contributions share the stronger
+    word). Viewers with `insights` get them; the public gets an empty list."""
     label: str
     direction: Literal["raises", "lowers"]
     strength: Literal["strong", "moderate", "slight"]

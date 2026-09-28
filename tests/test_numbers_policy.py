@@ -122,6 +122,17 @@ def test_drivers_in_words_by_tercile():
     assert [d["strength"] for d in got] == ["strong", "strong", "moderate", "moderate", "slight"]
     assert serving.drivers_plain([]) == [] and serving.drivers_plain(None) == []
     assert [d["strength"] for d in serving.drivers_plain(shap[:2])] == ["strong", "moderate"]
+    # equal |contribution|: the same word (the strength of the first of them), as PRJ-006073 and PRJ-004505 have
+    tied = [{"feature": f, "value": 1, "contribution": c} for f, c in (
+        ("months_to_anticipated_completion", 2.3069), ("sector_slip_4q", 0.5198), ("agency_n", 0.2754),
+        ("elapsed_ratio", 0.1449), ("physical_progress_pct", -0.1449))]
+    assert [d["strength"] for d in serving.drivers_plain(tied)] == ["strong", "strong", "moderate", "moderate",
+                                                                     "moderate"]
+    tied = [{"feature": f, "value": 1, "contribution": c} for f, c in (
+        ("months_to_anticipated_completion", -1.2668), ("elapsed_ratio", 0.1774), ("months_since_last_obs", 0.1774),
+        ("agency_slip_4q", -0.1232), ("sector_slip_4q", 0.1181))]
+    assert [d["strength"] for d in serving.drivers_plain(tied)] == ["strong", "strong", "strong", "moderate",
+                                                                     "slight"]
 
 
 def test_driver_labels_carry_no_number_or_unit():
