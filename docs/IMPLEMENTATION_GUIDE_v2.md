@@ -264,7 +264,10 @@ One run per (model, gold_version, cutoff) with params (feature list,
 hyperparameters, silver/gold versions), metrics, and artifacts (model file,
 SHAP summary, calibration table, backtest table). Champion/challenger: a
 candidate replaces the champion only when it beats it on the same folds on
-PR-AUC and calibration; the decision is recorded in the registry.
+PR-AUC and calibration; the decision is recorded in the registry. A run on a
+new gold version first re-scores the champion's own configuration (type,
+feature list, params) on the new gold as `<type>_incumbent`, and a new
+configuration has to beat that; nothing else takes over across gold versions.
 
 #### 3.5 Scoring the current portfolio
 
@@ -288,6 +291,20 @@ twice the measured seed sd. Each pooled metric also has a not-yet-due slice
 (anticipated completion after t + h). Only the cost revision is
 Platt-calibrated; calibrating the date targets and training h4 from 2014 both
 lost on the flash block and were reverted.
+
+Model upgrades (Sep 2026, docs/MODEL_UPGRADES_2026-09.md): candidates are
+measured with `python -m ml.experiment <candidate>`: 3 seeds, the validation
+and flash blocks, a paired project bootstrap CI, and the promotion rule plus a
+CI-above-0 guard. Of 19 candidates two shipped, each for one target, through
+`backtest.TARGET_PARAMS`. y_any_h4 weights training rows with an 8-quarter
+half-life (validation PR-AUC 0.869 -> 0.881). y_cost_rev_h2 trains with
+regularised params (learning rate 0.02, 63 leaves, lambda 20, 150 trees;
+0.109 -> 0.123). y_any_h2 and y_date_push_h2 keep their champions: no feature
+family, tuning, weighting or ensemble beat them on both blocks. Every train
+run writes `intervals.csv`, the p05-p95 coverage and pinball loss of the
+served intervals (months: 0.915 validation, 0.883 flash). The served
+model_version names every champion run, e.g.
+`lgbm-any2q-20260927-222602+20260928-051908`.
 
 ### 4. Serving
 
