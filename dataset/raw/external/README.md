@@ -1,7 +1,7 @@
 # External data sources
 
 Every file here comes from a public government portal or a published government document, except the synthetic
-fixtures in `mock/`. None of them is a model feature: the 2026-09 research backtested the land register, the
+fixtures in `mock/` and the web research in `research/` (news, agency and parliamentary pages, cited per fact). None of them is a model feature: the 2026-09 research backtested the land register, the
 PARIVESH state priors and the remark-derived factors and found no measurable lift, so they feed the risk profile, the
 External Factors page and the early notice only. The model's land features still read
 `land_acquisition_maharashtra.csv` alone (see `LA_MODEL_TABLE` in pipeline/external.py).
@@ -43,6 +43,13 @@ title, is kept only when the agency is plainly a government body or PSU.
 For comparison with the norms, the Ministry reported an average of 150 days for in-principle approval in 2023-24
 ([PIB, 5 Aug 2024](https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2041465)); the 2014-2022 legacy
 proposals took a median of 16.6 months from submission to Stage-I in the timeline sample.
+
+## Web research
+
+`research/research_sweep_<YYYY-MM>.jsonl`: per current project, what the public web said about it (hold-ups, progress,
+land, clearances, court cases, contractor), each fact with its headline, our own paraphrase, date and URL, found by a
+research agent and checked by a second agent that re-opened the source. Evidence for the project page, the risk
+profile and the assistant, not a model feature; method, fields and privacy rules in `research/README.md`.
 
 ## Synthetic
 
