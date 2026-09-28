@@ -166,7 +166,10 @@ function Chat() {
   const [dropped, setDropped] = useState<string | null>(null)
   const askKey = openKey && openKey !== dropped ? openKey : null
   const { data: openDetail } = useProject(askKey)
-  const openName = openDetail?.master?.projectName ?? askKey
+  // sent and shown only once the project loaded for this viewer (an unknown key, or one outside the viewer's scope,
+  // would fail every question with a 404), as the backend's canonical key
+  const ctxKey = askKey && openDetail ? openDetail.key : null
+  const openName = openDetail?.master?.projectName ?? ctxKey
   const openTier = openDetail?.scores ? TIER_LABEL[tierKey(openDetail.scores.tier)] : null
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -214,7 +217,7 @@ function Chat() {
     const update = (f: (t: AssistantTurn) => AssistantTurn) =>
       setTurns((ts) => ts.map((t) => (t.id === id && t.role === 'assistant' ? f(t) : t)))
     try {
-      await streamChat({ messages, projectKey: askKey ?? undefined }, (e) => {
+      await streamChat({ messages, projectKey: ctxKey ?? undefined }, (e) => {
         update((t) => applyEvent(t, e))
         if (e.event === 'done') setAnnounce(`Answer: ${e.data.text}`)
         if (e.event === 'error') setAnnounce(`The assistant hit a problem: ${e.data.message}`)
@@ -270,7 +273,7 @@ function Chat() {
   const welcome = !can(role, 'canSeeDrivers')
     ? 'Ask about public infrastructure projects: their risk, progress, cost and the latest news, or what a term means.'
     : `Ask about ${scopeName ? `${scopeName}’s` : 'any open'} projects: why one is at risk, what changed, how two compare, or where the blockers are.`
-  const suggestions = starters(role, portfolio, askKey ? { tier: openTier } : null)
+  const suggestions = starters(role, portfolio, ctxKey ? { tier: openTier } : null)
 
   return (
     <MotionConfig reducedMotion="user">
@@ -385,7 +388,7 @@ function Chat() {
             <div className="sr-only" aria-live="polite">{announce}</div>
 
             <div className="shrink-0 space-y-3 border-t border-border-subtle bg-surface-panel px-4 py-3.5">
-              {askKey && (
+              {ctxKey && (
                 <div className="flex">
                   <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-accent/10 py-1 pl-2.5 pr-1 text-xs text-accent ring-1 ring-inset ring-accent/20">
                     <Crosshair className="size-3.5 shrink-0" aria-hidden="true" />
@@ -433,7 +436,7 @@ function Chat() {
                   value={input}
                   maxLength={MAX_CHARS}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={askKey ? 'Ask about this project or any other…' : 'Ask about projects…'}
+                  placeholder={ctxKey ? 'Ask about this project or any other…' : 'Ask about projects…'}
                   aria-label="Question"
                   className="w-full rounded-xl border border-border-default bg-surface-base py-3 pl-4 pr-12 text-sm text-fg-base shadow-sm outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent"
                 />
