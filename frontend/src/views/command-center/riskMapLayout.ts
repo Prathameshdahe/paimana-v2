@@ -432,5 +432,10 @@ export function markAt(layout: MapLayout, x: number, y: number): OverflowMark | 
   return layout.overflow.find((o) => Math.abs(o.x - x) <= o.halfW && Math.abs(o.y - y) <= OVERFLOW_H / 2) ?? null
 }
 
+/** where a lane's keyboard walk resumes: the last index it was on, kept inside the lane's current length */
+export function resumeIndex(last: number | undefined, length: number): number {
+  return Math.max(0, Math.min(length - 1, last ?? 0))
+}
+
 /** does a row carry the early-notice flag */
 export const hasFlag = (row: { flags: Flag[] }, f: Flag) => row.flags.includes(f)

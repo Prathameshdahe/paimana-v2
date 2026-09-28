@@ -7,7 +7,7 @@ import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { ApiError } from '@/lib/api'
 import { useProject, useSignals, useTimeline } from '@/lib/queries'
-import { useProjectPanel } from '@/lib/useProjectPanel'
+import { restoreOpener, useProjectPanel } from '@/lib/useProjectPanel'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { detailHeadline } from '@/lib/headline'
@@ -28,8 +28,9 @@ const HEAD_LINK = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border
  * The project side panel: one project in the order an officer reads it — the sentence, the outlook tiles, why it is
  * happening and what the checks found, the AI brief on request and the second opinion (officials), then the report
  * facts, the outside issues and research. Opened from any list through useProjectPanel (?project=KEY) and mounted
- * once in App. Radix Dialog gives Escape, backdrop close, focus trap and labels; motion slides it (not under reduced
- * motion). The API already cuts what the viewer may not see; the developer gets a link into the Model detail tab.
+ * once in App. Radix Dialog gives Escape, backdrop close, focus trap and labels; closing gives focus back to what opened
+ * it (the map lane, the table row: useProjectPanel remembers it; the panel has no Dialog.Trigger). motion slides it
+ * (not under reduced motion). The API already cuts what the viewer may not see; the developer gets a link into the Model detail tab.
  */
 export function ProjectDetailDrawer() {
   const { key, close } = useProjectPanel()
@@ -43,7 +44,8 @@ export function ProjectDetailDrawer() {
                 <motion.div className="fixed inset-0 z-50 bg-fg-base/30 backdrop-blur-[2px]"
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
               </Dialog.Overlay>
-              <Dialog.Content asChild forceMount aria-describedby={undefined}>
+              <Dialog.Content asChild forceMount aria-describedby={undefined}
+                onCloseAutoFocus={(e) => { e.preventDefault(); restoreOpener() }}>
                 <motion.aside
                   data-lenis-prevent
                   className="fixed inset-y-0 right-0 z-50 flex w-[calc(100%-64px)] max-w-[680px] flex-col border-l border-border-default bg-surface-base shadow-2xl focus:outline-none max-sm:w-full"

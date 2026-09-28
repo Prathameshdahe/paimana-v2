@@ -8,7 +8,7 @@ import { OUTLOOK_TONE, OUTLOOK_WORDS, TONE_DOT, TONE_TEXT, outlookOf, toneOf } f
 import { dueIn } from '@/lib/headline'
 import { cn, formatDate, formatINR } from '@/lib/formatters'
 import {
-  AXIS_H, LABEL_W, OVERFLOW_H, SIZES, ZOOMS, hitTest, keysIn, layoutMap, markAt, type Dot, type LaneMode, type LaneSpec,
+  AXIS_H, LABEL_W, OVERFLOW_H, SIZES, ZOOMS, hitTest, keysIn, layoutMap, markAt, resumeIndex, type Dot, type LaneMode, type LaneSpec,
   type MapLayout, type OverflowMark, type Zoom,
 } from './riskMapLayout'
 import type { MapRow, Outlook, OutlookWord, TierFilter } from '@/contracts/project'
@@ -137,6 +137,8 @@ export function RiskMap(p: RiskMapProps) {
   const [brush, setBrush] = useState<{ x0: number; y0: number; x1: number; y1: number; add: boolean } | null>(null)
   const [live, setLive] = useState('')
   const laneRefs = useRef<Array<SVGGElement | null>>([])
+  // each lane's last walk index by lane id: coming back to a lane (after the side panel, or a Tab away) resumes there
+  const lastIndex = useRef(new Map<string, number>())
   const svgRef = useRef<SVGSVGElement>(null)
   const frame = useRef<number | null>(null)
   const press = useRef<{
@@ -228,6 +230,8 @@ export function RiskMap(p: RiskMapProps) {
     const d = layout?.byLane[lane]?.[index]
     if (!d) return
     setFocus({ lane, index })
+    const id = layout?.lanes[lane]?.id
+    if (id) lastIndex.current.set(id, index)
     setLive(dotText(d.row, outlook(d.row), asof))
   }
 
@@ -355,7 +359,7 @@ export function RiskMap(p: RiskMapProps) {
                     tabIndex={!lane.collapsed && (layout.byLane[li]?.length ?? 0) > 0 ? 0 : -1}
                     role="group"
                     aria-label={laneAria(mode, lane.label, layout.byLane[li]?.length ?? 0, lane.collapsed)}
-                    onFocus={() => { if (focus?.lane !== li) moveFocus(li, 0) }}
+                    onFocus={() => { if (focus?.lane !== li) moveFocus(li, resumeIndex(lastIndex.current.get(lane.id), layout.byLane[li]?.length ?? 0)) }}
                     onBlur={() => setFocus((f) => (f?.lane === li ? null : f))}
                     onKeyDown={(e) => onLaneKey(e, li)}
                     className="outline-none"
