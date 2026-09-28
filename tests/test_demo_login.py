@@ -39,19 +39,39 @@ def test_off_by_default_and_then_404(monkeypatch, fresh_db):
     assert accounts.user(email="ipmd.demo@paimana.local") is None
 
 
-def test_lists_the_roles_and_the_developer_only_when_it_exists(demo_on):
+def test_lists_the_four_official_views_and_never_the_developer(demo_on):
     sc = serving.scopes()
+    accounts.create_user(DEV_EMAIL, passwords.hash_password("correct horse battery staple 42"), "Dev", "developer",
+                         is_admin=True)
+    demo_on["PAIMANA_DEVELOPER_EMAIL"] = DEV_EMAIL          # even with the developer's account configured
     with TestClient(app) as c:
         info = c.get("/api/auth/demo").json()
         assert info["enabled"] is True
         assert [r["role"] for r in info["roles"]] == ["ipmd", "ministry", "agency", "admin"]
         scope = {r["role"]: r["scope"] for r in info["roles"]}
         assert scope["ministry"] == sc["ministries"][0]["name"] and scope["agency"] == sc["agencies"][0]["name"]
-        assert c.post("/api/auth/demo", json={"role": "developer"}).status_code == 404
-        accounts.create_user(DEV_EMAIL, passwords.hash_password("correct horse battery staple 42"), "Dev",
-                             "developer", is_admin=True)
-        demo_on["PAIMANA_DEVELOPER_EMAIL"] = DEV_EMAIL
-        assert [r["role"] for r in c.get("/api/auth/demo").json()["roles"]][-1] == "developer"
+        assert c.post("/api/auth/demo", json={"role": "developer"}).status_code == 422
+        assert c.get("/api/auth/me").status_code == 401
+
+
+def test_any_ministry_or_agency_gets_its_own_demo_account(demo_on):
+    sc = serving.scopes()
+    other_m, other_a = sc["ministries"][1]["name"], sc["agencies"][1]["name"]
+    with TestClient(app) as c:
+        top = c.post("/api/auth/demo", json={"role": "ministry"}).json()
+        h = {"X-CSRF-Token": top["csrfToken"]}
+        m = c.post("/api/auth/demo", json={"role": "ministry", "ministry": other_m.upper()}, headers=h).json()
+        assert m["ministry"] == other_m and m["userId"] != top["userId"]            # canonical spelling, own account
+        assert c.get("/api/projects").json()["total"] == serving.projects(scope=("ministry", other_m), size=1)["total"]
+        h = {"X-CSRF-Token": m["csrfToken"]}
+        a = c.post("/api/auth/demo", json={"role": "agency", "agency": other_a}, headers=h).json()
+        assert a["role"] == "agency_official" and a["agency"] == other_a
+        h = {"X-CSRF-Token": a["csrfToken"]}
+        bad = c.post("/api/auth/demo", json={"role": "agency", "agency": "No Such Agency"}, headers=h)
+        assert bad.status_code == 400 and c.get("/api/auth/me").json()["agency"] == other_a   # the session holds
+        again = c.post("/api/auth/demo", json={"role": "ministry", "ministry": other_m}, headers=h).json()
+        assert again["userId"] == m["userId"]                                      # the same account next time
+    assert accounts.user(user_id=top["userId"])["ministry"] == sc["ministries"][0]["name"]   # the default one kept its
 
 
 @pytest.mark.parametrize("role, account_role, admin", [
@@ -86,7 +106,8 @@ def test_a_second_click_switches_roles_with_the_csrf_token(demo_on):
         stale.cookies.set("paimana_session", old_cookie)
         assert stale.get("/api/auth/me").status_code == 401                             # the replaced session ended
     rows = db.audit_rows(action="auth.demo_login")["items"]
-    assert [row["detail"] for row in rows] == ["one-click demo sign-in as ministry", "one-click demo sign-in as agency"]
+    assert [row["detail"].split(" (")[0] for row in rows] == ["one-click demo sign-in as ministry",
+                                                          "one-click demo sign-in as agency"]
 
 
 def test_a_demo_account_keeps_no_known_password_and_drift_is_corrected(demo_on):

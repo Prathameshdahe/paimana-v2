@@ -5,7 +5,8 @@ import { ChevronDown, KeyRound, LogOut, ShieldCheck } from 'lucide-react'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can, canAdmin } from '@/lib/auth/access'
-import { DEMO_ICONS, demoRoleOf, useDemo, useOpenRole } from '@/lib/auth/demo'
+import { useDemo } from '@/lib/auth/demo'
+import { DemoRoleList } from '@/components/common/DemoRoleList'
 import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
 import { formatDate } from '@/lib/formatters'
@@ -44,8 +45,7 @@ export function TopBar() {
   const navigate = useNavigate()
   const [changing, setChanging] = useState(false)
   const demo = useDemo()
-  const openRole = useOpenRole()
-  const demoNow = demoRoleOf(session)
+  const [menuOpen, setMenuOpen] = useState(false)
   useAlertStream()
 
   return (
@@ -83,7 +83,7 @@ export function TopBar() {
           {can(role, 'canSeeAlerts') && <AlertBell />}
 
           {role ? (
-            <Popover.Root>
+            <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
               <Popover.Trigger
                 aria-label="account"
                 className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -116,28 +116,10 @@ export function TopBar() {
                     )}
                   </div>
                   {demo.data?.enabled && (
-                    // prototype mode (backend DEMO_LOGIN): one click opens another role's demo account
+                    // prototype mode (backend DEMO_LOGIN): one click opens another role, ministry or agency
                     <div className="border-t border-border-subtle py-1">
                       <div className="px-4 pb-1 pt-1.5 text-xs font-medium text-fg-dimmed">Switch role (demo)</div>
-                      {[{ role: 'public' as const, label: 'Public', scope: null }, ...demo.data.roles]
-                        .filter((o) => o.role !== demoNow)
-                        .map((o) => {
-                          const Icon = DEMO_ICONS[o.role]
-                          return (
-                            <Popover.Close asChild key={o.role}>
-                              <button
-                                type="button"
-                                disabled={!!openRole.pending}
-                                onClick={() => openRole.open(o.role)}
-                                className={ITEM}
-                                title={o.scope ?? undefined}
-                              >
-                                <Icon className="size-4" aria-hidden="true" />
-                                <span className="min-w-0 truncate">{o.label}</span>
-                              </button>
-                            </Popover.Close>
-                          )
-                        })}
+                      <DemoRoleList variant="menu" onPicked={() => setMenuOpen(false)} />
                     </div>
                   )}
                   <div className="border-t border-border-subtle py-1">
