@@ -126,3 +126,21 @@ def test_ship_guard_needs_a_ci_above_zero_on_a_block_that_clears_the_margin():
     assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)], 0.01)
     assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)], 0.01)   # the CI above 0 is under margin
     assert not experiment.robust(False, [b(0.02, 0.01)], 0.01)                     # the rule failed
+
+
+def test_harness_can_compare_against_an_earlier_run_and_names_the_champion(harness):
+    _, tmp = harness
+    old = {"entry_id": "R1/lightgbm/y_any_h2", "run_id": "R1", "model": "lightgbm", "target": "y_any", "horizon": 2,
+           "feature_list": ["noise"], "categorical": [], "params": {**backtest.LGB_PARAMS, "n_estimators": 20}}
+    new = {**old, "entry_id": "R2/lightgbm/y_any_h2", "run_id": "R2",
+           "params": {**backtest.LGB_PARAMS, "n_estimators": 20, "half_life_q": 8}}
+    reg = {"runs": [old, new], "champions": {"y_any_h2": {"entry_id": new["entry_id"]}}, "decisions": []}
+    man = {"features": {}, "categorical": []}
+    assert experiment.champion(reg, "y_any_h2", man)[2]["half_life_q"] == 8 and \
+        experiment.champion(reg, "y_any_h2", man)[3] == "R2/lightgbm/y_any_h2"
+    cols, cats, params, entry = experiment.champion(reg, "y_any_h2", man, run="R1")
+    assert entry == "R1/lightgbm/y_any_h2" and "half_life_q" not in params and cols == ["noise"]
+    with pytest.raises(AssertionError, match="no LightGBM entry"):
+        experiment.champion(reg, "y_any_h2", man, run="R9")
+    t = experiment.run("null", seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+    assert t.champion_entry.isna().all()                                   # no champion: the manifest's features

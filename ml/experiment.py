@@ -2,6 +2,7 @@
 Paired champion-vs-challenger experiments (docs/MODEL_UPGRADES_2026-09.md).
 
 Run from repo root after the gold build:  python -m ml.experiment <candidate> [--seeds 0,1,2] [--targets y_any_h2]
+                                                                     [--champion-run ML-20260927-222602]
                                           python -m ml.experiment --list | --table
                                           python -m ml.experiment --tune y_any_h2 [--trials 20] [--no-es]
                                           python -m ml.experiment g_intervals | g2_intervals_asym
@@ -12,7 +13,9 @@ Outputs  model/experiments/<candidate>.csv (one row per target and block), tune_
          temp/experiment_cache/ (champion predictions per gold version, target, cutoffs, columns, params and seed;
          safe to delete)
 
-The champion of each target is its registry entry (feature list, categoricals and LightGBM params). A challenger
+The champion of each target is its registry entry (feature list, categoricals and LightGBM params), or with
+--champion-run that run's LightGBM entry of the target (the champions a round started from, so a result stays
+reproducible after a promotion); the CSV's champion_entry column names it. A challenger
 changes one thing against it: extra columns joined on (project_key, period), which must be point-in-time (checked
 below), a different fit function (which may weight the training rows) or other columns. Both are backtested with
 backtest.backtest on the same rows and cutoffs, the validation and flash blocks of backtest.windows, once per seed
@@ -363,7 +366,7 @@ def tune(key="y_any_h2", trials=24, seed=0, es=True, out=OUT):
     t0 = time.time()
     feats, labels, cov, man = bt.load()
     y, h = next((y, h) for y, h in bt.TARGETS if f"{y}_h{h}" == key)
-    cols, cats, params = champion(registry.load(), key, man)
+    cols, cats, params, _ = champion(registry.load(), key, man)
     d = bt.frame(feats, labels[h], y, h)
     val = pd.to_datetime(bt.windows(cov, d, y, h)["validation"])
     rng = np.random.default_rng(seed)
@@ -443,7 +446,7 @@ def intervals(name="g_intervals", asym=False, out=OUT):
     nearer COVER on both blocks (p50 and its pinball loss do not change)."""
     t0 = time.time()
     feats, labels, cov, man = bt.load()
-    cols, cats, _ = champion(registry.load(), "y_any_h2", man)      # score.py: the p_any_2q champion's features
+    cols, cats, *_ = champion(registry.load(), "y_any_h2", man)     # score.py: the p_any_2q champion's features
     rows = []
     for qn, (y, like) in bt.QUANTILE_TARGETS.items():
         d = bt.qframe(feats, labels[2], y)
@@ -509,14 +512,20 @@ CANDIDATES = {
 
 # ---------------------------------------------------------------------------------------------------- the run
 
-def champion(reg, key, man):
-    """(feature list, categoricals, params) of the target's registry champion, else the manifest's full feature set
-    with LGB_PARAMS."""
-    e = next((r for r in reg["runs"] if r["entry_id"] == reg["champions"].get(key, {}).get("entry_id")), None)
+def champion(reg, key, man, run=None):
+    """(feature list, categoricals, params, entry_id) of the target's registry champion, or with run of that run's
+    LightGBM entry of the target (lightgbm, else lightgbm_incumbent). Without a LightGBM champion: the manifest's full
+    feature set with the target's lgb_params (entry_id None)."""
+    if run:
+        ids = [f"{run}/{m}/{key}" for m in ("lightgbm", "lightgbm" + registry.INCUMBENT)]
+        e = next((r for i in ids for r in reg["runs"] if r["entry_id"] == i), None)
+        assert e is not None, f"no LightGBM entry of {key} in run {run}"
+    else:
+        e = next((r for r in reg["runs"] if r["entry_id"] == reg["champions"].get(key, {}).get("entry_id")), None)
     if e is None or registry.family(e["model"]) != "lightgbm":
         y, h = key.rsplit("_h", 1)
-        return bt.model_cols(man["features"]), man["categorical"], bt.lgb_params(y, int(h))
-    return e["feature_list"], e["categorical"], dict(e["params"])
+        return bt.model_cols(man["features"]), man["categorical"], bt.lgb_params(y, int(h)), None
+    return e["feature_list"], e["categorical"], dict(e["params"]), e["entry_id"]
 
 
 def cached(tag, make):
@@ -560,8 +569,9 @@ def block_metrics(p, h):
     return bt.pooled(p.assign(model="m"), folds, h).iloc[0]
 
 
-def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_cache=True):
-    """Backtest the champion and the challenger on both blocks of every target; returns the result table."""
+def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_cache=True, champion_run=None):
+    """Backtest the champion (champion_run: that run's entries, see champion) and the challenger on both blocks of
+    every target; returns the result table."""
     cand = cand or CANDIDATES[name]
     t0 = time.time()
     feats, labels, cov, man = bt.load()
@@ -580,7 +590,7 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
         if key not in keys:
             continue
         t1 = time.time()
-        cols, cats, params = champion(reg, key, man)
+        cols, cats, params, entry_id = champion(reg, key, man, champion_run)
         ccols = cand.cols(cols, key) if cand.cols else cols + [c for c in new_cols if c not in cols]
         ccats = cats + [c for c in cand.cats if c not in cats]
         d, dc = bt.frame(feats, labels[h], y, h), bt.frame(cfeats, labels[h], y, h)
@@ -608,8 +618,9 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
             boot = paired_bootstrap(a[0].y.to_numpy(), a[0].project_key.to_numpy(), [p.p.to_numpy() for p in a],
                                     [p.p.to_numpy() for p in c], n_boot=n_boot)
             lo, hi = ci(boot)
-            res[b] = {"candidate": name, "target": key, "block": b, "n_rows": len(a[0]),
-                      "n_projects": a[0].project_key.nunique(), "n_folds": len(cs), "seeds": len(seeds),
+            res[b] = {"candidate": name, "target": key, "block": b, "champion_entry": entry_id,
+                      "n_rows": len(a[0]), "n_projects": a[0].project_key.nunique(), "n_folds": len(cs),
+                      "seeds": len(seeds),
                       "champion_pr_auc": mean(ma, "pr_auc"), "challenger_pr_auc": mean(mc, "pr_auc"),
                       "delta_pr_auc": float(np.mean(deltas)), "ci_lo": lo, "ci_hi": hi,
                       "boot_share_le_0": float((boot <= 0).mean()),
@@ -682,6 +693,8 @@ def main(argv=None):
     ap.add_argument("--targets", default=None, help="comma-separated target keys, e.g. y_any_h2")
     ap.add_argument("--boot", type=int, default=BOOT)
     ap.add_argument("--no-cache", action="store_true")
+    ap.add_argument("--champion-run", default=None,
+                    help="compare against this run's LightGBM entries instead of the current champions")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--table", action="store_true")
     ap.add_argument("--tune", metavar="TARGET", help="random search on the validation block, e.g. y_any_h2")
@@ -698,7 +711,8 @@ def main(argv=None):
         print(summary_table())
     elif a.candidate:
         run(a.candidate, seeds=tuple(int(s) for s in a.seeds.split(",")),
-            targets=a.targets.split(",") if a.targets else None, n_boot=a.boot, use_cache=not a.no_cache)
+            targets=a.targets.split(",") if a.targets else None, n_boot=a.boot, use_cache=not a.no_cache,
+            champion_run=a.champion_run)
     else:
         ap.error("name a candidate, or --list / --table")
 
