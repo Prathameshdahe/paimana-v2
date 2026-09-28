@@ -16,11 +16,11 @@ LLM_GATE: the caller wraps one call, or the calls of one task, in `with gate(wai
 is False (the wait timed out). The gate is not re-entrant, and chat(), chat_stream() and complete() never take it
 themselves; the chat, the brief (backend/brief.py), the worker cell (llm/worker.py), the research agent and the
 second opinion each take it around their generations. A chat request passes chat=True: chat_active() is True while one
-holds or waits for the gate. A background take (chat=False) first waits while a chat request is active (at most its
-wait_s, or CHAT_YIELD_S when it waits without limit), because a semaphore lets the thread that just released it take
-it again before a woken waiter runs; background jobs also check chat_active() between items and pause
-(wait_chat_idle), so the person waiting for an answer goes first. Embeddings take no gate (short requests to another
-model).
+holds or waits for the gate. A background take (chat=False) waits while a chat request is active (at most its wait_s,
+or CHAT_YIELD_S when it waits without limit), also when it was already waiting before the chat arrived: LLM_GATE hands
+itself to a waiting chat first, where a semaphore would wake its waiters in arrival order and let the thread that just
+released it take it straight back. Background jobs also check chat_active() between items and pause (wait_chat_idle),
+so the person waiting for an answer goes first. Embeddings take no gate (short requests to another model).
 
 An unreachable server is remembered the way backend/brief.py does it: the caller calls mark_down() after an
 LLMConnectionError whose `down` is True (refused, or no connection within CONNECT_TIMEOUT), and down_recently() is True
@@ -54,13 +54,10 @@ TIMEOUT = 120.0  # local 14B model can be slow (a streamed reply: the longest ga
 CONNECT_TIMEOUT = 3.0  # but a server that is not running fails fast
 EMBED_TIMEOUT = 60.0
 DOWN_S = 30
-CHAT_YIELD_S = 300.0  # a background gate() without a time limit waits at most this long for chat requests to finish
+CHAT_YIELD_S = 300.0  # a background gate() without a time limit lets chat requests go first for this long
 
 _transport: httpx.BaseTransport | None = None  # tests put an httpx.MockTransport here
 _down_at = -1e9  # time.monotonic() of the last unreachable LM Studio (mark_down)
-LLM_GATE = threading.BoundedSemaphore(1)
-_chat_lock = threading.Lock()
-_chat_n = 0  # chat requests holding or waiting for LLM_GATE
 
 
 class LLMConnectionError(Exception):
@@ -84,37 +81,80 @@ class LLMOutputError(Exception):
 
 # ------------------------------------------------------------------ gate and circuit breaker
 
+class _Gate:
+    """LLM_GATE: one holder at a time, taken and given back like a threading.BoundedSemaphore(1) (acquire(blocking,
+    timeout) -> bool, release(); ValueError on a release too many), except that chat takes go first. A take that is
+    not a chat waits until the gate is free and no chat take holds or waits for it (chats), for at most CHAT_YIELD_S
+    when it has no time limit, then until the gate is free; a chat take waits until the gate is free. Every release and
+    every chat that gives up wakes all waiters to check again, so a background take that was waiting before a chat
+    arrived does not go ahead of it (a semaphore wakes its waiters in arrival order)."""
+
+    def __init__(self):
+        self._cond = threading.Condition(threading.Lock())
+        self._held = self._by_chat = False
+        self.chats = 0  # chat takes holding or waiting for the gate
+
+    def _free(self) -> bool:
+        return not self._held
+
+    def _free_of_chats(self) -> bool:
+        return not self._held and not self.chats
+
+    def acquire(self, blocking: bool = True, timeout: float | None = None, *, chat: bool = False) -> bool:
+        """True once taken; False when it was not free within timeout seconds (None: no limit; blocking=False: not
+        free now). chat=True counts in chats from the start of the wait until release()."""
+        if not blocking:
+            timeout = 0
+        got = False
+        with self._cond:
+            try:
+                if chat:
+                    self.chats += 1
+                    got = self._cond.wait_for(self._free, timeout)
+                elif timeout is None:
+                    got = self._cond.wait_for(self._free_of_chats, CHAT_YIELD_S) or self._cond.wait_for(self._free)
+                else:
+                    got = self._cond.wait_for(self._free_of_chats, timeout)
+            finally:  # a wait cut short by an exception gives up too
+                if got:
+                    self._held, self._by_chat = True, chat
+                elif chat:
+                    self.chats -= 1
+                    self._cond.notify_all()
+            return got
+
+    def release(self) -> None:
+        with self._cond:
+            if not self._held:
+                raise ValueError("LLM_GATE released too many times")
+            if self._by_chat:
+                self.chats -= 1
+            self._held = self._by_chat = False
+            self._cond.notify_all()
+
+
+LLM_GATE = _Gate()
+
+
 @contextmanager
 def gate(wait_s: float | None = None, *, chat: bool = False) -> Iterator[bool]:
     """`with gate(wait_s) as ok:` holds LLM_GATE for the block; ok is False when it was not free within wait_s
     seconds (None: wait as long as it takes), and then the block must not generate. chat=True marks a chat request
     (chat_active) while it waits and while it holds the gate; any other take lets active chat requests go first,
-    waiting while chat_active() within the same wait_s (at most CHAT_YIELD_S when wait_s is None)."""
-    global _chat_n
-    if chat:
-        with _chat_lock:
-            _chat_n += 1
-    got = False
+    also the ones that arrive while it waits: it takes the gate only when no chat request holds or waits for it
+    within the same wait_s (when wait_s is None, during its first CHAT_YIELD_S seconds, then as soon as the gate
+    is free)."""
+    got = LLM_GATE.acquire(timeout=wait_s, chat=chat)
     try:
-        if not chat and chat_active():
-            end = time.monotonic() + (CHAT_YIELD_S if wait_s is None else wait_s)
-            while chat_active() and time.monotonic() < end:
-                time.sleep(0.02)
-            if wait_s is not None:
-                wait_s = max(0.0, end - time.monotonic())
-        got = LLM_GATE.acquire(timeout=wait_s)
         yield got
     finally:
         if got:
             LLM_GATE.release()
-        if chat:
-            with _chat_lock:
-                _chat_n -= 1
 
 
 def chat_active() -> bool:
     """True while a chat request holds or waits for LLM_GATE; background jobs pause between items."""
-    return _chat_n > 0
+    return LLM_GATE.chats > 0
 
 
 def wait_chat_idle(max_s: float = 300.0, poll_s: float = 0.5) -> bool:

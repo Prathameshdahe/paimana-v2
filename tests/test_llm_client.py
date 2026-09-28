@@ -375,6 +375,53 @@ def test_a_waiting_chat_goes_before_the_next_background_take():
         assert ok and time.monotonic() - t0 < 0.05
 
 
+def test_a_chat_goes_before_background_takes_already_waiting():
+    """The research agent generates while the second-opinion job and a brief already wait in the gate; a chat request
+    that arrives then gets the gate next (a semaphore would wake its waiters in arrival order: the chat last)."""
+    order, held, release = [], threading.Event(), threading.Event()
+
+    def holder():
+        with client.gate(5) as ok:
+            order.append("holder" if ok else "holder busy")
+            held.set()
+            release.wait(5)
+
+    def take(name, **kw):
+        with client.gate(5, **kw) as ok:
+            order.append(name if ok else f"{name} busy")
+            time.sleep(0.02)
+    threads = [threading.Thread(target=holder)]
+    threads[0].start()
+    assert held.wait(5)
+    threads += [threading.Thread(target=take, args=(name,)) for name in ("bg1", "bg2")]
+    for t in threads[1:]:
+        t.start()
+    time.sleep(0.2)                                  # both wait for the gate, and no chat is active yet
+    assert not client.chat_active() and order == ["holder"]
+    threads.append(threading.Thread(target=take, args=("chat",), kwargs={"chat": True}))
+    threads[-1].start()
+    deadline = time.monotonic() + 5
+    while not client.chat_active() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    release.set()
+    for t in threads:
+        t.join(10)
+    assert order[:2] == ["holder", "chat"] and sorted(order[2:]) == ["bg1", "bg2"]
+    assert not client.chat_active()
+
+    with client.gate(1) as ok:               # a chat that gives up hands the gate on to the background take behind it
+        assert ok
+        waiting = threading.Thread(target=take, args=("bg3",))
+        waiting.start()
+        with client.gate(0.05, chat=True) as chat_ok:
+            assert not chat_ok
+        assert not client.chat_active()
+    waiting.join(5)
+    assert order[-1] == "bg3"
+    with pytest.raises(ValueError):          # like the BoundedSemaphore it replaces
+        client.LLM_GATE.release()
+
+
 def test_circuit_breaker(monkeypatch):
     monkeypatch.setattr(client, "_down_at", -1e9)
     assert not client.down_recently()
