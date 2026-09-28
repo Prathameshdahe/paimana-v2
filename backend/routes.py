@@ -8,7 +8,7 @@ from llm import worker
 
 from . import brief, db, serving, store
 from .access import Viewer, in_scope, need, stream_viewer, viewer
-from .live import portals, scheduler, scout, watcher
+from .live import portals, research, scheduler, scout, watcher
 from .schemas import (
     AgencyMatrix,
     Alert,
@@ -287,6 +287,26 @@ def post_scout(background: BackgroundTasks, project_key: str | None = Query(None
     db.audit(v.role, "jobs.scout", "batch", f"{len(keys)} projects")
     background.add_task(scout.run, keys)
     return {"started": True, "detail": f"scouting {len(keys)} projects in the background", "pending": len(keys)}
+
+
+@router.post("/jobs/research", response_model=JobStarted)
+def post_research(background: BackgroundTasks, project_key: str | None = Query(None, max_length=32),
+                  v: Viewer = Depends(need("jobs"))):
+    """Run the research agent now, in the background (it waits for the local LLM): one current project, or the next
+    batch (watchlists, then Critical / High / Watch, least recently researched first)."""
+    if research.busy():
+        return {"started": False, "detail": "a research run is already in progress"}
+    if project_key:
+        k = _key(project_key)
+        if k not in scout.index()["projects"]:
+            raise HTTPException(status_code=404, detail=f"project {project_key} is not in the current portfolio")
+        keys = [k]
+    else:
+        keys = research.batch_keys()
+    db.audit(v.role, "jobs.research", keys[0] if project_key else "batch", f"{len(keys)} projects")
+    background.add_task(research.run, keys)
+    return {"started": True, "detail": f"researching {keys[0] if project_key else f'{len(keys)} projects'} in the "
+                                       "background", "pending": len(keys)}
 
 
 @router.post("/jobs/parivesh-snapshot", response_model=JobStarted)

@@ -59,7 +59,15 @@ CREATE TABLE IF NOT EXISTS research_facts (
 CREATE INDEX IF NOT EXISTS research_facts_key ON research_facts (project_key);
 CREATE TABLE IF NOT EXISTS researched (
     project_key TEXT PRIMARY KEY, researched_at TEXT NOT NULL, n_candidates INTEGER, n_relevant INTEGER);
+-- every verdict of the research agent on a news item for a project (relevant NULL: the verdict was rejected)
+CREATE TABLE IF NOT EXISTS signal_judgements (
+    signal_id INTEGER NOT NULL REFERENCES signals (id), project_key TEXT NOT NULL, relevant INTEGER,
+    verdict_json TEXT, model TEXT, prompt_version TEXT, judged_at TEXT, PRIMARY KEY (signal_id, project_key));
 """
+RESEARCH_FACT_COLS = ("fact_id", "project_key", "category", "taxonomy", "direction", "severity", "event_date",
+                      "date_precision", "published_date", "status", "summary", "headline", "source", "url", "domain",
+                      "match", "match_reason", "origin", "researched_on", "live", "signal_id", "model",
+                      "prompt_version", "judged_at")
 
 
 def path() -> Path:
@@ -264,6 +272,18 @@ def project_signals(project_key: str, limit=100) -> dict:
     return {"key": project_key, "last_scout_at": last and last[0], "items": items}
 
 
+def _read(sql: str, params: list) -> list[sqlite3.Row]:
+    """Rows of a read that finds nothing, rather than failing, when db.init() has not made the table yet (serving
+    used from a script outside the backend)."""
+    with closing(connect()) as con:
+        try:
+            return con.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as e:
+            if "no such table" not in str(e):
+                raise
+            return []
+
+
 def research_facts(project_key: str | None = None, keys=None) -> list[dict]:
     """The research agent's facts of one project, or of keys (None: every project), newest judged first."""
     conds, params = [], []
@@ -274,9 +294,7 @@ def research_facts(project_key: str | None = None, keys=None) -> list[dict]:
         conds.append(IN_KEYS)
         params.append(json.dumps(sorted(keys)))
     where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    with closing(connect()) as con:
-        return [dict(r) for r in con.execute(f"SELECT * FROM research_facts{where} ORDER BY judged_at DESC, fact_id",
-                                             params)]
+    return [dict(r) for r in _read(f"SELECT * FROM research_facts{where} ORDER BY judged_at DESC, fact_id", params)]
 
 
 def researched(project_key: str | None = None) -> dict[str, str]:
@@ -284,8 +302,52 @@ def researched(project_key: str | None = None) -> dict[str, str]:
     sql, params = ("SELECT project_key, researched_at FROM researched", [])
     if project_key is not None:
         sql, params = sql + " WHERE project_key = ?", [project_key]
+    return {r[0]: r[1] for r in _read(sql, params)}
+
+
+def research_candidates(project_key: str, limit: int) -> tuple[list[dict], list[dict]]:
+    """News items the research agent has not judged for this project: (up to limit linked to it, every one linked to
+    no project, the unlinked pool), newest first."""
+    unjudged = "NOT EXISTS (SELECT 1 FROM signal_judgements j WHERE j.signal_id = s.id AND j.project_key = ?)"
     with closing(connect()) as con:
-        return dict(con.execute(sql, params).fetchall())
+        linked = [dict(r) for r in con.execute(f"""SELECT s.*, sp.method FROM signals s
+            JOIN signal_projects sp ON sp.signal_id = s.id AND sp.project_key = ? WHERE {unjudged}
+            ORDER BY s.published_at DESC, s.id DESC LIMIT ?""", [project_key, project_key, limit])]
+        pool = [dict(r) for r in con.execute(f"""SELECT s.* FROM signals s
+            WHERE NOT EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id) AND {unjudged}
+            ORDER BY s.published_at DESC, s.id DESC""", [project_key])]
+    return linked, pool
+
+
+def save_research(project_key: str, judgements: list[dict], facts: list[dict], links: list[int]) -> list[str]:
+    """One batch of research verdicts in one transaction: every judgement, the relevant facts (a fact_id already
+    stored is kept as it is) and a signal_projects row (method 'llm') for each newly linked pool item. Returns the
+    fact_ids that are new."""
+    jcols = ("signal_id", "project_key", "relevant", "verdict_json", "model", "prompt_version", "judged_at")
+    with closing(connect()) as con, con:
+        con.executemany(f"INSERT OR REPLACE INTO signal_judgements ({', '.join(jcols)}) VALUES "
+                        f"({', '.join('?' * len(jcols))})", [[j.get(c) for c in jcols] for j in judgements])
+        new = [f["fact_id"] for f in facts if con.execute(
+            f"INSERT OR IGNORE INTO research_facts ({', '.join(RESEARCH_FACT_COLS)}) VALUES "
+            f"({', '.join('?' * len(RESEARCH_FACT_COLS))})", [f.get(c) for c in RESEARCH_FACT_COLS]).rowcount]
+        con.executemany("INSERT OR IGNORE INTO signal_projects (signal_id, project_key, link_score, method) "
+                        "VALUES (?, ?, NULL, 'llm')", [(sid, project_key) for sid in links])
+    return new
+
+
+def mark_researched(project_key: str, n_candidates: int, n_relevant: int) -> None:
+    with closing(connect()) as con, con:
+        con.execute("INSERT OR REPLACE INTO researched (project_key, researched_at, n_candidates, n_relevant) "
+                    "VALUES (?, ?, ?, ?)", [project_key, _now(), n_candidates, n_relevant])
+
+
+def add_alerts_once(rows: list[dict]) -> int:
+    """add_alerts, skipping a row whose project already has an alert of that kind from that source (a URL)."""
+    with closing(connect()) as con:
+        fresh = [r for r in rows if not con.execute(
+            "SELECT 1 FROM alerts WHERE project_key IS ? AND kind = ? AND source = ?",
+            [r.get("project_key"), r["kind"], r.get("source")]).fetchone()]
+    return add_alerts(fresh) if fresh else 0
 
 
 def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None:

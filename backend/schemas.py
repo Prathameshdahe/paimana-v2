@@ -748,6 +748,7 @@ class LiveStatus(CamelModel):
     scout: LiveJob
     parivesh_snapshot: LiveJob | None = None
     bhoomi_rashi_pull: LiveJob | None = None
+    research: LiveJob | None = None
     bhoomi_pull_enabled: bool = False
 
 

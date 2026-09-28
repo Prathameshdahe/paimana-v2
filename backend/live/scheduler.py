@@ -6,7 +6,9 @@ every SCOUT_INTERVAL_H hours (default 24, first run SCOUT_FIRST_DELAY_S after st
 backend/live/portals.py: the PARIVESH dashboard snapshot every PARIVESH_SNAPSHOT_INTERVAL_H hours (default 6; a
 date already archived is not fetched again, so this is one fetch a day with same-day retries; PARIVESH_SNAPSHOT=0
 turns it off) and, only with BHOOMI_PULL=1, a daily check that pulls the Bhoomi Rashi register when the newest pull
-is BHOOMI_PULL_EVERY_D days old (default 91, quarterly). LIVE_JOBS=0 starts none of them (the tests). The blocking
+is BHOOMI_PULL_EVERY_D days old (default 91, quarterly), and the research agent (backend/live/research.py) every
+RESEARCH_INTERVAL_H hours (default 24, first run RESEARCH_FIRST_DELAY_S after start; RESEARCH_AGENT=0 turns it off),
+up to RESEARCH_PER_RUN projects a run. LIVE_JOBS=0 starts none of them (the tests). The blocking
 work runs in a thread (asyncio.to_thread), and every job holds its own lock, so a scheduled run never overlaps one
 started from the API. A run that ingests, scouts or fetches writes its job_runs row; an idle tick (nothing in the
 inbox, today already archived, pull not due) only updates STATUS.
@@ -22,13 +24,14 @@ from datetime import datetime, timedelta, timezone
 from backend import db
 from backend.schemas import Alert
 
-from . import portals, scout, watcher
+from . import portals, research, scout, watcher
 
 SCOUT_FIRST_DELAY_S = 600
 PORTALS_FIRST_DELAY_S = 120
+RESEARCH_FIRST_DELAY_S = 1800
 POLL_S, HEARTBEAT_S = 2.0, 15.0
 STATUS = {job: {"interval_s": None, "running": False, "last_tick": None, "next_due": None, "last_error": None}
-          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull")}
+          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull", "research")}
 
 
 def _iso(t: datetime) -> str:
@@ -74,6 +77,9 @@ def start() -> list[asyncio.Task]:
     if bhoomi_enabled():
         every_d = int(env("BHOOMI_PULL_EVERY_D", portals.PULL_EVERY_D))
         loops.append(("bhoomi_rashi_pull", lambda: portals.pull_if_due(every_d), 86400.0, PORTALS_FIRST_DELAY_S))
+    if research.enabled():
+        loops.append(("research", research.batch, float(env("RESEARCH_INTERVAL_H", 24)) * 3600,
+                      RESEARCH_FIRST_DELAY_S))
     return [asyncio.create_task(_every(job, fn, s, first), name=job) for job, fn, s, first in loops]
 
 
@@ -89,7 +95,8 @@ def status() -> dict:
     return {"enabled": enabled(), "inbox_pending": len(watcher.pending()),
             "watch": {**STATUS["watch"], "last_run": jobs.get("ingest")},
             "scout": {**STATUS["scout"], "last_run": jobs.get("scout")},
-            **{job: {**STATUS[job], "last_run": jobs.get(job)} for job in ("parivesh_snapshot", "bhoomi_rashi_pull")},
+            **{job: {**STATUS[job], "last_run": jobs.get(job)}
+               for job in ("parivesh_snapshot", "bhoomi_rashi_pull", "research")},
             "bhoomi_pull_enabled": bhoomi_enabled()}
 
 

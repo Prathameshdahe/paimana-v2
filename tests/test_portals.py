@@ -156,6 +156,7 @@ def test_scheduler_switches(monkeypatch):
     monkeypatch.setattr(scheduler, "STATUS", {j: dict(v) for j, v in scheduler.STATUS.items()})
     monkeypatch.delenv("BHOOMI_PULL", raising=False)
     monkeypatch.delenv("PARIVESH_SNAPSHOT", raising=False)
+    monkeypatch.setenv("RESEARCH_AGENT", "0")     # the research loop: tests/test_research_agent.py
     monkeypatch.setattr(scheduler, "PORTALS_FIRST_DELAY_S", 0.05)
     monkeypatch.setattr(scheduler, "SCOUT_FIRST_DELAY_S", 60)
     monkeypatch.setattr(watcher, "watch_once", lambda: None)

@@ -31,6 +31,7 @@ def test_scheduler_runs_both_loops_when_on(monkeypatch):
     monkeypatch.setenv("LIVE_JOBS", "1")
     monkeypatch.setenv("WATCH_INTERVAL_S", "0.05")
     monkeypatch.setenv("PARIVESH_SNAPSHOT", "0")  # the portal loops: tests/test_portals.py
+    monkeypatch.setenv("RESEARCH_AGENT", "0")     # the research loop: tests/test_research_agent.py
     monkeypatch.delenv("BHOOMI_PULL", raising=False)
     monkeypatch.setattr(scheduler, "SCOUT_FIRST_DELAY_S", 0.1)
     monkeypatch.setattr(watcher, "watch_once", lambda: calls.append("watch"))

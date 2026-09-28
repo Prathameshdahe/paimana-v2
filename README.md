@@ -138,7 +138,7 @@ no LLM call and no cause tags.
 
 ### Live tracking
 
-The backend runs two background loops (`backend/live/scheduler.py`):
+The backend runs these background loops (`backend/live/scheduler.py`):
 
 - **Report watcher**, every `WATCH_INTERVAL_S` seconds (60). Drop a portal
   `Projects_Report.csv` export or a PAIMANA flash PDF into `dataset/raw/inbox/`,
@@ -153,13 +153,22 @@ The backend runs two background loops (`backend/live/scheduler.py`):
   (watchlists first, then Critical and High) and reads the PIB feed, links items
   to projects and raises `signal` alerts for severity 2 and 3 items.
   `POST /api/jobs/scout?project_key=PRJ-...` scouts one project on the spot.
+- **Research agent**, every `RESEARCH_INTERVAL_H` hours (24; the first run is
+  30 minutes after start; `RESEARCH_AGENT=0` turns it off). For up to
+  `RESEARCH_PER_RUN` projects (20; watchlists, then Critical, High and Watch)
+  it refreshes the news, has the local LLM judge each new item from its
+  headline (relevant or not, category, direction, severity, a short summary
+  whose numbers must be in the headline), stores the relevant ones as cited
+  research facts next to the web research sweep, and pauses while a chat
+  answer is using the LLM. `POST /api/jobs/research?project_key=PRJ-...` runs
+  it for one project.
 
 `POST /api/jobs/watch` runs the watcher now. `GET /api/live/status` shows the
 last and next runs and the inbox count, and `GET /api/stream` pushes each new
 alert as a Server-Sent Event. `GET /api/signals/feed` pages the stored signals
 with the state heat and, for each linked project, the first report after the
-news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn both
-loops off; the tests do.
+news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn every
+loop off; the tests do.
 
 ### Access by role
 
