@@ -753,7 +753,7 @@ The demo stack (`docker-compose.demo.yml`, project `paimana-demo`, network `10.2
 
 ### 10.3 The other documents and what each adds
 
-- `README.md`: the front page: what PAIMANA does, the results, the one-command Docker demo, screenshots, the architecture, roles, the AI features, development setup, tests, the stack, the layout, limitations, the documents and the team (rewritten 2026-09-29; the v1 README's model, data-cleaning and limitation sections are gone).
+- `README.md`: layout, setup, running, the LLM worker cell, live tracking, access by role, the production pointer. Its "Model", "Data cleaning" and "Known limitations" sections describe the v1 of September 22 and are stale (section 10.4).
 - `frontend/README.md`: commands, the proxy and API base, sessions and CSRF, the numbers policy, the developer role, the account pages, the routes, the design tokens, the command centre, the Models page. Authoritative for the frontend.
 - `docs/ACCESS_CONTROL.md`: sign-in, sessions, passwords, lockouts, sign-up, resets, bootstrap, the role matrices, request shapes, the assistant's per-tool matrix, the numbers feature. Authoritative for roles.
 - `docs/AI_ASSISTANT.md`: the chat pipeline, the SSE events, the tool matrix, guardrails, speed, the 36-question evaluation, limitations.
@@ -773,8 +773,11 @@ The demo stack (`docker-compose.demo.yml`, project `paimana-demo`, network `10.2
 
 ### 10.4 Claims in older documents that the code has overtaken
 
-- "It's only a role picker, there's no auth"; "the role and its scope come from request headers" (the old README and HELP.md, both corrected 2026-09-29; AI_ASSISTANT guardrails): the sign-in is real (argon2id, HttpOnly cookie, CSRF, lockouts); the viewer is built from the session cookie.
-- "Worker Console for IPMD Analyst and Ministry Official"; "IPMD runs jobs"; "Check inbox now (IPMD)"; portal jobs "started by an IPMD analyst" (the old README, TEAMMATE_GUIDE, EXTERNAL_RESEARCH, SECOND_OPINION): `/workers`, `/models`, every `POST /api/jobs/*`, the worker trigger and the audit log belong to the developer alone; IPMD analysts see counts and approve memos.
+- "It's only a role picker, there's no auth"; "the role and its scope come from request headers" (README, AI_ASSISTANT guardrails; HELP.md said so until 2026-09-29): the sign-in is real (argon2id, HttpOnly cookie, CSRF, lockouts); the viewer is built from the session cookie.
+- "Worker Console for IPMD Analyst and Ministry Official"; "IPMD runs jobs"; "Check inbox now (IPMD)"; portal jobs "started by an IPMD analyst" (README, TEAMMATE_GUIDE, EXTERNAL_RESEARCH, SECOND_OPINION): `/workers`, `/models`, every `POST /api/jobs/*`, the worker trigger and the audit log belong to the developer alone; IPMD analysts see counts and approve memos.
+- "The top bar shows the first four" (README): five inline, the rest under More.
+- `python -m backend.test_smoke` (README): no such file; the tests are pytest under `tests/`.
+- The README's v1 model (Tier 1/Tier 2, PR-AUC 0.079, 4,429 projects, `ml/train.py`, `model/metrics.json`): a leftover; the served model is the registry's champions on the 2005-2026 panel.
 - SQLite as the application store (PROJECT_OVERVIEW, IMPLEMENTATION_GUIDE, SECOND_OPINION, comments in `serving.py`, `second_opinion.py`, `worker.py`, `research.py`, `bottlenecks_summary.json`): PostgreSQL 16 with pgvector; `database/paimana.db` is read by nothing but the one-time copy.
 - "35 REST endpoints", "four background jobs", "10 pages", "Tier Ring + 3 probability gauges" for officials, "Top 3 SHAP reasons", the old 13-row checklist list, the worker steps with a "Drafter", "Trigger worker cycle", "PR-AUC 0.698 / 0.771", "264 tests", "Three roles" (PROJECT_OVERVIEW, TEAMMATE_GUIDE): 56 routes, six loops, 14 views on 15 routes, words for the four roles and gauges for the developer, five drivers, the `DIMENSIONS` list of section 4.9, five worker steps without a drafter, "Run Monitoring Cycle Now", the metrics of section 4.4, 530 test functions, five roles.
 - "The distinct-character rule is the backend's alone" (ACCESS_CONTROL): the frontend enforces it too. ACCESS_CONTROL's `canSeeModelVersion` key does not exist in `access.ts`.
