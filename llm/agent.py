@@ -35,8 +35,8 @@ The LLM is one call at a time: the answer holds client.gate (chat=True, so backg
 LLM call to the end. The writer waits at most GATE_WAIT_S for it, else cards + the deterministic answer with llm
 'busy'; the planner only PLAN_GATE_WAIT_S (it holds up the first card), else the router's calls and the fallback's
 run and the writer may still wait its own GATE_WAIT_S. A client that hangs up while the gate was awaited is caught
-before the LLM is asked. The circuit breaker is the client's: down_recently() skips the LLM ('unavailable'), and a refused connection marks it
-down. Nothing here logs the question text.
+before the LLM is asked. The circuit breaker is the client's: down_recently() skips the LLM ('unavailable'), and a
+refused connection marks it down. Nothing here logs the question text.
 """
 from __future__ import annotations
 
