@@ -2,6 +2,7 @@
 File model registry (docs/IMPLEMENTATION_GUIDE_v2.md A.2 and B 3.4): model/registry.json + model/runs/<run_id>/.
 
 Run from repo root after the gold build:  python -m pipeline.run train
+Undo a promotion:                          python -m ml.registry revert <target key> --reason "..."
 
 One train run backtests every target (ml/backtest.py), refits logistic regression and LightGBM on every realised
 label, saves them into the run folder and registers one entry per (model, target, horizon). Promotion: a challenger
@@ -20,8 +21,11 @@ categoricals, params: config) on the new gold and folds as the incumbent, named 
 of the run already has that configuration.
 The re-scored champion configuration takes over first (the same model on the new folds; nothing else may take over
 across gold versions or folds), and every new configuration then has to beat it under the rule. A champion whose
-features are no longer in the gold is retired and the run starts from no champion. Every decision and its reason is
-recorded in registry.json. Scoring refits each champion with its entry's own params (fitter).
+features are no longer in the gold is retired and the run starts from no champion. A promotion that the rule, once
+corrected, no longer supports is undone with revert: the champion it replaced is champion again (a decision
+"reverted"; the gate cannot do this itself, since the old configuration then has to beat the new one). Every
+decision and its reason is recorded in registry.json. Scoring refits each champion with its entry's own params
+(fitter).
 """
 import functools
 import json
@@ -161,6 +165,25 @@ def run_folds(feats, labels, coverage):
     return out
 
 
+def revert(reg, key, reason, at=None):
+    """Undo the promotion that made the current champion of key: the champion it replaced (the decision's
+    champion_before) is champion again, recorded as a "reverted" decision with reason (the evidence: a harness CSV, a
+    corrected rule). Returns the decision."""
+    at = at or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cur_id = reg["champions"][key]["entry_id"]
+    promo = next((d for d in reversed(reg["decisions"]) if d["challenger"] == cur_id and d["decision"] == "promoted"),
+                 None)
+    assert promo and promo["champion_before"], f"{cur_id} did not replace a champion; nothing to revert to"
+    before = next(r for r in reg["runs"] if r["entry_id"] == promo["champion_before"])
+    reg["champions"][key] = {"entry_id": before["entry_id"], "run_id": before["run_id"], "model": before["model"],
+                             "since": at}
+    decision = {"at": at, "target": before["target"], "horizon": before["horizon"], "challenger": before["entry_id"],
+                "champion_before": cur_id, "decision": "reverted",
+                "reason": f"promotion of {cur_id} ({promo['at']}) undone: {reason}"}
+    reg["decisions"].append(decision)
+    return decision
+
+
 def incumbents(reg, man, configs, folds=None):
     """target key -> the champion entry to re-score in this run: it was scored on another gold version or on other
     folds than the run's (folds: run_folds; None: the folds are not compared) and no candidate of the run (configs:
@@ -273,3 +296,21 @@ def main():
     register(reg, run_id, res, params, inc, created)
     REGISTRY.write_text(json.dumps(jsonable(reg), indent=2), encoding="utf-8")
     print(f"train {run_id}: {time.time() - t0:.0f}s, registry {REGISTRY}")
+
+
+def cli(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m ml.registry")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("revert", help="undo the promotion that made a target's current champion")
+    r.add_argument("key", help="target key, e.g. y_any_h4")
+    r.add_argument("--reason", required=True, help="the evidence, e.g. the harness CSV and the rule it fails")
+    a = ap.parse_args(argv)
+    reg = load()
+    d = revert(reg, a.key, a.reason)
+    REGISTRY.write_text(json.dumps(jsonable(reg), indent=2), encoding="utf-8")
+    print(f"{a.key}: {d['champion_before']} -> {d['challenger']} ({d['reason']})")
+
+
+if __name__ == "__main__":
+    cli()

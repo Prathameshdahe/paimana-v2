@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -148,3 +149,35 @@ def test_register_scores_the_incumbent_first_and_gates_the_new_configuration(tmp
     e = next(r for r in reg["runs"] if r["entry_id"] == champ["entry_id"])
     assert e["feature_list"] == ["a", "b"] and e["rescored_from"] == "R1/lightgbm/y_any_h2"
     assert (tmp_path / "R2" / "lightgbm_incumbent_y_any_h2.txt").exists()
+
+
+def test_revert_restores_the_champion_a_promotion_replaced():
+    reg = {"runs": [], "champions": {}, "decisions": []}
+    add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75))
+    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2"))
+    assert reg["champions"]["y_any_h2"]["entry_id"] == "R2/lightgbm/y_any_h2"
+    d = registry.revert(reg, "y_any_h2", "fails the corrected rule", at="now")
+    assert reg["champions"]["y_any_h2"] == {"entry_id": "R1/lightgbm/y_any_h2", "run_id": "R1", "model": "lightgbm",
+                                            "since": "now"}
+    assert d["decision"] == "reverted" and d["champion_before"] == "R2/lightgbm/y_any_h2"
+    assert d["challenger"] == "R1/lightgbm/y_any_h2" and "fails the corrected rule" in d["reason"]
+    assert add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75, run="R3")) == "rejected"    # the gate goes on from R1
+    try:
+        registry.revert(reg, "y_any_h2", "again")                  # R1 replaced no champion: nothing to go back to
+        raise RuntimeError("revert should refuse")
+    except AssertionError as e:
+        assert "nothing to revert to" in str(e)
+
+
+def test_revert_cli_writes_the_registry(tmp_path, monkeypatch):
+    reg = {"runs": [], "champions": {}, "decisions": []}
+    add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75))
+    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2"))
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(reg), encoding="utf-8")
+    monkeypatch.setattr(registry, "REGISTRY", path)
+    monkeypatch.setattr(registry, "load", lambda: json.loads(path.read_text(encoding="utf-8")))
+    registry.cli(["revert", "y_any_h2", "--reason", "harness CSV"])
+    out = json.loads(path.read_text(encoding="utf-8"))
+    assert out["champions"]["y_any_h2"]["entry_id"] == "R1/lightgbm/y_any_h2"
+    assert out["decisions"][-1]["decision"] == "reverted"
