@@ -20,9 +20,11 @@ in-process TestClient, no lifespan), so they follow the data:
   mentions / not_mentions {any: [...]}: the answer (or, for not_mentions, anything sent) contains one / none
   card           {type}: a card of that type was sent
 Reported: routing accuracy (the router's own calls and second-round tool are exactly the expected tools), tool
-accuracy (every expected tool ran, planner and second round included), checks passed, the LLM's answers accepted
-by the check (first or second attempt), the deterministic-answer rate, and the median and 90th percentile of the
-time to the first card and to done. The question text is printed with its result; nothing is stored.
+accuracy (every expected tool ran, planner and second round included), checks passed by the answer or the cards
+(the tools), checks the answer text passes alone (over the questions with a check the text can pass: a card check
+has none; this is the measure of the written answers), the LLM's answers accepted by the check (first or second
+attempt), the deterministic-answer rate, and the median and 90th percentile of the time to the first card and to
+done. The question text is printed with its result; nothing is stored.
 """
 import argparse
 import json
@@ -100,30 +102,31 @@ def expect(api: TestClient, q: dict, check: dict):
     return None
 
 
-def judge(check: dict, want, text: str, cards: list[dict], sent: str) -> bool:
+def judge(check: dict, want, text: str, cards: list[dict], sent: str) -> tuple[bool, bool | None]:
+    """(passed by the answer or the cards, passed by the answer text alone: None for a check of the cards only)."""
     kind = check["kind"]
     if kind == "count":
         on_card = any(c.get("total") == want or any(r.get("n") == want for r in c.get("rows") or [])
                       for c in cards)
         none = want == 0 and bool(re.search(r"\bno\b|\bnone\b|\bnot any\b", text, re.I))
-        return _says(text, want) or on_card or none
-    if kind == "top_group":
-        return want.lower() in text.lower()
+        in_text = _says(text, want) or none
+        return in_text or on_card, in_text
     if kind == "first_project":
         key, name = want
         first = next((c["items"][0]["key"] for c in cards if c["type"] == "projects" and c["items"]), None)
-        return _names(text, key, name) or first == key
-    if kind == "last_completion":
-        return want.lower() in text.lower()
-    if kind == "worst_agency":
-        return want.lower() in text.lower()
-    if kind == "mentions":
-        return any(w.lower() in text.lower() for w in check["any"])
-    if kind == "not_mentions":
-        return not any(w.lower() in sent.lower() for w in check["any"])
+        in_text = _names(text, key, name)
+        return in_text or first == key, in_text
     if kind == "card":
-        return any(c["type"] == check["type"] for c in cards)
-    raise ValueError(f"unknown check {kind}")
+        return any(c["type"] == check["type"] for c in cards), None
+    if kind in ("top_group", "last_completion", "worst_agency"):
+        ok = want.lower() in text.lower()
+    elif kind == "mentions":
+        ok = any(w.lower() in text.lower() for w in check["any"])
+    elif kind == "not_mentions":
+        ok = not any(w.lower() in sent.lower() for w in check["any"])
+    else:
+        raise ValueError(f"unknown check {kind}")
+    return ok, ok
 
 
 def run_one(api: TestClient, q: dict) -> dict:
@@ -145,13 +148,16 @@ def run_one(api: TestClient, q: dict) -> dict:
     checks = []
     for c in q["checks"]:
         want = expect(api, q, c)
-        checks.append({"check": c["kind"], "want": want, "ok": judge(c, want, done["text"], cards, sent)})
+        ok, in_text = judge(c, want, done["text"], cards, sent)
+        checks.append({"check": c["kind"], "want": want, "ok": ok, "text_ok": in_text})
+    by_text = [c["text_ok"] for c in checks if c["text_ok"] is not None]
     expected = set(q["tools"])
     accepted = done["llm"] == "ok" and not done["reasons"]  # the model's own text passed the check
     return {"id": q["id"], "role": q["role"], "question": q["question"], "routed": sorted(routed), "ran": ran,
             "routing_ok": routed == set(q.get("route", q["tools"])), "tools_ok": expected <= set(ran),
             "checks": checks,
-            "checks_ok": all(c["ok"] for c in checks), "llm": done["llm"],
+            "checks_ok": all(c["ok"] for c in checks), "text_checked": bool(by_text), "text_ok": all(by_text),
+            "llm": done["llm"],
             "accepted": accepted, "template": not accepted,
             "retries": sum(e["event"] == "retry" for e in events), "reasons": done["reasons"][:4],
             "retry_reasons": [r for e in events if e["event"] == "retry" for r in e["data"]["reasons"]][:6],
@@ -170,6 +176,7 @@ def summary(results: list[dict], llm: bool) -> dict:
     ok = lambda k: sum(r[k] for r in results)  # noqa: E731
     out = {"questions": n, "routing": f"{ok('routing_ok')}/{n}", "tools": f"{ok('tools_ok')}/{n}",
            "checks": f"{ok('checks_ok')}/{n}",
+           "text_checks": f"{sum(r['text_ok'] for r in results if r['text_checked'])}/{ok('text_checked')}",
            "first_card_s": (_pct([r["first_card_s"] for r in results], 0.5),
                             _pct([r["first_card_s"] for r in results], 0.9)),
            "done_s": (_pct([r["done_s"] for r in results], 0.5), _pct([r["done_s"] for r in results], 0.9))}
@@ -187,7 +194,8 @@ def table(s: dict) -> str:
     def secs(pair):
         return " / ".join("-" if x is None else f"{x:.1f} s" for x in pair)
     rows = [("Questions", s["questions"]), ("Routing accuracy (router alone)", s["routing"]),
-            ("Tool accuracy (all rounds)", s["tools"]), ("Checks passed", s["checks"])]
+            ("Tool accuracy (all rounds)", s["tools"]), ("Checks passed (answer or cards)", s["checks"]),
+            ("Checks the answer text passes alone", s["text_checks"])]
     if "accepted" in s:
         rows += [("Answers the model wrote, accepted by the check", s["accepted"]),
                  ("... after one strict retry", s["retried"]),
@@ -219,9 +227,11 @@ def main(argv: list[str] | None = None) -> int:
         mark = "ok " if r["routing_ok"] and r["tools_ok"] and r["checks_ok"] else "BAD"
         print(f"{mark} {r['id']:<8} {r['llm']:<11} card {r['first_card_s'] or 0:5.1f} s  done {r['done_s']:6.1f} s  "
               f"route {'ok' if r['routing_ok'] else r['routed']}  tools {'ok' if r['tools_ok'] else r['ran']}  "
-              f"checks {[c['ok'] for c in r['checks']]}" + (f"  retries {r['retries']}" if r["retries"] else ""),
+              f"checks {[c['ok'] for c in r['checks']]}"
+              + ("" if r["text_ok"] or not r["text_checked"] else "  text BAD")
+              + (f"  retries {r['retries']}" if r["retries"] else ""),
               flush=True)
-        if mark == "BAD" or r["retries"]:
+        if mark == "BAD" or r["retries"] or (r["text_checked"] and not r["text_ok"]):
             print(f"      Q: {r['question']}\n      A: {r['text'][:400]}\n"
                   f"      want: {[c['want'] for c in r['checks']]}"
                   + (f"\n      rejected: {r['retry_reasons']}" if r["retry_reasons"] else ""), flush=True)

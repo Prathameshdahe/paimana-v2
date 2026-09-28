@@ -31,3 +31,24 @@ def test_the_router_picks_the_expected_tools():
         r = router.route(v, messages, q.get("project_key"))
         routed = {c["tool"] for c in r.calls} | ({r.detail} if r.detail else set())
         assert routed == set(q.get("route", q["tools"])), (q["id"], r.calls, r.detail)
+
+
+def test_a_card_passes_a_check_but_not_the_answer_text():
+    """The eval reports the answer text on its own: a number or a project that only a card carries passes the
+    check (the tools found it) but not the text check (the written answer did not say it)."""
+    count = {"kind": "count"}
+    stats = [{"type": "stats", "rows": [{"name": "Odisha", "n": 12}]}]
+    assert chat_eval.judge(count, 12, "There are some Critical projects [1].", stats, "") == (True, False)
+    assert chat_eval.judge(count, 12, "There are 12 Critical projects [1].", stats, "") == (True, True)
+    assert chat_eval.judge(count, 0, "There are none [1].", [], "") == (True, True)
+    first = {"kind": "first_project"}
+    card = [{"type": "projects", "items": [{"key": "PRJ-000698"}]}]
+    assert chat_eval.judge(first, ("PRJ-000698", "Vishnugad Pipalkoti HEP"), "Here they are [1].", card, "") == (
+        True, False)
+    assert chat_eval.judge({"kind": "card", "type": "projects"}, None, "", card, "") == (True, None)
+    assert chat_eval.judge({"kind": "mentions", "any": ["Watch"]}, None, "The Watch tier [1].", [], "") == (True, True)
+    s = chat_eval.summary([{"routing_ok": True, "tools_ok": True, "checks_ok": True, "text_checked": True,
+                            "text_ok": False, "first_card_s": 0.1, "done_s": 1.0},
+                           {"routing_ok": True, "tools_ok": True, "checks_ok": True, "text_checked": False,
+                            "text_ok": True, "first_card_s": 0.1, "done_s": 1.0}], llm=False)
+    assert s["checks"] == "2/2" and s["text_checks"] == "0/1"
