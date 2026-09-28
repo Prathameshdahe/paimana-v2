@@ -169,7 +169,9 @@ the check. `CHAT_WRITER=0` turns the model off for chat altogether (cards and de
 Transport & Highways official, 12 for an IPMD analyst) through `agent.run` as their role. Each question names the
 tools it should use and checks read from the API at run time as the same viewer: a count equal to
 `/api/projects` or `/api/portfolio`, the state with the most Critical projects, the first project of a list, the
-latest anticipated completion, the worst agency by schedule overrun, a mention or a scope-leak word. With
+latest anticipated completion, the worst agency by schedule overrun, a mention or a scope-leak word. A count or
+a first project passes when the answer states it or a card carries it (the tools found it); the answer text is
+also scored alone, which is the measure of the written answers (a card-only check has no text part). With
 `--llm subset` the 12 questions marked `llm` run with the real planner and writer; `--llm all` runs every
 question with the model.
 
@@ -181,25 +183,32 @@ with other jobs during the runs). Router and tools, all 36 questions, writer off
 | Questions | 36 |
 | Routing accuracy (router alone) | 36/36 |
 | Tool accuracy (all rounds) | 36/36 |
-| Checks passed (deterministic answers and cards) | 36/36 |
-| Time to first card, median / p90 | 0.0 s / 0.4 s |
-| Time to done, median / p90 | 0.0 s / 0.4 s |
+| Checks passed (answer or cards) | 36/36 |
+| Checks the deterministic answer text passes alone | 33/33 |
+| Time to first card, median / p90 | 0.0 s / 0.2 s |
+| Time to done, median / p90 | 0.0 s / 0.2 s |
 
 With the model, 15 questions (the 12 marked `llm`, the out-of-scope question that goes to the planner, a help
-question and a follow-up; `python -m llm.eval --llm all --only ...`):
+question and a follow-up; `python -m llm.eval --llm all --only ...`), run again after the review fixes (the
+check no longer takes the question's own numbers, the planner waits 2 s for the gate):
 
 | Metric | Value |
 |---|---|
 | Questions | 15 |
 | Routing accuracy (router alone) | 15/15 |
 | Tool accuracy (all rounds, planner included) | 15/15 |
-| Checks passed | 15/15 |
-| Answers the model wrote, accepted by the check | 13/14 |
-| ... after one strict retry | 2/14 |
-| ... replaced by the deterministic answer | 1/14 |
+| Checks passed (answer or cards) | 15/15 |
+| Checks the model's answer text passes alone | 14/15 |
+| Answers the model wrote, accepted by the check | 14/14 |
+| ... after one strict retry | 0/14 |
+| ... replaced by the deterministic answer | 0/14 |
 | LLM states | 14 ok, 1 skipped (nothing in scope found, by design) |
-| Time to first card, median / p90 | 0.1 s / 1.6 s |
-| Time to done, median / p90 | 18.7 s / 67.4 s |
+| Time to first card, median / p90 | 0.0 s / 1.3 s |
+| Time to done, median / p90 | 23.1 s / 35.7 s |
+
+The text miss is "High risk petroleum projects": the answer names the riskiest projects but not how many there
+are (the count is on the card). The run before the fixes accepted 13 of 14 (2 after a retry, 1 replaced), with
+done at 18.7 s / 67.4 s; model runs vary from run to run, so the two differ by more than the fixes.
 
 What the runs showed and what changed (each fix is its own commit): the deterministic answer of a help question
 said only "5 passages found" (it now quotes the help); "which state has the most Critical projects" named the
