@@ -1,6 +1,5 @@
 # Security
 
-<<<<<<< HEAD
 What PAIMANA does about the items of the team's security plan (the 24-point checklist: data pipeline integrity,
 identity, quarantine, the model, poisoning, report remarks, the LLM's place, SHAP, intervals, calibration, agency
 names, the agency flag, PARIVESH, early notice, scenarios, the API boundary, roles, the agent, read-mostly AI, tests),
@@ -183,10 +182,6 @@ the public page redacted) and `tests/test_input_validation.py`; modified or dupl
 recorded `tests/test_parivesh.py`, `tests/test_research_pipeline.py`; quarantined rows stay out
 `tests/test_silver.py`; model version verified before use: added with the checksum (above). Not done: the raw
 archive's own hash manifest.
-=======
-What the production build enforces and what it does not, layer by layer, against the team's security plan.
-Deployment is below; the API section (sign-in, sessions, roles, request limits) and the Data, Model and AI sections
-(source checksums, quarantine, model checksums, the read-only assistant) are added by the units that own that code.
 
 ## Deployment
 
@@ -240,4 +235,3 @@ permissions; it never builds images, deploys or pushes.
 described in DEPLOYMENT.md). The rate limits are per address, so an office behind one NAT shares one budget. No
 egress filtering from the api container: it needs the news sources, PIB, PARIVESH, Bhoomi Rashi and LM Studio.
 Docker Desktop on Windows is a demo host, not a hardened one. The postgres container keeps its default capabilities.
->>>>>>> 72d37b3 (feat(ops): production Docker Compose stack, nginx TLS front, backups, first-run and check scripts, CI workflow)
