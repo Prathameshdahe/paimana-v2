@@ -136,6 +136,21 @@ def test_nginx_locations(nginx):
     assert set(re.findall(r"\$\{(\w+)\}", nginx)) <= {"PAIMANA_SERVER_NAME", "PAIMANA_HTTPS_SUFFIX"}
 
 
+def test_nginx_waits_as_long_as_the_api_on_the_llm_routes(nginx):
+    """Review finding (unit B, round 1): the routes the api exempts from its 30 s limit because they wait on the local
+    LLM or the web (backend/auth/middleware.py EXEMPT) get a long read timeout at nginx too, not the general 60 s that
+    answers 503 while the api is still working on them."""
+    from backend.auth import middleware
+    regex = re.findall(r"\n    location ~ (\S+) \{(.*?)\n    \}", nginx, re.S)
+    for path in ("/api/projects/PRJ-000001/brief", "/api/projects/PRJ-000001/second-opinion", "/api/jobs/scout",
+                 "/api/worker-runs/trigger"):
+        assert middleware.EXEMPT.match(path), path
+        hit = [body for rx, body in regex if re.match(rx, path)]
+        assert hit and "proxy_read_timeout 300s;" in hit[0] and "limit_req zone=api" in hit[0], path
+    for path in ("/api/projects/PRJ-000001", "/api/projects/PRJ-000001/briefing", "/api/jobs/scouts"):
+        assert not any(re.match(rx, path) for rx, _ in regex), path
+
+
 def test_dockerfiles():
     api = _text("Dockerfile.api")
     assert "FROM python:3.13-slim" in api and "\nUSER app\n" in api

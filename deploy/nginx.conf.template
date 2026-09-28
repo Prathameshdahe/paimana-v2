@@ -110,6 +110,14 @@ server {
         proxy_read_timeout 600s;
         proxy_pass $api;
     }
+    # the routes that wait on the local LLM or the web (the api exempts them from its 30 s limit: backend/auth/
+    # middleware.py EXEMPT): a brief, a second opinion (up to 90 s for the model, then its answer), one project's
+    # scout, the worker cycle. Five minutes, so nginx does not answer 503 while the api is still working.
+    location ~ ^/api/(projects/[^/]+/(brief|second-opinion)|jobs/scout|worker-runs/trigger)$ {
+        limit_req zone=api burst=100 nodelay;
+        proxy_read_timeout 300s;
+        proxy_pass $api;
+    }
     location /api/ {
         limit_req zone=api burst=100 nodelay;
         proxy_pass $api;

@@ -280,7 +280,9 @@ api's own. `server_tokens` is off.
 **Rate limits, per client IP, 429 above them.** `/api/auth/*` 10 a minute (burst 5), `/api/chat` 10 a minute
 (burst 3), everything else under `/api/` 60 a minute (burst 100). Request bodies: 1 MB everywhere except the report
 upload (`/api/jobs/ingest`: 110 MB, streamed to the api, which enforces its own 100 MB). The chat and alert streams
-and the upload may last 10 minutes; other calls 60 s at nginx (the api's own per-request timeout is shorter). The api
+and the upload may last 10 minutes; the routes that wait on the local LLM or the web (a brief, a second opinion, one
+project's scout, the worker cycle; the api exempts them from its 30 s limit) 5 minutes; other calls 60 s at nginx
+(the api's own per-request timeout is shorter). The api
 keeps its per-user limits behind these.
 
 **Containers.** api: python 3.13-slim, a non-root user (uid 1000), read-only root filesystem, every Linux capability
