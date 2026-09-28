@@ -13,9 +13,12 @@ Outputs  gold/research_facts.parquet (one row per fact), gold/research_projects.
 
 Every line is validated (validate_line): its shape, the enums (category, direction, severity 1-3, match, verdict),
 http(s) URLs, dates that parse ('YYYY-MM-DD', 'YYYY-MM' or 'YYYY'), a summary of at most MAX_WORDS words, and a
-privacy floor (private_names): an honorific followed by a capitalised word ('Shri Ramesh ...', 'Mr. Singh') is
-rejected unless the capitalised words after it name an organisation or a place ('Dr. Ram Manohar Lohia Hospital',
-'Sri Lanka'); named officials are rejected too (officials by office only). A bad fact is dropped with its reason, a
+privacy floor (private_names): an honorific followed by a capitalised word ('Shri Ramesh ...', 'Mr. Singh',
+'Mr.Singh') is rejected unless the capitalised words after it, up to the first of / the / and, end in a word naming
+an organisation or a place ('Dr. Ram Manohar Lohia Hospital', 'Dr B R Ambedkar Institute of Technology', 'Sri
+Lanka'; not 'Shri Ramesh Kumar of the Municipal Corporation', and a surname-like place word such as Nagar or Sagar
+only after another one); named officials are rejected too (officials by office only). The floor catches honorific +
+name only: a name with no honorific relies on the researchers' rule. A bad fact is dropped with its reason, a
 bad latest_status or external entry is blanked, and a bad line or an unknown project key drops the project; the
 counts go to the summary. A status outside ongoing / resolved / unknown reads as unknown. The fact's category maps
 to the report-remark TAXONOMY of pipeline/external.py (funds -> funding, natural_event -> weather; approvals_other,
@@ -62,17 +65,26 @@ MAX_WORDS = 40
 TOP_BLOCKERS = 20
 DATE_RX = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
 PRECISION = {1: "year", 2: "month", 3: "day"}
-# an honorific, then its run of capitalised words (initials and 'of' / 'the' / 'and' inside the run)
-HONORIFIC = re.compile(r"\b(?:Mr|Mrs|Ms|Mx|Shri|Shrimati|Smt|Sri|Sh|Dr|Kumari|Km|Prof|MR|MRS|SHRI|SMT|SRI|DR)\b\.?\s+"
-                       r"([A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|of|the|and|&))*)")
-# a run naming a thing, not a person: an institution, a place or a work ('Dr. Ram Manohar Lohia Hospital', 'Sri Lanka')
+# an honorific ('Mr', 'Mr.', 'Mr.Singh'), then its run of capitalised words (initials and 'of' / 'the' / 'and' inside
+# the run)
+HONORIFIC = re.compile(r"\b(?:Mr|Mrs|Ms|Mx|Shri|Shrimati|Smt|Sri|Sh|Dr|Kumari|Km|Prof|MR|MRS|SHRI|SMT|SRI|DR)\b"
+                       r"(?:\.\s*|\s+)([A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|of|the|and|&))*)")
+# the head of a run is its words before the first of / the / and / & ('Ramesh Kumar' of 'Ramesh Kumar of the
+# Municipal Corporation'); the run names a thing, not a person, only when its head ENDS in one of these words: an
+# institution, a company, a place or a work ('Dr. Ram Manohar Lohia Hospital', 'Dr B R Ambedkar Institute of
+# Technology', 'Sri Lanka')
 ORG_WORDS = re.compile(
     r"\b(?:hospital|university|college|institute|school|academy|board|trust|foundation|society|samiti|sansthan"
     r"|nagar|marg|road|path|chowk|setu|bridge|flyover|station|airport|stadium|port|terminal|dam|canal|sagar"
-    r"|project|pariyojana|yojana|scheme|mission|memorial|park|temple|mandir|shrine|complex|bhawan|bhavan|hall"
+    r"|projects?|pariyojana|yojana|scheme|mission|memorial|park|temple|mandir|shrine|complex|bhawan|bhavan|hall"
     r"|cent(?:re|er)|library|museum|market|corporation|limited|ltd|authority|council|commission|department"
     r"|ministry|district|municipal|medical|garden|expressway|highway|lanka|city|ganganagar|sahib|kalahasti"
-    r"|nellore|puttaparthi)\b", re.I)
+    r"|nellore|puttaparthi|constructions?|contractors?|builders|developers|engineers|engineering|enterprises?"
+    r"|industries|infra|infrastructure|infratech|associates|company|pvt|private|group|laboratories)\b", re.I)
+# place words that are also surnames ('Mr. Ramesh Nagar', 'Dr. Anil Sagar'): they end a thing's name only after
+# another of ORG_WORDS ('Sri City Industrial Park')
+SURNAME_WORDS = {"sagar", "nagar", "park"}
+CONNECTOR = re.compile(r"\s+(?:of|the|and|&)(?=\s|$)")
 EXT_KEYS = {"land_acquired_pct": ("value", "as_of"), "forest_clearance": ("stage", "as_of"),
             "court_case": ("court", "status", "as_of"), "contractor": ("company", "status", "as_of"),
             "new_target": ("date", "as_of"), "cost_revision": ("new_cost_cr", "as_of")}
@@ -114,9 +126,20 @@ def show_date(t, precision) -> str:
     return pd.Timestamp(t).strftime({"year": "%Y", "month": "%Y-%m"}.get(precision, "%Y-%m-%d"))
 
 
+def _names_thing(run: str) -> bool:
+    """The run after an honorific names an organisation or a place: its head (the words before of / the / and / &)
+    ends in one of ORG_WORDS, a surname-like one (SURNAME_WORDS) only after another."""
+    words = CONNECTOR.split(run, maxsplit=1)[0].split()
+    found = [m.group(0).lower() for m in map(ORG_WORDS.search, words) if m]
+    last = ORG_WORDS.search(words[-1]) if words else None
+    if last is None:
+        return False
+    return last.group(0).lower() not in SURNAME_WORDS or any(w not in SURNAME_WORDS for w in found[:-1])
+
+
 def private_names(text) -> list[str]:
     """Honorific + capitalised-name runs in text that do not name an organisation or place (see the docstring)."""
-    return [m.group(0) for m in HONORIFIC.finditer(text or "") if not ORG_WORDS.search(m.group(1))]
+    return [m.group(0) for m in HONORIFIC.finditer(text or "") if not _names_thing(m.group(1))]
 
 
 def fact_id(key: str, url: str, category: str, event_date) -> str:

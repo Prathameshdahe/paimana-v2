@@ -61,6 +61,18 @@ def test_committed_sweep_validates_without_drops():
     ("Sri Lanka ferry terminal", False),
     ("The Union Minister reviewed the Bhatkal stretch", False),
     ("DR. NTR Marg flyover", False),
+    # an organisation after of / the / and does not make the person before it one
+    ("Shri Ramesh Kumar of the Municipal Corporation said", True),
+    ("Mr Ramesh Kumar and the Irrigation Department", True),
+    # surnames that are also place words, and no space after the dot
+    ("Dr. Anil Sagar, the contractor", True),
+    ("Mr. Ramesh Nagar protested", True),
+    ("Mr.Singh said", True),
+    ("Shri Ram Kumar District Collector inspected the site", True),   # ends in an office, not an organisation
+    ("Sri City Industrial Park allotted land", False),
+    ("Dr. Ambedkar Nagar Road widening", False),
+    ("Sri Avantika Contractors won the package", False),
+    ("Sri Lanka and India signed the port deal", False),
 ])
 def test_privacy_floor(text, private):
     assert bool(R.private_names(text)) is private
