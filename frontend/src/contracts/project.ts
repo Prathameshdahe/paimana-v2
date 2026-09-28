@@ -23,7 +23,7 @@ export type OutlookWord = 'very likely' | 'likely' | 'possible' | 'unlikely'
 /** the likely further slip, from the hidden median months */
 export type SlipBand = 'under 6 months' | '6 to 12 months' | '1 to 2 years' | 'over 2 years'
 /** a measured extra delay in words, from the hidden months (the hidden-delay priors) */
-export type DelayWord = 'a few months' | 'about half a year' | 'about a year' | 'over a year'
+export type DelayWord = 'no measurable extra delay' | 'a few months' | 'about half a year' | 'about a year' | 'over a year'
 
 /**
  * The outlook in words, on scores and on list rows: delay from P(date push, 2q), cost from P(cost revision, 2q) with
@@ -444,7 +444,11 @@ export interface ScenarioPoint {
   agencyBasis: string | null
 }
 
-/** a nearest past project at the same stage, in numbers (the developer's Model detail) */
+/**
+ * A nearest past project at the same stage (unit G's schemas.Analogue). The numbers (distance, the y_* outcome figures)
+ * are the developer's; for the four roles they come null. name, outcome and yearsAgo come to every viewer from unit G's
+ * backend and are absent from an older one (the outcome is then read from yAny, the age from analoguePeriod).
+ */
 export interface Analogue {
   rank: number
   analogueKey: string
@@ -459,6 +463,9 @@ export interface Analogue {
   yAny: number | null
   yDatePush: number | null
   yCostRev: number | null
+  name?: string | null
+  outcome?: AnalogueOutcome | null
+  yearsAgo?: number | null
 }
 
 /** what happened to a past project like this one, within 4 quarters */

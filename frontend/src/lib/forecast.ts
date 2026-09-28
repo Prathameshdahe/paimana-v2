@@ -1,19 +1,20 @@
 /**
  * src/lib/forecast.ts
  *
- * Reading GET /api/projects/{key}/forecast in either shape (contracts/project.ts Forecast): the developer's numbers
- * (Analogue rows with distances and outcomes in 0/1) or the four roles' words (AnalogueBrief, the completion window
- * as a band). The analogue sentence counts outcomes, which both shapes carry; no distance, slip or rate is read.
+ * Reading GET /api/projects/{key}/forecast in any shape (contracts/project.ts Forecast): Analogue rows (unit G keeps
+ * every key, the numbers null for the four roles, and adds name / outcome / yearsAgo; an older backend sends the numbers
+ * alone) or AnalogueBrief rows, the completion window as a band. The analogue sentence counts outcomes: the row's own
+ * when sent, else yAny's 0/1; no distance, slip or rate is read.
  */
 import { monthsUntil } from './headline'
 import type { Analogue, AnalogueBrief, AnalogueOutcome, Forecast } from '@/contracts/project'
 
-/** an analogue row in numbers (the developer's), as opposed to the four roles' AnalogueBrief */
+/** an Analogue row (unit G's or an older backend's), as opposed to an AnalogueBrief */
 export function isNumericAnalogue(a: Analogue | AnalogueBrief): a is Analogue {
   return 'analogueKey' in a
 }
 
-/** the numeric analogue rows only: the developer's table */
+/** the Analogue rows only: the developer's table */
 export function numericAnalogues(f: Forecast | undefined): Analogue[] {
   return (f?.analogues ?? []).filter(isNumericAnalogue)
 }
@@ -28,7 +29,8 @@ export interface AnalogueChip {
 }
 
 function outcomeOf(a: Analogue | AnalogueBrief): AnalogueOutcome {
-  if (!isNumericAnalogue(a)) return a.outcome
+  if (a.outcome) return a.outcome
+  if (!isNumericAnalogue(a)) return 'unknown'
   return a.yAny === 1 ? 'slipped' : a.yAny === 0 ? 'held' : 'unknown'
 }
 
@@ -41,12 +43,13 @@ export function analogueChips(f: Forecast | undefined): AnalogueChip[] {
       return { key: a.key ?? null, name: a.name ?? 'an unnamed project', sector, outcome, yearsAgo }
     }
     const months = a.analoguePeriod ? -monthsUntil(f.asof, a.analoguePeriod) : null
+    const computed = months === null || Number.isNaN(months) ? null : Math.max(0, Math.round(months / 12))
     return {
       key: a.analogueKey,
-      name: a.analogueName ?? a.analogueKey,
+      name: a.name ?? a.analogueName ?? a.analogueKey,
       sector: a.sector,
       outcome: outcomeOf(a),
-      yearsAgo: months === null || Number.isNaN(months) ? null : Math.max(0, Math.round(months / 12)),
+      yearsAgo: a.yearsAgo ?? computed,
     }
   })
 }

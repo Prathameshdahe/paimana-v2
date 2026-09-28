@@ -9,6 +9,9 @@
 import type { HiddenDelayPrior } from '@/contracts/portfolio'
 import type { DelayWord, HiddenDelayMatch } from '@/contracts/project'
 
+/** the one DelayWord that is not an extra delay (unit G's serving.NO_EXTRA: the interval does not lie above zero) */
+export const NO_EXTRA_DELAY: DelayWord = 'no measurable extra delay'
+
 /** pipeline/gold.OPEN_MAX_AGE_Q: a remark flag is open today only within this many quarters of its last mention */
 export const LIVE_QUARTERS = 4
 
@@ -49,7 +52,8 @@ export function fromPrior(p: HiddenDelayPrior): Estimate {
     months: trio(p.extra_months, p.extra_months_lo, p.extra_months_hi),
     push: trio(p.extra_push, p.extra_push_lo, p.extra_push_hi),
     holm: p.holm_months === null && p.holm_push === null ? null : Math.min(p.holm_months ?? 1, p.holm_push ?? 1),
-    word: p.extraMonthsWord,
+    // unit G sends the summary's nested keys snake_case; undefined only when neither casing is there
+    word: p.extra_months_word !== undefined ? p.extra_months_word : p.extraMonthsWord,
   }
 }
 
@@ -81,12 +85,14 @@ export interface Verdict {
 
 /**
  * The short verdict. With numbers (the developer): '+2.5 mo' when the months or push interval excludes zero, 'none
- * measurable' when both span zero. Without: the backend's word ('a few months more'), 'none measurable' when it has
- * no word, 'not available yet' from a backend that sends no words. 'too few to measure' under the project floor.
+ * measurable' when both span zero. Without: the backend's word ('a few months more'), 'none measurable' for its 'no
+ * measurable extra delay' or no word, 'not available yet' from a backend that sends no words. 'too few to measure'
+ * under the project floor.
  */
 export function verdict(e: Estimate, numbers = true): Verdict {
   if (!e.measurable) return { text: 'too few to measure', tone: 'muted' }
   if (!numbers) {
+    if (e.word === NO_EXTRA_DELAY) return { text: 'none measurable', tone: 'muted' }
     if (e.word) return { text: `${e.word} more`, tone: 'warning' }
     return e.word === null ? { text: 'none measurable', tone: 'muted' } : { text: 'not available yet', tone: 'muted' }
   }

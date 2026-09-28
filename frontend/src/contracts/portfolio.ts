@@ -353,7 +353,11 @@ export interface HiddenDelayPrior {
   extra_push_hi: number | null
   holm_months: number | null
   holm_push: number | null
-  /** the extra months in words (months, push and their CIs are hidden numbers); absent from an older backend */
+  /**
+   * the extra months in words (months, push and their CIs are hidden numbers); absent from an older backend. Unit G
+   * sends it snake_case, like the rest of the summary's nested keys (extra_months_word); lib/external reads either.
+   */
+  extra_months_word?: DelayWord | null
   extraMonthsWord?: DelayWord | null
   /** current projects in scope it applies to; null for the NH/district grouping (not rated) */
   n_current?: number | null
