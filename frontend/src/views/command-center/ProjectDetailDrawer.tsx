@@ -13,6 +13,7 @@ import {
   ExternalChips, MoneyBar, ProgressTrend, ProjectChips, RiskGrid, RiskRingCard, TimelineStrip, TimeVsWork, TopDrivers,
   VisualsSkeleton,
 } from '@/views/project-studio/ProjectVisuals'
+import { ResearchNews } from '@/views/project-studio/ResearchNews'
 
 /**
  * The project side panel: a visual summary of one project (/api/projects/{key} + /timeline), opened from any
@@ -110,7 +111,9 @@ function PanelBody({ projectKey }: { projectKey: string }) {
             <ExternalChips
               detail={detail}
               news={signals.data && { n: signals.data.items.length, scouted: !!signals.data.lastScoutAt }}
+              research={detail.research}
             />
+            <ResearchNews projectKey={k} variant="panel" />
             {full && <TopDrivers drivers={detail.scores?.shapTop5 ?? []} />}
           </>
         )}

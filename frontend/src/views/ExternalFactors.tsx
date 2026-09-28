@@ -10,6 +10,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { EvidenceFeed } from './external-factors/EvidenceFeed'
 import { LandMap } from './external-factors/LandMap'
+import { ResearchPanel } from './external-factors/ResearchPanel'
 import { useRole } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
 import { useExternalSummary } from '@/lib/queries'
@@ -48,8 +49,9 @@ function Bar({ share, className = 'bg-warning' }: { share: number; className?: s
 /**
  * External Factors (/external) over /api/external/summary: per-factor tiles and their top
  * projects, the early-notice list, coverage and the composite score; the caveats sit in one
- * "About this data" section. Every figure comes from gold/external_summary.json. The news
- * evidence below pages /api/signals/feed (officials only; the public sees the summary).
+ * "About this data" section. Every figure comes from gold/external_summary.json, except the web
+ * research panel (/api/research/summary, every role: the public gets counts and headlines). The
+ * news evidence below pages /api/signals/feed (officials only; the public sees the summary).
  */
 export function ExternalFactors() {
   const { data, error, isLoading } = useExternalSummary()
@@ -81,6 +83,7 @@ export function ExternalFactors() {
           <FactorBoard s={data} />
           <EarlyNoticePanel s={data} />
           <PortalPanel s={data} />
+          <ResearchPanel />
           <HiddenDelayPanel s={data} />
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
             {data.landCoverage?.by_state && <LandMap states={data.landCoverage.by_state} />}

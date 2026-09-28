@@ -12,6 +12,7 @@ import { ShapWaterfall } from './project-studio/ShapWaterfall'
 import { AnaloguesTable } from './project-studio/AnaloguesTable'
 import { ExternalEvents, LinkedSignals } from './project-studio/EvidencePanels'
 import { BriefCard } from './project-studio/BriefCard'
+import { ResearchNews } from './project-studio/ResearchNews'
 import {
   ExternalChips, MoneyBar, ProgressTrend, ProjectChips, RiskGrid, RiskRingCard, TimelineStrip, TimeVsWork, VisualsSkeleton,
 } from './project-studio/ProjectVisuals'
@@ -21,7 +22,8 @@ import { Button } from '@/components/ui/Button'
 import { Badge, StalledBadge } from '@/components/ui/Badge'
 
 /**
- * Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals and brief.
+ * Project page (guide §5): one project from /api/projects/{key} and its timeline, forecast, signals, brief and web
+ * research (ResearchNews, every role).
  * Without canSeeDrivers (the public) it is the simple page, built from the side panel's visual blocks
  * (project-studio/ProjectVisuals) over the redacted API: no drivers, intervals or model internals.
  */
@@ -91,8 +93,9 @@ export function ProjectStudio() {
           <ProgressTrend timeline={timeline.data} error={timeline.error} height={200} />
           <div className="grid items-start gap-4 lg:grid-cols-3">
             <RiskGrid detail={detail} plain className="lg:col-span-2" />
-            <ExternalChips detail={detail} />
+            <ExternalChips detail={detail} research={detail.research} />
           </div>
+          <ResearchNews projectKey={detail.key} variant="panel" />
         </Page>
       </MotionConfig>
     )
@@ -137,7 +140,11 @@ export function ProjectStudio() {
           <ExternalEvents events={detail.external.events} asof={detail.provenance.asof} />
         </div>
         <div className="col-span-1">
-          <ExternalChips detail={detail} />
+          <ExternalChips detail={detail} research={detail.research} />
+        </div>
+
+        <div className="col-span-1 lg:col-span-3">
+          <ResearchNews projectKey={detail.key} variant="page" />
         </div>
       </div>
     </Page>

@@ -165,6 +165,11 @@ export const EVENT_CATEGORY: Record<string, { label: string; color: string; ink:
   inter_agency: { label: 'Inter-agency', color: '#4a3aa7', ink: '#ffffff' },
   law_order: { label: 'Law & order', color: '#e34948', ink: '#ffffff' },
   weather: { label: 'Weather', color: '#8a8578', ink: '#ffffff' },
+  // the web research's own categories (pipeline/research.py TAXONOMY_OF keeps these names)
+  approvals_other: { label: 'Other approvals', color: '#1f9bb5', ink: '#0b0b0b' },
+  design_scope: { label: 'Design or scope', color: '#9b6a3c', ink: '#ffffff' },
+  progress: { label: 'Progress', color: '#6f9a2e', ink: '#0b0b0b' },
+  other: { label: 'Other', color: '#9a968c', ink: '#0b0b0b' },
 }
 
 export function categoryLabel(c: string | null | undefined): string {

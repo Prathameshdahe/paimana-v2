@@ -16,13 +16,16 @@ import {
 import { featureLabel } from '@/lib/featureLabels'
 import { cn, formatDate, formatINR, formatProb, orDash } from '@/lib/formatters'
 import { LIVE_QUARTERS, details, formatQuarter, fromMatch, isLive, verdict } from '@/lib/external'
-import type { Flag, HiddenDelayMatch, ProjectDetail, RiskRow, RiskState, ShapValue, Timeline } from '@/contracts/project'
+import type {
+  Flag, HiddenDelayMatch, ProjectDetail, ResearchBrief, RiskRow, RiskState, ShapValue, Timeline,
+} from '@/contracts/project'
 
 const EASE = [0.22, 1, 0.36, 1] as const
 const GROW = { duration: 0.7, ease: EASE }
 const clamp = (v: number) => Math.min(100, Math.max(0, v))
 
-function Section({ title, info, right, className, children }: {
+/** the panel block: a rounded box with a title, an optional (i) and a right-hand note (also the research and opinion blocks) */
+export function Section({ title, info, right, className, children }: {
   title: React.ReactNode
   info?: React.ReactNode
   right?: React.ReactNode
@@ -627,12 +630,43 @@ function landFact(x: ProjectDetail['external'], asof: string) {
   return lines.length || delays.length ? { tone, lines, delays } : null
 }
 
+/** the research and news chip: cited web facts (every role), and the scout's linked news (officials) */
+function NewsChips({ research, news }: { research: ResearchBrief | null | undefined; news?: { n: number; scouted: boolean } }) {
+  if (!research && !news) return null
+  const parts = [
+    research && (research.searched ? `${research.nFacts} research fact${research.nFacts === 1 ? '' : 's'}` : 'not researched yet'),
+    news && (news.scouted ? `${news.n} linked news` : 'news not searched yet'),
+  ].filter(Boolean)
+  const live = research?.nNegativeLive ?? 0
+  return (
+    <>
+      {live > 0 && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-critical/10 px-2.5 py-1 text-xs font-medium text-critical ring-1 ring-inset ring-critical/20"
+          title="negative web research facts, not resolved, dated within 4 quarters">
+          <Newspaper className="size-3.5" strokeWidth={2} />
+          {live} live blocker{live === 1 ? '' : 's'} in the news
+        </span>
+      )}
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
+        <Newspaper className="size-3.5" strokeWidth={2} />
+        {parts.join(' · ')}
+      </span>
+    </>
+  )
+}
+
 /**
  * External issues: the forest and land facts from outside the reports (PARIVESH stage and dates, the Bhoomi Rashi
  * stretch) with the remark status and the measured hidden delay, then the remark issues, live or stale (last known
- * quarter), and the linked-news count (officials). The public API sends no PARIVESH details or hidden delay.
+ * quarter), and the research and news counts: cited web facts for everyone, linked news for officials. The public
+ * API sends no PARIVESH details or hidden delay.
  */
-export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: { n: number; scouted: boolean } }) {
+export function ExternalChips({ detail, news, research }: {
+  detail: ProjectDetail
+  news?: { n: number; scouted: boolean }
+  /** the project's web research counts (ProjectDetail.research) */
+  research?: ResearchBrief | null
+}) {
   const x = detail.external
   const asof = detail.provenance.asof
   const open = OPEN_CATEGORIES.map(([c, f]) => {
@@ -647,7 +681,7 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
 
   return (
     <Section title="External issues"
-      info={`Forest and land facts from PARIVESH and the Bhoomi Rashi register, with the measured hidden delay for that status on real projects. Remark issues come from the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}; one not mentioned for ${LIVE_QUARTERS} quarters is stale and shows the quarter it was last known${news ? '. News: items the scout linked to this project' : ''}.`}>
+      info={`Forest and land facts from PARIVESH and the Bhoomi Rashi register, with the measured hidden delay for that status on real projects. Remark issues come from the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}; one not mentioned for ${LIVE_QUARTERS} quarters is stale and shows the quarter it was last known. Research facts: cited web sources about this project${news ? '; linked news: items the scout linked to it' : ''}.`}>
       <div className="space-y-2">
         {forest && <Fact icon={Trees} title="Forest clearance" {...forest} />}
         {land && <Fact icon={LandPlot} title="Land acquisition" {...land} />}
@@ -671,12 +705,7 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
         {open.length === 0 && !forest && !land && (
           <span className="rounded-full bg-fg-dimmed/10 px-2.5 py-1 text-xs text-fg-muted">No open issue in the remarks</span>
         )}
-        {news && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
-            <Newspaper className="size-3.5" strokeWidth={2} />
-            {news.scouted ? `${news.n} linked news` : 'News not searched yet'}
-          </span>
-        )}
+        <NewsChips research={research} news={news} />
       </div>
     </Section>
   )
