@@ -140,6 +140,13 @@ def test_no_endpoint_returns_more_than_100_project_rows(client):
             assert len(rows) <= MAX_ROWS, path
 
 
+def test_near_complete_excludes_done_and_overdue_projects(client):
+    rows = client.get("/api/projects", params={"near_complete": True, "sort": "progress", "size": 20}).json()
+    asof = client.get("/api/meta").json()["asof"]
+    assert rows["total"] > 0 and rows["items"][0]["physicalProgressPct"] < 100
+    assert all(80 <= r["physicalProgressPct"] <= 99 and r["anticipatedCompletion"] >= asof for r in rows["items"])
+
+
 def test_external_and_models(client):
     e = client.get("/api/external/summary").json()
     assert e["earlyNotice"]["n_projects"] == client.get("/api/projects", params={"flag": "early_notice"}).json()[

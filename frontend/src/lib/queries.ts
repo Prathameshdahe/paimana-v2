@@ -47,6 +47,8 @@ export type PortfolioFilters = {
 export type ProjectQuery = PortfolioFilters & {
   q?: string
   flag?: Flag
+  /** 80-99% done and not past the anticipated completion */
+  near_complete?: boolean
   sort?: ProjectSort
   order?: 'asc' | 'desc'
   page?: number

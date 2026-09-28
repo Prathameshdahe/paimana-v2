@@ -30,6 +30,7 @@ export function EarlyWarningInbox() {
   const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })
   const ack = useAckAlert()
   const canAck = can(role, 'canAck')
+  const kinds = KINDS.filter((k) => k !== 'pipeline_error' || can(role, 'canSeePipelineErrors'))
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
 
   return (
@@ -47,7 +48,7 @@ export function EarlyWarningInbox() {
             }}
           >
             <option value="">All kinds</option>
-            {KINDS.map((k) => (
+            {kinds.map((k) => (
               <option key={k} value={k}>{ALERT_KIND_LABEL[k]}</option>
             ))}
           </Select>

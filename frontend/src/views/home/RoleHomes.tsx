@@ -139,7 +139,7 @@ const lateBy = (m: number) => (m >= 24 ? `${(m / 12).toFixed(1)} years late` : `
 /** The transparency landing: headline figures, the risk mix, the map and two short lists; no alerts. */
 export function PublicHome() {
   const { data: p, error } = usePortfolio()
-  const near = useProjects({ sort: 'progress', size: 5 })
+  const near = useProjects({ sort: 'progress', size: 5, near_complete: true })
   const late = useProjects({ sort: 'slip', size: 5 })
   const k = p?.kpis
   const nStates = p?.byState.filter((s) => s.name).length
@@ -207,14 +207,16 @@ export function PublicHome() {
           )}
           <ProjectList
             title="Closest to completion"
+            info="Open projects 80-99% done whose expected completion date has not passed yet."
             more={<MoreLink to="/command">All projects</MoreLink>}
             rows={near.data?.items}
             error={near.error}
-            empty="No open projects report their progress."
+            empty="No open project is 80-99% done and still on its expected date."
             right={(r) => (
               <span className="flex w-32 shrink-0 items-center gap-2">
                 <span className="flex-1"><Meter pct={r.physicalProgressPct ?? 0} className="bg-stable" /></span>
-                <span className="w-10 text-right text-xs font-semibold tabular-nums text-fg-base">{orDash(r.physicalProgressPct, (v) => formatPct(v, 0))}</span>
+                {/* floored: 99.6% done is not "100%" */}
+                <span className="w-10 text-right text-xs font-semibold tabular-nums text-fg-base">{orDash(r.physicalProgressPct, (v) => `${Math.floor(v)}%`)}</span>
               </span>
             )}
           />
@@ -256,7 +258,7 @@ function AgenciesRanked() {
       ) : (
         <div className="max-h-[360px] divide-y divide-border-subtle overflow-y-auto" data-lenis-prevent>
           {rows.map((a) => (
-            <Link key={a.agency} to="/agencies" className="grid grid-cols-[minmax(0,1fr)_6rem_3rem] items-center gap-3 px-5 py-2 transition-colors hover:bg-surface-elevated">
+            <Link key={a.agency} to={`/agencies?agency=${encodeURIComponent(a.agency)}`} className="grid grid-cols-[minmax(0,1fr)_6rem_3rem] items-center gap-3 px-5 py-2 transition-colors hover:bg-surface-elevated">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-fg-base" title={a.names ?? undefined}>{a.agency}</span>
                 <span className="block text-xs text-fg-dimmed">{a.nOpen} open</span>
@@ -377,7 +379,7 @@ function BiasBullet({ label, self, sector, peers, note, rank }: {
         </span>
         <span className="flex items-baseline gap-2">
           <span className={cn('text-2xl font-semibold tabular-nums leading-none', worse ? 'text-critical' : 'text-stable')}>{formatSignedRatio(self)}</span>
-          {rank && <Badge variant={worse ? 'critical' : 'stable'}>#{rank.rank} of {rank.of}</Badge>}
+          {rank && <Badge variant={rankTone(rank)}>#{rank.rank} of {rank.of}</Badge>}
         </span>
       </div>
       <div className="relative h-6">
@@ -410,6 +412,12 @@ function BiasBullet({ label, self, sector, peers, note, rank }: {
       </div>
     </div>
   )
+}
+
+/** the rank badge's colour by position (rank 1 = smallest overrun): top third green, bottom third red, amber between */
+function rankTone({ rank, of }: { rank: number; of: number }): 'stable' | 'warning' | 'critical' {
+  const pos = rank / Math.max(of, 1)
+  return pos <= 1 / 3 ? 'stable' : pos > 2 / 3 ? 'critical' : 'warning'
 }
 
 /** rank 1 = the smallest overrun among the peers that have the value; ties share a rank */

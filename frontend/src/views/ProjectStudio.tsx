@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
+import { MotionConfig } from 'motion/react'
 import { useForecast, useProject, useSignals, useTimeline } from '@/lib/queries'
 import { isOffline } from '@/lib/api'
 import { useRole } from '@/lib/auth/RoleContext'
@@ -67,30 +68,33 @@ export function ProjectStudio() {
   }
 
   if (!full) {
+    // the visual blocks animate with motion: honour the viewer's reduced-motion setting, as the side panel does
     return (
-      <Page narrow>
-        <div className="space-y-2">
-          <Link to="/command" className="text-xs text-fg-dimmed transition-colors hover:text-fg-muted">&larr; All projects</Link>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-fg-dimmed">{detail.key}</span>
-            {detail.scores && <Badge tier={detail.scores.tier} />}
-            {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
+      <MotionConfig reducedMotion="user">
+        <Page narrow>
+          <div className="space-y-2">
+            <Link to="/command" className="text-xs text-fg-dimmed transition-colors hover:text-fg-muted">&larr; All projects</Link>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-fg-dimmed">{detail.key}</span>
+              {detail.scores && <Badge tier={detail.scores.tier} />}
+              {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight text-fg-base">{detail.master?.projectName ?? detail.key}</h1>
+            <ProjectChips detail={detail} />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-fg-base">{detail.master?.projectName ?? detail.key}</h1>
-          <ProjectChips detail={detail} />
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <RiskRingCard detail={detail} full={false} />
-          <TimelineStrip detail={detail} />
-          <TimeVsWork detail={detail} />
-          <MoneyBar detail={detail} />
-        </div>
-        <ProgressTrend timeline={timeline.data} error={timeline.error} height={200} />
-        <div className="grid items-start gap-4 lg:grid-cols-3">
-          <RiskGrid detail={detail} plain className="lg:col-span-2" />
-          <ExternalChips detail={detail} />
-        </div>
-      </Page>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RiskRingCard detail={detail} full={false} />
+            <TimelineStrip detail={detail} plain />
+            <TimeVsWork detail={detail} />
+            <MoneyBar detail={detail} />
+          </div>
+          <ProgressTrend timeline={timeline.data} error={timeline.error} height={200} />
+          <div className="grid items-start gap-4 lg:grid-cols-3">
+            <RiskGrid detail={detail} plain className="lg:col-span-2" />
+            <ExternalChips detail={detail} />
+          </div>
+        </Page>
+      </MotionConfig>
     )
   }
 

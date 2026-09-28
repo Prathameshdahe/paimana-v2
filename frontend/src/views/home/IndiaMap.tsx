@@ -40,7 +40,7 @@ export function IndiaMap() {
   const topStates = useMemo(
     () =>
       [...(data?.byState ?? [])]
-        .sort((a, b) => b.nCritical - a.nCritical || b.nHigh - a.nHigh || b.n - a.n)
+        .sort((a, b) => atRisk(b) - atRisk(a) || b.nCritical - a.nCritical || b.n - a.n)
         .slice(0, 6),
     [data]
   )
@@ -153,7 +153,7 @@ export function IndiaMap() {
       )}
 
       <div className="border-t border-border-subtle px-5 pb-3 pt-3">
-        <div className="mb-2 text-xs font-medium text-fg-muted">Top states by critical projects</div>
+        <div className="mb-2 text-xs font-medium text-fg-muted">Top states by projects at risk (critical + high)</div>
         <div className="space-y-1">
           {topStates.map((s) => (
             <button
@@ -167,9 +167,8 @@ export function IndiaMap() {
                 <span style={{ width: `${(s.nCritical / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.Critical }} />
                 <span style={{ width: `${(s.nHigh / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.High }} />
               </span>
-              <span className="whitespace-nowrap text-xs text-fg-dimmed">
-                <span className="font-semibold text-critical">{s.nCritical}</span> ·{' '}
-                <span className="font-semibold text-warning">{s.nHigh}</span> of {s.n} · {orDash(s.capitalCr, formatINRShort)}
+              <span className="whitespace-nowrap text-xs text-fg-dimmed" title={`${s.nCritical} critical, ${s.nHigh} high`}>
+                <span className="font-semibold text-critical">{s.nCritical + s.nHigh} at risk</span> of {s.n} · {orDash(s.capitalCr, formatINRShort)}
               </span>
             </button>
           ))}

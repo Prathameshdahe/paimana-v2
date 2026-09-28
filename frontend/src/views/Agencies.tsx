@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import {
   CartesianGrid,
@@ -345,7 +346,15 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
 export function Agencies() {
   const [showSmall, setShowSmall] = useState(false)
   const [view, setView] = useState<'chart' | 'table'>('chart')
-  const [selected, setSelected] = useState<string | null>(null)
+  // the picked agency lives in the URL (?agency=), so a link can open the page with it selected
+  const [params, setParams] = useSearchParams()
+  const selected = params.get('agency')
+  const setSelected = (a: string | null) => setParams((p) => {
+    const next = new URLSearchParams(p)
+    if (a) next.set('agency', a)
+    else next.delete('agency')
+    return next
+  }, { replace: true })
   const { data, error, isFetching } = useAgencyMatrix(showSmall)
   const point = data?.points.find((p) => p.agency === selected)
 

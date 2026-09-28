@@ -278,7 +278,7 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                   </div>
                 </td>
                 {withEvidence && (
-                  <td className="min-w-[240px] px-4 py-3">
+                  <td className="min-w-[220px] px-4 py-3">
                     {lines.map(([, text], i) => (
                       <div key={i} className="text-xs leading-snug text-fg-muted line-clamp-2" title={text}>
                         {text}
@@ -287,8 +287,8 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                   </td>
                 )}
                 <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1"><Badge tier={p.tier} />{p.stalled && <StalledBadge />}</div>
-                  <div className="mt-1 text-xs text-fg-dimmed">P(slip) {pct(p.p_any_2q)}</div>
+                  <div className="flex flex-col items-start gap-1"><Badge tier={p.tier} />{p.stalled && <StalledBadge />}</div>
+                  <div className="mt-1 whitespace-nowrap text-xs text-fg-dimmed">P(slip) {pct(p.p_any_2q)}</div>
                 </td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums text-fg-base">{slip(p.slip_to_date_months)}</td>
                 <td className="whitespace-nowrap py-3 pl-4 pr-5 text-right font-mono tabular-nums text-fg-base">

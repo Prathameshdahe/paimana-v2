@@ -273,8 +273,11 @@ def _scope_sql(scope) -> tuple[str, list]:
     return "agency IN (SELECT raw FROM amap WHERE canonical = ?)", [name]
 
 
+NEAR_COMPLETE = (80, 99)  # progress band (%) of the public Home's "closest to completion" (99.9% is all but done)
+
+
 def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None, agency=None,
-           scope=None) -> tuple[str, list]:
+           scope=None, near_complete=False) -> tuple[str, list]:
     conds, params = [], []
     if scope:
         sql, params = _scope_sql(scope)
@@ -295,6 +298,9 @@ def _where(ministry=None, sector=None, state_=None, tier=None, q=None, flag=None
     if flag:
         conds.append("list_contains(flags, ?)")
         params.append(flag)
+    if near_complete:  # not done yet and not past its anticipated completion
+        conds.append('physical_progress_pct BETWEEN ? AND ? AND anticipated_completion >= "asof"')
+        params += list(NEAR_COMPLETE)
     return (" WHERE " + " AND ".join(conds)) if conds else "", params
 
 
@@ -371,10 +377,10 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
 
 @cached
 def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag=None, sort="risk", order=None,
-             page=1, size=50, agency=None, scope=None):
+             page=1, size=50, agency=None, scope=None, near_complete=False):
     size = max(1, min(int(size), 100))
     page = max(1, int(page))
-    where, params = _where(ministry, sector, state_, tier, q, flag, agency, scope)
+    where, params = _where(ministry, sector, state_, tier, q, flag, agency, scope, near_complete)
     direction = (order or ("asc" if sort == "name" else "desc")).upper()
     total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}

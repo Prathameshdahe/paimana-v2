@@ -105,7 +105,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
               <MoneyBar detail={detail} />
             </div>
             <ProgressTrend timeline={timeline.data} error={timeline.error} />
-            <TimelineStrip detail={detail} />
+            <TimelineStrip detail={detail} plain={!full} />
             <RiskGrid detail={detail} plain={!full} />
             <ExternalChips
               detail={detail}

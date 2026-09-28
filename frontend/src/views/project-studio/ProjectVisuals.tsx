@@ -81,18 +81,19 @@ function Gauge({ label, value }: { label: string; value: number | null }) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs text-fg-muted">{label}</div>
-      <div className="text-base font-semibold tabular-nums text-fg-base">{value}</div>
-    </div>
-  )
+/** the public ring card's one line: where the tier sits in the ranking (ml/score.py TIER_TOP 5/20/50%) */
+const TIER_PLAIN: Record<string, string> = {
+  Critical: 'Among the 5% of open projects most likely to be delayed or cost more in the next six months.',
+  High: 'Among the 20% of open projects most likely to be delayed or cost more in the next six months.',
+  Medium: 'In the riskier half of open projects for a delay or cost revision in the next six months.',
+  Low: 'In the less risky half of open projects for a delay or cost revision in the next six months.',
+  Watch: 'No completion date on record, so the delay risk is not ranked.',
 }
 
 /**
  * Donut of P(date push or cost revision, 2q) in the tier colour, tier inside. full: three gauges beside it;
- * the public: work done, cost and completion instead. The stalled badge sits in the header. Watch (no completion date): a grey-violet ring and no
+ * the public: one line on where the tier ranks (progress, cost and dates each have their own block, shown once).
+ * The stalled badge sits in the header. Watch (no completion date): a grey-violet ring and no
  * date-based gauges.
  */
 export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: boolean }) {
@@ -100,8 +101,7 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
   const t = tierKey(s?.tier ?? null)
   const untiered = t === 'Watch'
   const p = untiered ? null : (s?.pAny2q ?? null)
-  const o = detail.latest ?? {}
-  const R = 52
+    const R = 52
   const center = !s ? 'Not scored' : untiered ? 'Watch · no completion date' : TIER_LABEL[t]
 
   return (
@@ -139,12 +139,7 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
             </div>
           </div>
         ) : (
-          <div className="grid flex-1 grid-cols-2 gap-3">
-            <Stat label="Work done" value={orDash(o.physicalProgressPct, (v) => `${v.toFixed(0)}%`)} />
-            <Stat label="Cost" value={orDash(o.anticipatedCostCr, formatINR)} />
-            <Stat label="Expected completion" value={orDash(o.anticipatedCompletion, formatDate)} />
-            <Stat label="Scheduled" value={orDash(o.scheduledCompletion, formatDate)} />
-          </div>
+          s && <p className="min-w-[12rem] flex-1 text-sm leading-relaxed text-fg-muted">{TIER_PLAIN[t]}</p>
         )}
       </div>
       {!s && detail.master?.lastStatus && (
@@ -350,7 +345,7 @@ function monthsBetween(a: string, b: string): number {
  * Sanction -> scheduled -> anticipated -> predicted completion (p50, anticipated + months p50) on one line, the
  * p05-p95 band behind it when the viewer gets intervals, and a today (asof) marker.
  */
-export function TimelineStrip({ detail }: { detail: ProjectDetail }) {
+export function TimelineStrip({ detail, plain }: { detail: ProjectDetail; plain?: boolean }) {
   const s = detail.scores
   const ant = detail.latest?.anticipatedCompletion ?? null
   const sched = detail.latest?.scheduledCompletion ?? null
@@ -358,7 +353,7 @@ export function TimelineStrip({ detail }: { detail: ProjectDetail }) {
   const marks = [
     { label: 'Sanctioned', date: detail.master?.sanctionDate ?? null, dot: 'bg-fg-muted' },
     { label: 'Scheduled', date: sched, dot: 'bg-accent' },
-    { label: 'Anticipated', date: ant, dot: 'bg-warning' },
+    { label: plain ? 'Expected' : 'Anticipated', date: ant, dot: 'bg-warning' },
     { label: 'Predicted', date: addMonths(ant, s?.monthsP50), dot: 'bg-critical' },
   ].filter((m): m is { label: string; date: string; dot: string } => !!m.date)
   const today = detail.provenance.asof
@@ -375,7 +370,7 @@ export function TimelineStrip({ detail }: { detail: ProjectDetail }) {
       title="Timeline"
       info={band[0] && band[1]
         ? 'Predicted: the anticipated completion plus the model’s median slip over the next 2 quarters; the shaded band is its 5th–95th percentile.'
-        : 'Predicted: the anticipated completion plus the expected slip over the next 2 quarters.'}
+        : `Predicted: the ${plain ? 'expected' : 'anticipated'} completion plus the expected slip over the next 2 quarters.`}
       right={slip !== null && slip > 0 && (
         <span className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning">+{slip} mo vs schedule</span>
       )}

@@ -82,8 +82,11 @@ def get_portfolio(ministry: str | None = None, sector: str | None = None, state:
 def get_projects(q: str | None = Query(None, max_length=100), ministry: str | None = None,
                  sector: str | None = None, state: str | None = None, tier: Tier | None = None,
                  flag: Flag | None = None, sort: Sort = "risk", order: Literal["asc", "desc"] | None = None,
-                 page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100), v: Viewer = Anyone):
-    out = serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size, scope=v.scope)
+                 page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100), near_complete: bool = False,
+                 v: Viewer = Anyone):
+    """near_complete: 80-99% done and not past the anticipated completion (the public Home's short list)."""
+    out = serving.projects(q, ministry, sector, state, tier, flag, sort, order, page, size, scope=v.scope,
+                           near_complete=near_complete)
     return out if v.can("insights") else serving.public_page(out)
 
 

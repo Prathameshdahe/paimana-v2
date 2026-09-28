@@ -106,9 +106,11 @@ export function KPIRibbon() {
           ))}
         </div>
         <TierBar tiers={p.tiers} total={k.nProjects} className="mt-2.5 h-2" />
-        <div className="mt-1.5 text-xs text-fg-dimmed">
-          + <span className="text-watch">{tierN('Watch').toLocaleString()} Watch</span>: no completion date
-        </div>
+        {tierN('Watch') > 0 && (
+          <div className="mt-1.5 text-xs text-fg-dimmed">
+            + <span className="text-watch">{tierN('Watch').toLocaleString()} Watch</span>: no completion date
+          </div>
+        )}
       </Tile>
 
       <Tile icon={Gauge} tone="stable" label="Spent so far" value={orDash(k.expenditureCr, formatINRShort)}>

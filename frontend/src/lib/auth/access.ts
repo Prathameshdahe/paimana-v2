@@ -40,6 +40,8 @@ export const FEATURE_ROLES = {
   canSeeNews: OFFICIALS,
   /** check inbox, run scout, worker trigger */
   canRunJobs: IPMD,
+  /** pipeline-error alerts (backend: IPMD only) */
+  canSeePipelineErrors: IPMD,
   /** model versions and data provenance in the top bar */
   canSeeModelVersion: OFFICIALS,
 } satisfies Record<string, Role[]>
