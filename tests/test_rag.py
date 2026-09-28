@@ -186,7 +186,7 @@ def test_lexical_fallback_when_embeddings_fail(env, monkeypatch):
     idx = rag.ensure_index(background=False)
     assert idx is not None and not idx.has_emb.any() and not idx.dense_ready
     assert ids(rag.search("Watch tier", PUBLIC, k=1)) == ["help:0"]
-    assert (rag.RAG_DIR / "chunks.parquet").exists() and not (rag.RAG_DIR / "embeddings.npy").exists()
+    assert (rag.RAG_DIR / "chunks.parquet").exists() and not (rag.RAG_DIR / "embeddings.npz").exists()
     # LM Studio back: the next check (after the retry wait) embeds the same chunks without re-chunking them
     monkeypatch.setattr(client, "embed", lambda texts, **kw: hash_vectors(texts))
     monkeypatch.setattr(rag, "CHECK_S", 0)
@@ -279,6 +279,48 @@ def test_fingerprint_covers_the_chunkers_texts(env, monkeypatch):
     assert len({fp, fp2, rag.fingerprint()}) == 3   # texts the chunks copy rebuild the index without a VERSION bump
     rule = rag.CHECK_RULES["execution_stagnation"]
     assert "30%" in rule and "95%" in rule            # the whole stagnation rule of ml/score.py
+
+
+def test_saved_vectors_are_matched_by_content_hash(env):
+    idx = rag.ensure_index(background=False)
+    vec = {r["id"]: idx.emb[i].copy() for i, r in enumerate(idx.rows)}
+    old = (rag.RAG_DIR / "embeddings.npz").read_bytes()
+    # new chunks in another order, one of them changed; then the old vectors file is back: a kill between two
+    # replaces, or another writer saving at the same time
+    rows = [{k: v for k, v in r.items() if k != "hash"} for r in reversed(idx.rows)]
+    rows[0]["text"] = "Delay categories: land only."
+    rag.save(rag.build_index(rows, "fp-new", previous=idx))
+    (rag.RAG_DIR / "embeddings.npz").write_bytes(old)
+    back = rag.load()
+    assert back.fingerprint == "fp-new" and [r["id"] for r in back.rows] == [r["id"] for r in rows]
+    assert not back.has_emb[0] and back.has_emb[1:].all()     # the changed chunk gets no stale vector
+    assert all(np.array_equal(back.emb[i], vec[r["id"]]) for i, r in enumerate(back.rows) if i)
+    assert not [p.name for p in rag.RAG_DIR.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_older_vectors_file_is_read_and_replaced(env):
+    import pandas as pd
+    idx = rag.ensure_index(background=False)
+    d = rag.RAG_DIR  # write the format before hashes were saved with the vectors: row i for chunk i
+    pd.read_parquet(d / "chunks.parquet").assign(embedded=idx.has_emb).to_parquet(d / "chunks.parquet")
+    np.save(d / "embeddings.npy", idx.emb)
+    (d / "embeddings.npz").unlink()
+    back = rag.load()
+    assert back.has_emb.all() and np.array_equal(back.emb, idx.emb)
+    rag.save(back)
+    assert (d / "embeddings.npz").exists() and not (d / "embeddings.npy").exists()
+    assert np.array_equal(rag.load().emb, idx.emb)
+
+
+def test_rebuild_waits_for_a_running_build(env):
+    done = threading.Event()
+    with rag._build_lock:                        # a background refresh is running
+        t = threading.Thread(target=lambda: (rag.rebuild(), done.set()))
+        t.start()
+        time.sleep(0.2)
+        assert not done.is_set()
+    t.join(10)
+    assert done.is_set() and env["builds"] == 1
 
 
 def test_background_build_serves_when_done(env):

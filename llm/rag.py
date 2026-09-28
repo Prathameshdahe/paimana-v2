@@ -33,19 +33,19 @@ rankings (top POOL each) are fused by reciprocal rank, score = sum of 1 / (RRF_K
 computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-IDF ranks alone: search() never
 raises for an LLM outage.
 
-Artifacts in dataset/rag/ (gitignored): chunks.parquet, embeddings.npy (float16, row i for chunk i, zeros where
-missing), meta.json with the input fingerprint: chunker VERSION, a hash of this file and of the texts it copies from
-serving and the delay taxonomy (so an edit to them rebuilds without a VERSION bump), embedding model, the served data
-state (its version,
-the external_summary.json mtime, and its gold and model version and asof), the docs and research file mtimes, and the
-max signal id and link and agent-fact counts of the app database. The data part is read from the same
-serving.state() the chunks are built from, never from the files: while the report watcher pins the old version
-during an ingest, or a failed reload keeps it, the files are newer than what is served, and an index built then
-carries the served version's fingerprint, so it is rebuilt once the new version is served. ensure_index() serves the
-saved index and, when the fingerprint moved (checked at most every CHECK_S seconds), rebuilds in a background
-thread: the new chunks are served on TF-IDF
-as soon as they are built, then the chunks whose text changed are embedded (the rest keep their vectors, by content
-hash), pausing while a chat request waits for the LLM (client.chat_active). A failed embedding run is retried after
+Artifacts in dataset/rag/ (gitignored): chunks.parquet; embeddings.npz, the float16 vectors of the embedded chunks
+with the content hash of each, so a vector is only ever paired with the chunk text it was computed from (the files
+are replaced one by one, and the CLI and the backend may both write); meta.json with the input fingerprint: chunker
+VERSION, a hash of this file and of the texts it copies from serving and the delay taxonomy (so an edit to them
+rebuilds without a VERSION bump), embedding model, the served data state (its version, the external_summary.json
+mtime, and its gold and model version and asof), the docs and research file mtimes, and the max signal id and link
+and agent-fact counts of the app database. The data part is read from the same serving.state() the chunks are built
+from, never from the files: while the report watcher pins the old version during an ingest, or a failed reload keeps
+it, the files are newer than what is served, and an index built then carries the served version's fingerprint, so
+it is rebuilt once the new version is served. ensure_index() serves the saved index and, when the fingerprint moved
+(checked at most every CHECK_S seconds), rebuilds in a background thread: the new chunks are served on TF-IDF as soon
+as they are built, then the chunks whose text changed are embedded (the rest keep their vectors, by content hash),
+pausing while a chat request waits for the LLM (client.chat_active). A failed embedding run is retried after
 EMBED_RETRY_S; a failed query embedding falls back to TF-IDF for QUERY_RETRY_S.
 """
 import argparse
@@ -900,26 +900,74 @@ def embed_missing(idx: Index) -> Index:
 
 # ------------------------------------------------------------------ storage
 
+def _tmp(d: Path, name: str) -> Path:
+    """A temporary file name no other writer uses: the CLI build and the backend's refresh may save at once."""
+    return d / f".{name}.{os.getpid()}.{threading.get_ident()}.{time.monotonic_ns()}.tmp"
+
+
 def save(idx: Index, where: Path | None = None) -> None:
+    """Write idx to where (RAG_DIR): chunks.parquet, embeddings.npz (the vectors of the embedded chunks with their
+    content hashes, so load() pairs a vector only with the chunk it was computed from, whatever state the other
+    files are in) and meta.json, each written to a temporary file of its own and moved into place."""
     d = where or RAG_DIR
     d.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(idx.rows, columns=COLUMNS + ["hash"]).assign(embedded=idx.has_emb)
-    df.to_parquet(d / "chunks.parquet.tmp", index=False)
-    os.replace(d / "chunks.parquet.tmp", d / "chunks.parquet")
-    if idx.emb is not None:
-        with open(d / "embeddings.npy.tmp", "wb") as f:
-            np.save(f, idx.emb.astype(np.float16))
-        os.replace(d / "embeddings.npy.tmp", d / "embeddings.npy")
-    else:
-        (d / "embeddings.npy").unlink(missing_ok=True)
-    counts = Counter(f"{r['kind']}/{r['visibility']}" for r in idx.rows)
-    meta = {**idx.meta, "fingerprint": idx.fingerprint, "version": VERSION, "n_chunks": len(idx.rows),
-            "n_embedded": int(idx.has_emb.sum()), "embed_model": client.LLM_EMBED_MODEL,
-            "dim": None if idx.emb is None else int(idx.emb.shape[1]), "counts": dict(sorted(counts.items())),
-            "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    (d / "meta.json.tmp").write_text(json.dumps(meta, indent=1), encoding="utf-8")
-    os.replace(d / "meta.json.tmp", d / "meta.json")
+    tmps = []
+
+    def put(name: str, write) -> None:
+        t = _tmp(d, name)
+        tmps.append(t)
+        write(t)
+        os.replace(t, d / name)
+
+    try:
+        put("chunks.parquet", lambda t: pd.DataFrame(idx.rows, columns=COLUMNS + ["hash"]).to_parquet(t, index=False))
+        if idx.emb is not None and idx.has_emb.any():
+            on = np.flatnonzero(idx.has_emb)
+            hashes = np.array([idx.rows[i]["hash"] for i in on], dtype=str)
+
+            def vectors(t):
+                with open(t, "wb") as f:
+                    np.savez(f, emb=idx.emb[on].astype(np.float16), hash=hashes)
+            put("embeddings.npz", vectors)
+        else:
+            (d / "embeddings.npz").unlink(missing_ok=True)
+        (d / "embeddings.npy").unlink(missing_ok=True)  # the format before the hashes were saved with the vectors
+        counts = Counter(f"{r['kind']}/{r['visibility']}" for r in idx.rows)
+        meta = {**idx.meta, "fingerprint": idx.fingerprint, "version": VERSION, "n_chunks": len(idx.rows),
+                "n_embedded": int(idx.has_emb.sum()), "embed_model": client.LLM_EMBED_MODEL,
+                "dim": None if idx.emb is None else int(idx.emb.shape[1]), "counts": dict(sorted(counts.items())),
+                "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        put("meta.json", lambda t: t.write_text(json.dumps(meta, indent=1), encoding="utf-8"))
+    finally:
+        for t in tmps:
+            t.unlink(missing_ok=True)
     idx.meta = meta
+
+
+def _saved_vectors(d: Path, df: pd.DataFrame, rows: list[dict]) -> tuple[np.ndarray, np.ndarray] | None:
+    """(emb, has) for rows: from embeddings.npz, each vector matched to its chunk by content hash; from the older
+    embeddings.npy (row i for chunk i, the parquet's embedded column) only when that is all there is."""
+    try:
+        if (d / "embeddings.npz").exists():
+            with np.load(d / "embeddings.npz") as z:
+                e, at = z["emb"], {h: i for i, h in enumerate(z["hash"].tolist())}
+            pairs = [(i, at[r["hash"]]) for i, r in enumerate(rows) if r["hash"] in at]
+        elif (d / "embeddings.npy").exists() and "embedded" in df:
+            e = np.load(d / "embeddings.npy")
+            if len(e) != len(rows):
+                return None
+            pairs = [(i, i) for i in np.flatnonzero(df["embedded"].to_numpy(dtype=bool))]
+        else:
+            return None
+    except (OSError, ValueError, KeyError) as err:
+        log.warning("rag: cannot read the saved vectors in %s: %s", d, err)
+        return None
+    if e.ndim != 2 or not pairs:
+        return None
+    emb, has = np.zeros((len(rows), e.shape[1]), dtype=np.float16), np.zeros(len(rows), dtype=bool)
+    new, old = map(list, zip(*pairs))
+    emb[new], has[new] = e[old], True
+    return emb, has
 
 
 def load(where: Path | None = None, *, any_version: bool = False) -> Index | None:
@@ -936,12 +984,11 @@ def load(where: Path | None = None, *, any_version: bool = False) -> Index | Non
     if meta.get("version") != VERSION and not any_version:
         return None
     rows = [{k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()}
-            for r in df.drop(columns="embedded").to_dict("records")]
-    emb, has = None, np.zeros(len(rows), dtype=bool)
-    if (d / "embeddings.npy").exists() and meta.get("embed_model") == client.LLM_EMBED_MODEL:
-        e = np.load(d / "embeddings.npy")
-        if e.ndim == 2 and len(e) == len(rows):
-            emb, has = e.astype(np.float16, copy=False), df["embedded"].to_numpy(dtype=bool)
+            for r in df.drop(columns="embedded", errors="ignore").to_dict("records")]
+    for r in rows:
+        r["hash"] = _hash(r)  # from the text itself, not trusted from the file
+    vec = _saved_vectors(d, df, rows) if meta.get("embed_model") == client.LLM_EMBED_MODEL else None
+    emb, has = vec if vec is not None else (None, np.zeros(len(rows), dtype=bool))
     return Index(rows, meta["fingerprint"], Lexical(rows), emb, has, meta)
 
 
@@ -968,7 +1015,13 @@ def _stale(idx: Index | None, fp: str) -> bool:
 
 def rebuild(embed: bool = True, previous: Index | None = None, s: dict | None = None) -> Index:
     """Build from the current inputs now, reusing the vectors of unchanged chunks, then serve and save it. s is the
-    served data state both the chunks and the fingerprint are taken from (serving.state() by default)."""
+    served data state both the chunks and the fingerprint are taken from (serving.state() by default). Waits for a
+    background refresh of this process to finish first (one build at a time)."""
+    with _build_lock:
+        return _rebuild(embed, previous, s)
+
+
+def _rebuild(embed: bool, previous: Index | None, s: dict | None) -> Index:
     t0 = time.monotonic()
     s = serving.state() if s is None else s
     fp = fingerprint(s)
@@ -1011,7 +1064,7 @@ def _refresh(raise_errors: bool = False) -> None:
             _publish(idx)
             save(idx)
         else:
-            rebuild(previous=idx, s=s)
+            _rebuild(True, idx, s)   # this thread holds the build lock
     except Exception:
         _build_failed_at = time.monotonic()
         log.exception("rag: index build failed")
