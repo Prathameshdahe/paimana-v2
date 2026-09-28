@@ -10,8 +10,9 @@ first, one pipeline run per file:
      first), external, research, gold, score and profile. train is the monthly run and is started by hand.
   3. success: the inbox file moves to dataset/raw/<csv|pdf>/<fiscal year>/, the old and new predictions are diffed
      into tier_up / tier_down / new_project alerts, prediction_log rows whose t + 2q is now labelled get their
-     realised outcome (a slip_realised alert when they were High / Critical and slipped), and the accepted report
-     and its run are registered in ingest.source_documents / load_runs.
+     realised outcome (a slip_realised alert when they were High / Critical and slipped), the accepted report and
+     its run are registered in ingest.source_documents / load_runs, and python -m pipeline.run serve loads the
+     PostgreSQL serving tables (best effort: its failure is a severity-2 pipeline_error, never a failed ingest).
      failure: the predictions pointer and file, the prediction log and the clean input the run replaced are put
      back, serving stays on the version it had (pinned), the file stays in the inbox and a pipeline_error alert is
      raised. The source row keeps status error, so the file is retried only under a new pipeline version.
@@ -263,6 +264,22 @@ def _fail(row: dict, started: str, error: str, summary: dict) -> dict:
     return row
 
 
+def _serve(timings: dict, filename: str) -> str | None:
+    """The serving tables after a successful run (python -m pipeline.run serve), best effort: the report is
+    ingested whatever happens here; a failure (the database down) is the returned error, logged in the job summary
+    and raised as a severity-2 pipeline_error alert, and the next serve run loads what this one did not."""
+    try:
+        timings["serve"] = run_step([sys.executable, "-X", "utf8", "-m", "pipeline.run", "serve"])
+        return None
+    except Exception as e:  # noqa: BLE001 - any failing step, as for the pipeline steps
+        error = f"{type(e).__name__}: {e}"
+        db.add_alerts([{"project_key": None, "kind": "pipeline_error", "severity": 2,
+                        "title": f"Serving tables not loaded after {filename}",
+                        "detail": f"{error[:1500]} -- the report is ingested and served; python -m pipeline.run serve "
+                                  "loads the tables once the database answers", "source": f"serve:{filename}"}])
+        return error
+
+
 def ingest(path: Path, sha: str, pv: str) -> dict:
     """Run one inbox file through the pipeline (see the module docstring); returns its sources row."""
     started, t0 = _now(), time.time()
@@ -303,6 +320,7 @@ def ingest(path: Path, sha: str, pv: str) -> dict:
         serving.pin(not ran and serving._version() != version)  # noqa: SLF001
         return _fail(row, started, f"{type(e).__name__}: {e}", {**summary, "seconds": round(time.time() - t0, 1)})
     serving.pin(False)
+    summary["serve_error"] = _serve(timings, path.name)
     row.update(status="ok", rows=n_rows, archived_as=archived.relative_to(ROOT).as_posix())
     # the lineage row of ingest.source_documents / load_runs: the run and the versions its scores carry
     db.record_source({**row, "started_at": started, "rows_read": n_rows, "rows_loaded": n_rows, "rows_failed": 0,

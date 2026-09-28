@@ -141,8 +141,39 @@ def _limits(con) -> None:
     con.execute(f"SET threads = {threads}")
 
 
+class ModelIntegrityError(RuntimeError):
+    """A champion model file is not the one model/registry.json sealed (secure.txt section 4)."""
+
+
+def verify_models() -> dict[str, dict]:
+    """The champion model files against the sha256 sealed in model/registry.json (ml/registry.py verify): returns
+    target key -> {entry_id, path, status, sha256}. A mismatch or a missing file refuses the data version
+    (ModelIntegrityError, after a pipeline_error alert); an unsealed entry is logged as a warning (python -m
+    ml.registry seal), not refused."""
+    from ml import registry  # noqa: PLC0415 - the check reads the registry, nothing else of the ml package
+    checks = registry.verify(registry.load(), ROOT)
+    bad = {k: v for k, v in checks.items() if v["status"] in ("mismatch", "missing")}
+    for k, v in checks.items():
+        if v["status"] == "unsealed":
+            log.warning("model %s (%s) has no sealed sha256: python -m ml.registry seal", k, v["entry_id"])
+    if bad:
+        detail = "; ".join(f"{k}: {v['status']} {v['path']}" for k, v in bad.items())
+        log.error("champion model files fail their integrity check: %s", detail)
+        try:
+            from . import db  # noqa: PLC0415 - db imports this module
+            db.add_alerts_once([{"project_key": None, "kind": "pipeline_error", "severity": 3,
+                                 "title": "Model integrity check failed: the served data version was refused",
+                                 "detail": detail[:1500],
+                                 "source": "model:" + ",".join(v["entry_id"] for v in bad.values())}])
+        except Exception:  # noqa: BLE001 - the alert is best effort; the refusal is not
+            log.exception("could not raise the model integrity alert")
+        raise ModelIntegrityError(detail)
+    return checks
+
+
 def _load() -> dict:
-    """Read one data version into a fresh in-memory DuckDB."""
+    """Read one data version into a fresh in-memory DuckDB (after the champion model files pass verify_models)."""
+    verify_models()
     ptr = json.loads(POINTER.read_text(encoding="utf-8"))
     silver = json.loads(SILVER_MANIFEST.read_text(encoding="utf-8"))
     asof = date.fromisoformat(ptr["asof"])
@@ -1047,8 +1078,11 @@ def models(s):
     runs = [{"entry_id": r["entry_id"], "run_id": r["run_id"], "model": r["model"], "target": r["target"],
              "horizon": r["horizon"], "gold_version": r["gold_version"], "created_at": r.get("created_at"),
              "pr_auc": r["metrics"]["pooled"].get("pr_auc"), "ece": r["metrics"]["pooled"].get("ece"),
-             "test_pr_auc": (r["metrics"].get("test") or {}).get("pr_auc"), "champion": r["entry_id"] in champions}
+             "test_pr_auc": (r["metrics"].get("test") or {}).get("pr_auc"), "champion": r["entry_id"] in champions,
+             "artifact_path": r["artifacts"].get("model"), "artifact_sha256": r.get("artifact_sha256")}
             for r in reg.get("runs", [])]
+    sealed = {r["entry_id"]: r.get("artifact_sha256") for r in reg.get("runs", [])}
+    champ = {k: {**c, "artifact_sha256": sealed.get(c["entry_id"])} for k, c in champ.items()}
     return {"champions": champ, "run_id": run_id, "backtest": csv("backtest_summary.csv"),
             "ablation": csv("ablation.csv"),
             "shap_summary": csv("shap_summary.csv", """SELECT feature, "group", mean_abs_shap FROM t

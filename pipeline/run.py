@@ -14,7 +14,9 @@ Pipeline entry point:  python -m pipeline.run <step>
              (pipeline/bottlenecks.py), the measured hidden-delay priors (pipeline/hidden_delay.py), then the
              risk-profile checklist and the external early-notice summary (ml/risk_profile.py), which writes the
              serving version file last
-  all        silver, external, research, gold, train, score and profile in order
+  serve      the PostgreSQL serving tables from silver and gold (pipeline/serve.py: core.projects, project_keys,
+             project_timeline, ml.model_registry, predictions, risk_flags, forecasts, agency_stats), idempotent
+  all        silver, external, research, gold, train, score, profile and serve in order
 
 A failed step stops the run (its exception propagates; the later steps do not run), and the steps before it are
 complete: each step reads only the outputs of the steps before it and writes only its own. What the serving side
@@ -35,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline import agency, bottlenecks, build_identity, external, gold, hidden_delay, research, silver  # noqa: E402
 
-ALL = ["silver", "external", "research", "gold", "train", "score", "profile"]
+ALL = ["silver", "external", "research", "gold", "train", "score", "profile", "serve"]
 
 
 def main(argv=None):
@@ -50,7 +52,8 @@ def main(argv=None):
     sub.add_parser("score", help="predictions, intervals, SHAP and rank tiers for the current portfolio")
     sub.add_parser("profile", help="agency matrix, bottlenecks, hidden-delay priors, 12 checks + external composite, "
                                    "early-notice summary")
-    sub.add_parser("all", help="silver, external, research, gold, train, score and profile")
+    sub.add_parser("serve", help="the PostgreSQL serving tables (core.*, ml.*) from silver and gold")
+    sub.add_parser("all", help="silver, external, research, gold, train, score, profile and serve")
     args = ap.parse_args(argv)
     steps = ALL if args.step == "all" else [args.step]
     t0 = time.time()
@@ -78,6 +81,9 @@ def main(argv=None):
         bottlenecks.main()
         hidden_delay.main()
         risk_profile.main()
+    if "serve" in steps:
+        from pipeline import serve  # the app database layer (SQLAlchemy, psycopg), only when it runs
+        serve.main()
     print(f"{args.step}: {time.time() - t0:.1f}s")
 
 

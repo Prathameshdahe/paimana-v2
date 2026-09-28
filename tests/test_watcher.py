@@ -119,7 +119,7 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     out = watcher.watch_once()
     assert [f["status"] for f in out["files"]] == ["ok"], out
     assert calls == ["portal_csv", "build_clean_projects", "silver", "external", "research", "gold", "score",
-                     "profile"]
+                     "profile", "serve"]
     row = out["files"][0]
     assert row["kind"] == "portal_csv" and row["rows"] == 2
     assert (live / row["archived_as"]).exists() and row["archived_as"].startswith("raw/csv/")
@@ -130,13 +130,13 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     # the same bytes again: nothing to do
     (watcher.INBOX / "copy.csv").write_text(PORTAL_CSV, encoding="utf-8")
     assert watcher.pending() == [] and watcher.watch_once()["files"] == []
-    assert len(calls) == 8
+    assert len(calls) == 9
     # the accepted report and its run are registered for the lineage (ingest.source_documents / load_runs)
     (doc,) = db.source_documents(row["sha256"])
     assert (doc["file_type"], doc["report_type"], doc["source_path"]) == ("csv", "portal_csv", row["archived_as"])
     (run,) = db.load_runs("INGEST")
     assert (run["status"], run["rows_loaded"], run["source_document_id"]) == ("SUCCESS", 2, doc["source_document_id"])
-    assert run["model_version"] == "mv-new"
+    assert run["model_version"] == "mv-new" and db.latest_jobs()[0]["summary"]["serve_error"] is None
     # a new pipeline version ingests it again
     monkeypatch.setattr(watcher, "pipeline_version", lambda: "next")
     assert [p.name for p, _ in watcher.pending()] == ["copy.csv"]
@@ -162,6 +162,20 @@ def test_failed_step_keeps_the_old_predictions(live, monkeypatch):
     assert len(err) == 1 and err[0]["project_key"] is None and "profile broke" in err[0]["detail"]
     assert watcher.pending() == []  # the failure is recorded, not retried every minute
     assert db.latest_jobs()[0]["status"] == "error"
+
+
+def test_failed_serve_step_does_not_fail_the_ingest(live, monkeypatch):
+    """The serving tables are best effort: the report is ingested and served, the failure is a severity-2 alert."""
+    calls = fake_pipeline(monkeypatch, fail_at="serve")
+    (watcher.INBOX / "Projects_Report.csv").write_text(PORTAL_CSV, encoding="utf-8")
+    row = watcher.watch_once()["files"][0]
+    assert row["status"] == "ok" and calls[-1] == "serve" and not (watcher.INBOX / "Projects_Report.csv").exists()
+    assert "serve broke" in db.latest_jobs()[0]["summary"]["serve_error"]
+    (err,) = alerts_of("pipeline_error") or [None]
+    assert err is None
+    (err,) = [a for a in db.alerts(kind="pipeline_error")["items"] if a["source"] == "serve:Projects_Report.csv"]
+    assert err["severity"] == 2 and "serve broke" in err["detail"] and "python -m pipeline.run serve" in err["detail"]
+    assert [r["status"] for r in db.load_runs("INGEST")] == ["SUCCESS"]
 
 
 def test_unknown_file_is_an_error_not_a_run(live, monkeypatch):

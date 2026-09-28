@@ -28,6 +28,7 @@ decision and its reason is recorded in registry.json. Scoring refits each champi
 (fitter).
 """
 import functools
+import hashlib
 import json
 import sys
 import time
@@ -253,6 +254,7 @@ def register(reg, run_id, res, params, inc, created):
                                  "flash": flash.get("pooled"), "flash_folds": flash.get("folds", [])},
                      "windows": {k: res["windows"][key][k] for k in ["validation", "test", "flash"]},
                      "artifacts": {"model": f"model/runs/{run_id}/{model_file}", **shared},
+                     "artifact_sha256": sha256_of(run_dir / model_file),   # the seal serving verifies (verify)
                      "n_final_fit": len(d), "created_at": created}
             entry = jsonable(entry)
             reg["runs"].append(entry)
@@ -305,6 +307,43 @@ def main():
     print(f"train {run_id}: {time.time() - t0:.0f}s, registry {REGISTRY}")
 
 
+def sha256_of(path) -> str:
+    with open(path, "rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def seal(reg, root=None) -> list[str]:
+    """Record artifact_sha256 (the model file's sha256) on every entry that has none yet and whose file exists;
+    returns the entry ids sealed. Entries registered since the field exists carry it from register()."""
+    root = root or backtest.ROOT
+    done = []
+    for e in reg["runs"]:
+        path = root / e["artifacts"]["model"]
+        if not e.get("artifact_sha256") and path.is_file():
+            e["artifact_sha256"] = sha256_of(path)
+            done.append(e["entry_id"])
+    return done
+
+
+def verify(reg, root=None) -> dict[str, dict]:
+    """The champion model files against their seals (secure.txt section 4): target key -> {entry_id, path, status}
+    with status 'ok', 'mismatch' (the file is not the one registered), 'missing' (no file) or 'unsealed' (the entry
+    has no sha256 to check against: python -m ml.registry seal)."""
+    root = root or backtest.ROOT
+    out = {}
+    for key, champ in reg.get("champions", {}).items():
+        e = next((r for r in reg["runs"] if r["entry_id"] == champ["entry_id"]), None)
+        if e is None:
+            out[key] = {"entry_id": champ["entry_id"], "path": None, "status": "missing"}
+            continue
+        path = root / e["artifacts"]["model"]
+        expected = e.get("artifact_sha256")
+        status = ("missing" if not path.is_file() else "unsealed" if not expected
+                  else "ok" if sha256_of(path) == expected else "mismatch")
+        out[key] = {"entry_id": e["entry_id"], "path": e["artifacts"]["model"], "status": status, "sha256": expected}
+    return out
+
+
 def cli(argv=None):
     import argparse
     ap = argparse.ArgumentParser(prog="python -m ml.registry")
@@ -312,8 +351,21 @@ def cli(argv=None):
     r = sub.add_parser("revert", help="undo the promotion that made a target's current champion")
     r.add_argument("key", help="target key, e.g. y_any_h4")
     r.add_argument("--reason", required=True, help="the evidence, e.g. the harness CSV and the rule it fails")
+    sub.add_parser("seal", help="record the sha256 of every registered model file that has none yet")
+    sub.add_parser("verify", help="check the champion model files against their recorded sha256")
     a = ap.parse_args(argv)
     reg = load()
+    if a.cmd == "seal":
+        done = seal(reg)
+        REGISTRY.write_text(json.dumps(jsonable(reg), indent=2), encoding="utf-8")
+        print(f"sealed {len(done)} entries" + (": " + ", ".join(done) if done else ""))
+        return
+    if a.cmd == "verify":
+        bad = 0
+        for key, v in verify(reg).items():
+            bad += v["status"] != "ok"
+            print(f"{key}: {v['status']} {v['path']}")
+        sys.exit(1 if bad else 0)
     d = revert(reg, a.key, a.reason)
     REGISTRY.write_text(json.dumps(jsonable(reg), indent=2), encoding="utf-8")
     print(f"{a.key}: {d['champion_before']} -> {d['challenger']} ({d['reason']})")
