@@ -176,6 +176,51 @@ def test_auditor_flags_zero_progress_with_overrun(monkeypatch):
     assert confidence < 1.0
 
 
+def test_worker_cell_takes_the_llm_gate_per_call_so_a_chat_goes_between_calls(monkeypatch):
+    """Each generation holds the gate on its own (worker._generate): a chat request that arrives during a project
+    gets the LLM after the current call, not after the project's 4 calls (Segment 8 review, llm lens)."""
+    import threading
+    import time
+    import types
+
+    from backend.schemas import AnalystOutput, AuditorQuery, DispatcherOutput, ScoutOutput
+    from llm import client
+
+    held, call_s = [], 0.15
+    samples = {AuditorQuery: AuditorQuery(query_text="q"), ScoutOutput: ScoutOutput(tags=[]),
+               AnalystOutput: AnalystOutput(summary="s", bottlenecks=[], recommended_action="a"),
+               DispatcherOutput: DispatcherOutput(draft_memo="m", recommended_recipient_role="ipmd_analyst")}
+
+    def fake_call_llm(system, user, model):
+        with client.gate(0) as free:      # the gate is held around the generation: another take must wait
+            held.append(not free)
+        time.sleep(call_s)
+        return samples[model]
+    rows = [{"project_key": "PRJ-000001", "project_name": "p", "months_since_last_obs": 5, "dq_score": 0.5}]
+    event = {"status": "open", "category": "land", "first_seen": "a", "last_seen": "b", "evidence": "e",
+             "source_doc_id": "d", "source_page": 1}
+    monkeypatch.setattr(worker, "call_llm", fake_call_llm)
+    monkeypatch.setattr(worker, "serving", types.SimpleNamespace(
+        top_projects=lambda n: rows, meta=lambda: {"model_version": "m", "asof": "a"},
+        state=lambda: {"pointer": {"path": "x/y"}},
+        project=lambda k: {"scores": {}, "latest": {}, "provenance": {"model_version": "m"},
+                           "external": {"events": [event]}}))
+    monkeypatch.setattr(worker, "db", types.SimpleNamespace(project_signals=lambda k, limit: {"items": []}))
+    monkeypatch.setattr(worker, "store", types.SimpleNamespace(append_worker_runs=lambda r: None,
+                                                              append_dispatch_drafts=lambda d: None))
+    t = threading.Thread(target=worker.run_worker_cycle)
+    t.start()
+    time.sleep(call_s / 2)                # a chat arrives during the auditor's call
+    t0 = time.monotonic()
+    with client.gate(2 * call_s, chat=True) as ok:
+        waited = time.monotonic() - t0
+    t.join(10)
+    assert ok and waited < 1.5 * call_s   # after the current call, not after all four
+    assert held == [True] * 4
+    with client.gate(0) as free:          # nothing left held
+        assert free
+
+
 def test_cache_is_dropped_when_the_data_version_changes(monkeypatch):
     from backend import serving
     before = serving.state()

@@ -2,6 +2,11 @@
 
 No agent framework — 5 sequential calls don't need a graph library, a for-loop
 does the job. Orchestrated by run_worker_cycle() at the bottom.
+
+Every generation goes through _generate(), which takes the LLM gate (llm/client.py) for that one call: a project is
+up to 4 calls of 20 to 120 s each (the auditor and scout only when they have something to phrase), and holding the
+gate across all of them kept a chat answer waiting for minutes; taken per call, a chat request goes between them.
+The forecaster and the data reads take no gate.
 """
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +31,13 @@ STALE_MONTHS, DQ_MIN = 3, 0.7  # same thresholds as the data-staleness row in ml
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _generate(system: str, user: str, response_model):
+    """call_llm with the LLM gate held for this one generation only (module docstring); the gate is taken without
+    a time limit: the cell runs on demand for an analyst, behind whatever chat answer is in flight."""
+    with gate():
+        return call_llm(system, user, response_model)
 
 
 # ---------- 1. Auditor ----------
@@ -63,7 +75,7 @@ def auditor(project_row: dict) -> tuple[list[str], float, AuditorQuery | None]:
             f"only phrase what is listed.\nProject: {project_row.get('project_name')}\n"
             f"Issues: {'; '.join(issues)}"
         )
-        query = call_llm(system, user, AuditorQuery)
+        query = _generate(system, user, AuditorQuery)
 
     return issues, data_confidence, query
 
@@ -113,7 +125,7 @@ def scout(project_row: dict) -> tuple[ScoutOutput, list[dict]]:
         "Evidence:\n" + "\n".join(lines) + "\n"
         "Extract 1-3 cause tags with a confidence (0-1) and a short source_note quoting one evidence line."
     )
-    return call_llm(system, user, ScoutOutput), signals
+    return _generate(system, user, ScoutOutput), signals
 
 
 # ---------- 4. Analyst ----------
@@ -134,7 +146,7 @@ def analyst(forecaster_output: dict, scout_output: ScoutOutput) -> AnalystOutput
         f"SHAP top drivers: {forecaster_output.get('shap_top5')}\n"
         f"Scout cause tags: {[t.model_dump() for t in scout_output.tags]}\n"
     )
-    return call_llm(system, user, AnalystOutput)
+    return _generate(system, user, AnalystOutput)
 
 
 # ---------- 5. Dispatcher ----------
@@ -151,7 +163,7 @@ def dispatcher(analyst_output: AnalystOutput, project_row: dict) -> DispatchDraf
         f"Bottlenecks: {analyst_output.bottlenecks}\n"
         f"Recommended action: {analyst_output.recommended_action}\n"
     )
-    out = call_llm(system, user, DispatcherOutput)
+    out = _generate(system, user, DispatcherOutput)
     return DispatchDraft(
         id=str(uuid.uuid4()),
         project_id=str(project_row.get("project_key")),
@@ -181,15 +193,14 @@ def run_worker_cycle() -> dict:
     processed = 0
 
     for project_row in top:
-        with gate():  # one generation at a time on the local model; chat answers go first
-            issues, _confidence, _query = auditor(project_row)
-            if issues:
-                alerts_raised += 1
+        issues, _confidence, _query = auditor(project_row)   # each LLM call takes the gate on its own (_generate)
+        if issues:
+            alerts_raised += 1
 
-            fc = forecaster(project_row["project_key"])
-            sc, signals = scout(project_row)
-            an = analyst(fc, sc)
-            draft = dispatcher(an, project_row)
+        fc = forecaster(project_row["project_key"])
+        sc, signals = scout(project_row)
+        an = analyst(fc, sc)
+        draft = dispatcher(an, project_row)
         draft.evidence = [
             EvidenceItem(tag=t.category, source_url=None, note=t.source_note) for t in sc.tags
         ] + [EvidenceItem(tag=s["category"] or "news", source_url=s["url"], note=s["title"]) for s in signals[:5]]
