@@ -358,7 +358,7 @@ function Chat() {
                   {welcome}
                 </div>
               </AssistantRow>
-              {turns.map((t) =>
+              {turns.map((t, i) =>
                 t.role === 'user' ? (
                   <div key={t.id} className="flex justify-end">
                     <div className="min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-accent px-3.5 py-2.5 leading-relaxed text-fg-inverse shadow-sm">
@@ -367,7 +367,7 @@ function Chat() {
                   </div>
                 ) : (
                   <ErrorBoundary key={t.id} fallback={<AssistantRow><p className="text-xs text-fg-dimmed">This answer could not be shown.</p></AssistantRow>}>
-                    <Answer t={t} flash={flash} onCite={(n) => showSource(t.id, n)} />
+                    <Answer t={t} latest={i === turns.length - 1} flash={flash} onCite={(n) => showSource(t.id, n)} />
                   </ErrorBoundary>
                 )
               )}
@@ -518,13 +518,18 @@ function ProblemNote({ p }: { p: Problem }) {
 }
 
 /** one answer: the tool steps, the data cards, the narrative with its source chips, the sources, the verdict */
-function Answer({ t, flash, onCite }: { t: AssistantTurn; flash: string | null; onCite: (n: number) => void }) {
+function Answer({ t, latest, flash, onCite }: {
+  t: AssistantTurn
+  latest: boolean
+  flash: string | null
+  onCite: (n: number) => void
+}) {
   const byN = new Map(t.sources.map((s) => [String(s.n), s]))
   const flashed = flash?.startsWith(`${t.id}:`) ? Number(flash.slice(String(t.id).length + 1)) : null
   const writing = t.streaming && !t.problem
   return (
     <AssistantRow>
-      <ToolSteps steps={t.steps} stage={t.stage} detail={t.stageDetail} retries={t.retries} streaming={t.streaming} />
+      <ToolSteps steps={t.steps} stage={t.stage} detail={t.stageDetail} retries={t.retries} streaming={t.streaming} latest={latest} />
       {t.cards.map((c, i) => <ChatCardView key={i} card={c} />)}
       {(t.text || writing) && (
         <div className="rounded-2xl rounded-tl-sm border border-border-subtle bg-surface-panel px-3.5 py-2.5 leading-relaxed text-fg-base shadow-sm">

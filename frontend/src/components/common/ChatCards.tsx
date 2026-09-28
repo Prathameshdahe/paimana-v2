@@ -492,19 +492,22 @@ const STAGE_LABEL: Record<ChatStage, string> = {
 }
 
 /**
- * The tool calls of one answer as a compact list: open while the answer is coming, folded to one line once it is
- * done (the viewer can open it again). New steps are announced politely to screen readers.
+ * The tool calls of one answer as a compact list: open on the newest answer, folded to one line on older ones (so it
+ * folds when the next question is asked, never under the viewer's eyes as an answer ends); the viewer can open or
+ * fold it. New steps are announced politely to screen readers.
  */
-export function ToolSteps({ steps, stage, detail, retries, streaming }: {
+export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: {
   steps: ChatTool[]
   stage: ChatStage | null
   detail: string | null
   retries: string[][]
   streaming: boolean
+  /** the newest answer */
+  latest: boolean
 }) {
   const [open, setOpen] = useState<boolean | null>(null)
   const listId = useId()
-  const expanded = open ?? streaming
+  const expanded = open ?? (streaming || latest)
   const now = streaming ? (detail || (stage ? STAGE_LABEL[stage] : 'Sending the question')) : null
   const summary = `${steps.length} step${steps.length === 1 ? '' : 's'}${retries.length ? ' · rewritten once' : ''}`
   if (!streaming && steps.length === 0 && retries.length === 0) return null
