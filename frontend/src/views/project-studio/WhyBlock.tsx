@@ -22,12 +22,14 @@ const label = (dim: string) => RISK_DIMENSION[dim]?.label ?? dim.replace(/_/g, '
  * (dots, no bar lengths); then what the checks found — each flagged check as a sentence with its evidence, source and
  * date, the clear ones folded, and the ones without data named as such (not the same as clear). compact: the side
  * panel's tighter spacing. numbers: the developer reads the evidence as stored; the four roles read it without the
- * model's numbers an older backend writes into it (lib/outlook plainText).
+ * model's numbers an older backend writes into it (lib/outlook plainText). showDrivers false (the public, who gets no
+ * drivers by policy: unit G sends driversPlain []): the block opens with the checks, with no "not available" line.
  */
-export function WhyBlock({ drivers, checks, numbers, compact, className }: {
+export function WhyBlock({ drivers, checks, numbers, showDrivers = true, compact, className }: {
   drivers: PlainDriver[]
   checks: RiskRow[]
   numbers: boolean
+  showDrivers?: boolean
   compact?: boolean
   className?: string
 }) {
@@ -42,7 +44,7 @@ export function WhyBlock({ drivers, checks, numbers, compact, className }: {
   return (
     <section className={cn('rounded-xl border border-border-subtle bg-surface-panel shadow-card', compact ? 'p-4' : 'p-5', className)}>
       <H className="text-base font-semibold text-fg-base">Why it is happening</H>
-      {top.length > 0 ? (
+      {!showDrivers ? null : top.length > 0 ? (
         <ol className={cn('mt-3 space-y-2', compact && 'mt-2')}>
           {top.map((d, i) => {
             const up = d.direction === 'raises'
@@ -64,7 +66,7 @@ export function WhyBlock({ drivers, checks, numbers, compact, className }: {
         </p>
       )}
 
-      <div className={cn('border-t border-border-subtle', compact ? 'mt-3 pt-3' : 'mt-4 pt-4')}>
+      <div className={cn(showDrivers ? cn('border-t border-border-subtle', compact ? 'mt-3 pt-3' : 'mt-4 pt-4') : 'mt-2')}>
         <Sub className="text-sm font-semibold text-fg-base">What the checks found</Sub>
         {checks.length === 0 ? (
           <p className="mt-2 text-sm text-fg-muted">No checks: the project is not in the current portfolio.</p>

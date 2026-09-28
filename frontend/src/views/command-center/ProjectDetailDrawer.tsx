@@ -131,7 +131,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
           <>
             <p className="text-base leading-relaxed text-fg-base">{detailHeadline(detail, numbers)}</p>
             <OutlookTiles outlook={outlookOf(detail.scores, numbers)} tier={detail.scores?.tier ?? null} />
-            <WhyBlock drivers={driversOf(detail.scores, numbers)} checks={detail.riskProfile} numbers={numbers} compact />
+            <WhyBlock drivers={driversOf(detail.scores, numbers)} checks={detail.riskProfile} numbers={numbers} showDrivers={insights} compact />
             {k && insights && <FoldedBrief key={`b-${k}`} projectKey={k} />}
             {k && can(role, 'canSeeSecondOpinion') && (
               <SecondOpinionCard key={k} projectKey={k} variant="panel" tier={detail.scores?.tier} />
