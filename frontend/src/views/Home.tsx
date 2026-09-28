@@ -28,6 +28,7 @@ const QUICK_LINKS: Array<{ to: string; label: string; hint: string; icon: Lucide
   { to: '/external', label: 'External factors', hint: 'Land, forest, courts', icon: Trees },
   { to: '/bottlenecks', label: 'Bottlenecks', hint: 'Shared blockers', icon: Network },
   { to: '/radar', label: 'Radar', hint: 'Linked news', icon: Radar },
+  // the developer's only (canOpen filters it): model statistics are not for the four roles
   { to: '/models', label: 'Models', hint: 'Accuracy checks', icon: BrainCircuit },
 ]
 

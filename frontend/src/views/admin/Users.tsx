@@ -7,7 +7,7 @@ import { useResetUserPassword, useUpdateUser, useUsers } from '@/lib/queries'
 import { useSession } from '@/lib/auth/SessionContext'
 import { cn, formatDateTime } from '@/lib/formatters'
 import { Outcome, Pager, RoleScopeEditor, Table } from './parts'
-import { ROLE_LABEL, scopeComplete, scopeOf, TD, TH, type RoleScope } from './lib'
+import { listed, ROLE_LABEL, scopeComplete, scopeOf, TD, TH, type RoleScope } from './lib'
 import type { ResetToken, User } from '@/contracts/auth'
 
 const SIZE = 25
@@ -79,10 +79,10 @@ export function Users() {
               </tr>
             </thead>
             <tbody>
-              {data.items.length === 0 && (
+              {data.items.filter(listed).length === 0 && (
                 <tr><td colSpan={6} className="py-8 text-center text-sm text-fg-dimmed">No account matches.</td></tr>
               )}
-              {data.items.map((u) => {
+              {data.items.filter(listed).map((u) => {
                 const self = u.id === me.userId
                 const busy = update.isPending && update.variables?.id === u.id
                 return (

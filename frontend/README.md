@@ -63,6 +63,32 @@ which feature (`ROUTE_ROLES`, `FEATURE_ROLES`, `canOpen`, `can`, `canAdmin`);
 (`backend/access.py`, `docs/ACCESS_CONTROL.md`); the map only decides what is
 shown.
 
+## Numbers policy and the developer
+
+The four roles (public, agency, ministry, IPMD) never see a raw model number:
+no probability, SHAP value, quantile interval, rank percentile, bias statistic,
+CI, lift, analogue distance or rate, or scenario value. They read the tier, the
+outlook in words (`Scores.outlook` / `ProjectRow.outlook`: delay and cost
+"very likely / likely / possible / unlikely", slip "under 6 months ... over 2
+years"), the drivers in words (`Scores.driversPlain`), the agencies' words
+(`scheduleWord`, `costWord`), the measured delay as a band (`extraMonthsWord`),
+and report facts (cost, spend, progress, dates, counts). The backend cuts the
+numbers out of their answers; the pages also never render one outside
+`can(role, 'canSeeNumbers')`, so a page stays clean against an older backend
+that still sends them (it then says "not available yet" where words are
+missing). `src/lib/outlook.ts` is the one place that picks words over numbers;
+`src/lib/headline.ts` writes the opening sentences (the week's brief, a
+project's headline) from facts, tiers and words, never a number.
+
+The hidden `developer` role (`Me.role === 'developer'`, the only viewer with
+`canSeeNumbers`, `canSeeModels`, `canSeeWorkers`, `canSeeAudit` and
+`canRunJobs`) sees everything: the project page adds a Model detail tab
+(`?tab=model`) with the prediction panel, gauges, SHAP waterfall, analogue
+table, the numeric trajectory and the predicted window; Agencies adds the
+numeric matrix and leaderboard; Models, Workers and the audit log open for it
+alone. It carries no role label: only a small "Developer" tag in the account
+menu, and the administration lists never show it.
+
 The other account pages: `/signup` (request access: email, name, role, the
 searchable ministry or agency list, a justification, a password checked against
 the policy in `src/lib/auth/password.ts` with a rules-only strength meter; an
@@ -83,12 +109,24 @@ sits in one error boundary that offers Reload
 (`src/components/ui/navigation-menu-05.tsx`) shows the first five pages and the
 rest under More. The `@` import alias points to `src/`.
 
-Corners are sharp everywhere: every named radius in `tailwind.config.ts` is 0,
-and `rounded-full` is for true circles only (dots, rings, avatars, the chat
-launcher, spinner dots, the slider thumb, radio dots). The account pages
-(`src/components/layout/AccountLayout.tsx`) animate nothing.
+The look is the token layer in `src/styles/globals.css` and
+`tailwind.config.ts`: the sand canvas, chalk panels, the rounded radii, the four
+inks (critical, warning, stable, watch) that mean a tier or an outlook word and
+nothing else, grey as the default mark on every chart (a coloured mark is a
+statement), the slate accent for the viewer's own action (selection, focus,
+links). Every page opens with one plain sentence; cards are unequal, sections
+sit 32 px apart. The account pages (`src/components/layout/AccountLayout.tsx`)
+animate nothing; elsewhere motion is one short fade and honours reduced motion.
 
-Models (`/models`) reads `/api/models`: live accuracy of the logged
+The command centre (`src/views/CommandCenter.tsx`) is the week's brief, one
+filter bar shared by the risk map (`command-center/RiskMap.tsx`, geometry in
+`riskMapLayout.ts`: every project by due date and delay outlook, a dot's spot
+from its due date and a hash of its key only), where the risk sits by sector,
+where the delays come from, and the project list. The map reads
+`GET /api/projects/map`; against a backend without it, it shows the 100 most at
+risk from `/api/projects` and says so.
+
+Models (`/models`, the developer only) reads `/api/models`: live accuracy of the logged
 predictions, the champion run's backtest, calibration, SHAP summary and
 ablation tables, and the registry's champion decisions. Bottlenecks, Agencies
 and Radar read `/api/bottlenecks`, `/api/agencies/matrix` and
@@ -97,6 +135,8 @@ and Radar read `/api/bottlenecks`, `/api/agencies/matrix` and
 running.
 
 There is no test runner in this package; the behaviour checks for the api
-client, the session, the password policy and the account, admin and error
-pages are small esbuild + `react-dom/server` scripts kept outside the repo and
-run before each change ships.
+client, the session, the password policy, the account, admin and error pages,
+the headline sentences, the risk map geometry and a render of every redesigned
+page for each role against both backends (with a scan that no hidden number
+reaches the four roles) are small esbuild + `react-dom/server` scripts kept
+outside the repo and run before each change ships.

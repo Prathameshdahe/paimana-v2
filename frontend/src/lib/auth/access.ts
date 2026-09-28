@@ -17,26 +17,11 @@ const MINISTRY_UP: Role[] = ['ministry_official', 'ipmd_analyst', 'developer']
 const IPMD: Role[] = ['ipmd_analyst', 'developer']
 const DEVELOPER: Role[] = ['developer']
 
-/** page path (first segment) -> roles that may open it */
-export const ROUTE_ROLES: Record<string, Role[]> = {
-  '/': EVERYONE,
-  '/command': EVERYONE, // the project list + search; read-only for the public
-  '/projects': EVERYONE, // the public page is the simple one (no drivers, analogues, intervals)
-  '/external': EVERYONE,
-  '/bottlenecks': OFFICIALS,
-  '/agencies': OFFICIALS,
-  '/radar': OFFICIALS,
-  '/approvals': OFFICIALS,
-  '/models': MINISTRY_UP,
-  '/workers': IPMD,
-  '/admin': IPMD, // and the admin flag (ADMIN_ROUTES)
-}
-
-/** pages that need the session's admin flag on top of the role */
-const ADMIN_ROUTES = new Set(['/admin'])
-
 export const FEATURE_ROLES = {
-  /** SHAP drivers, analogues, quantile intervals, provenance, forecast, brief, project news */
+  /**
+   * the officials' project evidence (backend: insights): the paths ahead, similar past projects, the AI brief, linked
+   * news and the checks' evidence lines — in words; the numbers behind them are canSeeNumbers
+   */
   canSeeDrivers: OFFICIALS,
   /** alert bell, alert inbox, live stream */
   canSeeAlerts: OFFICIALS,
@@ -49,20 +34,42 @@ export const FEATURE_ROLES = {
   canSeeNews: OFFICIALS,
   /** the AI second opinion on a project (backend: need insights); it never changes the tier */
   canSeeSecondOpinion: OFFICIALS,
-  /** check inbox, run scout, worker trigger */
-  canRunJobs: IPMD,
+  /** check inbox, run scout, worker trigger (backend: jobs) */
+  canRunJobs: DEVELOPER,
   /** pipeline-error alerts (backend: IPMD only) */
   canSeePipelineErrors: IPMD,
-  /** model versions and data provenance in the top bar */
-  canSeeModelVersion: OFFICIALS,
-  /** users, sign-up requests and the audit log (backend: need admin); the role half of canAdmin */
+  /** users and sign-up requests (backend: need admin); the role half of canAdmin */
   canAdmin: IPMD,
+  /** the Models page: accuracy, backtests, calibration and the registry (backend: models) */
+  canSeeModels: DEVELOPER,
+  /** the Worker Console (backend: workers) */
+  canSeeWorkers: DEVELOPER,
+  /** the audit log, the Administration page's third tab (backend: audit) */
+  canSeeAudit: DEVELOPER,
   /**
    * the raw model numbers (backend: numbers): probabilities, SHAP values, quantile intervals, rank percentiles, bias
    * statistics, CIs, lifts, analogue distances and rates, scenario values. The project page's Model detail tab.
    */
   canSeeNumbers: DEVELOPER,
 } satisfies Record<string, Role[]>
+
+/** page path (first segment) -> roles that may open it */
+export const ROUTE_ROLES: Record<string, Role[]> = {
+  '/': EVERYONE,
+  '/command': EVERYONE, // the project list + search; read-only for the public
+  '/projects': EVERYONE, // the public page is the simple one (no drivers, analogues, intervals)
+  '/external': EVERYONE,
+  '/bottlenecks': OFFICIALS,
+  '/agencies': OFFICIALS,
+  '/radar': OFFICIALS,
+  '/approvals': OFFICIALS,
+  '/models': FEATURE_ROLES.canSeeModels, // accuracy, backtests, calibration: model statistics (SPEC9_ui section 6)
+  '/workers': FEATURE_ROLES.canSeeWorkers,
+  '/admin': IPMD, // and the admin flag (ADMIN_ROUTES); the audit tab needs canSeeAudit
+}
+
+/** pages that need the session's admin flag on top of the role */
+const ADMIN_ROUTES = new Set(['/admin'])
 
 export type Feature = keyof typeof FEATURE_ROLES
 

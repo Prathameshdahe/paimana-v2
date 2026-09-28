@@ -24,6 +24,14 @@ export function scopeOf(v: RoleScope): string | null {
   return v.role === 'ministry_official' ? v.ministry : v.role === 'agency_official' ? v.agency : null
 }
 
+/**
+ * an account the lists may show: never the hidden developer (the backend leaves it out of /api/admin/users too;
+ * this keeps a stray row off the page)
+ */
+export function listed(u: { role: string }): boolean {
+  return u.role !== 'developer'
+}
+
 /** a scoped role has its scope; IPMD needs none */
 export function scopeComplete(v: RoleScope): boolean {
   return v.role === 'ipmd_analyst' || !!scopeOf(v)
