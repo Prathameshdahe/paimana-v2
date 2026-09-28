@@ -455,11 +455,12 @@ class ResearchState(CamelModel):
 
 class ResearchBlocker(CamelModel):
     """A live negative fact of severity >= 2 with its project; the public gets the sweep's blockers only, as
-    headline, url and date."""
+    headline, url and dates. Show event_date by date_precision, else published_date (a live fact has one of them)."""
     headline: str
     url: str
     event_date: date | None
     date_precision: Literal["day", "month", "year"] | None
+    published_date: date | None = None
     fact_id: str | None = None
     project_key: str | None = None
     project_name: str | None = None

@@ -3,6 +3,7 @@ Expectations come from the committed gold research tables, so the tests hold for
 sweep alike."""
 import sys
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -174,9 +175,20 @@ def test_public_summary_is_counts_and_citations(client):
     assert [b["url"] for b in pub["topRecentBlockers"]] == [b["url"] for b in full["topRecentBlockers"]
                                                             if b["origin"] == "sweep"]
     assert AGENT_URL in {b["url"] for b in full["topRecentBlockers"]}
+    assert all("publishedDate" in b for b in full["topRecentBlockers"])
+    assert next(b for b in full["topRecentBlockers"] if b["factId"] == "agentfact001")["publishedDate"] == "2026-09-30"
     for b in pub["topRecentBlockers"]:
-        assert b["headline"] and b["url"] and b["eventDate"]
+        assert b["headline"] and b["url"] and (b["eventDate"] or b["publishedDate"])   # a live fact is dated
         assert all(b[k] is None for k in ("factId", "projectKey", "projectName", "summary", "source", "tier"))
+
+
+def test_public_blocker_keeps_its_publish_date():
+    """A source with no event date is dated by its publish date for the public too."""
+    row = {"headline": "Work stopped", "url": "https://a.in/x", "event_date": None, "date_precision": None,
+           "published_date": date(2026, 9, 1), "origin": "sweep", "summary": "s", "fact_id": "f", "project_key": "k"}
+    got = serving.public_research_summary({"top_recent_blockers": [row, {**row, "origin": "agent"}]})
+    assert got["top_recent_blockers"] == [{"headline": "Work stopped", "url": "https://a.in/x", "event_date": None,
+                                           "date_precision": None, "published_date": date(2026, 9, 1)}]
 
 
 def test_empty_research_tables_keep_their_columns(tmp_path, monkeypatch):

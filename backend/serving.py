@@ -713,17 +713,18 @@ def research_summary(scope=None) -> dict:
                      "n_agent_projects": len(agent_at)},
         "by_category": by_cat, "by_state": by_state,
         "top_recent_blockers": [{**{k: f.get(k) for k in ("fact_id", "project_key", "category", "severity",
-                                                           "event_date", "date_precision", "summary", "headline",
-                                                           "source", "url", "origin")},
+                                                           "event_date", "date_precision", "published_date",
+                                                           "summary", "headline", "source", "url", "origin")},
                                  **{k: cur[f["project_key"]][k] for k in ("project_name", "state", "tier")}}
                                 for f in blockers],
         "agent_last_run": max(agent_at.values(), default=None), "note": RESEARCH_NOTE}
 
 
 def public_research_summary(d: dict) -> dict:
-    """research_summary() for the public: the counts, and of the sweep's blockers only headline, URL and date (a
-    headline is all a public blocker says, and the research agent's are raw feed titles: see public_facts)."""
-    keep = ("headline", "url", "event_date", "date_precision")
+    """research_summary() for the public: the counts, and of the sweep's blockers only headline, URL and dates (the
+    event date, and the publish date for a fact whose source gives no event date; a headline is all a public blocker
+    says, and the research agent's are raw feed titles: see public_facts)."""
+    keep = ("headline", "url", "event_date", "date_precision", "published_date")
     return {**d, "top_recent_blockers": [{k: f[k] for k in keep} for f in d["top_recent_blockers"]
                                          if f["origin"] == "sweep"]}
 
