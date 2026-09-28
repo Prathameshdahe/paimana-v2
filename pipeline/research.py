@@ -61,6 +61,9 @@ TAXONOMY_OF = {"land": "land", "forest_env": "forest_env", "litigation": "litiga
                "design_scope": "design_scope", "progress": "progress", "other": "other"}
 DIRECTIONS, STATUSES = ("negative", "positive", "neutral"), ("ongoing", "resolved", "unknown")
 MATCHES, VERDICTS = ("high", "medium", "low"), ("keep", "fix")
+# the brief's copyright rule is a paraphrase of 30 words or fewer, and the agents were asked for 30; the floor is
+# 40 so a verified paraphrase a word or two over (the pilot has one of 31) is not dropped. It is our own wording,
+# never quoted article text (dataset/raw/external/research/README.md records the same deviation)
 MAX_WORDS = 40
 TOP_BLOCKERS = 20
 DATE_RX = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
