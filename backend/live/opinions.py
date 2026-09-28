@@ -1,23 +1,24 @@
 """The nightly job `second_opinion`: the LLM second opinion (llm/second_opinion.py) on the riskiest projects whose
 current evidence has none yet, fitted in between the chat answers.
 
-batch_keys() orders the Critical, High and Watch projects by when they were last asked (never first), then by
-tier and the riskiest first. The job works in the plain view (second_opinion.pack's default: the pack without the
-model's numbers, the opinion every official reads); the developer's numbers view is asked for on demand. run(keys, limit) takes them in turn and, for each, builds the evidence pack and skips it
-when it is not scored, has no evidence about the project itself (second_opinion.has_evidence: nothing but the status
-line and the model) or was already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an
-opinion accepted or rejected under it, or a rejection under it noted on an older prompt's accepted opinion
-(last_rejected), so a rejection is not asked again every night, only when the evidence or the prompt changes. An
-accepted opinion that fails a check tightened since (second_opinion._accepted) is due again: it is no longer served.
-Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
-(second_opinion.generate as a background job: the gate lets chat requests go first, also between an opinion's first
-ask and its retry; fresh, so an opinion made under an older prompt is redone), until `limit` projects were asked
-(SECOND_OPINION_PER_RUN, default 15). LM Studio down, busy past the waits, or the stop flag (stop(): the scheduler
-sets it at shutdown and when a run overruns its time limit; checked between projects, inside the waits and before
-each ask) ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep their
-opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
-db.record_job('second_opinion', ...) with counts only (per status and concern level): the projects it asked are
-logged, never stored in the summary, which officials of every scope read in /api/jobs and /api/live/status.
+batch_keys() orders the Critical, High and Watch projects by when they were last asked in the plain view (never
+first), then by tier and the riskiest first. The job works in the plain view (second_opinion.pack's default: the pack
+without the model's numbers, the opinion every official reads); the developer's numbers view is asked for on demand.
+run(keys, limit) takes them in turn and, for each, builds the evidence pack and skips it when it is not scored, has no
+evidence about the project itself (second_opinion.has_evidence: nothing but the status line and the model) or was
+already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an opinion accepted or rejected
+under it, or a rejection under it noted on an older prompt's accepted opinion (last_rejected), so a rejection is not
+asked again every night, only when the evidence or the prompt changes. An accepted opinion that fails a check
+tightened since (second_opinion._accepted) is due again: it is no longer served. Otherwise it waits while a chat
+request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks (second_opinion.generate as a background
+job: the gate lets chat requests go first, also between an opinion's first ask and its retry; fresh, so an opinion
+made under an older prompt is redone), until `limit` projects were asked (SECOND_OPINION_PER_RUN, default 15). LM
+Studio down, busy past the waits, or the stop flag (stop(): the scheduler sets it at shutdown and when a run overruns
+its time limit; checked between projects, inside the waits and before each ask) ends the run early (status
+'partial', or 'error' when nothing was asked); the projects done keep their opinions. One run at a time (a module
+lock: a second call returns busy); a run given keys records db.record_job('second_opinion', ...) with counts only
+(per status and concern level): the projects it asked are logged, never stored in the summary, which officials of
+every scope read in /api/jobs and /api/live/status.
 
 Speed on the laptop (qwen2.5-coder-14b, about 3 to 4 tokens/s out): an opinion is one call of 20 to 40 s when LM
 Studio is free, about twice that with the retry, so a run of 15 takes about 5 to 15 minutes.
