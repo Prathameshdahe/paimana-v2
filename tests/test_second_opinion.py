@@ -165,6 +165,7 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
     negative = next(it["id"] for it in p["items"] if it["direction"] == "negative" and not it["stale"])
     positive = [it["id"] for it in p["items"] if it["direction"] in ("positive", "neutral", "context")]
     n, n_ctx = len(p["items"]), next(it["id"] for it in p["items"] if it["direction"] == "context")
+    minor = next(it["id"] for it in p["items"] if so.group(it) == 1)
     faults = {
         "not in the list: E": {"narrative": f"Work stopped after a protest on the site [E{n + 7}] and more words."},
         f"not in the list: {n_ctx}": {"narrative": f"Work stopped after a protest [{negative}] with most work done "
@@ -177,6 +178,12 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
                                               "narrative": f"The report shows most of the work done [{positive[0]}] "
                                                            "and little else of note."},
         "does not fit this evidence": {"concern": "none"},
+        "'watch' must cite at least one negative item": {
+            "concern": "watch", "key_evidence": positive[:1],
+            "narrative": f"The report shows most of the work done [{positive[0]}] and little else of note."},
+        "'watch' must cite each current hold-up": {
+            "concern": "watch", "key_evidence": [minor],
+            "narrative": f"Revisions are noted [{minor}] and work on the units goes on [{positive[0]}]."},
         "headline must have": {"headline": " ".join(["word"] * 16)},
         "names a person": {"narrative": f"Shri Ramesh Kumar stopped work after a protest at the site [{negative}]."},
         "concern must be": {"concern": "alarm"},
@@ -185,6 +192,21 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
         op = {**good, **change}
         reasons, _ = so.check(op, p)
         assert any(want in r for r in reasons), (want, reasons)
+
+
+def test_watch_cites_every_current_hold_up(opinion_db):
+    p = so.pack(KEY)
+    holdups = [it["id"] for it in so.citable(p) if so.group(it) == 0]
+    progress = next(it["id"] for it in p["items"] if so.group(it) == 2)
+    assert len(holdups) >= 2
+    watch = {**so.parse(reply(p)), "concern": "watch", "key_evidence": holdups[:1]}
+    some = {**watch, "narrative": f"The first hold-up is being cleared [{holdups[0]}], and work goes on [{progress}]."}
+    assert so.check(some, p)[0] == [f"'watch' must cite each current hold-up ({', '.join(holdups[1:])}) with the item "
+                                    "that says it is being solved; if no item says so, the concern is 'concern'"]
+    every = {**watch, "narrative": f"The hold-ups are being cleared [{', '.join(holdups)}], and work goes on "
+                                   f"[{progress}]."}
+    assert so.check(every, p)[0] == []
+    assert "a 'watch' cites each of them" in so.messages(p)[1]["content"]
 
 
 def test_a_claims_numbers_must_be_in_the_items_it_cites(opinion_db):
