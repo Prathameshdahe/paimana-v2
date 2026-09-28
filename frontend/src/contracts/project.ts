@@ -279,6 +279,8 @@ export interface ResearchFact {
   match: string | null
   matchReason: string | null
   verified: 'keep' | 'fix' | null
+  /** article: the researcher read the source; headline: only a news-feed headline and its feed summary were judged */
+  basis: 'article' | 'headline' | null
   origin: 'sweep' | 'agent'
   researchedOn: string | null
   live: boolean

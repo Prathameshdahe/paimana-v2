@@ -12,10 +12,11 @@ import { Section } from './ProjectVisuals'
 import type { ProjectResearch, ResearchFact } from '@/contracts/project'
 
 const ABOUT =
-  'Cited web sources about this project: a one-time research sweep, each fact checked by a second agent that ' +
-  're-opened the source, and news items the in-app research agent judged with the local AI. The summaries are ' +
-  'our own words; the link goes to the source. Evidence only, never a model input. Live: negative, not resolved ' +
-  'and dated within 4 quarters. No news is not no problem: coverage favours large, much-reported projects.'
+  'Cited web sources about this project: a one-time research sweep (some facts read from the article, most judged ' +
+  'from a news headline and its feed summary; each checked by a second agent) and news items the in-app research ' +
+  'agent judged with the local AI. The summaries are our own words; the link goes to the source. Evidence only, ' +
+  'never a model input. Live: negative, not resolved and dated within 4 quarters. No news is not no problem: ' +
+  'coverage favours large, much-reported projects.'
 
 /** the left rule of a fact, by group */
 const RULE: Record<ResearchGroup, string> = {
@@ -31,6 +32,14 @@ const PANEL_PER_GROUP = 3
 function origin(f: ResearchFact): { text: string; title: string } {
   if (f.origin === 'agent') {
     return { text: 'news, judged by the local AI', title: 'A news item the in-app research agent judged relevant from its headline and feed summary' }
+  }
+  if (f.basis === 'headline') {
+    return {
+      text: 'from the headline, checked',
+      title: f.verified === 'fix'
+        ? 'Judged from the news headline and feed summary only (the article was not read); a second agent checked it and corrected the summary'
+        : 'Judged from the news headline and feed summary only (the article was not read); a second agent checked it',
+    }
   }
   return {
     text: f.verified ? 'source re-checked' : 'web research',
