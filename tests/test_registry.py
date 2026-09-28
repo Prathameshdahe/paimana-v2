@@ -75,10 +75,12 @@ def test_incumbents_only_for_a_champion_of_another_gold_and_configuration():
     reg = {"runs": [champ], "champions": {"y_any_h2": {"entry_id": champ["entry_id"], "model": "lightgbm"}},
            "decisions": []}
     man = {"gold_version": "g2", "features": {"state": ["a", "b", "c"]}}
-    new = {"lightgbm": registry.config({"model": "lightgbm", "feature_list": ["a", "b", "c"], "categorical": [],
-                                        "params": P})}
+    keys = [f"{y}_h{h}" for y, h in backtest.TARGETS]
+    new = {k: {"lightgbm": registry.config({"model": "lightgbm", "feature_list": ["a", "b", "c"], "categorical": [],
+                                             "params": P})} for k in keys}
     assert list(registry.incumbents(reg, man, new)) == ["y_any_h2"]
-    assert registry.incumbents(reg, man, {"lightgbm": registry.config(champ)}) == {}     # same configuration
+    same = {k: {"lightgbm": registry.config(champ)} for k in keys}
+    assert registry.incumbents(reg, man, same) == {}                                      # same configuration
     assert registry.incumbents(reg, {**man, "gold_version": "g1"}, new) == {}             # same gold
     assert registry.incumbents(reg, {**man, "features": {"state": ["a", "c"]}}, new) == {}
     assert "y_any_h2" not in reg["champions"] and reg["decisions"][-1]["decision"] == "retired"
@@ -113,10 +115,10 @@ def test_register_scores_the_incumbent_first_and_gates_the_new_configuration(tmp
     res = {"frames": {("y_any", 2): d}, "manifest": man, "features": ["a", "b", "c"], "categorical": [],
            "metrics": metrics, "windows": {"y_any_h2": {"validation": [], "test": [], "flash": []}}}
     params = {"lightgbm": P, "logreg": {}}
-    inc = registry.incumbents(reg, man, {n: registry.config({"model": n, "feature_list": res["features"],
-                                                             "categorical": [], "params": p})
-                                         for n, p in params.items()})
-    decs = registry.register(reg, "R2", res, params, inc, "now")
+    configs = {n: registry.config({"model": n, "feature_list": ["a", "b", "c"], "categorical": [], "params": p})
+               for n, p in params.items()}
+    inc = registry.incumbents(reg, man, {f"{y}_h{h}": configs for y, h in backtest.TARGETS})
+    decs = registry.register(reg, "R2", res, {"y_any_h2": params}, inc, "now")
     assert [(x["challenger"], x["decision"]) for x in decs] == [
         ("R2/lightgbm_incumbent/y_any_h2", "promoted"), ("R2/lightgbm/y_any_h2", "rejected"),
         ("R2/logreg/y_any_h2", "rejected")]

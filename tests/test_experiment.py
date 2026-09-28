@@ -119,3 +119,10 @@ def test_harness_refuses_a_column_that_reads_the_future(harness):
         xbar=ctx.feats.groupby("project_key").x.transform("mean")))
     with pytest.raises(AssertionError, match="change when the data are cut"):
         experiment.run("leak", leak, seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+
+
+def test_ship_guard_needs_a_ci_above_zero_on_a_block_that_clears_the_margin():
+    b = lambda d, lo: {"delta_pr_auc": d, "ci_lo": lo}
+    assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)], 0.01)
+    assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)], 0.01)   # the CI above 0 is under margin
+    assert not experiment.robust(False, [b(0.02, 0.01)], 0.01)                     # the rule failed

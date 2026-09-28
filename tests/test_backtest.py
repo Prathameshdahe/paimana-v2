@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pytest
@@ -133,6 +134,20 @@ def test_calibrate_reads_only_folds_realised_by_the_cutoff():
     noisy = pool.assign(y=np.where(late, 1 - pool.y, pool.y), p=np.where(late, 0.99, pool.p))
     b = backtest.calibrate(target, noisy, 2)
     assert np.allclose(a.p, b.p) and not np.allclose(a.p, target.p)
+
+
+def test_half_life_weights_and_target_params(monkeypatch):
+    d = labelled(2, n_keys=60)
+    params = {**backtest.LGB_PARAMS, "n_estimators": 20, "n_jobs": 1}
+    q = backtest.qindex(d.period).to_numpy()
+    w = 0.5 ** ((q.max() - q) / 8)
+    want = lgb.LGBMClassifier(**params).fit(backtest.lgb_X(d, ["x"], []), d.y, sample_weight=w)
+    got, _ = backtest.fit_lgbm(d, ["x"], [], "y", params={**params, "half_life_q": 8})
+    plain, _ = backtest.fit_lgbm(d, ["x"], [], "y", params=params)
+    p = lambda m: m.predict_proba(d[["x"]])[:, 1]
+    assert np.allclose(p(got), p(want)) and not np.allclose(p(plain), p(want))
+    monkeypatch.setattr(backtest, "TARGET_PARAMS", {("y_any", 4): {"half_life_q": 8}})
+    assert backtest.lgb_params("y_any", 4)["half_life_q"] == 8 and "half_life_q" not in backtest.lgb_params("y_any", 2)
 
 
 def test_interval_backtest_trains_on_realised_rows_and_scores_coverage_and_pinball():

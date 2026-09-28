@@ -32,6 +32,7 @@ t + 2q, fit_quantiles) are backtested the same way on the validation and flash c
 the mean width and the pinball loss at each quantile. A conformal widening from folds realised by the cutoff was
 tried and left out (docs/MODEL_UPGRADES_2026-09.md): those folds already cover >= 90%, so it moved nothing.
 """
+import functools
 import json
 import time
 from pathlib import Path
@@ -52,6 +53,8 @@ SILVER = ROOT / "dataset" / "silver"
 RUNS = ROOT / "model" / "runs"
 
 TARGETS = [("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2), ("y_any", 4)]   # first is the primary target
+# y_any_h2 has its own model: 1 - (1 - p_date)(1 - p_cost) from the date and cost models (which train on more rows)
+# lost 0.020 validation PR-AUC [-0.027, -0.013], and its mean with the direct model 0.009 [-0.013, -0.004]
 NEEDS = {"y_date_push": ["anticipated_completion"], "y_cost_rev": ["anticipated_cost_cr"],
          "y_any": ["anticipated_completion", "anticipated_cost_cr"]}
 RELIABLE = 0.8      # field completeness that makes a quarter reliable
@@ -77,6 +80,15 @@ PK = ["project_key", "period"]
 LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_leaves=15, min_child_samples=50,
                   subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0, random_state=0,
                   n_jobs=8, verbose=-1)
+# target -> LightGBM params that differ from LGB_PARAMS for that target alone. One enters only after it passed the
+# promotion rule on that target in ml/experiment.py (3 seeds, paired project bootstrap) with a CI above 0 on a block.
+# half_life_q is not a LightGBM param: fit_lgbm turns it into sample weights that halve every half_life_q quarters
+# of row age. Tried and left out (docs/MODEL_UPGRADES_2026-09.md): the y_any_h2 validation search's picks lost
+# 0.038-0.055 flash PR-AUC on y_any_h2 and y_date_push_h2 (early stopping on an inner time split kept 20-400 trees)
+# and 0.018-0.024 validation on y_any_h4; the mean of 5 seeds stayed inside the noise everywhere (y_any_h2 flash
+# +0.0048 against a 0.0076 margin); age weights lost on both blocks for y_any_h2 and y_cost_rev_h2 and on the flash
+# block for y_date_push_h2; flash-report rows weighted 3x cleared the noise nowhere (y_cost_rev_h2 flash -0.010).
+TARGET_PARAMS = {}
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
 ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]), ("+context", ["state", "dynamics", "context"]),
@@ -204,9 +216,25 @@ def fit_logreg(tr, cols, cats, y):
     return m, lambda d: m.predict_proba(X(d))[:, 1]
 
 
-def fit_lgbm(tr, cols, cats, y, params=None):
-    """LightGBM with LGB_PARAMS, or with params (a registry entry's own, ml/registry.py fitter)."""
-    m = lgb.LGBMClassifier(**(params or LGB_PARAMS)).fit(lgb_X(tr, cols, cats), tr[y])
+def lgb_params(y, h):
+    """The LightGBM params of target (y, h): LGB_PARAMS with its TARGET_PARAMS."""
+    return {**LGB_PARAMS, **TARGET_PARAMS.get((y, h), {})}
+
+
+def fit_lgbm(tr, cols, cats, y, params=None, weight=None):
+    """LightGBM with LGB_PARAMS, or with params (a target's lgb_params, a registry entry's own). A half_life_q in
+    params weights each training row 0.5 ** (age / half_life_q), age = quarters from its t to the newest training t;
+    weight(tr) multiplies in any other sample weights."""
+    params = dict(params or LGB_PARAMS)
+    half = params.pop("half_life_q", None)
+    w = np.ones(len(tr))
+    if half:
+        q = qindex(tr.period).to_numpy()
+        w = w * 0.5 ** ((q.max() - q) / half)
+    if weight is not None:
+        w = w * weight(tr)
+    m = lgb.LGBMClassifier(**params).fit(lgb_X(tr, cols, cats), tr[y],
+                                         sample_weight=None if half is None and weight is None else w)
     return m, lambda d: m.predict_proba(lgb_X(d, cols, cats))[:, 1]
 
 
@@ -424,19 +452,20 @@ def run(run_dir, extra=None):
     step_cols = {ABLATION_MODEL[step]: [f for g in gs for f in groups[g]] for step, gs in ABLATION}
     cols = step_cols["lightgbm"]
     assert cols == model_cols(groups)
-    main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
-            "lightgbm": (fit_lgbm, cols, cats)}
-    ablation = {name: (fit_lgbm, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
     wins, all_folds, summary, abl, calib, shap, frames, fold_metrics, platt = {}, [], [], [], [], [], {}, {}, {}
     latest = feats.period.max()
     for y, h in TARGETS:
         key = f"{y}_h{h}"
+        fit = functools.partial(fit_lgbm, params=lgb_params(y, h))
+        main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
+                "lightgbm": (fit, cols, cats)}
+        abl_models = {name: (fit, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
         d = frame(feats, labels[h], y, h)
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
         val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
         models, names = {**main, **extra.get(key, {})}, MAIN + list(extra.get(key, {}))
-        pv, fv, fitted = backtest(d, y, val, {**models, **ablation})
+        pv, fv, fitted = backtest(d, y, val, {**models, **abl_models})
         splits = {"val": (pv[pv.model.isin(names)], fv[fv.model.isin(names)]),
                   "test": backtest(d, y, test, models)[:2]}
         if len(flash):

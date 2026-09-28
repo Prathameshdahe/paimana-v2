@@ -73,6 +73,12 @@ FEATURE_GROUPS = {
                 + [f"ext_ever_{c}" for c in EXT_CATS]
                 + [f"ext_months_since_first_{c}" for c in EXT_FIRST] + ["ext_remark_quarters"] + FC_FEATURES
                 + ["la_linked", "la_complexity_max_by_t", "la_parcels_by_t", "la_notif_span_by_t"],
+    # measured and left out (ml/experiment.py, 3 seeds, paired project bootstrap, docs/MODEL_UPGRADES_2026-09.md):
+    # deadline feasibility (required vs recent progress and spend pace) cost y_any_h2 0.013 validation PR-AUC and
+    # helped only y_any_h4, where the age weights of backtest.TARGET_PARAMS helped more and the two together lost on
+    # the flash block; slip history (slip change over 2q/4q, last push, pushes in 4q/8q, own realised rates) gained
+    # 0.004-0.008 on y_date_push_h2 validation but lost 0.008-0.014 on its flash block; project-type keywords from
+    # the name stayed inside the noise on every target
 }
 CATEGORICAL = ["sector", "state", "period_type"]
 BASELINE = ["slipped_last_period", "rule_score"]
@@ -134,7 +140,9 @@ def base(obs, cutoff=None):
     d["months_to_scheduled_completion"] = months(d["scheduled_completion"]) - now
     d["months_to_anticipated_completion"] = ac - now
     d["slip_to_date_months"] = ac - months(d["scheduled_completion"])
-    # a revision at t: cost or anticipated completion stepped up against the key's previous printed value
+    # a revision at t: cost or anticipated completion stepped up against the key's previous printed value. A step
+    # across a basis change (anticipated -> revised) counts, unlike in build_labels: masking it cost y_any_h2 0.0025
+    # and y_any_h4 0.0015 validation PR-AUC (CIs below 0) and cleared the noise nowhere (MODEL_UPGRADES_2026-09.md)
     prev_cost = g["anticipated_cost_cr"].ffill().groupby(d["project_key"]).shift()
     prev_ac = ac.groupby(d["project_key"]).ffill().groupby(d["project_key"]).shift()
     event = (cost >= COST_STEP * prev_cost) | (ac >= prev_ac + DATE_STEP)

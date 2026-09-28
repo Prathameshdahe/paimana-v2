@@ -134,15 +134,16 @@ def promote(reg, entry):
 
 def incumbents(reg, man, configs):
     """target key -> the champion entry to re-score in this run: it was scored on another gold version and no
-    candidate of the run (configs: name -> config tuple) has its configuration. A champion with a feature that the
-    gold no longer has cannot be re-scored: it is retired (a recorded decision) and the target has no champion."""
+    candidate of the run (configs: target key -> {name: config tuple}) has its configuration. A champion with a
+    feature that the gold no longer has cannot be re-scored: it is retired (a recorded decision) and the target has
+    no champion."""
     have = {f for fs in man["features"].values() for f in fs}
     out = {}
     for y, h in backtest.TARGETS:
         key = f"{y}_h{h}"
         cur_id = reg["champions"].get(key, {}).get("entry_id")
         cur = next((r for r in reg["runs"] if r["entry_id"] == cur_id), None)
-        if cur is None or cur["gold_version"] == man["gold_version"] or config(cur) in configs.values():
+        if cur is None or cur["gold_version"] == man["gold_version"] or config(cur) in configs[key].values():
             continue
         missing = sorted(set(cur.get("feature_list") or []) - have)
         if missing:
@@ -157,7 +158,8 @@ def incumbents(reg, man, configs):
 
 def register(reg, run_id, res, params, inc, created):
     """Final fit, model file, entry and promotion decision for every (target, candidate), the re-scored incumbent
-    first where there is one. params: model name -> params; inc: incumbents(). Returns the decisions."""
+    first where there is one. params: target key -> model name -> params; inc: incumbents(). Returns the
+    decisions."""
     run_dir = backtest.RUNS / run_id
     man, cols, cats = res["manifest"], res["features"], res["categorical"]
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
@@ -167,7 +169,7 @@ def register(reg, run_id, res, params, inc, created):
     for (y, h), d in res["frames"].items():
         key = f"{y}_h{h}"
         champ = family(reg["champions"].get(key, {}).get("model", ""))
-        spec = {name: {"model": name, "feature_list": cols, "categorical": cats, "params": params[name]}
+        spec = {name: {"model": name, "feature_list": cols, "categorical": cats, "params": params[key][name]}
                 for name in sorted(CANDIDATES, key=lambda n: n != champ)}     # the champion's own type goes first
         if key in inc:
             cur, name = inc[key], family(inc[key]["model"]) + INCUMBENT
@@ -204,16 +206,18 @@ def main():
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     man = json.loads((backtest.GOLD / "manifest.json").read_text(encoding="utf-8"))
     cols, cats = backtest.model_cols(man["features"]), man["categorical"]
-    params = {"lightgbm": backtest.LGB_PARAMS, "logreg": {**backtest.LOGREG_PARAMS, "onehot_min_frequency":
-              backtest.ONEHOT_MIN, "numeric": "median impute + missing flags + standardise"}}
+    logreg = {**backtest.LOGREG_PARAMS, "onehot_min_frequency": backtest.ONEHOT_MIN,
+              "numeric": "median impute + missing flags + standardise"}
+    params = {f"{y}_h{h}": {"lightgbm": backtest.lgb_params(y, h), "logreg": logreg} for y, h in backtest.TARGETS}
     reg = load()
-    inc = incumbents(reg, man, {n: config({"model": n, "feature_list": cols, "categorical": cats, "params": p})
-                                for n, p in params.items()})
+    inc = incumbents(reg, man, {k: {n: config({"model": n, "feature_list": cols, "categorical": cats, "params": p})
+                                    for n, p in ps.items()} for k, ps in params.items()})
     run_id, res = backtest.main(extra={k: {family(e["model"]) + INCUMBENT: (fitter(e), e["feature_list"],
                                                                             e["categorical"])}
                                        for k, e in inc.items()})
     assert res["features"] == cols and res["manifest"]["gold_version"] == man["gold_version"]
-    info = {**params,
+    info = {"lightgbm": backtest.LGB_PARAMS, "logreg": logreg,
+            "target_params": {f"{y}_h{h}": p for (y, h), p in backtest.TARGET_PARAMS.items()},
             "windows": {"reliable_min": backtest.RELIABLE, "n_val": backtest.N_VAL, "n_test": backtest.N_TEST,
                         "min_rows": backtest.MIN_ROWS},
             "final_fit": "all label rows (every realised outcome), completed projects excluded, rows before "
