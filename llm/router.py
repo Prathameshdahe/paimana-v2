@@ -405,10 +405,10 @@ def _project_calls(viewer, r: Route, calls: list, official: bool) -> None:
         calls.append(_call(viewer, "external_factors", key=p))
     if "opinion" in it and official:
         calls.append(_call(viewer, "second_opinion", key=p))
+    if not any(calls):  # also under a help word: 'what is the tier of X' needs the project before the help text
+        calls.append(_call(viewer, "get_project", key=p))
     if "help" in it and HELP_TOPIC.search(r.question):
         calls.append(_call(viewer, "search_knowledge", q=r.question[:300]))
-    if not any(calls):
-        calls.append(_call(viewer, "get_project", key=p))
     if "compare" in it:  # compare with only one project named: the planner may find the other
         r.confidence, r.reason = 0.4, "compare needs two projects"
 

@@ -47,6 +47,15 @@ TABLE = [
     ("public", "any land acquisition problems in Karnataka?", ["external_factors"], [],
      {"factor": "land", "state": "Karnataka"}),
     ("public", "Pipalkothi hydro project status", ["get_project"], [PIPALKOTI], {"key": PIPALKOTI}),  # a typo
+    # a help word does not lose the project: its page first, then the help text
+    ("public", "What is the tier of PRJ-000698?", ["get_project", "search_knowledge"], [PIPALKOTI],
+     {"key": PIPALKOTI}),
+    ("public", "What is the risk level of Pipalkoti?", ["get_project", "search_knowledge"], [PIPALKOTI],
+     {"key": PIPALKOTI}),
+    ("public", "What is the chance that PRJ-000698 will slip?", ["get_project", "search_knowledge"], [PIPALKOTI],
+     {"key": PIPALKOTI}),
+    ("ipmd", "How accurate is the prediction for Pipalkoti?", ["get_project", "search_knowledge"], [PIPALKOTI],
+     {"key": PIPALKOTI}),
     ("ipmd", "why is Pipalkoti Medium?", ["explain_prediction", "get_project"], [PIPALKOTI], {"key": PIPALKOTI}),
     ("ipmd", "Why is PRJ-004941 Critical", ["explain_prediction", "get_project"], ["PRJ-004941"],
      {"key": "PRJ-004941"}),
