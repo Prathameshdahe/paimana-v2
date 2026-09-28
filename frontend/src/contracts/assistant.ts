@@ -212,7 +212,11 @@ export type ChatEvent =
   | { event: 'tool'; data: ChatTool }
   | { event: 'card'; data: ChatCard }
   | { event: 'token'; data: { text: string } }
-  /** the first draft failed the number check: clear the streamed text, a second attempt follows */
+  /**
+   * clear the streamed text, a replacement follows: a draft failed the check against the data (the second attempt,
+   * or after two failures the answer built from the data), or the local model stopped mid-answer (reasons
+   * ['the local AI stopped answering'], then the answer built from the data)
+   */
   | { event: 'retry'; data: { reasons: string[] } }
   | { event: 'done'; data: ChatDone }
   | { event: 'error'; data: { message: string } }

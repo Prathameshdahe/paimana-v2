@@ -491,6 +491,29 @@ const STAGE_LABEL: Record<ChatStage, string> = {
   checking: 'Checking the numbers against the data',
 }
 
+/** what B3 sends as the reason when the local model drops mid-answer (llm/agent.py): not a failed check */
+const DROPPED = /stopped answering/i
+
+/**
+ * Each retry in words. B3 sends one when a draft fails the check against the data (a second attempt follows, and
+ * after a second failure the answer is built from the data), or when the local model stops mid-answer (the answer
+ * is built from the data at once).
+ */
+function retryLines(retries: string[][]): Array<{ text: string; reasons: string[] }> {
+  let failed = 0
+  return retries.map((reasons) => {
+    if (reasons.some((r) => DROPPED.test(r))) {
+      return { reasons, text: 'The local AI stopped answering, so the answer is built from the data instead' }
+    }
+    failed += 1
+    return {
+      reasons,
+      text: failed === 1 ? 'The first draft did not pass the check against the data, so it is being written again'
+        : 'The second draft did not pass either, so the answer is built from the data instead',
+    }
+  })
+}
+
 /**
  * The tool calls of one answer as a compact list: open on the newest answer, folded to one line on older ones (so it
  * folds when the next question is asked, never under the viewer's eyes as an answer ends); the viewer can open or
@@ -509,7 +532,8 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
   const listId = useId()
   const expanded = open ?? (streaming || latest)
   const now = streaming ? (detail || (stage ? STAGE_LABEL[stage] : 'Sending the question')) : null
-  const summary = `${steps.length} step${steps.length === 1 ? '' : 's'}${retries.length ? ' · rewritten once' : ''}`
+  const summary = `${steps.length} step${steps.length === 1 ? '' : 's'}`
+    + (retries.length ? ` · ${retries.length} draft${retries.length === 1 ? '' : 's'} set aside` : '')
   if (!streaming && steps.length === 0 && retries.length === 0) return null
 
   return (
@@ -541,10 +565,10 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
             </span>
           </li>
         ))}
-        {retries.map((reasons, i) => (
-          <li key={`retry-${i}`} className="flex items-start gap-1.5 text-warning" title={reasons.join('; ')}>
+        {retryLines(retries).map(({ text, reasons }, i) => (
+          <li key={`retry-${i}`} className="flex items-start gap-1.5 text-warning" title={reasons.join('; ') || undefined}>
             <RotateCcw className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            <span>The first draft had a number that is not in the data, so it is being written again</span>
+            <span>{text}</span>
           </li>
         ))}
       </ol>

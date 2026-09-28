@@ -40,7 +40,7 @@ interface AssistantTurn {
   steps: ChatTool[]
   cards: ChatCard[]
   sources: ChatSource[]
-  /** the reasons of each first draft that failed the number check */
+  /** the reasons of each draft set aside (retry events) */
   retries: string[][]
   done: ChatDone | null
   streaming: boolean
@@ -68,7 +68,7 @@ function applyEvent(t: AssistantTurn, e: ChatEvent): AssistantTurn {
     case 'token':
       return { ...t, text: t.text + e.data.text }
     case 'retry':
-      // the first draft failed the number check: it goes, the second attempt streams in its place
+      // the draft so far goes (it failed the check, or the local model stopped); its replacement streams in its place
       return { ...t, text: '', retries: [...t.retries, e.data.reasons] }
     case 'done':
       return { ...t, text: e.data.text, done: e.data, streaming: false }
