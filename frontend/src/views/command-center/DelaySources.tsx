@@ -10,11 +10,12 @@ import type { Flag } from '@/contracts/project'
  * Where the delays come from: the six outside factors ranked by how many current projects have them on record, a
  * grey bar with the early-notice share (flagged while the reports show no slip yet) as a darker inner part; hover
  * for the counts and capital, click to filter the page by the factor's flag where it has one. Counts over every
- * project in view (gold/external_summary.json), not the page's other filters.
+ * project in view (gold/external_summary.json), not the page's other filters: with a filter on, the card says so.
  */
-export function DelaySources({ selected, onPick, className }: {
+export function DelaySources({ selected, onPick, filtersActive, className }: {
   selected: Flag | undefined
   onPick: (flag: Flag | undefined) => void
+  filtersActive?: boolean
   className?: string
 }) {
   const { data, error } = useExternalSummary()
@@ -93,6 +94,9 @@ export function DelaySources({ selected, onPick, className }: {
               <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-full bg-fg-dimmed/40" />on record</span>
               <span className="inline-flex items-center gap-1"><span className="h-2 w-3 rounded-full bg-fg-muted" />no slip in the reports yet</span>
             </div>
+            {filtersActive && (
+              <p className="text-xs text-fg-muted">Across every project in your view: the filters above do not apply here.</p>
+            )}
           </>
         )}
       </div>

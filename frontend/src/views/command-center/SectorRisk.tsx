@@ -24,10 +24,12 @@ function sectorTakeaway(rows: GroupStat[]): string | null {
  * High together; hover for the counts and capital, click to filter the page by that sector. Counts only; it reads the
  * page's state and ministry filters (a sector filter would leave one bar, so it is not applied here).
  */
-export function SectorRisk({ filters, selected, onPick, className }: {
+export function SectorRisk({ filters, selected, onPick, ignored, className }: {
   filters: PortfolioFilters
   selected: string | undefined
   onPick: (sector: string | undefined) => void
+  /** a search, tier or flag filter is on: the counts cannot follow it, and the card says so */
+  ignored?: boolean
   className?: string
 }) {
   const { data, error } = usePortfolio({ state: filters.state, ministry: filters.ministry })
@@ -94,6 +96,9 @@ export function SectorRisk({ filters, selected, onPick, className }: {
               <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-fg-dimmed/35" />the rest</span>
               {rows.length > ROWS && <span>· the {ROWS} with the most Critical and High of {rows.length} sectors</span>}
             </div>
+            {ignored && (
+              <p className="text-xs text-fg-muted">The search, tier and flag filters above do not apply to these bars.</p>
+            )}
           </>
         )}
       </div>

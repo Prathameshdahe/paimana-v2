@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { hasFilters, useMeta, usePortfolio, useProjectMap, useProjects, type ProjectQuery } from '@/lib/queries'
+import {
+  changesFilters, hasFilters, useMeta, usePortfolio, useProjectMap, useProjects, type ProjectQuery,
+} from '@/lib/queries'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { FLAG_LABEL } from '@/lib/riskPalette'
@@ -46,6 +48,10 @@ export function CommandCenter() {
   const meta = useMeta()
   const portfolio = usePortfolio()
   const asof = meta.data?.asof ?? portfolio.data?.asof
+  // the map's tier counts (collapsed lanes, the no-date strip) follow the sector, state and ministry filters; GET
+  // /api/portfolio cannot follow a search or a flag, so with either the counts are unknown and the map gives no number
+  const scoped = usePortfolio({ sector: query.sector, state: query.state, ministry: query.ministry })
+  const tierCounts = query.q || query.flag ? undefined : scoped.data?.tiers
 
   useEffect(() => {
     if (searchParams.has('state') || searchParams.has('flag')) {
@@ -53,12 +59,12 @@ export function CommandCenter() {
     }
   }, [searchParams, setSearchParams])
 
-  // any filter or sort change goes back to page 1 and clears the map's selection; a page change keeps the rest
+  // a filter change goes back to page 1 and clears the map's selection; a sort or page change, or a patch that changes
+  // nothing (the chip already on), keeps the selection
   const changeQuery = useCallback((patch: Partial<ProjectQuery>) => {
-    const filtering = Object.keys(patch).some((k) => k !== 'page' && k !== 'sort' && k !== 'order')
-    if (filtering) setSelected(new Set())
+    if (changesFilters(query, patch)) setSelected(new Set())
     setQuery((q) => ({ ...q, ...patch, page: patch.page ?? 1 }))
-  }, [])
+  }, [query])
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
   const onSelect = useCallback((keys: string[], add: boolean) => {
@@ -115,7 +121,7 @@ export function CommandCenter() {
             asof={asof}
             numbers={numbers}
             tierFilter={query.tier}
-            tierCounts={portfolio.data?.tiers}
+            tierCounts={tierCounts}
             openKey={panel.key}
             onOpen={panel.open}
             selection={selected}
@@ -127,8 +133,9 @@ export function CommandCenter() {
             onClearFilters={clearFilters}
           />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-1">
-            <SectorRisk filters={query} selected={query.sector} onPick={(sector) => changeQuery({ sector })} />
-            <DelaySources selected={query.flag} onPick={(flag) => changeQuery({ flag })} />
+            <SectorRisk filters={query} selected={query.sector} onPick={(sector) => changeQuery({ sector })}
+              ignored={!!(query.q || query.tier || query.flag)} />
+            <DelaySources selected={query.flag} onPick={(flag) => changeQuery({ flag })} filtersActive={hasFilters(query)} />
           </div>
         </div>
       </section>

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { Select } from '@/components/ui/Input'
-import { hasFilters, usePortfolio, type ProjectQuery } from '@/lib/queries'
+import { hasFilters, tierAfterClick, usePortfolio, type ProjectQuery } from '@/lib/queries'
 import { FLAG_LABEL, TIER_COLOR, TIER_LABEL, TIERS } from '@/lib/riskPalette'
 import { cn } from '@/lib/formatters'
 import type { Flag, TierFilter } from '@/contracts/project'
@@ -17,10 +17,13 @@ const TIER_ON: Record<TierFilter | 'ALL', string> = {
 
 const WATCH_TITLE = 'No completion date in the reports, so the delay risk is not ranked'
 
+type Chip = TierFilter | 'ALL'
+
 /**
  * The command centre's one set of filters, read by the risk map, the two portfolio visuals and the table: search,
- * the tier chips with their counts (also the map's legend), then sector, state, ministry (when the viewer sees more
- * than one) and flag. Selects wrap rather than shrink below 160 px; search comes first when the row wraps.
+ * the tier chips with their counts (also the map's legend; one choice at a time, a radio group: arrows move and pick,
+ * clicking the chip already on goes back to All), then sector, state, ministry (when the viewer sees more than one)
+ * and flag. Selects wrap rather than shrink below 160 px; search comes first when the row wraps.
  */
 export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: (patch: Partial<ProjectQuery>) => void }) {
   const { data: p } = usePortfolio()
@@ -44,7 +47,22 @@ export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: 
   const states = names(p?.byState)
   const ministries = names(p?.byMinistry)
   const count = (t: TierFilter) => p?.tiers.find((x) => x.tier === t)?.n
-  const chips: Array<TierFilter | 'ALL'> = ['ALL', ...TIERS, 'Watch']
+  const chips: Chip[] = ['ALL', ...TIERS, 'Watch']
+  const chipRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const current: Chip = query.tier ?? 'ALL'
+  const pick = (i: number) => {
+    const t = chips[(i + chips.length) % chips.length] as Chip
+    chipRefs.current[chips.indexOf(t)]?.focus()
+    if (t !== current) onChange({ tier: t === 'ALL' ? undefined : t })
+  }
+  const onChipKey = (e: React.KeyboardEvent, i: number) => {
+    const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? i + 1
+      : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? i - 1
+      : e.key === 'Home' ? 0 : e.key === 'End' ? chips.length - 1 : null
+    if (to === null) return
+    e.preventDefault()
+    pick(to)
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 py-2.5 shadow-card" role="search" aria-label="Filter projects">
@@ -61,16 +79,20 @@ export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: 
         />
       </label>
 
-      <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Tier">
-        {chips.map((t) => {
-          const on = (query.tier ?? 'ALL') === t
+      <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Tier">
+        {chips.map((t, i) => {
+          const on = current === t
           const n = t === 'ALL' ? p?.kpis.nProjects : count(t)
           return (
             <button
               key={t}
+              ref={(el) => { chipRefs.current[i] = el }}
               type="button"
-              aria-pressed={on}
-              onClick={() => onChange({ tier: t === 'ALL' ? undefined : t })}
+              role="radio"
+              aria-checked={on}
+              tabIndex={on ? 0 : -1}
+              onClick={() => onChange({ tier: tierAfterClick(query.tier, t) })}
+              onKeyDown={(e) => onChipKey(e, i)}
               title={t === 'Watch' ? WATCH_TITLE : undefined}
               className={cn(
                 'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',

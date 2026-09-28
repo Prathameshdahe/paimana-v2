@@ -14,6 +14,8 @@ import {
 import type { MapRow, Outlook, OutlookWord, TierFilter } from '@/contracts/project'
 import type { TierCount } from '@/contracts/portfolio'
 
+type Brush = { x0: number; y0: number; x1: number; y1: number; add: boolean }
+
 interface RiskMapProps {
   rows: MapRow[] | undefined
   /** set when rows are only the riskiest few of the scope (no map endpoint) */
@@ -25,6 +27,7 @@ interface RiskMapProps {
   numbers: boolean
   /** the shared tier filter: in tier lanes the other tiers collapse */
   tierFilter: TierFilter | undefined
+  /** tier counts under the page's filters; undefined when they cannot be known (a search or flag filter): no number */
   tierCounts: TierCount[] | undefined
   /** the open side panel's project: its dot keeps an accent ring */
   openKey: string | null
@@ -78,7 +81,7 @@ function laneSpecs(mode: LaneMode, tierFilter: TierFilter | undefined, counts: T
     label: TIER_LABEL[t],
     word: t,
     collapsed: !!tierFilter && tierFilter !== t,
-    hidden: counts?.find((c) => c.tier === t)?.n ?? 0,
+    hidden: counts ? counts.find((c) => c.tier === t)?.n ?? 0 : undefined,
   }))
 }
 
@@ -134,7 +137,8 @@ export function RiskMap(p: RiskMapProps) {
   const [hover, setHover] = useState<Dot | null>(null)
   const [hoverMark, setHoverMark] = useState<OverflowMark | null>(null)
   const [focus, setFocus] = useState<{ lane: number; index: number } | null>(null)
-  const [brush, setBrush] = useState<{ x0: number; y0: number; x1: number; y1: number; add: boolean } | null>(null)
+  const [brush, setBrush] = useState<Brush | null>(null)
+  const pending = useRef<Brush | null>(null)
   const [live, setLive] = useState('')
   const laneRefs = useRef<Array<SVGGElement | null>>([])
   // each lane's last walk index by lane id: coming back to a lane (after the side panel, or a Tab away) resumes there
@@ -153,8 +157,11 @@ export function RiskMap(p: RiskMapProps) {
     return m
   }, [rows, numbers])
   const outlook = (r: MapRow) => words.get(r.key) ?? null
-  const mode: LaneMode = (rows ?? []).some((r) => words.get(r.key)) ? 'outlook' : 'tier'
-  const notRanked = mode === 'outlook' && (rows ?? []).some((r) => r.anticipatedCompletion && !r.noCompletionDate && !words.get(r.key)?.delay)
+  const mode: LaneMode = useMemo(() => ((rows ?? []).some((r) => words.get(r.key)) ? 'outlook' : 'tier'), [rows, words])
+  const notRanked = useMemo(
+    () => mode === 'outlook' && (rows ?? []).some((r) => r.anticipatedCompletion && !r.noCompletionDate && !words.get(r.key)?.delay),
+    [mode, rows, words]
+  )
   const specs = useMemo(() => laneSpecs(mode, p.tierFilter, p.tierCounts, notRanked), [mode, p.tierFilter, p.tierCounts, notRanked])
 
   const layout: MapLayout | null = useMemo(() => {
@@ -162,19 +169,25 @@ export function RiskMap(p: RiskMapProps) {
     return layoutMap({ rows, asof, width, mode, specs, zoom, outlookOf: (r) => words.get(r.key) ?? null })
   }, [rows, asof, width, mode, specs, zoom, words])
 
-  // the no-date count: the rows' own, or the portfolio's Watch count when the rows are only the riskiest few
-  const watchN = p.tierCounts?.find((c) => c.tier === 'Watch')?.n ?? 0
-  const noDate = p.partial ? (p.tierFilter && p.tierFilter !== 'Watch' ? 0 : watchN) : (layout?.noDate ?? 0)
+  // the no-date count: the rows' own, or the filtered portfolio's Watch count when the rows are only the riskiest few
+  // (null: not known under a search or flag filter)
+  const watchN = p.tierCounts ? p.tierCounts.find((c) => c.tier === 'Watch')?.n ?? 0 : null
+  const noDate: number | null = p.partial ? (p.tierFilter && p.tierFilter !== 'Watch' ? 0 : watchN) : (layout?.noDate ?? 0)
+  // the chart's one line, worked out once per data change, not on every hover or brush frame
+  const takeaway = useMemo(() => (rows && asof ? takeawayText(rows, asof) : null), [rows, asof])
 
   useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current) }, [])
 
+  // the SVG's box, read once per press (a drag reuses it: no forced layout on every move) and on each hover frame
+  const rect = useRef<DOMRect | null>(null)
   const point = (e: React.PointerEvent) => {
-    const r = svgRef.current?.getBoundingClientRect()
+    const r = rect.current ?? svgRef.current?.getBoundingClientRect()
     return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 }
   }
 
   function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (!layout || e.button !== 0) return
+    rect.current = svgRef.current?.getBoundingClientRect() ?? null
     const { x, y } = point(e)
     const dot = hitTest(layout, x, y)
     const mark = dot ? null : markAt(layout, x, y)
@@ -197,7 +210,16 @@ export function RiskMap(p: RiskMapProps) {
         press.current = null
         return
       }
-      if (pr.armed && pr.moved) setBrush({ x0: pr.x, y0: pr.y, x1: x, y1: y, add: pr.add })
+      if (pr.armed && pr.moved) {
+        // one brush update per frame, like hover
+        pending.current = { x0: pr.x, y0: pr.y, x1: x, y1: y, add: pr.add }
+        if (frame.current === null) {
+          frame.current = requestAnimationFrame(() => {
+            frame.current = null
+            if (pending.current) setBrush(pending.current)
+          })
+        }
+      }
       return
     }
     if (frame.current !== null) return
@@ -212,11 +234,14 @@ export function RiskMap(p: RiskMapProps) {
   function onPointerUp(e: React.PointerEvent<SVGSVGElement>) {
     const pr = press.current
     press.current = null
+    const { x, y } = point(e)
+    rect.current = null
     if (!pr || !layout) return
     if (pr.timer !== null) clearTimeout(pr.timer)
-    const { x, y } = point(e)
-    if (brush) {
-      p.onSelect(keysIn(layout, brush.x0, brush.y0, x, y), brush.add)
+    const b = pending.current ?? brush
+    pending.current = null
+    if (b) {
+      p.onSelect(keysIn(layout, b.x0, b.y0, x, y), b.add)
       setBrush(null)
       return
     }
@@ -298,7 +323,9 @@ export function RiskMap(p: RiskMapProps) {
   return (
     <Card className={p.className} title={mode === 'outlook' ? 'Due soon and likely to slip' : 'Due soon, by risk tier'} titleRight={titleRight}>
       <div className="space-y-3 px-5 pb-4 pt-3">
-        <Takeaway rows={rows} asof={asof} />
+        {takeaway
+          ? <p className="text-base text-fg-base">{takeaway}</p>
+          : <p className="h-6 w-2/3 animate-pulse rounded bg-surface-input/70" />}
         {p.partial && (
           <p className="text-xs text-fg-dimmed">
             Only the {p.partial.shown} most at risk of {p.partial.total.toLocaleString('en-IN')} are on the map
@@ -325,7 +352,7 @@ export function RiskMap(p: RiskMapProps) {
           ) : layout.dots.length === 0 && layout.later === 0 ? (
             <Empty>
               Nothing here has a completion date, so it cannot be placed by due date.
-              {noDate > 0 && ` The ${noDate.toLocaleString('en-IN')} projects without one are in the table below.`}
+              {noDate !== null && noDate > 0 && ` The ${noDate.toLocaleString('en-IN')} projects without one are in the table below.`}
             </Empty>
           ) : layout.dots.length === 0 ? (
             <Empty>
@@ -343,7 +370,7 @@ export function RiskMap(p: RiskMapProps) {
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerLeave={() => { if (!press.current) { setHover(null); setHoverMark(null) } }}
-                onPointerCancel={() => { press.current = null; setBrush(null) }}
+                onPointerCancel={() => { press.current = null; pending.current = null; rect.current = null; setBrush(null) }}
                 style={{ cursor: hover || hoverMark ? 'pointer' : brush ? 'crosshair' : 'default' }}
               >
                 <defs>
@@ -404,10 +431,12 @@ export function RiskMap(p: RiskMapProps) {
             </button>
           </p>
         )}
-        {noDate > 0 && (
+        {(noDate === null || noDate > 0) && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border-default px-3 py-1.5 text-xs text-fg-muted">
             <span className="size-2 rounded-full" style={{ background: TIER_COLOR.Watch }} aria-hidden="true" />
-            {noDate.toLocaleString('en-IN')} project{noDate === 1 ? ' has' : 's have'} no completion date, so {noDate === 1 ? 'it is' : 'they are'} not placed
+            {noDate === null
+              ? 'Projects without a completion date are not placed'
+              : `${noDate.toLocaleString('en-IN')} project${noDate === 1 ? ' has' : 's have'} no completion date, so ${noDate === 1 ? 'it is' : 'they are'} not placed`}
             {p.tierFilter !== 'Watch' && (
               <button type="button" onClick={p.onListNoDate} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
                 · list them
@@ -467,7 +496,7 @@ function LaneLabel({ mode, lane }: { mode: LaneMode; lane: MapLayout['lanes'][nu
   if (lane.collapsed) {
     return (
       <text x={LABEL_W - 10} y={mid + 4} textAnchor="end" fontSize={12} className="fill-fg-dimmed">
-        {lane.label} · hidden ({(lane.hidden ?? 0).toLocaleString('en-IN')})
+        {lane.label} · hidden{lane.hidden !== undefined && ` (${lane.hidden.toLocaleString('en-IN')})`}
       </text>
     )
   }
@@ -528,8 +557,7 @@ function HoverCard({ dot, layout, outlook, asof }: { dot: Dot; layout: MapLayout
 }
 
 /** the one line the chart says, from its own rows: how many Critical projects are already overdue */
-function Takeaway({ rows, asof }: { rows: MapRow[] | undefined; asof: string | undefined }) {
-  if (!rows || !asof) return <p className="h-6 w-2/3 animate-pulse rounded bg-surface-input/70" />
+function takeawayText(rows: MapRow[], asof: string): string {
   const crit = rows.filter((r) => r.tier === 'Critical' && r.anticipatedCompletion)
   const over = crit.filter((r) => dueIn(r.anticipatedCompletion, asof)?.overdue).length
   const dated = rows.filter((r) => r.anticipatedCompletion && !r.noCompletionDate)
@@ -541,7 +569,7 @@ function Takeaway({ rows, asof }: { rows: MapRow[] | undefined; asof: string | u
     : dated.length > 0
       ? `${soon.toLocaleString('en-IN')} of the ${dated.length.toLocaleString('en-IN')} dated projects here are due within a year.`
       : 'No project here has a completion date to place.'
-  return <p className="text-base text-fg-base">{text}</p>
+  return text
 }
 
 function Legend({ mode }: { mode: LaneMode }) {

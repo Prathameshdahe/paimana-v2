@@ -64,6 +64,17 @@ export type ProjectQuery = PortfolioFilters & {
   size?: number
 }
 
+/** does the patch change a filter of the query (not the sort or the page, not a value it already has)? */
+export function changesFilters(q: ProjectQuery, patch: Partial<ProjectQuery>): boolean {
+  return (Object.keys(patch) as Array<keyof ProjectQuery>)
+    .some((k) => k !== 'page' && k !== 'sort' && k !== 'order' && patch[k] !== q[k])
+}
+
+/** the tier a filter chip's click asks for: the chip's own, or All again (undefined) when that chip is already on */
+export function tierAfterClick(current: TierFilter | undefined, chip: TierFilter | 'ALL'): TierFilter | undefined {
+  return chip === 'ALL' || chip === current ? undefined : chip
+}
+
 /** does the query carry a filter (not just a sort or a page)? */
 export function hasFilters(q: ProjectQuery): boolean {
   return !!(q.q || q.tier || q.sector || q.state || q.ministry || q.flag || q.near_complete)
