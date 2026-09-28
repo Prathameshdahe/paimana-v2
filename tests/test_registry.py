@@ -95,6 +95,11 @@ def test_incumbents_only_for_a_champion_of_another_gold_and_configuration():
     same = {k: {"lightgbm": registry.config(champ)} for k in keys}
     assert registry.incumbents(reg, man, same) == {}                                      # same configuration
     assert registry.incumbents(reg, {**man, "gold_version": "g1"}, new) == {}             # same gold
+    same_folds = {k: {"val": ["2024-01-01", "2024-04-01"], "flash": ["2025-07-01"]} for k in keys}
+    assert registry.incumbents(reg, {**man, "gold_version": "g1"}, new, same_folds) == {}
+    moved = {**same_folds, "y_any_h2": {"val": ["2023-10-01", "2024-01-01"], "flash": ["2025-07-01"]}}
+    assert list(registry.incumbents(reg, {**man, "gold_version": "g1"}, new, moved)) == ["y_any_h2"]   # new folds
+    assert registry.incumbents(reg, {**man, "gold_version": "g1"}, same, moved) == {}    # a candidate has its config
     assert registry.incumbents(reg, {**man, "features": {"state": ["a", "c"]}}, new) == {}
     assert "y_any_h2" not in reg["champions"] and reg["decisions"][-1]["decision"] == "retired"
 

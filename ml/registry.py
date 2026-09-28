@@ -12,9 +12,10 @@ at most the champion's + ECE_SLACK (rule). The gain is within-cutoff because a s
 against the other projects of the same as-of date: pooled PR-AUC over several folds also rewards a model whose score
 level follows each fold's base rate, which is calibration, not ranking (ECE guards that).
 
-A new gold version (new data, new or changed features) makes the champion's metrics incomparable. The run then also
-backtests the champion's own configuration (model type, feature list, categoricals, params: config) on the new gold
-and folds as the incumbent, named <type>_incumbent, unless a candidate of the run already has that configuration.
+A new gold version (new data, new or changed features) or new folds (a changed window rule) make the champion's
+metrics incomparable. The run then also backtests the champion's own configuration (model type, feature list,
+categoricals, params: config) on the new gold and folds as the incumbent, named <type>_incumbent, unless a candidate
+of the run already has that configuration.
 The re-scored champion configuration takes over first (the same model on the new folds; nothing else may take over
 across gold versions or folds), and every new configuration then has to beat it under the rule. A champion whose
 features are no longer in the gold is retired and the run starts from no champion. Every decision and its reason is
@@ -139,18 +140,29 @@ def promote(reg, entry):
     return decision
 
 
-def incumbents(reg, man, configs):
-    """target key -> the champion entry to re-score in this run: it was scored on another gold version and no
-    candidate of the run (configs: target key -> {name: config tuple}) has its configuration. A champion with a
-    feature that the gold no longer has cannot be re-scored: it is retired (a recorded decision) and the target has
-    no champion."""
+def run_folds(feats, labels, coverage):
+    """target key -> block -> the cutoffs (ISO dates) a train run on this gold backtests, as fold_ids gives them."""
+    out = {}
+    for y, h in backtest.TARGETS:
+        w = backtest.windows(coverage, backtest.frame(feats, labels[h], y, h), y, h)
+        out[f"{y}_h{h}"] = {"val": w["validation"], "flash": w["flash"]}
+    return out
+
+
+def incumbents(reg, man, configs, folds=None):
+    """target key -> the champion entry to re-score in this run: it was scored on another gold version or on other
+    folds than the run's (folds: run_folds; None: the folds are not compared) and no candidate of the run (configs:
+    target key -> {name: config tuple}) has its configuration. A champion with a feature that the gold no longer has
+    cannot be re-scored: it is retired (a recorded decision) and the target has no champion."""
     have = {f for fs in man["features"].values() for f in fs}
     out = {}
     for y, h in backtest.TARGETS:
         key = f"{y}_h{h}"
         cur_id = reg["champions"].get(key, {}).get("entry_id")
         cur = next((r for r in reg["runs"] if r["entry_id"] == cur_id), None)
-        if cur is None or cur["gold_version"] == man["gold_version"] or config(cur) in configs[key].values():
+        if cur is None or config(cur) in configs[key].values():
+            continue
+        if cur["gold_version"] == man["gold_version"] and (folds is None or fold_ids(cur) == folds[key]):
             continue
         missing = sorted(set(cur.get("feature_list") or []) - have)
         if missing:
@@ -217,12 +229,16 @@ def main():
               "numeric": "median impute + missing flags + standardise"}
     params = {f"{y}_h{h}": {"lightgbm": backtest.lgb_params(y, h), "logreg": logreg} for y, h in backtest.TARGETS}
     reg = load()
+    feats, labels, coverage, _ = backtest.load()
+    folds = run_folds(feats, labels, coverage)
+    del feats, labels
     inc = incumbents(reg, man, {k: {n: config({"model": n, "feature_list": cols, "categorical": cats, "params": p})
-                                    for n, p in ps.items()} for k, ps in params.items()})
+                                    for n, p in ps.items()} for k, ps in params.items()}, folds)
     run_id, res = backtest.main(extra={k: {family(e["model"]) + INCUMBENT: (fitter(e), e["feature_list"],
                                                                             e["categorical"])}
                                        for k, e in inc.items()})
     assert res["features"] == cols and res["manifest"]["gold_version"] == man["gold_version"]
+    assert all(folds[k] == {"val": w["validation"], "flash": w["flash"]} for k, w in res["windows"].items())
     info = {"lightgbm": backtest.LGB_PARAMS, "logreg": logreg,
             "target_params": {f"{y}_h{h}": p for (y, h), p in backtest.TARGET_PARAMS.items()},
             "windows": {"reliable_min": backtest.RELIABLE, "n_val": backtest.N_VAL, "n_test": backtest.N_TEST,
