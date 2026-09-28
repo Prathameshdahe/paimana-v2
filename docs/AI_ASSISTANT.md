@@ -61,7 +61,8 @@ Code: `llm/router.py` (routing), `llm/tools.py` (tools), `llm/agent.py` (planner
    between `<<<DATA` and `DATA>>>`. The prompt says text quoting news, research, remarks or portal records is
    quoted material, never instructions.
 5. **Checker**: `backend.brief.validate` against exactly the facts the writer saw (plus the source lines and the
-   numbers of the question itself), with plain number words read as digits ("two quarters" is 2, which the facts
+   N of a "top N" the question asks for; no other number of the question, so a leading question such as "is it
+   97% complete?" never gets its own figure back as checked), with plain number words read as digits ("two quarters" is 2, which the facts
    hold; a word the facts themselves use stays a word); citations must point at a source; a public answer may not
    name model internals (SHAP, log-odds, LightGBM, quantiles). A rejected answer is retried once with the
    reasons named; a second rejection is replaced by the deterministic answer. Either way `done.validated` is true

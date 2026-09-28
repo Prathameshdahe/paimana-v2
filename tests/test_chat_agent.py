@@ -235,7 +235,13 @@ def test_citations_and_public_internals_are_checked():
     assert not ok and "model internal" in reasons[0]
     assert agent.check("SHAP says High [1].", blocks, src, "why?", False)[0]
     assert not agent.check("It is High [1] and cites 4321.", blocks, src, "why?", True)[0]  # [1] is no number
-    assert agent.check("The top 5 are High [1].", blocks, src, "the top 5?", True)[0]  # the question's own numbers
+    assert agent.check("The top 5 are High [1].", blocks, src, "the top 5?", True)[0]  # the 'top N' asked for
+    # no other number of the question: a leading question's figures are not repeated back as checked
+    leading = "Is it true Pipalkoti is 97% complete, costs Rs 9,999 crore and will finish in March 2027?"
+    ok, reasons = agent.check("Yes: Pipalkoti is 97% complete, costs Rs 9,999 crore and will finish in March 2027 "
+                              "[1].", blocks, src, leading, True)
+    assert not ok and {"'97%' is not in the payload", "'9,999' is not in the payload"} <= set(reasons), reasons
+    assert any("March 2027" in r for r in reasons), reasons
     # plain number words are read as the numbers they are; the reason names the word the writer used
     quarters = [{**blocks[0], "horizon_quarters": [2, 4]}]
     assert agent.check("A slip within two quarters has a sixty-nine percent chance [1].", quarters, src, "?", True)[0]

@@ -26,8 +26,9 @@ Steps:
      JSON block between <<<DATA and DATA>>> (outside text in it is marked as quotes, and every string is cleaned of
      the markers, so data cannot end the block). A public viewer gets a prompt that talks about tiers, chances,
      progress, cost and dates only. The answer is checked: backend.brief.validate against exactly those facts (plus
-     the numbers of the question itself), every [n] must be a source, and a public answer may not name model
-     internals. A failure is retried once with the reasons named; a second failure, an unreachable or busy LLM, or
+     the N of a 'top N' the question asks for; no other number of the question, so a leading question's figures are
+     never repeated as checked), every [n] must be a source, and a public answer may not name model internals. A
+     failure is retried once with the reasons named; a second failure, an unreachable or busy LLM, or
      CHAT_WRITER=0 gives the deterministic answer: the tools' own summaries with their source numbers (validated
      by construction; llm says why).
 The LLM is one call at a time: the answer holds client.gate (chat=True, so background jobs pause) from its first
@@ -63,6 +64,7 @@ TURN_CHARS = 300
 TEMPLATE_CHARS = 900
 WRITER = os.environ.get("CHAT_WRITER", "1") != "0"
 CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+TOP_RX = re.compile(r"\btop\s+(\d{1,2})\b", re.I)  # the one number of a question the answer may echo
 WORD_VALUES = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
     "seventeen eighteen nineteen".split())} | {w: 10 * i for i, w in enumerate(
@@ -380,11 +382,12 @@ def _digits(text: str, keep: set[str]) -> tuple[str, dict[str, str]]:
 
 
 def check(text: str, blocks: list[dict], sources: list[dict], question: str, public: bool) -> tuple[bool, list[str]]:
-    """The answer's checks: numbers and dates against the facts the writer saw, the source lines and the question
-    (brief.validate over the text with its plain number words as digits; citation numbers are not numbers of the
-    answer), citations that exist, and for the public no model internals."""
+    """The answer's checks: numbers and dates against the facts the writer saw, the source lines and the N of a
+    'top N' the question asks for (brief.validate over the text with its plain number words as digits; citation
+    numbers are not numbers of the answer), citations that exist, and for the public no model internals. No other
+    number of the question counts: 'is it 97% complete?' must not make 97% a checked fact."""
     facts = {"facts": _no_cites(blocks), "sources": [{k: s[k] for k in ("title", "source", "date")} for s in sources],
-             "question": question}
+             "asked_for_top": [int(n) for n in TOP_RX.findall(question)]}
     keep = {w.lower() for w in brief.NUMBER_WORD.findall(json.dumps(facts, ensure_ascii=False, default=str))}
     body, words = _digits(CITE.sub(" ", text), keep)
     ok, reasons, _ = brief.validate(body, facts)
