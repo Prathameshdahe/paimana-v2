@@ -1,61 +1,127 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { MOCK_PROJECTS } from '@/mocks/projects'
+import { useState } from 'react'
+import { useProjectPanel } from '@/lib/useProjectPanel'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { formatINRShort, formatMonths } from '@/lib/formatters'
+import { Select } from '@/components/ui/Input'
+import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { useAckAlert, useAlerts } from '@/lib/queries'
+import { useRole } from '@/lib/auth/RoleContext'
+import { can } from '@/lib/auth/access'
+import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
+import { formatDate, formatDateTime } from '@/lib/formatters'
+import type { AlertKind } from '@/contracts/portfolio'
+
+const PAGE_SIZE = 30
+const KINDS = Object.keys(ALERT_KIND_LABEL) as AlertKind[]
 
 /**
- * Action-oriented alert feed — distinct from the Triage Table (which is a
- * browse/sort/filter register). This is "what needs a decision right now",
- * sorted by urgency, with an acknowledge action so it reads as a workflow
- * inbox rather than a dashboard widget.
- *
- * Acknowledged state is local (useState), there is no persistence layer yet.
- * Resets on reload. Fine for a demo; swap for a real store when there's a
- * backend to write to.
+ * Action-oriented alert feed from /api/alerts (SQLite, written by the monthly
+ * run, the report watcher and the news scout) — distinct from the Triage
+ * Table's browse/sort/filter register. Live: /api/stream refetches it when an
+ * alert is raised; only the viewer's projects (backend scope). Acknowledging
+ * (analysts, ministry officials; lib/auth/access.ts) is stored against the role.
  */
 export function EarlyWarningInbox() {
-  const navigate = useNavigate()
-  const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set())
-
-  const alerts = useMemo(() => {
-    return MOCK_PROJECTS
-      .filter((p) => p.riskTier === 'CRITICAL' || p.actionableRunwayDays <= 30)
-      .sort((a, b) => b.compositeRiskScore - a.compositeRiskScore)
-      .slice(0, 30)
-  }, [])
-
-  const visible = alerts.filter((a) => !acknowledged.has(a.id))
+  const panel = useProjectPanel()
+  const { role } = useRole()
+  const [page, setPage] = useState(1)
+  const [kind, setKind] = useState<AlertKind | undefined>()
+  const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })
+  const ack = useAckAlert()
+  const canAck = can(role, 'canAck')
+  const kinds = KINDS.filter((k) => k !== 'pipeline_error' || can(role, 'canSeePipelineErrors'))
+  const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
 
   return (
     <Card
-      title="Early Warning Inbox"
-      titleRight={<span className="text-[11px] font-mono text-fg-dimmed">{visible.length} open</span>}
+      title="Early warnings"
+      titleRight={
+        <span className="flex items-center gap-2">
+          {data && <span>{data.total} open</span>}
+          <Select
+            aria-label="alert kind"
+            value={kind ?? ''}
+            onChange={(e) => {
+              setKind((e.target.value || undefined) as AlertKind | undefined)
+              setPage(1)
+            }}
+          >
+            <option value="">All kinds</option>
+            {kinds.map((k) => (
+              <option key={k} value={k}>{ALERT_KIND_LABEL[k]}</option>
+            ))}
+          </Select>
+        </span>
+      }
       className="h-full flex flex-col"
     >
-      {visible.length === 0 ? (
-        <div className="px-5 py-8 text-center text-xs font-mono text-fg-dimmed">All clear — no critical or &le;30-day-runway projects.</div>
+      {error ? (
+        <ApiErrorNote error={error} />
+      ) : isLoading || !data ? (
+        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">loading alerts...</div>
+      ) : data.items.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
+          {kind
+            ? `No open ${ALERT_KIND_LABEL[kind].toLowerCase()} alerts.`
+            : 'No open alerts — every alert has been acknowledged.'}
+        </div>
       ) : (
-        <div className="divide-y divide-border-subtle flex-1 overflow-y-auto">
-          {visible.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-5 py-2.5 hover:bg-surface-elevated">
-              <Badge tier={p.riskTier} />
+        <div className="divide-y divide-border-subtle flex-1 overflow-y-auto max-h-[760px]" data-lenis-prevent>
+          {data.items.map((a) => (
+            <div key={a.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-elevated">
+              <IconChip icon={ALERT_KIND_ICON[a.kind]} variant={alertVariant(a.severity)} title={ALERT_KIND_LABEL[a.kind] ?? a.kind} />
               <button
-                onClick={() => navigate(`/projects/${p.id}`)}
-                className="flex-1 min-w-0 text-left"
+                onClick={() => a.projectKey && panel.open(a.projectKey)}
+                disabled={!a.projectKey}
+                className="flex-1 min-w-0 text-left disabled:cursor-default"
               >
-                <div className="truncate text-xs font-medium text-fg-base">{p.name}</div>
-                <div className="truncate text-[11px] font-mono text-fg-dimmed">
-                  {p.code} · {p.sector} · {p.state} · {p.actionableRunwayDays}d runway · {formatMonths(p.predictedDelayMonths)} delay · {formatINRShort(p.overrunForecastCr)} overrun
+                <div className="truncate text-sm font-medium text-fg-base">{a.title ?? ALERT_KIND_LABEL[a.kind]}</div>
+                <div
+                  className="truncate text-xs text-fg-dimmed"
+                  title={[a.detail, a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
+                >
+                  {ALERT_KIND_LABEL[a.kind] ?? a.kind}
+                  {a.projectKey && <> · {a.projectKey}</>}
+                  {' · '}
+                  {formatDateTime(a.createdAt)}
+                  {a.detail && <> · {a.detail}</>}
                 </div>
               </button>
-              <Button size="sm" variant="ghost" onClick={() => setAcknowledged((s) => new Set(s).add(p.id))}>
-                Acknowledge
-              </Button>
+              {canAck && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={ack.isPending && ack.variables === a.id}
+                  onClick={() => ack.mutate(a.id)}
+                >
+                  Acknowledge
+                </Button>
+              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {ack.isError && (
+        <div className="border-t border-border-subtle px-5 py-1.5 text-xs text-critical">
+          acknowledge failed: {String(ack.error)}
+        </div>
+      )}
+
+      {pages > 1 && (
+        <div className="flex items-center justify-between border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed">
+          <span>
+            page {page} of {pages}
+          </span>
+          <span className="flex gap-2">
+            <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              Prev
+            </Button>
+            <Button size="sm" variant="secondary" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
+          </span>
         </div>
       )}
     </Card>

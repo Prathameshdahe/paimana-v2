@@ -10,12 +10,17 @@ Outputs  gold/predictions_<model_version>_<asof YYYY-MM>.parquet, gold/predictio
 
 At asof (default: the latest period) the current projects are those in the latest report with a feature row at
 asof that are not completed. Each target's champion type from the registry is refitted on every label row realised
-by asof (t + h <= asof) and scores them; LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
+by asof (t + h <= asof, from backtest.TRAIN_FROM where a target has one) and scores them; a target in
+backtest.CALIBRATED goes through the Platt calibrator the champion's train run stored (backtest.PLATT_FILE, fitted on
+the folds realised by that run's latest period). LightGBM quantile regressors (5/50/95) trained on the same h=2 rows give
 the slip-months and cost-% intervals. SHAP top-5 (log-odds contributions) come from the p_any_2q model. Tiers go
-by rank of p_any_2q, not by threshold; the stagnation override lifts a project one tier.
-A score whose model never saw one of the row's null features in training is left null (see unseen_missing): today
-that is the date-based scores of projects with no anticipated completion date (no_completion_date). A project
-without p_any_2q gets no tier.
+by rank of p_any_2q, not by threshold. The stagnation rule (no progress for 2+ quarters, not at >= 95% progress) is
+only a flag, stagnation_override, shown as a badge: it used to lift the tier, but flagged projects slipped at or below
+the base rate in the backtest and every lifted tier got less precise. A score whose model never saw one of the row's
+null features in training is left null (see unseen_missing): today that is the date-based scores of projects with no
+anticipated completion date (no_completion_date). Those projects are in the Watch tier, outside the rank shares; the
+API orders them by flagged checklist rows, then p_cost_rev_2q, an order no backtest has validated (their slip label
+needs a date).
 """
 import json
 import sys
@@ -36,8 +41,10 @@ PROBS = {"p_date_push_2q": ("y_date_push", 2), "p_cost_rev_2q": ("y_cost_rev", 2
 QUANTILES = {"months": "y_months", "cost_pct": "y_cost_pct"}     # h = 2 regression targets
 ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
 TIERS = ["Critical", "High", "Medium", "Low"]
+WATCH = "Watch"             # the tier of a project with no anticipated completion date (no date-based score)
 TIER_TOP = [0.05, 0.20, 0.50, 1.0]      # cumulative rank share at the bottom of each tier
 STAGNANT_Q, STAGNANT_ELAPSED = 2, 0.3
+NEAR_DONE_PCT = 95          # a project this far along is finishing, not stagnating: no override
 SHAP_K = 5
 SHORT = {"lightgbm": "lgbm", "logreg": "logreg"}
 LOG_KEY = ["project_key", "asof", "model_version"]
@@ -47,19 +54,26 @@ DISPLAY = ["project_name", "sector", "state", "agency", "ministry", "anticipated
            "physical_progress_pct", "anticipated_completion"]
 
 
-def tiers(p, stagnant):
-    """Rank tiers of scores p (1 = riskiest; ties broken by position) and the stagnation override, which lifts a
-    flagged project one tier, never above Critical. A null score gets no tier and is not counted in the rank shares.
-    Returns tier_rank_pct, tier_by_rank, tier, stagnation_override."""
+def tiers(p, stagnant, no_date=None):
+    """Rank tiers of scores p (1 = riskiest; ties broken by position). A null score is not counted in the rank shares:
+    with no completion date (no_date) its tier is WATCH, otherwise it has none. stagnation_override is the stagnation
+    rule's flag as given; it does not change the tier. Returns tier_rank_pct, tier_by_rank, tier,
+    stagnation_override."""
     p = pd.Series(np.asarray(p, float))
     scored = p.notna().to_numpy()
     rank_pct = p.rank(method="first", ascending=False).to_numpy() / max(scored.sum(), 1)
-    by_rank = np.searchsorted(TIER_TOP, np.nan_to_num(rank_pct), side="left")
-    lifted = np.asarray(stagnant, bool) & (by_rank > 0) & scored
-    names = np.array(TIERS, dtype=object)
-    name = lambda i: np.where(scored, names[i], None)
-    return pd.DataFrame({"tier_rank_pct": rank_pct, "tier_by_rank": name(by_rank), "tier": name(by_rank - lifted),
-                         "stagnation_override": lifted})
+    names = np.array(TIERS, dtype=object)[np.searchsorted(TIER_TOP, np.nan_to_num(rank_pct), side="left")]
+    by_rank = np.where(scored, names, None)
+    watch = ~scored & (np.zeros(len(p), bool) if no_date is None else np.asarray(no_date, bool))
+    return pd.DataFrame({"tier_rank_pct": rank_pct, "tier_by_rank": by_rank, "tier": np.where(watch, WATCH, by_rank),
+                         "stagnation_override": np.asarray(stagnant, bool)})
+
+
+def stagnant(cur):
+    """Stagnation override rule: no progress for STAGNANT_Q+ quarters at >= STAGNANT_ELAPSED elapsed, and progress
+    below NEAR_DONE_PCT (null progress does not block it)."""
+    return ((cur.stagnation_quarters >= STAGNANT_Q) & (cur.elapsed_ratio >= STAGNANT_ELAPSED)
+            & ~(cur.physical_progress_pct >= NEAR_DONE_PCT)).to_numpy()
 
 
 def unseen_missing(train, X, cols):
@@ -72,6 +86,15 @@ def unseen_missing(train, X, cols):
 
 def champion(reg, y, h):
     return next(r for r in reg["runs"] if r["entry_id"] == reg["champions"][f"{y}_h{h}"]["entry_id"])
+
+
+def calibrator(entry):
+    """The Platt parameters of entry's model and target from its run folder, or None (raw scores)."""
+    path = backtest.RUNS / entry["run_id"] / backtest.PLATT_FILE
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8")).get(f"{entry['target']}_h{entry['horizon']}", {}).get(
+        entry["model"])
 
 
 def shap_top5(booster, X, k=SHAP_K):
@@ -120,12 +143,14 @@ def main(asof=None):
     fitted = {}
     for col, (y, h) in PROBS.items():
         e = champion(reg, y, h)
-        d = backtest.frame(feats, labels[h], y)
+        d = backtest.frame(feats, labels[h], y, h)
         d = d[d.target_period <= asof]
         fitted[col], predict = registry.CANDIDATES[e["model"]](d, e["feature_list"], e["categorical"], y)
         skip = unseen_missing(d, cur, e["feature_list"])
-        out[col] = np.where(skip, np.nan, predict(cur))
-        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored")
+        cal = calibrator(e) if (y, h) in backtest.CALIBRATED else None
+        out[col] = np.where(skip, np.nan, backtest.platt_apply(cal, predict(cur)))
+        print(f"  {col}: {e['model']} ({e['entry_id']}) refit on {len(d)} rows, {skip.sum()} rows not scored, "
+              f"calibration {'Platt a=%.3f b=%.3f' % (cal['a'], cal['b']) if cal and 'a' in cal else 'none'}")
 
     cols, cats = lead["feature_list"], lead["categorical"]
     Xc = backtest.lgb_X(cur, cols, cats)
@@ -142,9 +167,8 @@ def main(asof=None):
             out[f"{name}_{s}"] = q[:, i]
         print(f"  {name}: quantile LightGBM on {len(d)} rows")
 
-    stagnant = (cur.stagnation_quarters >= STAGNANT_Q) & (cur.elapsed_ratio >= STAGNANT_ELAPSED)
-    out = pd.concat([out, tiers(out.p_any_2q, stagnant)], axis=1)
     out["no_completion_date"] = cur.months_to_anticipated_completion.isna()
+    out = pd.concat([out, tiers(out.p_any_2q, stagnant(cur), out.no_completion_date)], axis=1)
     m = fitted["p_any_2q"]
     # ponytail: SHAP only for a LightGBM champion; a logistic champion leaves the column null
     out["shap_top5_json"] = shap_top5(m.booster_, Xc) if lead["model"] == "lightgbm" else None
@@ -160,8 +184,8 @@ def main(asof=None):
     log = append_log(out)
 
     print(f"scored {len(out)} current projects at {asof.date()} ({mv}); tier counts:")
-    print(out.tier.fillna("no tier").value_counts().reindex(TIERS + ["no tier"]).to_string(),
-          f"\n  stagnation overrides: {out.stagnation_override.sum()}, no completion date: {out.no_completion_date.sum()}")
+    print(out.tier.fillna("no tier").value_counts().reindex(TIERS + [WATCH, "no tier"]).to_string(),
+          f"\n  stagnation flags: {out.stagnation_override.sum()}, no completion date: {out.no_completion_date.sum()}")
     print("p_any_2q distribution:\n" + out.p_any_2q.describe(percentiles=[.05, .25, .5, .75, .95]).round(3).to_string())
     top = out.nlargest(10, "p_any_2q").assign(top_shap=lambda x: x.shap_top5_json.map(
         lambda s: json.loads(s)[0]["feature"] if s else None))

@@ -67,3 +67,68 @@ def test_topk_shares_tied_slots():
     y, p = np.array([1, 0, 1, 0]), np.array([0.9, 0.5, 0.5, 0.5])
     assert backtest.topk(y, p, 2) == 1 + 1 / 3
     assert backtest.ece(np.array([0, 1] * 5), np.full(10, 0.5)) == 0
+
+
+def test_flash_block_takes_every_cutoff_with_enough_rows():
+    periods = pd.date_range("2024-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
+    cov = pd.DataFrame({"period": periods, "anticipated_completion": 0.9, "anticipated_cost_cr": 1.0})
+    cov.loc[cov.period >= backtest.FLASH_FROM, "anticipated_completion"] = 0.6    # flash prints no anticipated date
+    t = [p for p in periods if p + pd.DateOffset(months=6) <= periods[-1]]
+    d = pd.DataFrame({"period": np.repeat(t, [50 if p == pd.Timestamp("2025-10-01") else 150 for p in t])})
+    w = backtest.windows(cov, d, "y_date_push", 2)
+    assert w["test"] == ["2024-10-01"] and "2025-07-01" not in w["validation"]
+    assert w["flash"] == ["2025-07-01", "2026-01-01"]                          # 2025-10 has < MIN_ROWS rows
+    assert w["rows_per_cutoff"]["2026-01-01"] == 150
+
+
+def test_not_yet_due_slice():
+    d = labelled(2)
+    d["months_to_anticipated_completion"] = np.tile([3.0, 12.0, np.nan], len(d))[:len(d)]
+    assert backtest.not_yet_due(d.iloc[:3]).tolist() == [False, True, False]  # due by t + 2q, after it, unknown
+    cutoffs = Q[5:8]
+    preds, folds, _ = backtest.backtest(d, "y", cutoffs, {"logreg": (backtest.fit_logreg, ["x"], [])})
+    s = backtest.pooled(preds, folds, 2).iloc[0]
+    rows = d[d.period.isin(cutoffs) & (d.months_to_anticipated_completion > 6)]
+    assert s.nyd_n == len(rows) and s.nyd_base_rate == rows.y.mean()
+    assert 0 < s.nyd_pr_auc <= 1 and 0 <= s.nyd_precision_50 <= 1
+
+
+def test_train_from_cuts_only_its_own_target(monkeypatch):
+    periods = pd.date_range("2012-01-01", periods=12, freq="QS").astype("datetime64[us]")
+    feats = pd.DataFrame({"project_key": "PRJ-000001", "period": periods, "is_completed": False, "x": 1.0})
+    labels = feats[["project_key", "period"]].assign(target_period=periods + pd.DateOffset(months=12), y_any=1)
+    assert len(backtest.frame(feats, labels, "y_any", 4)) == 12                 # no target has a start today
+    monkeypatch.setattr(backtest, "TRAIN_FROM", {("y_any", 4): pd.Timestamp("2014-01-01")})
+    assert backtest.frame(feats, labels, "y_any", 4).period.min() == pd.Timestamp("2014-01-01")
+    assert len(backtest.frame(feats, labels, "y_any", 2)) == len(backtest.frame(feats, labels, "y_any")) == 12
+
+
+def test_platt_folds_are_realised_by_the_cutoff_and_fix_a_skew():
+    c = pd.Timestamp("2024-07-01")
+    for h in (2, 4):
+        folds = backtest.calibration_folds(c, h)
+        assert len(folds) == backtest.PLATT_FOLDS and max(folds) == c - pd.DateOffset(months=3 * h)
+    rng = np.random.default_rng(0)
+    true = rng.uniform(0.05, 0.6, 4000)
+    y = (rng.random(4000) < true).astype(int)
+    skewed = np.clip(true + 0.25, 0, 0.99)                     # over-predicts by 25 points
+    cal = backtest.platt_fit(y, skewed)
+    fixed = backtest.platt_apply(cal, skewed)
+    assert abs(fixed.mean() - y.mean()) < 0.01 < abs(skewed.mean() - y.mean())
+    assert (np.argsort(fixed) == np.argsort(skewed)).all()      # ranks unchanged
+    assert backtest.platt_fit(np.ones(500), skewed[:500]) is None
+    assert (backtest.platt_apply(None, skewed) == skewed).all()
+
+
+def test_calibrate_reads_only_folds_realised_by_the_cutoff():
+    rng = np.random.default_rng(1)
+    q = pd.date_range("2023-01-01", periods=8, freq="QS")
+    pool = pd.concat([pd.DataFrame({"cutoff": c, "model": "m", "project_key": [f"P{i}" for i in range(300)],
+                                    "y": rng.integers(0, 2, 300), "p": rng.uniform(0.2, 0.8, 300)}) for c in q])
+    c = q[-1]
+    target = pool[pool.cutoff == c]
+    a = backtest.calibrate(target, pool, 2)
+    late = pool.cutoff > c - pd.DateOffset(months=6)            # c - 1q and c itself: labels not realised by c
+    noisy = pool.assign(y=np.where(late, 1 - pool.y, pool.y), p=np.where(late, 0.99, pool.p))
+    b = backtest.calibrate(target, noisy, 2)
+    assert np.allclose(a.p, b.p) and not np.allclose(a.p, target.p)

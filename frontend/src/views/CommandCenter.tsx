@@ -1,71 +1,71 @@
-import { useState } from 'react'
-import { useProjects } from '@/mocks'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useProjects, type ProjectQuery } from '@/lib/queries'
+import { FLAG_LABEL } from '@/lib/riskPalette'
+import type { Flag } from '@/contracts/project'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { KPIRibbon } from './command-center/KPIRibbon'
 import { PortfolioUrgencyMatrix } from './command-center/PortfolioUrgencyMatrix'
 import { TriageTable } from './command-center/TriageTable'
-import { ProjectDetailDrawer } from './command-center/ProjectDetailDrawer'
-import type { Project } from '@/contracts/project'
+import { useProjectPanel } from '@/lib/useProjectPanel'
+
+const PAGE_SIZE = 25
 
 export function CommandCenter() {
-  const { data: projects = [], isLoading } = useProjects()
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [drawerProject, setDrawerProject] = useState<Project | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // ?state= (India map) and ?flag= (External Factors) are read once, then dropped from the URL
+  const [query, setQuery] = useState<ProjectQuery>(() => {
+    const flag = searchParams.get('flag')
+    return {
+      sort: 'risk',
+      order: 'desc',
+      page: 1,
+      size: PAGE_SIZE,
+      state: searchParams.get('state') ?? undefined,
+      flag: flag && Object.keys(FLAG_LABEL).includes(flag) ? (flag as Flag) : undefined,
+    }
+  })
+  const panel = useProjectPanel()
+  const projects = useProjects(query)
 
-  const handleSelectFromMatrix = (projectId: string) => {
-    setSelectedProjectId(projectId)
-  }
+  useEffect(() => {
+    if (searchParams.has('state') || searchParams.has('flag')) {
+      setSearchParams((prev) => { prev.delete('state'); prev.delete('flag'); return prev }, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
-  const handleOpenDetail = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId) ?? null
-    setSelectedProjectId(projectId)
-    setDrawerProject(project)
-  }
-
-  const handleCloseDrawer = () => {
-    setDrawerProject(null)
-  }
+  // any filter or sort change goes back to page 1; a page change keeps the rest
+  const changeQuery = (patch: Partial<ProjectQuery>) =>
+    setQuery((q) => ({ ...q, ...patch, page: patch.page ?? 1 }))
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      {/* Page header — pronounced, distinct from content */}
-      <div className="flex items-end justify-between pt-4 pb-2">
-        <div className="flex items-center gap-4">
-          <h1 className="font-sans text-2xl font-black tracking-tight text-fg-base uppercase">
-            Executive Command Center
-          </h1>
-        </div>
-        <div className="font-mono text-[11px] text-fg-muted uppercase tracking-widest flex items-center gap-2">
-          telemetry pipeline <span className="text-stable font-bold">operational</span>
-        </div>
-      </div>
+    <Page>
+      <PageHeader
+        title="Command Center"
+        subtitle="Every open project, ranked by the chance it slips in the next two quarters"
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            <span className={projects.error ? 'size-2 rounded-full bg-critical' : 'size-2 rounded-full bg-stable'} />
+            {projects.error ? 'data service unreachable' : 'data service up'}
+          </span>
+        }
+      />
 
-      <div className="h-px bg-border-subtle" />
-
-      {isLoading ? (
-        <div className="h-48 flex items-center justify-center font-mono text-xs text-fg-dimmed">
-          loading telemetry stream...
-        </div>
-      ) : (
-        <>
-          <KPIRibbon />
-          <PortfolioUrgencyMatrix
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={handleSelectFromMatrix}
-          />
-          <TriageTable
-            projects={projects}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={setSelectedProjectId}
-            onOpenDetail={handleOpenDetail}
-          />
-          <ProjectDetailDrawer
-            project={drawerProject}
-            isOpen={drawerProject !== null}
-            onClose={handleCloseDrawer}
-          />
-        </>
-      )}
-    </div>
+      <KPIRibbon />
+      <PortfolioUrgencyMatrix
+        page={projects.data}
+        selectedKey={panel.key}
+        onOpenDetail={panel.open}
+      />
+      <TriageTable
+        query={query}
+        onChange={changeQuery}
+        page={projects.data}
+        error={projects.error}
+        isFetching={projects.isFetching}
+        selectedKey={panel.key}
+        onOpenDetail={panel.open}
+      />
+    </Page>
   )
 }

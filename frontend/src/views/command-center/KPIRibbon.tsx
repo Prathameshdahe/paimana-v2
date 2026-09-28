@@ -1,98 +1,132 @@
-import { usePortfolioSummary } from '@/mocks'
-import { MonoFigure } from '@/components/ui/MonoFigure'
-import { formatINRShort, formatPct } from '@/lib/formatters'
+import type React from 'react'
+import { Gauge, IndianRupee, ShieldAlert, TrendingUp } from 'lucide-react'
+import { usePortfolio } from '@/lib/queries'
+import { IconChip } from '@/components/ui/Badge'
+import { Tooltip } from '@/components/ui/Tooltip'
+import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { TIERS, TIER_COLOR, TIER_LABEL, TIER_TEXT } from '@/lib/riskPalette'
+import { formatINRShort, formatPct, formatPctDelta, orDash, cn } from '@/lib/formatters'
+import type { TierCount } from '@/contracts/portfolio'
+
+const tile = 'rounded-xl border border-border-subtle bg-surface-panel p-4 shadow-card animate-card-in'
+
+/** a stat tile: icon chip, label, one big figure, and whatever sits under it */
+export function Tile({ icon, tone, label, value, children }: {
+  icon: React.ComponentType<{ className?: string }>
+  tone: 'critical' | 'accent' | 'stable' | 'warning'
+  label: string
+  value?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={tile}>
+      <div className="flex items-center gap-2.5">
+        <IconChip icon={icon} variant={tone} />
+        <span className="text-sm font-medium text-fg-muted">{label}</span>
+      </div>
+      {value !== undefined && (
+        <div className="mt-3 text-2xl font-semibold tabular-nums leading-none tracking-tight text-fg-base">{value}</div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+/** a thin rounded bar: `pct` filled */
+export function Meter({ pct, className }: { pct: number; className: string }) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
+      <div className={cn('h-full rounded-full transition-[width] duration-700', className)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    </div>
+  )
+}
+
+/** the tier mix as one segmented bar, Watch last; each segment names its count on hover */
+export function TierBar({ tiers, total, className = 'h-2' }: { tiers: TierCount[]; total: number; className?: string }) {
+  const n = (t: string) => tiers.find((x) => x.tier === t)?.n ?? 0
+  return (
+    <div className={cn('flex gap-px overflow-hidden rounded-full bg-surface-input', className)}>
+      {[...TIERS, 'Watch' as const].map((t) => (
+        <Tooltip key={t} content={`${TIER_LABEL[t]}: ${n(t).toLocaleString()} projects`}>
+          <div style={{ width: `${(n(t) / Math.max(total, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full transition-[width] duration-700" />
+        </Tooltip>
+      ))}
+    </div>
+  )
+}
 
 /**
- * KPI Ribbon — inline metric strip, NOT card soup.
- * Single horizontal band with pipe-delimited macro KPIs.
- * Matches Grafana/Datadog stat-bar pattern.
+ * Four stat tiles from /api/portfolio: capital, overrun, the tier mix as one bar, and spend with
+ * physical progress. Home and Command Center share them.
  */
 export function KPIRibbon() {
-  const { data: s } = usePortfolioSummary()
-  if (!s) return null
+  const { data: p, error, isLoading } = usePortfolio()
 
-  const overrunPct = (s.cumulativeOverrunCr / s.originalPortfolioCostCr) * 100
+  if (error) {
+    return (
+      <div className={tile}>
+        <ApiErrorNote error={error} className="py-4" />
+      </div>
+    )
+  }
+  if (isLoading || !p) {
+    return (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <div key={i} className={cn(tile, 'h-[128px] animate-pulse')} />)}
+      </div>
+    )
+  }
+
+  const k = p.kpis
+  const tierN = (t: string) => p.tiers.find((x) => x.tier === t)?.n ?? 0
+  const spentPct =
+    k.expenditureCr !== null && k.anticipatedCostCr ? (k.expenditureCr / k.anticipatedCostCr) * 100 : null
 
   return (
-    <div className="border border-border-subtle bg-surface-panel">
-      <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-border-subtle">
-        {/* Sanctioned Capital */}
-        <div className="px-4 py-3 flex flex-col items-center text-center justify-center">
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-widest text-fg-dimmed mb-1">
-            Revised Sanctioned
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <Tile icon={IndianRupee} tone="accent" label="Anticipated cost" value={orDash(k.anticipatedCostCr, formatINRShort)}>
+        <div className="mt-2 text-xs text-fg-dimmed">
+          {k.nProjects.toLocaleString()} open projects · originally {orDash(k.originalCostCr, formatINRShort)}
+        </div>
+      </Tile>
+
+      <Tile icon={TrendingUp} tone="critical" label="Cost overrun so far" value={<span className="text-critical">{orDash(k.overrunCr, formatINRShort)}</span>}>
+        <div className="mt-2 text-xs text-fg-dimmed">
+          <span className="font-semibold text-critical">{orDash(k.overrunPct, formatPctDelta)}</span> over the original cost
+        </div>
+      </Tile>
+
+      <Tile icon={ShieldAlert} tone="warning" label="Risk tiers">
+        <div className="mt-3 flex items-baseline justify-between gap-2">
+          {TIERS.map((t) => (
+            <span key={t} className="flex flex-col">
+              <span className={cn('text-xl font-semibold tabular-nums leading-none', TIER_TEXT[t])}>{tierN(t)}</span>
+              <span className="mt-1 text-xs text-fg-dimmed">{t}</span>
+            </span>
+          ))}
+        </div>
+        <TierBar tiers={p.tiers} total={k.nProjects} className="mt-2.5 h-2" />
+        {tierN('Watch') > 0 && (
+          <div className="mt-1.5 text-xs text-fg-dimmed">
+            + <span className="text-watch">{tierN('Watch').toLocaleString()} Watch</span>: no completion date
           </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="default">
-              {formatINRShort(s.revisedPortfolioCostCr)}
-            </MonoFigure>
-            <div className="text-[10px] font-sans text-fg-muted font-semibold bg-surface-elevated border border-border-subtle px-1.5 py-0.5 rounded-sm">
-              orig <span className="font-mono tabular-nums">{formatINRShort(s.originalPortfolioCostCr)}</span>
-            </div>
+        )}
+      </Tile>
+
+      <Tile icon={Gauge} tone="stable" label="Spent so far" value={orDash(k.expenditureCr, formatINRShort)}>
+        <div className="mt-2.5 space-y-1.5 text-xs text-fg-dimmed">
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0">spent</span>
+            <div className="flex-1"><Meter pct={spentPct ?? 0} className="bg-accent" /></div>
+            <span className="w-9 text-right font-mono tabular-nums text-fg-muted">{orDash(spentPct, (v) => formatPct(v, 0))}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0">progress</span>
+            <div className="flex-1"><Meter pct={k.avgProgressPct ?? 0} className="bg-stable" /></div>
+            <span className="w-9 text-right font-mono tabular-nums text-fg-muted">{orDash(k.avgProgressPct, (v) => formatPct(v, 0))}</span>
           </div>
         </div>
-
-        {/* Cumulative Overrun */}
-        <div className="px-4 py-3 bg-critical/5 flex flex-col items-center text-center justify-center">
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-widest text-critical mb-1 flex items-center justify-center gap-1.5">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-critical" />
-            Cumulative Overrun
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="critical">
-              {formatINRShort(s.cumulativeOverrunCr)}
-            </MonoFigure>
-            <div className="text-[10px] font-sans text-critical font-semibold bg-critical/10 px-1.5 py-0.5 rounded-sm">
-              <span className="font-mono tabular-nums">+{formatPct(overrunPct)}</span> escalation
-            </div>
-          </div>
-        </div>
-
-        {/* Triage Distribution */}
-        <div className="px-4 py-3 flex flex-col items-center text-center justify-center">
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-widest text-fg-dimmed mb-1">
-            Risk Triage
-          </div>
-          <div className="flex items-baseline justify-center gap-3 mt-1">
-            <span className="text-lg font-mono tabular-nums font-semibold text-critical">{s.criticalCount}</span>
-            <span className="text-[11px] font-sans text-fg-dimmed font-medium">CRIT</span>
-            <span className="text-lg font-mono tabular-nums font-semibold text-warning">{s.warningCount}</span>
-            <span className="text-[11px] font-sans text-fg-dimmed font-medium">WARN</span>
-            <span className="text-lg font-mono tabular-nums font-semibold text-stable">{s.normalCount}</span>
-            <span className="text-[11px] font-sans text-fg-dimmed font-medium">STBL</span>
-          </div>
-
-          {/* Proportional bar — minimal, no rounded corners */}
-          <div className="flex h-1 w-3/4 mt-2 bg-surface-input">
-            <div
-              style={{ width: `${(s.criticalCount / s.totalProjects) * 100}%` }}
-              className="bg-critical h-full"
-            />
-            <div
-              style={{ width: `${(s.warningCount / s.totalProjects) * 100}%` }}
-              className="bg-warning h-full"
-            />
-            <div
-              style={{ width: `${(s.normalCount / s.totalProjects) * 100}%` }}
-              className="bg-stable h-full"
-            />
-          </div>
-        </div>
-
-        {/* P-F Disparity Leading Indicator */}
-        <div className="px-4 py-3 bg-warning/5 flex flex-col items-center text-center justify-center">
-          <div className="text-[11px] font-sans font-semibold uppercase tracking-widest text-warning mb-1">
-            Avg Budget / Work Gap
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <MonoFigure size="xl" sentiment="warning">
-              +{formatPct(s.avgDisparityDeltaPct)}
-            </MonoFigure>
-            <div className="text-[10px] font-sans text-warning font-semibold bg-warning/10 px-1.5 py-0.5 rounded-sm">
-              financial burn ahead of physical
-            </div>
-          </div>
-        </div>
-      </div>
+      </Tile>
     </div>
   )
 }

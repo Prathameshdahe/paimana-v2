@@ -1,8 +1,10 @@
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -19,14 +21,11 @@ def test_tiers_are_sized_by_rank():
     assert t.tier_rank_pct.min() == 1 / 200 and t.tier_rank_pct.max() == 1
 
 
-def test_stagnation_override_lifts_at_most_one_tier():
+def test_stagnation_is_a_flag_and_never_moves_the_tier():
     p = np.linspace(1, 0, 100)
     t = score.tiers(p, np.ones(100, bool))
-    lift = t.tier_by_rank.map(score.TIERS.index) - t.tier.map(score.TIERS.index)
-    assert set(lift) == {0, 1}
-    assert (lift[t.tier_by_rank == "Critical"] == 0).all()             # never above Critical
-    assert (t.stagnation_override == (lift == 1)).all()
-    assert t.tier.value_counts()["Critical"] == 20                     # 5 by rank + 15 lifted from High
+    assert (t.tier == t.tier_by_rank).all() and t.stagnation_override.all()
+    assert t.tier.value_counts()["Critical"] == 5
 
 
 def test_log_append_is_idempotent(tmp_path):
@@ -50,8 +49,28 @@ def test_null_in_a_never_null_training_feature_is_not_scored():
     assert score.unseen_missing(train, X, ["months_to_deadline", "progress"]).tolist() == [True, False, False]
 
 
-def test_unscored_rows_get_no_tier_and_do_not_shift_ranks():
+def test_unscored_rows_are_watch_without_a_date_and_do_not_shift_ranks():
     p = np.r_[np.linspace(1, 0, 20), [np.nan] * 5]
-    t = score.tiers(p, np.ones(25, bool))
-    assert t.tier[20:].isna().all() and t.tier_rank_pct[20:].isna().all() and not t.stagnation_override[20:].any()
+    no_date = np.r_[np.zeros(22, bool), np.ones(3, bool)]
+    t = score.tiers(p, np.ones(25, bool), no_date)
+    assert t.tier[20:22].isna().all() and (t.tier[22:] == score.WATCH).all()      # no score but a date: no tier
+    assert t.tier_by_rank[20:].isna().all() and t.tier_rank_pct[20:].isna().all()
     assert t.tier_by_rank[:20].value_counts().to_dict() == {"Critical": 1, "High": 3, "Medium": 6, "Low": 10}
+
+
+def test_stagnation_override_skips_nearly_finished_projects():
+    cur = pd.DataFrame({"stagnation_quarters": [3, 3, 3, 1, 3], "elapsed_ratio": [0.9, 0.9, 0.9, 0.9, 0.1],
+                        "physical_progress_pct": [40.0, 97.0, None, 40.0, 40.0]})
+    assert score.stagnant(cur).tolist() == [True, False, True, False, False]
+
+
+def test_calibrator_comes_from_the_champion_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(score.backtest, "RUNS", tmp_path)
+    (tmp_path / "R1").mkdir()
+    (tmp_path / "R1" / score.backtest.PLATT_FILE).write_text(
+        json.dumps({"y_any_h2": {"lightgbm": {"a": 1.0, "b": -1.0}}}), encoding="utf-8")
+    entry = {"run_id": "R1", "target": "y_any", "horizon": 2, "model": "lightgbm"}
+    cal = score.calibrator(entry)
+    assert cal == {"a": 1.0, "b": -1.0}
+    assert score.backtest.platt_apply(cal, [0.5])[0] == pytest.approx(1 / (1 + np.e))
+    assert score.calibrator({**entry, "horizon": 4}) is None and score.calibrator({**entry, "run_id": "R0"}) is None

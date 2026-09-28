@@ -16,10 +16,10 @@ paimana-v2/
   model/         trained LightGBM model, feature schema, metrics
   pipeline/      data prep scripts
   dataset/       all data, raw to processed
-    raw/         QPISR PDFs and MoSPI CSVs, never edited
-    silver/      cleaned CSVs
-    gold/        model features and latest scores
-  database/      JSON store for worker runs and memo drafts
+    raw/         QPISR PDFs and MoSPI CSVs, never edited; raw/inbox/ takes new reports
+    silver/      cleaned observations (Parquet)
+    gold/        features, labels, scores, risk profile (Parquet + JSON)
+  database/      paimana.db (SQLite app state, gitignored) and JSON for worker runs and memo drafts
   docs/          design notes and pitch
   temp/          scratch, gitignored
 ```
@@ -51,11 +51,17 @@ One `.env` at the root is shared by the Python code and Vite (see `envDir` in
 
 ## Running
 
-Backend, with the venv active:
+The dashboard needs the backend; there is no bundled data. Backend, with the venv active:
 
 ```
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 ```
+
+It starts the report watcher and the news scout in the background (see Live
+tracking). `LIVE_JOBS=0` in `.env` or the shell turns both loops off; the jobs
+still start from the API. The alert stream (`/api/stream`) never ends by itself,
+so without `--timeout-graceful-shutdown` Ctrl+C and `--reload` wait forever on an
+open dashboard tab.
 
 Dashboard, in a second terminal:
 
@@ -69,10 +75,24 @@ page except Home sends you to `/login` until you pick a role. It's only a role
 picker, there's no auth. Public can't open the Approval Inbox, and the Worker
 Console is for IPMD Analyst and Ministry Official only.
 
-The dashboard also runs without the backend, on heuristic scores (details in
-`frontend/README.md`). The backend reads `dataset/gold/` on each request and
-keeps worker runs and memo drafts as JSON in `database/`. Routes are in
-`backend/routes.py`.
+Pages: `/` (map, live status, alert inbox), `/command` (triage), `/external`
+(external factors and news evidence), `/bottlenecks` (projects sharing an open
+land or clearance issue), `/agencies` (agency schedule and cost bias),
+`/radar` (news evidence feed, state heat map, "Run scout now"),
+`/projects/:key` (with the validated LLM brief), `/models` (registry,
+backtest, calibration, live accuracy; `/audit` redirects there), `/workers`,
+`/approvals` and `/login`. The top bar shows the first four and puts the rest
+under MORE.
+
+To feed a new report, drop a portal `Projects_Report.csv` export or a PAIMANA
+flash PDF into `dataset/raw/inbox/`. The watcher picks it up within a minute, or
+at once from "Check inbox now" on Home (IPMD Analyst). New alerts reach the top
+bar bell and the Home inbox through `/api/stream`.
+
+The backend reads `dataset/silver/` and `dataset/gold/` through DuckDB and
+reloads when a new score or profile lands. Alerts, watchlists and the audit log
+are in SQLite (`database/paimana.db`, created on first start); worker runs and
+memo drafts stay JSON in `database/`. Routes are in `backend/routes.py`.
 
 Gotchas:
 
@@ -111,11 +131,44 @@ the model scores. The auditor's checks are plain Python and it calls the LLM
 only to word a query to the agency when one fails. Memo drafts from the
 dispatcher wait in the Approval Inbox until someone approves or rejects them.
 
-Treat the scout step as plumbing for now. Its input is placeholder remark text
-that `pipeline/build_real_projects.py` fills in from the heuristic drivers. For
-projects outside the 300 in `real_projects.json` it gets no text at all and
-still returns cause tags. That's 8 of the current top 10, and you can see the
-made-up evidence in `database/dispatch_drafts.json`.
+The scout step reads only recorded evidence: the delay events found in the
+project's report remarks (`gold/project_events`, with document and page) and
+the news signals linked to it (see Live tracking). A project with neither gets
+no LLM call and no cause tags.
+
+### Live tracking
+
+The backend runs two background loops (`backend/live/scheduler.py`):
+
+- **Report watcher**, every `WATCH_INTERVAL_S` seconds (60). Drop a portal
+  `Projects_Report.csv` export or a PAIMANA flash PDF into `dataset/raw/inbox/`,
+  or upload one with `POST /api/jobs/ingest`. The watcher runs the extractor,
+  the clean merge and `pipeline.run` silver, external, gold, score and profile,
+  then raises tier-change and new-project alerts and fills realised outcomes
+  in `gold/prediction_log.parquet`. `train` is not part of it; retrain by hand
+  each month. One portal file takes about two minutes. If a step fails, the old
+  scores keep serving and a `pipeline_error` alert is raised.
+- **News scout**, every `SCOUT_INTERVAL_H` hours (24; the first run is 10
+  minutes after start). It searches Google News for up to 50 projects
+  (watchlists first, then Critical and High) and reads the PIB feed, links items
+  to projects and raises `signal` alerts for severity 2 and 3 items.
+  `POST /api/jobs/scout?project_key=PRJ-...` scouts one project on the spot.
+
+`POST /api/jobs/watch` runs the watcher now. `GET /api/live/status` shows the
+last and next runs and the inbox count, and `GET /api/stream` pushes each new
+alert as a Server-Sent Event. `GET /api/signals/feed` pages the stored signals
+with the state heat and, for each linked project, the first report after the
+news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn both
+loops off; the tests do.
+
+### Access by role
+
+The sign-in page picks a role: public (no sign-in needed), agency official (one
+canonical agency), ministry official (one ministry) or IPMD analyst. Every page
+and API answer is cut to that role's projects, and the public gets a simple
+project page without model internals. The role goes to the backend in
+`X-Paimana-*` headers that it trusts: a prototype, not authentication. The
+role-by-page table is in `docs/ACCESS_CONTROL.md`.
 
 ## Rebuilding data and the model
 
@@ -126,16 +179,11 @@ training code changes.
 python pipeline/extract_pdf_context.py    # PDFs -> dataset/silver/pdf_sector_state_fix.csv
 python pipeline/clean_sector_state.py     # raw CSVs -> dataset/silver/*_clean.csv
 python ml/train.py                        # -> dataset/gold/*.csv and model/*
-
-python pipeline/build_real_projects.py    # -> frontend/src/mocks/real_projects.json
-python pipeline/build_state_dots.py       # -> frontend/src/data/state-dots.json
 ```
 
-The backend keeps `real_projects.json` in memory, so restart it after
-regenerating that file. The Audit Suite numbers are hardcoded in
-`frontend/src/mocks/audit.ts` (benchmark rows and `BENCHMARK_NOTES` from
-`model/metrics.json`, CUF info-gain percentages from
-`model/shap_test_sanity.json`), so update them by hand after retraining.
+The frontend has no bundled data; every view reads the backend API. The Audit
+Suite shows the champion run's `backtest_summary.csv` and `ablation.csv` through
+`/api/models`, so it follows a retrain without edits.
 
 ## Data cleaning
 
@@ -201,12 +249,9 @@ elapsed and recorded delay.
 - IDs are stable from 2024-25 on, but the 2005-10 and 2021-24 files use other ID
   formats, so history before 2024-25 can't be linked yet. The model uses
   2024-25 and 2025-26. 2026-27 is cleaned but not used for training yet.
-- The Sandbox coefficients are hand-set.
 - Forecast overrun in crore reads Rs 0 for many projects because `cost_revised`
   is often missing in the source.
-- `GET /api/projects/{id}/forecast` returns a 500 for projects with no risk
-  exposure. `risk_exposure_cr` is a plain float in `backend/schemas.py` and NaN
-  can't be serialised.
-- 12 of the 300 dashboard projects show predicted delays above 150 months, up to
-  275. That's what the source dates say and we haven't capped it.
 - The JSON store in `database/` has no locking, so one user at a time.
+- There is no authentication. The role and its scope come from request headers
+  the backend trusts (`docs/ACCESS_CONTROL.md`), so they separate views and do
+  not protect data.

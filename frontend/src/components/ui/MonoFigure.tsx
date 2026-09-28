@@ -4,16 +4,17 @@ import { cn } from '@/lib/formatters'
 interface MonoFigureProps extends React.HTMLAttributes<HTMLSpanElement> {
   children: React.ReactNode
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl'
-  sentiment?: 'critical' | 'warning' | 'stable' | 'accent' | 'default' | 'muted'
+  sentiment?: 'critical' | 'warning' | 'stable' | 'accent' | 'default' | 'muted' | 'watch'
 }
 
+// small figures sit in mono beside text; headline figures are sans, still tabular
 const sizeClasses = {
-  xs: 'text-[11px] leading-none',
-  sm: 'text-xs leading-none',
-  base: 'text-sm leading-none',
-  lg: 'text-base leading-none',
-  xl: 'text-lg font-medium leading-none',
-  '2xl': 'text-xl font-semibold leading-none',
+  xs: 'font-mono text-xs leading-none',
+  sm: 'font-mono text-xs leading-none',
+  base: 'font-mono text-sm leading-none',
+  lg: 'text-base font-semibold leading-none',
+  xl: 'text-lg font-semibold leading-none',
+  '2xl': 'text-xl font-semibold leading-none tracking-tight',
   '3xl': 'text-2xl font-semibold leading-none tracking-tight',
 }
 
@@ -24,6 +25,7 @@ const sentimentClasses = {
   accent: 'text-accent',
   default: 'text-fg-base',
   muted: 'text-fg-muted',
+  watch: 'text-watch',
 }
 
 export function MonoFigure({
@@ -36,7 +38,7 @@ export function MonoFigure({
   return (
     <span
       className={cn(
-        'font-mono tabular-nums',
+        'tabular-nums',
         sizeClasses[size],
         sentimentClasses[sentiment],
         className

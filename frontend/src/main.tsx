@@ -23,8 +23,8 @@ function raf(time: number): void {
 requestAnimationFrame(raf)
 
 // ── TanStack Query Client ──────────────────────────────────────────────────
-// retry: false — mock engine never fails; no network retries needed.
-// staleTime: 5min — data is stable within a session.
+// retry: false — a down backend shows its "start uvicorn" state at once (lib/api.ts).
+// staleTime: 5min — the data version changes monthly.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

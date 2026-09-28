@@ -1,6 +1,8 @@
 """Pydantic models: API responses + LLM structured-output schemas."""
-from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import date
+from typing import Annotated, Any, Literal
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 
 def _to_camel(name: str) -> str:
@@ -13,34 +15,669 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True)
 
 
-# ---------- plain data lookups ----------
+# ---------- serving (read side, backend/serving.py) ----------
 
-class ForecastOut(BaseModel):
-    project_id: str
-    slip_probability: float
-    risk_exposure_cr: float
+def _camel_keys(d: dict) -> dict:
+    return {_to_camel(k): v for k, v in d.items()}
+
+
+# A Parquet row passed through as it is (master, observation, forest, land):
+# its column names go out in camelCase like every other field.
+Record = Annotated[dict[str, Any], AfterValidator(_camel_keys)]
+Tier = Literal["Critical", "High", "Medium", "Low", "Watch"]
+Flag = Literal["land", "forest", "litigation", "contractor", "early_notice"]
+Sort = Literal["risk", "cost", "slip", "name", "progress"]
+
+
+class Meta(CamelModel):
+    asof: date
     model_version: str
+    gold_version: str
+    silver_version: str
+    n_current: int
+    n_watch: int
+    latest_report_period: date | None
+    latest_report_doc: str | None
+    models: dict[str, str]
+    caveats: list[str]
 
 
-class ShapItem(BaseModel):
+class Kpis(CamelModel):
+    n_projects: int
+    original_cost_cr: float | None
+    anticipated_cost_cr: float | None
+    expenditure_cr: float | None
+    overrun_cr: float | None
+    overrun_pct: float | None
+    avg_progress_pct: float | None
+
+
+class TierCount(CamelModel):
+    tier: str
+    n: int
+    capital_cr: float
+
+
+class GroupStat(CamelModel):
+    name: str | None
+    n: int
+    capital_cr: float | None
+    n_critical: int
+    n_high: int
+
+
+class TopProject(CamelModel):
+    key: str
+    name: str | None
+    sector: str | None
+    state: str | None
+    tier: str | None
+    p_any_2q: float | None
+    anticipated_cost_cr: float | None
+    override: bool | None = None  # the stagnation badge
+
+
+class Portfolio(CamelModel):
+    asof: date
+    filters: dict[str, str | None]
+    kpis: Kpis
+    tiers: list[TierCount]
+    by_state: list[GroupStat]
+    by_sector: list[GroupStat]
+    by_ministry: list[GroupStat]
+    top: list[TopProject]
+
+
+class ProjectRow(CamelModel):
+    key: str
+    name: str | None
+    sector: str | None
+    state: str | None
+    agency: str | None
+    ministry: str | None
+    tier: str | None
+    tier_rank_pct: float | None
+    override: bool | None
+    p_any_2q: float | None
+    p_date_push_2q: float | None
+    p_cost_rev_2q: float | None
+    months_p50: float | None
+    months_p95: float | None
+    anticipated_cost_cr: float | None
+    expenditure_cr: float | None
+    physical_progress_pct: float | None
+    anticipated_completion: date | None
+    slip_to_date_months: float | None
+    no_completion_date: bool | None
+    flags: list[str]
+
+
+class ProjectPage(CamelModel):
+    total: int
+    page: int
+    size: int
+    items: list[ProjectRow]
+
+
+class ShapValue(CamelModel):
     feature: str
+    value: Any = None
     contribution: float
-    direction: str
 
 
-class ExplanationOut(BaseModel):
-    project_id: str
-    shap: list[ShapItem]
+class Scores(CamelModel):
+    p_date_push_2q: float | None
+    p_cost_rev_2q: float | None
+    p_any_2q: float | None
+    p_any_4q: float | None
+    months_p05: float | None
+    months_p50: float | None
+    months_p95: float | None
+    cost_pct_p05: float | None
+    cost_pct_p50: float | None
+    cost_pct_p95: float | None
+    tier_rank_pct: float | None
+    tier_by_rank: str | None
+    tier: str | None
+    stagnation_override: bool | None
+    no_completion_date: bool | None
+    stagnation_quarters: float | None
+    elapsed_ratio: float | None
+    shap_top5: list[ShapValue]
 
 
-class ProjectScore(CamelModel):
-    """Bulk per-project model output — lets the frontend overlay real
-    slip_probability/SHAP onto every displayed project in one request
-    instead of 300 individual /forecast calls."""
-    project_id: str
-    slip_probability: float
+class RiskRow(CamelModel):
+    dimension: str
+    state: Literal["flagged", "clear", "unknown"]
+    evidence: str | None
+    source: str | None
+    as_of_date: date | None
+
+
+class EventRow(CamelModel):
+    category: str
+    event_no: int
+    first_seen: date | None
+    last_seen: date | None
+    n_quarters: int | None
+    n_mentions: int | None
+    status: str | None
+    resolved: bool | None
+    subtype: str | None
+    authority: str | None
+    forest_area_ha: float | None
+    violation: bool | None
+    evidence: str | None
+    source_doc_id: str | None
+    source_page: int | None
+    remarks_last_seen: date | None
+
+
+class External(CamelModel):
+    fc: Record | None
+    land: Record | None
+    land_pairs: list[Record]
+    composite: Record | None
+    events: list[EventRow]
+    # PARIVESH link, remark-named proposals, remark status (as-of quarters), measured hidden-delay priors that apply;
+    # empty on the public page
+    portal: Record | None = None
+    proposals: list[Record] = []
+    remark_status: Record | None = None
+    hidden_delay: list[Record] = []
+
+
+class Provenance(CamelModel):
+    """model, data versions and source document are None on the public page (backend/access.py)."""
+    asof: date
+    model_version: str | None
+    gold_version: str | None
+    silver_version: str | None
+    source_doc_id: str | None
+    source_page: int | None
+    period: date | None
+    period_type: str | None
+
+
+class ReviewBadge(CamelModel):
+    n_rows: int
+    first_period: date | None
+    last_period: date | None
+    note: str
+
+
+class ProjectDetail(CamelModel):
+    key: str
+    master: Record | None
+    latest: Record | None
+    scores: Scores | None
+    flags: list[str]
+    risk_profile: list[RiskRow]
+    top_risks_plain: list[str]  # up to 3 flagged checklist rows in plain words
+    external: External
+    provenance: Provenance
+    review: ReviewBadge | None
+
+
+class TimelinePoint(CamelModel):
+    period: date
+    physical_progress_pct: float | None
+    expenditure_cr: float | None
+    anticipated_cost_cr: float | None
+    anticipated_completion: date | None
+    source_doc_id: str | None
+    source_page: int | None
+    period_type: str | None
+
+
+class Timeline(CamelModel):
+    key: str
+    points: list[TimelinePoint]
+
+
+class ScenarioPoint(CamelModel):
+    step: int
+    quarter: date
+    continue_: float | None  # own recent velocity; goes out as "continue"
+    recover: float | None
+    agency: float | None
+    agency_basis: str | None
+
+
+class Analogue(CamelModel):
+    rank: int
+    analogue_key: str
+    analogue_name: str | None
+    analogue_period: date | None
+    target_period: date | None
+    sector: str | None
+    basis: str | None
+    distance: float | None
+    y_months: float | None
+    y_cost_pct: float | None
+    y_any: int | None
+    y_date_push: int | None
+    y_cost_rev: int | None
+
+
+class ScurvePoint(CamelModel):
+    elapsed_lo: float
+    elapsed_hi: float
+    expected_progress: float | None
+    n_projects: int | None
+    date: date | None  # bin middle on the project's sanction-to-scheduled span
+
+
+class BandPoint(CamelModel):
+    quarter: date
+    lo: float
+    mid: float
+    hi: float
+
+
+class CompletionBand(CamelModel):
+    anticipated: date | None
+    months_p05: float | None
+    months_p50: float | None
+    months_p95: float | None
+    p05: date | None
+    p50: date | None
+    p95: date | None
+
+
+class Forecast(CamelModel):
+    key: str
+    asof: date
+    sector: str | None
+    elapsed_ratio: float | None
+    physical_progress_pct: float | None
+    scenarios: list[ScenarioPoint]
+    analogues: list[Analogue]
+    analogue_summary: str
+    scurve_fit_year: int | None
+    scurve: list[ScurvePoint]
+    band: list[BandPoint]
+    completion: CompletionBand
+    band_method: str
+
+
+class ExternalSummary(CamelModel):
+    """gold/external_summary.json; the nested blocks keep the file's own keys."""
+    as_of_date: date
+    n_projects: int
     model_version: str
-    shap: list[ShapItem]
+    rule: str
+    factors: dict[str, Any]
+    early_notice: dict[str, Any]
+    notice_backtest: dict[str, Any]
+    external_composite: dict[str, Any]
+    coverage: dict[str, Any]
+    caveats: list[str]
+    # remark flags live vs stale, PARIVESH-linked projects, land coverage and the measured hidden-delay priors
+    remark_flags: dict[str, Any] | None = None
+    portal: dict[str, Any] | None = None
+    land_coverage: dict[str, Any] | None = None
+    hidden_delay_priors: dict[str, Any] | None = None
+
+
+class LiveAccuracy(CamelModel):
+    """Realised outcomes of logged predictions; every metric is None until outcomes are realised (never faked)."""
+    n_logged: int
+    n_realised: int
+    first_asof: date | None
+    n_critical_high_realised: int
+    precision_critical_high: float | None
+    base_rate: float | None
+    pr_auc: float | None
+    note: str
+
+
+class ModelsOut(CamelModel):
+    """registry: one row per registered entry (pooled validation PR-AUC, ECE, test PR-AUC, champion now);
+    decisions: champion / challenger decisions with their reasons (the last 100 of each)."""
+    champions: dict[str, Any]
+    run_id: str | None
+    backtest: list[Record]
+    ablation: list[Record]
+    shap_summary: list[Record]
+    calibration: list[Record]
+    registry: list[Record]
+    decisions: list[Record]
+    live_accuracy: LiveAccuracy
+
+
+class AgencyPoint(CamelModel):
+    """One canonical agency (gold/agency_matrix.parquet). schedule_bias / cost_bias are shrunk toward the sector
+    median when n < 10, the *_raw ones are not; CIs are bootstrap 90% intervals of the raw median."""
+    agency: str
+    names: str | None
+    sector: str | None
+    ministry: str | None
+    n_projects: int
+    n_open: int
+    capital_cr: float
+    schedule_bias: float | None
+    schedule_bias_raw: float | None
+    schedule_bias_q25: float | None
+    schedule_bias_q75: float | None
+    schedule_bias_ci_lo: float | None
+    schedule_bias_ci_hi: float | None
+    cost_bias: float | None
+    cost_bias_raw: float | None
+    cost_bias_q25: float | None
+    cost_bias_q75: float | None
+    cost_bias_ci_lo: float | None
+    cost_bias_ci_hi: float | None
+    n_cost: int
+    sector_schedule_bias: float | None
+    sector_cost_bias: float | None
+    shrink_weight: float | None
+    shrunk: bool
+    hidden: bool
+    trend: float | None
+    n_recent: int
+    is_self: bool = False  # the signed-in agency official's own agency
+
+
+class AgencyMatrix(CamelModel):
+    asof: date
+    n_agencies: int
+    n_hidden: int
+    method: str
+    points: list[AgencyPoint]
+
+
+class MemberBrief(CamelModel):
+    key: str
+    name: str | None
+    tier: str | None
+    p_any_2q: float | None
+    anticipated_cost_cr: float | None
+
+
+class Bottleneck(CamelModel):
+    """A cluster of current projects sharing an open issue (category, authority, state); level 'state' is the
+    rollup over every authority. headline + note: the projects that would be affected, not a causal claim."""
+    bottleneck_id: str
+    level: Literal["authority", "state"]
+    category: str
+    authority: str | None
+    state: str | None
+    n_projects: int
+    capital_exposed_cr: float
+    mean_p_any_2q: float | None
+    mean_months_p50: float | None
+    n_critical_high: int
+    earliest_first_seen: date | None
+    last_seen: date | None
+    n_signals: int
+    evidence: list[str]
+    headline: str
+    note: str
+    top_members: list[MemberBrief]
+
+
+class BottleneckPage(CamelModel):
+    """summary: gold/bottlenecks_summary.json with the file's own keys."""
+    asof: date
+    total: int
+    page: int
+    size: int
+    summary: dict[str, Any]
+    items: list[Bottleneck]
+
+
+class MemberEvidence(CamelModel):
+    kind: Literal["event", "signal"]
+    authority: str | None
+    first_seen: date | None
+    last_seen: date | None
+    evidence: str | None
+    source_doc_id: str | None
+    source_page: int | None
+    url: str | None
+
+
+class BottleneckMember(CamelModel):
+    key: str
+    name: str | None
+    sector: str | None
+    state: str | None
+    agency: str | None
+    tier: str | None
+    p_any_2q: float | None
+    months_p50: float | None
+    anticipated_cost_cr: float | None
+    evidence: list[MemberEvidence]
+
+
+class BottleneckDetail(CamelModel):
+    asof: date
+    bottleneck: Bottleneck
+    total: int
+    page: int
+    size: int
+    members: list[BottleneckMember]
+
+
+class BriefOut(CamelModel):
+    """A validated brief; payload is every fact the model was given (its own keys), the numbers it may cite."""
+    status: Literal["ok"]
+    key: str
+    asof: str
+    model_version: str
+    text: str
+    paragraphs: list[str]
+    cached: bool
+    generated_at: str | None
+    n_numbers_checked: int | None
+    attempts: int | None
+    payload: dict[str, Any]
+
+
+# ---------- app state (SQLite, backend/db.py) ----------
+
+Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]
+AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice",
+                    "pipeline_error"]
+
+
+class Alert(CamelModel):
+    """project_key is None only for a pipeline_error alert."""
+    id: int
+    created_at: str
+    project_key: str | None
+    kind: AlertKind
+    severity: int
+    title: str | None
+    detail: str | None
+    asof: str | None
+    model_version: str | None
+    source: str | None
+    acked_by: str | None
+    acked_at: str | None
+
+
+class AlertPage(CamelModel):
+    total: int
+    page: int
+    size: int
+    items: list[Alert]
+
+
+class ScopeOption(CamelModel):
+    name: str
+    n: int  # current projects
+    names: str | None = None  # agencies: every printed name
+    ministry: str | None = None
+
+
+class Scopes(CamelModel):
+    """The sign-in picker: ministries and canonical agencies of the current portfolio."""
+    ministries: list[ScopeOption]
+    agencies: list[ScopeOption]
+
+
+class RoleBody(CamelModel):
+    """role: optional, and when sent it must be the signed-in one (X-Paimana-Role, backend/access.py)."""
+    role: Role | None = None
+
+
+class WatchRequest(CamelModel):
+    role: Role | None = None
+    project_key: str = Field(max_length=32)
+
+
+class WatchItem(CamelModel):
+    role: str
+    project_key: str
+    added_at: str | None
+    project: ProjectRow | None
+
+
+class Watchlist(CamelModel):
+    total: int
+    items: list[WatchItem]
+
+
+class JobRun(CamelModel):
+    id: int
+    job: str
+    started_at: str | None
+    finished_at: str | None
+    status: str | None
+    summary: Any = None
+
+
+class Ingested(CamelModel):
+    """A file saved into dataset/raw/inbox/ for the watcher's next run; saved_as None when these bytes were
+    already ingested by the current pipeline version (nothing is kept)."""
+    saved_as: str | None
+    sha256: str
+    kind: str | None
+    already_ingested: bool
+
+
+class JobStarted(CamelModel):
+    """summary: the run's counts when it ran inside the request (the scout on one project)."""
+    started: bool
+    detail: str
+    pending: int | None = None
+    summary: dict[str, Any] | None = None
+
+
+class LiveJob(CamelModel):
+    """One background loop: its in-memory tick state and its last recorded run (job_runs; None: never ran)."""
+    interval_s: float | None
+    running: bool
+    last_tick: str | None
+    next_due: str | None
+    last_error: str | None
+    last_run: JobRun | None
+
+
+class LiveStatus(CamelModel):
+    """enabled False: LIVE_JOBS=0, the loops are not running (jobs still start from the API, the Bhoomi Rashi pull
+    only with BHOOMI_PULL=1). A job whose loop is off has interval_s None."""
+    enabled: bool
+    inbox_pending: int
+    watch: LiveJob
+    scout: LiveJob
+    parivesh_snapshot: LiveJob | None = None
+    bhoomi_rashi_pull: LiveJob | None = None
+    bhoomi_pull_enabled: bool = False
+
+
+class LeadTime(CamelModel):
+    """The first report period after the signal date whose CUF row changed (completion pushed or cost revised) and
+    the gap in days; None while no report has changed since."""
+    cuf_change_period: date | None = None
+    lead_days: int | None = None
+
+
+class Signal(LeadTime):
+    id: int
+    url: str
+    title: str | None
+    source: str | None
+    published_at: str | None
+    fetched_at: str | None
+    summary: str | None
+    category: str | None
+    severity: int | None
+    link_score: float | None
+    method: str | None
+
+
+class ProjectSignals(CamelModel):
+    """last_scout_at None means the scout never searched this project: no signals is then unknown, not clear."""
+    key: str
+    last_scout_at: str | None
+    items: list[Signal]
+
+
+class FeedProject(LeadTime):
+    key: str
+    name: str | None
+    state: str | None
+    tier: str | None
+    link_score: float | None
+    method: str | None
+
+
+class FeedItem(CamelModel):
+    """A stored signal; projects is empty for the unlinked pool (ambiguous or weak matches)."""
+    id: int
+    url: str
+    title: str | None
+    source: str | None
+    published_at: str | None
+    fetched_at: str | None
+    summary: str | None
+    category: str | None
+    severity: int | None
+    projects: list[FeedProject]
+
+
+class StateHeat(CamelModel):
+    state: str | None
+    n: int
+
+
+class CountRow(CamelModel):
+    name: str | int | None
+    n: int
+
+
+class LeadTimeStats(CamelModel):
+    n_linked_pairs: int
+    n_with_later_change: int
+    median_lead_days: int | None
+    basis: str
+
+
+class RadarSummary(CamelModel):
+    """Counts over signals published in the last window_days; lead time over every linked signal."""
+    window_days: int
+    since: str
+    n_signals_total: int
+    n_window: int
+    n_linked: int
+    n_unlinked: int
+    by_category: list[CountRow]
+    by_severity: list[CountRow]
+    by_source: list[CountRow]
+    n_projects_scouted: int
+    lead_time: LeadTimeStats
+
+
+class SignalFeed(CamelModel):
+    """state_heat: signals of severity >= 2 in the last 90 days per state of their linked projects."""
+    total: int
+    page: int
+    size: int
+    items: list[FeedItem]
+    state_heat: list[StateHeat]
 
 
 # ---------- worker cell persistence ----------
@@ -80,7 +717,7 @@ class DispatchDraft(CamelModel):
 class ApprovalRequest(CamelModel):
     draft_id: str
     decision: Decision
-    role: str
+    role: Role | None = None
 
 
 class TriggerResult(BaseModel):

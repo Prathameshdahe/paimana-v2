@@ -10,8 +10,15 @@ Portal quirks handled:
   if the project was revised, else original.
 - in the project list a revised cost of 0 means "not revised"; it becomes
   blank here, and cost_latest_cr falls back to the original cost.
+
+A newer project-list export on its own (the live report watcher,
+backend/live/watcher.py) replaces portal_projects.csv only; the two summary
+files stay those of the last full export:
+  python pipeline/extract/portal_csv.py --projects <path to Projects_Report.csv>
 """
 import re
+import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -24,8 +31,8 @@ def months_between(a, b):
     return (b.year - a.year) * 12 + (b.month - a.month)
 
 
-def projects():
-    d = pd.read_csv(DATASET / "Projects_Report.csv", skiprows=2)
+def projects(src=DATASET / "Projects_Report.csv"):
+    d = pd.read_csv(src, skiprows=2)
     d.columns = ["sr_no", "sector", "ministry", "agency", "project_code", "project_name",
                  "cost_original_cr", "cost_revised_cr", "expenditure_cum_cr",
                  "physical_progress_pct", "doc_original", "doc_revised", "sanction_date"]
@@ -69,8 +76,15 @@ def summary(fname, dim):
     return d.drop(columns="cost_pair")
 
 
-def main():
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
     OUT.mkdir(parents=True, exist_ok=True)
+    if argv[:1] == ["--projects"]:
+        p = projects(Path(argv[1]))
+        assert not p["project_code"].duplicated().any()
+        p.to_csv(OUT / "portal_projects.csv", index=False, encoding="utf-8")
+        print(f"projects {len(p)} -> {OUT / 'portal_projects.csv'} (summaries unchanged)")
+        return
     p = projects()
     sec = summary("Sector-Wise-Report.csv", "sector")
     st = summary("State-Wise-Report.csv", "state")

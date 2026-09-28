@@ -15,12 +15,25 @@ export function Input({ className, icon, ...props }: InputProps) {
       )}
       <input
         className={cn(
-          'w-full bg-surface-input border border-border-default rounded-md px-3 py-1.5 text-xs text-fg-base placeholder:text-fg-dimmed focus:outline-none focus:border-accent transition-colors',
+          'w-full bg-surface-input border border-border-default rounded-lg px-3 py-2 text-sm text-fg-base placeholder:text-fg-dimmed focus:outline-none focus:border-accent transition-colors',
           icon ? 'pl-8' : 'pl-3',
           className
         )}
         {...props}
       />
     </div>
+  )
+}
+
+/** The one dropdown look: filter bars, card headers. */
+export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        'h-8 max-w-[220px] rounded-lg border border-border-default bg-surface-panel px-2 text-xs text-fg-base shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/30',
+        className
+      )}
+      {...props}
+    />
   )
 }

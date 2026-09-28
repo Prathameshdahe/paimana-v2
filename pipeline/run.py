@@ -7,7 +7,11 @@ Pipeline entry point:  python -m pipeline.run <step>
   gold       features and labels from silver (pipeline/gold.py)
   train      backtest, refit and register the models (ml/backtest.py, ml/registry.py)
   score      score the current portfolio, then analogues and scenarios (ml/score.py, ml/analogues.py)
-  all        silver, external, gold, train and score in order
+  profile    canonical agencies and the agency matrix (pipeline/agency.py), bottleneck clusters
+             (pipeline/bottlenecks.py), the measured hidden-delay priors (pipeline/hidden_delay.py), then the
+             risk-profile checklist and the external early-notice summary (ml/risk_profile.py), which writes the
+             serving version file last
+  all        silver, external, gold, train, score and profile in order
 """
 import argparse
 import sys
@@ -15,9 +19,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pipeline import build_identity, external, gold, silver  # noqa: E402
+from pipeline import agency, bottlenecks, build_identity, external, gold, hidden_delay, silver  # noqa: E402
 
-ALL = ["silver", "external", "gold", "train", "score"]
+ALL = ["silver", "external", "gold", "train", "score", "profile"]
 
 
 def main(argv=None):
@@ -29,7 +33,9 @@ def main(argv=None):
     sub.add_parser("gold", help="point-in-time features, horizon labels and the gold manifest")
     sub.add_parser("train", help="rolling-origin backtest, model refit and file registry")
     sub.add_parser("score", help="predictions, intervals, SHAP and rank tiers for the current portfolio")
-    sub.add_parser("all", help="silver, external, gold, train and score")
+    sub.add_parser("profile", help="agency matrix, bottlenecks, hidden-delay priors, 12 checks + external composite, "
+                                   "early-notice summary")
+    sub.add_parser("all", help="silver, external, gold, train, score and profile")
     args = ap.parse_args(argv)
     steps = ALL if args.step == "all" else [args.step]
     t0 = time.time()
@@ -49,6 +55,12 @@ def main(argv=None):
         from ml import analogues, score
         score.main()
         analogues.main()
+    if "profile" in steps:
+        from ml import risk_profile
+        agency.main()
+        bottlenecks.main()
+        hidden_delay.main()
+        risk_profile.main()
     print(f"{args.step}: {time.time() - t0:.1f}s")
 
 

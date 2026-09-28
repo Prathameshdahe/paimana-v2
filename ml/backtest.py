@@ -6,13 +6,25 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet
 Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summary.csv (b table), ablation.csv
-         (c table), calibration.csv, shap_summary.csv
+         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators)
 
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
 The newest usable cutoff is the test fold; the N_VAL usable cutoffs before it that sit in the newest reliable block
 are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
 label was known by c) and predict the rows at t = c. Completed projects are left out: there is nothing to warn about.
+
+The validation block is quarterly-report (QPISR) era: anticipated vs anticipated dates, and 0% remarks or progress at
+some folds. Live scoring and the test fold are the flash-report era (revised vs revised, a higher slip rate), where
+val rankings have flipped. So a second block, flash, holds every cutoff from FLASH_FROM with >= MIN_ROWS labelled rows
+(these fail the coverage rule: flash reports print no anticipated fields). For the 2-quarter targets it includes the
+test cutoff, so there the test fold is no longer independent of promotion. Every pooled row also reports the
+not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
+early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
+
+A target in TRAIN_FROM trains on rows from that date only (none today). A target in CALIBRATED gets a Platt
+calibrator fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
+it; the summary's calibration column says which. The ablation table compares the raw LightGBM scores.
 """
 import json
 import time
@@ -40,6 +52,19 @@ RELIABLE = 0.8      # field completeness that makes a quarter reliable
 N_VAL = 6           # validation cutoffs
 N_TEST = 1          # newest usable cutoffs held out as test
 MIN_ROWS = 100      # a cutoff needs this many labelled rows
+FLASH_FROM = pd.Timestamp("2025-07-01")     # first flash-report quarter (the serving format)
+# target -> first training quarter. Empty: training y_any_h4 on t >= 2014 only gained 0.023 validation PR-AUC but
+# lost 0.024 [-0.043, -0.006] on the flash block (3 seeds, paired project bootstrap; one fold of 335 rows), and the
+# 2-quarter targets lost on flash as well (y_any_h2 -0.014), so every target keeps every row.
+TRAIN_FROM = {}
+# Platt scaling, fitted on each model's predictions at the PLATT_FOLDS cutoffs c - h, ..., c - h - PLATT_FOLDS + 1,
+# whose labels are all realised by c. Only the cost revision: for y_any_h2 and y_date_push_h2 it halved validation
+# ECE but doubled flash-block ECE (0.061 -> 0.135, 0.065 -> 0.125) and lowered flash PR-AUC (-0.004, -0.007):
+# calibrators fitted on quarterly-report folds pull scores down where the flash-era slip rate is higher. y_any_h4 got worse on
+# validation (its folds are 4-7 quarters old).
+CALIBRATED = {("y_cost_rev", 2)}
+PLATT_FOLDS = 4
+PLATT_FILE = "platt.json"
 KS = (50, 100)
 ECE_BINS = 10
 PK = ["project_key", "period"]
@@ -48,17 +73,21 @@ LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_
                   n_jobs=8, verbose=-1)
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
-ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]),
-            ("+context", ["state", "dynamics", "context"]), ("+freshness", ["state", "dynamics", "context", "freshness"])]
+ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]), ("+context", ["state", "dynamics", "context"]),
+            ("+freshness", ["state", "dynamics", "context", "freshness"]),
+            ("+external", ["state", "dynamics", "context", "freshness", "external"])]
 ABLATION_MODEL = {"state": "lgbm_state", "+dynamics": "lgbm_state_dyn", "+context": "lgbm_state_dyn_ctx",
-                  "+freshness": "lightgbm"}
+                  "+freshness": "lgbm_state_dyn_ctx_fresh", "+external": "lightgbm"}
+ABLATION_GAINS = ["pr_auc", "precision_50", "recall_100"]     # each step minus the step before
 MAIN = ["naive", "rule", "logreg", "lightgbm"]
 WINDOW_RULE = ("A quarter is reliable for a target when every field its label compares (needs) is >= reliable_min "
                "complete in silver/coverage.parquet. A cutoff c is usable when c and c + h are reliable and c has "
                f">= {MIN_ROWS} labelled rows. test = the newest {N_TEST} usable cutoff(s). validation = the last "
                f"{N_VAL} usable cutoffs before test inside the newest reliable block that still has usable cutoffs. "
                "Each fold trains on every label row with target_period <= cutoff (outcome known by the cutoff, any "
-               "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded.")
+               "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded. "
+               f"flash = every cutoff from {FLASH_FROM.date()} with >= {MIN_ROWS} labelled rows (reliability not "
+               "required), scored the same way as a second validation block.")
 
 
 def qindex(s):
@@ -74,10 +103,11 @@ def load():
     return feats, labels, pd.read_parquet(SILVER / "coverage.parquet"), manifest
 
 
-def frame(feats, labels, y):
-    """Labelled rows for target y joined to their features at t; completed projects dropped."""
+def frame(feats, labels, y, h=None):
+    """Labelled rows for target y at horizon h joined to their features at t; completed projects and rows before
+    the target's TRAIN_FROM dropped."""
     d = labels[PK + ["target_period", y]].dropna(subset=[y]).merge(feats, on=PK, how="inner")
-    d = d[~d.is_completed.astype(bool)].copy()
+    d = d[~d.is_completed.astype(bool) & (d.period >= TRAIN_FROM.get((y, h), d.period.min()))].copy()
     d[y] = d[y].astype(int)
     return d.sort_values(PK, ignore_index=True)
 
@@ -106,14 +136,15 @@ def windows(coverage, d, y, h):
     last = qindex([rest[-1]])[0]
     block = next(b for b in blocks(rel) if b[0] <= last <= b[1])
     val = [c for c in rest if qindex([c])[0] >= block[0]][-N_VAL:]
+    flash = [c for c in n.index if c >= FLASH_FROM and n[c] >= MIN_ROWS]
     iso = lambda p: pd.Timestamp(p).date().isoformat()
     return {
         "target": y, "horizon": h, "needs": NEEDS[y], "reliable_min": RELIABLE,
         "reliable_blocks": [[iso(date_of[a]), iso(date_of[b])] for a, b in blocks(rel)],
         "usable_cutoffs": [iso(c) for c in usable],
         "validation_block": [iso(date_of[block[0]]), iso(date_of[block[1]])],
-        "validation": [iso(c) for c in val], "test": [iso(c) for c in test],
-        "rows_per_cutoff": {iso(c): int(n[c]) for c in val + test},
+        "validation": [iso(c) for c in val], "test": [iso(c) for c in test], "flash": [iso(c) for c in flash],
+        "rows_per_cutoff": {iso(c): int(n[c]) for c in sorted(set(val + test + flash))},
         "train_rule": f"label rows with target_period (t + {h}q) <= cutoff",
     }
 
@@ -204,6 +235,57 @@ def score(y, p):
     return r
 
 
+def not_yet_due(d):
+    """Rows whose anticipated completion is after the outcome quarter t + h (a null date is not in the slice)."""
+    if "months_to_anticipated_completion" not in d:
+        return np.zeros(len(d), bool)
+    h_months = (d.target_period.dt.year - d.period.dt.year) * 12 + d.target_period.dt.month - d.period.dt.month
+    return (d.months_to_anticipated_completion > h_months).to_numpy()
+
+
+def logit(p):
+    p = np.clip(np.asarray(p, float), 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+
+
+def platt_fit(y, p):
+    """Platt scaling p -> sigmoid(a * logit(p) + b) fitted on (y, p), or None when there are fewer than MIN_ROWS rows
+    or only one class (the scores then stay raw)."""
+    y = np.asarray(y, int)
+    if len(y) < MIN_ROWS or y.min() == y.max():
+        return None
+    m = LogisticRegression(C=1e6).fit(logit(p)[:, None], y)
+    return {"a": float(m.coef_[0, 0]), "b": float(m.intercept_[0]), "n": int(len(y)), "n_pos": int(y.sum())}
+
+
+def platt_apply(cal, p):
+    """Scores p through a platt_fit result (None or no "a": unchanged)."""
+    p = np.asarray(p, float)
+    return p if not cal or "a" not in cal else 1 / (1 + np.exp(-(cal["a"] * logit(p) + cal["b"])))
+
+
+def calibration_folds(c, h, k=PLATT_FOLDS):
+    """The k newest cutoffs whose labels are all realised by c: c - h, ..., c - h - k + 1 quarters."""
+    return [pd.Timestamp(c) - pd.DateOffset(months=3 * (h + j)) for j in range(k)]
+
+
+def calibrate(preds, pool, h):
+    """Each (cutoff, model) of preds through a Platt fit on the same model's pool predictions at the cutoff's
+    calibration folds, whose labels are realised by the cutoff (no leakage). Ranks within a fold are unchanged."""
+    out = []
+    for (c, name), g in preds.groupby(["cutoff", "model"], sort=False):
+        src = pool[(pool.model == name) & pool.cutoff.isin(calibration_folds(c, h))]
+        out.append(g.assign(p=platt_apply(platt_fit(src.y, src.p), g.p)))
+    return pd.concat(out).loc[preds.index]
+
+
+def rescore(preds, folds):
+    """folds with the metric columns recomputed from preds (after calibration)."""
+    s = pd.DataFrame([{"cutoff": c, "model": m, **score(g.y, g.p)}
+                      for (c, m), g in preds.groupby(["cutoff", "model"], sort=False)])
+    return folds[["cutoff", "model", "n_train", "max_train_target"]].merge(s, on=["cutoff", "model"], how="left")
+
+
 def backtest(d, y, cutoffs, models):
     """Rolling origin. models = {name: (fit_fn, cols, cats)}. At each cutoff c every model is fitted on rows with
     target_period <= c and scores the rows at period == c. Returns (predictions, folds, fitted models)."""
@@ -215,7 +297,7 @@ def backtest(d, y, cutoffs, models):
             p = predict(te)
             fitted[c, name] = m
             preds.append(pd.DataFrame({"cutoff": c, "model": name, "project_key": te.project_key.to_numpy(),
-                                       "y": te[y].to_numpy(), "p": p}))
+                                       "y": te[y].to_numpy(), "p": p, "not_yet_due": not_yet_due(te)}))
             folds.append({"cutoff": c, "model": name, "n_train": len(tr), "max_train_target": tr.target_period.max(),
                           **score(te[y], p)})
     return pd.concat(preds, ignore_index=True), pd.DataFrame(folds), fitted
@@ -237,9 +319,20 @@ def lead_times(preds, h, k=100):
     return out
 
 
+def slice_metrics(d, prefix="nyd_"):
+    """PR-AUC and precision@50 (each fold's own top 50) of the rows of one model's predictions d."""
+    both = len(d) and 0 < d.y.mean() < 1
+    folds = [(g.y.to_numpy(float), g.p.to_numpy(float)) for _, g in d.groupby("cutoff")]
+    slots = sum(min(50, len(y)) for y, _ in folds)
+    return {f"{prefix}n": len(d), f"{prefix}base_rate": float(d.y.mean()) if len(d) else np.nan,
+            f"{prefix}pr_auc": float(average_precision_score(d.y, d.p)) if both else np.nan,
+            f"{prefix}precision_50": sum(topk(y, p, 50) for y, p in folds) / slots if slots else np.nan}
+
+
 def pooled(preds, folds, h):
     """Pooled metrics per model: PR-AUC, ROC-AUC, Brier and ECE on all fold rows together; Recall@k and
-    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k."""
+    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k; nyd_* the
+    same on the not-yet-due slice."""
     lead = lead_times(preds, h)
     rows = []
     for name, d in preds.groupby("model", sort=False):
@@ -250,7 +343,7 @@ def pooled(preds, folds, h):
             r[f"recall_{k}"] = r[f"hits_{k}"] / max(f.n_pos.sum(), 1)
         r["precision_50"] = r["hits_50"] / np.minimum(50, f.n).sum()
         rows.append({"model": name, "n_folds": len(f), **r, "pr_auc_fold_mean": f.pr_auc.mean(),
-                     "lead_time_q": lead[name]})
+                     "lead_time_q": lead[name], **slice_metrics(d[d.not_yet_due.astype(bool)])})
     return pd.DataFrame(rows)
 
 
@@ -276,42 +369,64 @@ def run(run_dir):
     main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
             "lightgbm": (fit_lgbm, cols, cats)}
     ablation = {name: (fit_lgbm, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
-    wins, all_folds, summary, abl, calib, shap, frames, fold_metrics = {}, [], [], [], [], [], {}, {}
+    wins, all_folds, summary, abl, calib, shap, frames, fold_metrics, platt = {}, [], [], [], [], [], {}, {}, {}
+    latest = feats.period.max()
     for y, h in TARGETS:
         key = f"{y}_h{h}"
-        d = frame(feats, labels[h], y)
+        d = frame(feats, labels[h], y, h)
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
-        val, test = pd.to_datetime(w["validation"]), pd.to_datetime(w["test"])
+        val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
         pv, fv, fitted = backtest(d, y, val, {**main, **ablation})
-        pt, ft, _ = backtest(d, y, test, main)
-        for split, p, f in [("val", pv, fv), ("test", pt, ft)]:
+        splits = {"val": (pv[pv.model.isin(MAIN)], fv[fv.model.isin(MAIN)]), "test": backtest(d, y, test, main)[:2]}
+        if len(flash):
+            splits["flash"] = backtest(d, y, flash, main)[:2]
+        method = "none"
+        if (y, h) in CALIBRATED:
+            method = f"platt_k{PLATT_FOLDS}"
+            done = {c for p, _ in splits.values() for c in p.cutoff}
+            want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
+            extra = sorted(c for c in want - done if (d.period == c).any())
+            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, extra, main)[0]] if extra else []))
+            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # val and flash can share cutoffs
+            for split, (p, f) in splits.items():
+                cp = calibrate(p, pool, h)
+                splits[split] = (cp, rescore(cp, f))
+            # the serving calibrator: the folds realised by the latest period
+            now = pool[pool.cutoff.isin(calibration_folds(latest, h))]
+            platt[key] = {name: {**(platt_fit(g.y, g.p) or {}),
+                                 "fit_cutoffs": sorted(str(c.date()) for c in g.cutoff.unique())}
+                          for name, g in now.groupby("model")}
+        for split, (p, f) in splits.items():
             f = f.assign(target=y, horizon=h, split=split)
             all_folds.append(f)
-            s = pooled(p, f, h).assign(target=y, horizon=h, split=split)
-            summary.append(s[s.model.isin(MAIN)])
+            s = pooled(p, f, h).assign(target=y, horizon=h, split=split, calibration=method)
+            summary.append(s)
             for name in MAIN:
                 fold_metrics[key, split, name] = {"pooled": s[s.model == name].iloc[0].drop(
                     ["target", "horizon", "split", "model"]).to_dict(), "folds": f[f.model == name].to_dict("records")}
-            if split == "val":
-                prev = None
-                for step, gs in ABLATION:
-                    r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
-                    r.update(step=step, groups="+".join(gs), n_features=len(step_cols[ABLATION_MODEL[step]]),
-                             pr_auc_gain=np.nan if prev is None else r["pr_auc"] - prev)
-                    prev = r["pr_auc"]
-                    abl.append(r)
-                for name in MAIN:
-                    q = p[p.model == name]
-                    calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
-                contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
-                                                                  pred_contrib=True)[:, :-1] for c in val]
-                mean_abs = np.abs(np.vstack(contrib)).mean(axis=0)
-                group_of = {f: g for g, fs in groups.items() for f in fs}
-                shap.append(pd.DataFrame({"target": y, "horizon": h, "feature": cols,
-                                          "group": [group_of[c] for c in cols], "mean_abs_shap": mean_abs})
-                            .sort_values("mean_abs_shap", ascending=False))
-        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']}  {time.time() - t0:.0f}s")
+        # the ablation compares raw LightGBM scores; the calibration table shows the served (calibrated) ones
+        all_folds.append(fv[~fv.model.isin(MAIN)].assign(target=y, horizon=h, split="val"))
+        s, prev = pooled(pv, fv, h).assign(target=y, horizon=h), None
+        for step, gs in ABLATION:
+            r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
+            r.update(step=step, groups="+".join(gs), n_features=len(step_cols[ABLATION_MODEL[step]]),
+                     **{f"{m}_gain": np.nan if prev is None else r[m] - prev[m] for m in ABLATION_GAINS})
+            prev = r
+            abl.append(r)
+        pc = splits["val"][0]
+        for name in MAIN:
+            q = pc[pc.model == name]
+            calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
+        contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
+                                                          pred_contrib=True)[:, :-1] for c in val]
+        mean_abs = np.abs(np.vstack(contrib)).mean(axis=0)
+        group_of = {f: g for g, fs in groups.items() for f in fs}
+        shap.append(pd.DataFrame({"target": y, "horizon": h, "feature": cols,
+                                  "group": [group_of[c] for c in cols], "mean_abs_shap": mean_abs})
+                    .sort_values("mean_abs_shap", ascending=False))
+        print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']} "
+              f"calibration {method}  {time.time() - t0:.0f}s")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     lead = ["target", "horizon"]
@@ -328,12 +443,14 @@ def run(run_dir):
     abl.to_csv(run_dir / "ablation.csv", index=False)
     calib.to_csv(run_dir / "calibration.csv", index=False)
     pd.concat(shap, ignore_index=True).to_csv(run_dir / "shap_summary.csv", index=False)
+    (run_dir / PLATT_FILE).write_text(json.dumps({"asof": str(latest.date()), "method": f"platt_k{PLATT_FOLDS}",
+                                                  **platt}, indent=2), encoding="utf-8")
     (run_dir / "windows.json").write_text(json.dumps({
         "rule": WINDOW_RULE,
         "gold_version": manifest["gold_version"], "silver_version": manifest["silver_version"], **wins},
         indent=2), encoding="utf-8")
     return {"windows": wins, "frames": frames, "features": cols, "groups": groups, "categorical": cats,
-            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest}
+            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt}
 
 
 def main(run_id=None):

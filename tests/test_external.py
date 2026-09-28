@@ -6,6 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from pipeline import bhoomi_rashi as B  # noqa: E402
 from pipeline import external as X  # noqa: E402
 
 CATEGORY_SAMPLES = {
@@ -19,12 +20,16 @@ CATEGORY_SAMPLES = {
                    "Matter currently sub judice", "Efforts to get the stay vacated"],
     "contractor": ["The contract was terminated on 14.01.15", "Package to be re-tendered", "Agency under NCLT.",
                    "Slow progress by the contractor in laying of pipelines"],
-    "funding": ["Work on 12 stations not started due to fund shortage.", "subsequent work on hold for want of financial closure",
+    "funding": ["Work on 12 stations not started due to fund shortage.",
+                "subsequent work on hold for want of financial closure",
                 "Progress slow due to non-availability of funds"],
     "utility_shifting": ["Utility shifting.", "Shifting of 3 nos HT Lines pending"],
-    "inter_agency": ["Delay in GAD approval by Railways", "NOC from AAI awaited", "held up pending approval from state Govt."],
-    "law_order": ["Law & order problem", "The area is Naxal affected", "Stoppage of work due to agitation by local people"],
-    "weather": ["Heavy monsoon affecting progress", "Flash flood in Jun-13", "works suspended due to lockdown for Covid 19"],
+    "inter_agency": ["Delay in GAD approval by Railways", "NOC from AAI awaited",
+                     "held up pending approval from state Govt."],
+    "law_order": ["Law & order problem", "The area is Naxal affected",
+                  "Stoppage of work due to agitation by local people"],
+    "weather": ["Heavy monsoon affecting progress", "Flash flood in Jun-13",
+                "works suspended due to lockdown for Covid 19"],
 }
 NEGATIVES = ["Milestones achieved/total: 0/7", "Land lease agreement signed", "Rainwater harvesting chamber",
              "All tagged Equipment like Pumps and Agitators received", "Work is in progress from all contractors",
@@ -49,7 +54,8 @@ def test_template_and_benign_text_matches_no_category():
 def test_acronyms_are_case_sensitive():
     s = pd.Series(["pending LA at few stretches", "la la land", "Stage I FC is expected", "fc barcelona"])
     assert s.str.contains(X.category_regex("land"), case=False, regex=True).tolist() == [True, False, False, False]
-    assert s.str.contains(X.category_regex("forest_env"), case=False, regex=True).tolist() == [False, False, True, False]
+    fe = s.str.contains(X.category_regex("forest_env"), case=False, regex=True)
+    assert fe.tolist() == [False, False, True, False]
 
 
 def test_subtype_authority_area_and_resolved():
@@ -64,6 +70,152 @@ def test_subtype_authority_area_and_resolved():
     assert (lit.subtype, lit.authority) == ("court", "High Court")
 
 
+def test_land_done_by_share_acquired_or_payment_made():
+    m = X.tag(pd.Series([
+        "Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.)",
+        "Land Acquisition (Hect):(Scope:795.734 /Physical progress : 795.734)=100% Earthwork(Lakh cum): 50%",
+        "Payment of compensation is made",
+        "Possession of land has been taken",
+        "Land Acquisition (Hect.):(Scope=500/Physical progress=300)=60%",
+        "Land Acquisition completede Except for Sardarpur-jhabua section for which FLS is in progress",
+    ]))
+    land = m[m.category.eq("land")].drop_duplicates("text_id").sort_values("text_id")
+    assert land.resolved.tolist() == [True, True, True, True, False, False]
+
+
+def test_forest_area_skips_non_forest_and_other_clauses():
+    s = pd.Series(["Forest land of 111.89 Ha and non-forest land of 648.86 Ha are under process of possession",
+                   "Total land of 155.16 Ha is required to be acquired(PVT-152.059 Ha and Forest - 3.101)",
+                   "Pvt land 132.344 hect, Govt land -16.404 hect and Forest land-71.72 hect acquired",
+                   "Total land required is 1426.08 Ha including forest and nonforest land",
+                   "Principal Chief Conservator of Forest 4", "Stage-I FC(323.49Ha): NOC for GMJJ of 152.60Ha"])
+    assert X.forest_area(s).fillna(-1).tolist() == [111.89, 3.101, 71.72, -1, -1, 323.49]
+
+
+def test_land_share_short_of_done_keeps_land_open_whatever_the_verb():
+    # the % before 'land acquisition' is the land share, not the earthwork % after it
+    m = X.tag(pd.Series(["91.58 % land acquistion completed. 95.9 % earthwork",
+                         "Out of total 129.58 Ha land, 76.99 Ha land acquired",
+                         "Out of total 1339 Ha land required, 1324.48 Ha land is under possession"]))
+    land = m[m.category.eq("land")].drop_duplicates("text_id").sort_values("text_id")
+    assert land.resolved.tolist() == [False, False, True]
+
+
+def test_got_is_done_and_a_letter_number_or_work_in_progress_is_no_hold_up():
+    m = X.tag(pd.Series(["Stage-II FC got from MoEF on 12.05.2019",
+                         "Stage II FC issued by MoEF vide letter no. 8-12/2019-FC dated 03.05.2021",
+                         "Land acquisition completed and work is in progress",
+                         "Land acquisition is in progress", "No forest clearance received yet"]))
+    first = m.drop_duplicates("text_id").sort_values("text_id")
+    assert first.resolved.tolist() == [True, True, True, False, False]
+
+
+LA_PCT_CASES = {   # the remark research's self-check sentences (scratch extract_la.py), share of land acquired
+    "Out of total 129.58 Ha land, 76.99 Ha land acquired": 59.4,
+    "91.58 % land acquistion completed. 95.9 % earthwork": 91.58,
+    "For complete project, Out of Total 2072.883 Ha land in complete Wardha- Nanded section, land acquired is "
+    "1907.271 Ha and Balance land to be acquired =165.612 Ha.": 92.0,
+    "Total land required 111.7798 Ha. out of which 75.8171 ha. acquired (incl. 4.55 Ha forest & 0.4375 Ha Govt.)": 67.8,
+    "Out of 1257 Ha forest land required, 1056 Ha is in possession and clearance of balance 201 Ha is under process":
+        84.0,
+    "a.180.429 Ha out of 286.35 Ha tenancy land has been possessed. b.42.805 Ha out of 81.65 Ha Govt. land": 63.0,
+    "208 superstructure of major bridges , 63.96% land acquisition , 97.52% track linking": 63.96,
+    "Out of total 1339 Ha land required, 1324.48 Ha land is under possession.Balance 14.52Ha of tenancy land": 98.9,
+    "Acquisition of Land (245 Acre): 129.03 Acre (53%) out of 245 Acre land registered": 52.7,
+    "Kudachi (83 Km) - 633.95 Acres of land out of 1395.92 Acres yet to be handed over": 54.6,
+    "28% land out of 840 ha required is yet to be acquired.": 72.0,
+    "34.32 Ha of Land were handed over, out of the total requirement of 274.01 Ha": 12.5,
+    "Land Acquisition (Hect.):(Scope=1597.321/Physical progress=1583.963)=99.16% Earth Work (Lakh Cum.)": 99.16,
+    "acquired 450 ha, balance 50 ha": 90.0,
+}
+
+
+@pytest.mark.parametrize("text,want", list(LA_PCT_CASES.items()))
+def test_land_share_patterns(text, want):
+    assert X.la_progress(text)["la_pct"] == pytest.approx(want, abs=1)
+
+
+def test_land_share_skips_other_percentages_and_steps():
+    assert "la_pct" not in X.la_progress("Earthwork 95.9 % completed")
+    assert "la_pct" not in X.la_progress("50% compensation for land acquisition released")
+    assert X.la_progress("3D notification for land issued in 12 villages")["la_step"] == "declaration"
+    assert X.la_progress("Compensation disbursed and land handed over")["la_step"] == "possession"
+    assert X.la_progress("Earthwork in progress") == {}
+
+
+FC_STAGE_CASES = {   # real remark sentences
+    "Forest Land (244.536 Ha): Tree enumeration has been completed": "applied",
+    "Balance demand awaited from Forest Deptt": "state_level",
+    "Stage-I forest clearance awaited and ROW problem.": "stage1_pending",
+    "Forest permission, file is pending with IRO Panchkula": "regional_iro",
+    "Placing of proposal for 354.258 Ha FL before FAC.MP State forwarded the proposal to MoEF on 18.01.2022":
+        "central_fac_moef",
+    "353.76 Ha MP Forest land: Stage I FC was issued by MoEF on 13.01.2020": "stage1_granted",
+    "Project constraints Stage-II forest clearance awaited.": "stage2_pending",
+    "Working permission in forest in Assam received in Feb'19": "working_permission",
+    "Stage-II forest clearance (297 Ha) for Dharamjaygarh -Jabalpur line received in Feb 15.": "stage2_granted",
+    "Forest clearance received in Oct 15 after cabinet meeting": "approved_generic",
+    "Delay in forest land diversion": "fc_awaited",
+    "Forest Land (631.39 Ha): FAC rejected the proposal with reduced forest area from 631 Ha to 326 Ha": "rejected",
+    "Appeal against the decision of FAC is to be submitted and Revised Mining Plan for additional 142 Ha forest land "
+    "is under preparation.": "rejected",
+    "No forest land is involved in the project": "not_applicable",
+    "Land acquisition pending": None, "non forest area": None,
+}
+
+
+@pytest.mark.parametrize("text,want", list(FC_STAGE_CASES.items()))
+def test_forest_stage_patterns(text, want):
+    assert X.fc_stage(text) == want
+
+
+def test_stage_dash_is_rejoined_before_the_sentence_split():
+    s = X.sentences(pd.Series(["Work slow. Stage - I forest clearance awaited", "FC - II received"]))
+    assert s.tolist() == ["Work slow", "Stage-I forest clearance awaited", "FC-II received"]
+    assert [X.fc_stage(x) for x in s[1:]] == ["stage1_pending", "stage2_granted"]
+
+
+def test_forest_area_of_a_proposal_or_diversion_without_the_word_forest():
+    s = pd.Series(["In one proposal No FP/MP/RAIL/39172/2019 of 66.69 ha of section Vijaysota to Beohari, DFO/Shahdol "
+                   "has given conditional permission",
+                   "One proposal (FP/MP/RAIL/41734/2019) now pending is that for diversion of 72.83 ha land with a "
+                   "stretch of 27.5 km length falling under Sanjay Tiger Forest Reserve Area",
+                   "diversion of 12 ha of non-forest land"])
+    assert X.forest_area(s).fillna(-1).tolist() == [66.69, 72.83, -1]
+
+
+def test_quarter_facts_and_latest_status():
+    q = pd.date_range("2022-01-01", periods=3, freq="QS").astype("datetime64[us]")
+    rows = pd.DataFrame({"project_key": ["P1", "P1", "P1", "P2"], "period": [q[0], q[1], q[2], q[0]],
+                         "remarks": ["Stage-I forest clearance awaited. Out of 410 Ha, 205 Ha land is in possession",
+                                     "Stage-I FC granted by MoEF. 3D notification for land issued; 91.58 % land "
+                                     "acquisition completed. Proposal no. FP/JH/MIN/44804/2020 for 133.69 Ha "
+                                     "forest land",
+                                     "Work going on at site",
+                                     "Land acquisition (Hect.):(Scope=500/Physical progress=300)=60%; 80 % land "
+                                     "acquisition in Bihar"]})
+    qf = X.quarter_facts(rows)
+    assert qf[["project_key", "period"]].values.tolist() == [["P1", q[0]], ["P1", q[1]], ["P2", q[0]]]
+    assert qf["fc_stage"].tolist()[:2] == ["stage1_pending", "stage1_granted"]
+    assert qf["la_pct"].tolist() == [50.0, 91.58, 70.0]            # two shares with no hectares: their median
+    assert qf["la_step"].tolist()[:2] == ["possession", "declaration"]
+    assert qf["proposal_no"].isna().tolist() == [True, False, True]
+    assert qf["proposal_no"].iloc[1] == "FP/JH/MIN/44804/2020"
+    st = X.remark_status(qf).set_index("project_key")
+    assert (st.loc["P1", "fc_stage"], st.loc["P1", "fc_stage_as_of"]) == ("stage1_granted", q[1])
+    assert (st.loc["P1", "la_pct"], st.loc["P1", "la_pct_as_of"]) == (91.58, q[1])
+    assert pd.isna(st.loc["P2", "fc_stage"]) and pd.isna(st.loc["P2", "fc_stage_as_of"])
+
+
+def test_a_recommendation_tor_or_request_for_approval_is_not_done():
+    s = pd.Series(["WBCZMA issued recommendation to Secretary, MoEF & CC for CRZ Approval",
+                   "Environmental Clearance: ToR issued on 14.02.2022",
+                   "All approvals received except for Forest Diversion Approval (Stage II)",
+                   "Stage II FC issued by MoEF on 03.05.2021", "EMP for approval has been completed"])
+    m = X.tag(s)
+    assert m[m.category.eq("forest_env")].sort_values("text_id").resolved.tolist() == [False, False, False, True]
+
+
 def test_free_text_strips_templates():
     s = pd.Series(["Milestones achieved/total: 0/7", "start: 2025-04",
                    "Milestones achieved/total: 2/7; Delay in land acquisition"])
@@ -76,9 +228,10 @@ def test_events_split_on_gaps_and_open_only_at_the_end():
     q = pd.date_range("2021-01-01", periods=6, freq="QS").astype("datetime64[us]")
     remarks = ["Land acquisition pending", "Land acquisition pending", "Work going on at site",
                "Land acquisition pending", "Work going on at site", "Land acquisition pending"]
-    rows = pd.DataFrame({"project_key": "PRJ-1", "period": q, "remarks": remarks, "source_doc_id": [f"d{i}" for i in range(6)],
-                         "source_page": 1, "report": [str(p) for p in q]})
-    master = pd.DataFrame({"project_key": ["PRJ-1"], "state": "Bihar", "sector": "Railways", "completed_period": pd.NaT})
+    rows = pd.DataFrame({"project_key": "PRJ-1", "period": q, "remarks": remarks,
+                         "source_doc_id": [f"d{i}" for i in range(6)], "source_page": 1, "report": [str(p) for p in q]})
+    master = pd.DataFrame({"project_key": ["PRJ-1"], "state": "Bihar", "sector": "Railways",
+                           "completed_period": pd.NaT})
     seen, m = X.mentions(rows)
     ev = X.events(seen, m, master)
     assert ev.event_no.tolist() == [1, 2, 3]
@@ -87,6 +240,22 @@ def test_events_split_on_gaps_and_open_only_at_the_end():
     assert ev.source_doc_id.tolist() == ["d0", "d3", "d5"]
     done = X.events(seen, m, master.assign(completed_period=q[-1]))
     assert (done.status == "closed").all()                        # a completed project has no open events
+
+
+def test_event_quote_comes_from_its_last_quarter_and_agrees_with_its_state():
+    q = pd.date_range("2021-01-01", periods=2, freq="QS").astype("datetime64[us]")
+    remarks = ["Stage-II forest clearance issued on 27/10/2021.",
+               "Stage-II forest clearance issued on 27/10/2021. FC proposals for diversion of 101.60 Ha have been "
+               "submitted online"]
+    rows = pd.DataFrame({"project_key": "PRJ-1", "period": q, "remarks": remarks, "source_doc_id": "d",
+                         "source_page": 1, "report": [str(p) for p in q]})
+    master = pd.DataFrame({"project_key": ["PRJ-1"], "state": "Bihar", "sector": "Railways",
+                           "completed_period": pd.NaT})
+    ev = X.events(*X.mentions(rows), master).iloc[0]
+    assert (ev.status, ev.resolved, ev.n_quarters) == ("open", False, 2)
+    assert ev.evidence.startswith("FC proposals for diversion")    # not the shorter 'issued' sentence
+    done = X.events(*X.mentions(rows.iloc[:1]), master).iloc[0]
+    assert (done.status, done.evidence) == ("closed", "Stage-II forest clearance issued on 27/10/2021.")
 
 
 SCEN = pd.read_csv(X.EXTERNAL / "parivesh_fc_scenarios.csv")
@@ -157,3 +326,226 @@ def test_shape_and_mining_rules():
                           "Non-Linear", "Linear", "Linear", "Non-Linear", "Linear", "Linear", "Linear"]
     mine = X.mining(sector, name, s.eq("Linear"))
     assert mine[mine].index.tolist() == [11]                        # the rail line to a mine is not a mining lease
+
+
+def test_nh_id_normalises_the_land_table_names():
+    s = pd.Series(["161A", "161 (New)", "160 Ext.", "6 Ext", "NH53", "353 C", "353-I", "NE4", "361 New",
+                   "Greenfield Expressway", "No Yet to be Assigned", "Newly Proposed"])
+    assert X.nh_id(s).tolist()[:9] == ["161A", "161", "160", "6", "53", "353C", "353I", "NE4", "361"]
+    assert X.nh_id(s).iloc[9:].isna().all()
+
+
+def test_nh_from_text_patterns_old_new_and_chainage():
+    s = pd.Series(["Sarsam - Kothari of NH-161A - 2L PS from Km.33/00 to 90/00", "NH 161 section", "NH161",
+                   "National Highway 161", "NH No. 161", "NH 85 (OLD NH 49)", "NH-11A(NEW NH-148)",
+                   "NH-17 & 48 (KARNATAKA)", "NH548 D from KM 132/600", "NH- 965DD upto Junction of NH-66 Ch-22700",
+                   "NH-4B & 4 KM 12", "4L from Km 95.400 Udaipura to Km 147.450", "Mumbai-Nagpur NE-4 pkg",
+                   "Up-gradation to 2-lane for NH- 965DD from Pacharal-Mandangad-Mhapral-Rajewadi Upto Junction of "
+                   "NH-66 Ch-22700 to 75100 Km", "of Kolde to Visarwadi Near Junction with NH-6 section of NH 752G total",
+                   "Duttalur at NH-565 Junction to Kavali", "from Jn. with NH 30 near Bela"])
+    assert X.nh_from_text(s).fillna("-").tolist() == ["161A", "161", "161", "161", "161", "85", "148", "17;48", "548D",
+                                                      "965DD", "4B", "-", "NE4", "965DD", "752G", "-", "-"]
+
+
+LA = pd.DataFrame({
+    "state": "MAHARASHTRA", "highway_name": ["161 (New)", "161 (New)", "166", "Greenfield Highway"],
+    "districts_touched": ["NANDED", "HINGOLI|NANDED", "Satara", "PUNE"],
+    "num_parcels": [100, 50, 10, 5], "total_area_ha": [10.0, 5.0, 1.0, 0.5],
+    "acquisition_complexity_score": [4, 1, 0, 2], "notif_span_days": [900, 100, 0, 10],
+    "first_notif_date": ["2019-01-10", "2022-05-01", "2020-01-01", "2021-01-01"],
+    "last_notif_date": ["2021-06-30", "2022-08-01", "2020-01-01", "2021-01-11"]})
+
+
+def test_link_land_district_first_then_nh_and_unknown_elsewhere():
+    master = pd.DataFrame({
+        "project_key": ["P1", "P2", "P3", "P4", "P5", "P6"],
+        "sector": ["Roads & Highways"] * 5 + ["Railways"],
+        "state": ["Maharashtra", "Maharashtra", "Karnataka", "Maharashtra", "Multi-State", "Maharashtra"],
+        "project_name": ["Hingoli bypass on NH-161", "Widening of NH 161", "NH-161 Karnataka section",
+                         "Nanded to Loha", "Satara - Belgaum NH-166", "Hingoli NH-161 rail overbridge"],
+        "codes_seen": None})
+    st = X.stretches(LA)
+    land, pairs = X.link_land(master, st)
+    r = land.set_index("project_key")
+    assert r.la_match_method.tolist() == ["nh_district", "nh_only", "no_land_data_for_state", "no_nh_in_name",
+                                          "nh_district", "not_road"]
+    assert r.loc["P1", "la_stretches"] == 1 and r.loc["P1", "la_parcels"] == 50         # only the Hingoli stretch
+    assert r.loc["P2", "la_stretches"] == 2 and r.loc["P2", "la_complexity_max"] == 4
+    # no km range in the names: district and NH-only links are possible, never rated (gold/land_link_check.csv)
+    assert r.la_state.tolist() == ["possible", "possible", "unknown", "unknown", "possible", "unknown"]
+    assert not r["la_linked"].any()
+    assert r.loc["P2", "la_evidence"] == ("possible link, NH only, no district or km range in the name places the "
+                                          "project on it: NH-161: 150 parcels over 3.6 years of notifications, "
+                                          "complexity 4/5")
+    assert r.loc["P1", "la_evidence"].startswith("possible link, NH and a district named in the name, no km range to "
+                                                 "place it: NH-161 (Hingoli): 50 parcels")
+    by_nh, by_d = X.land_tables(st)
+    assert by_nh.set_index("nh").loc["161", "parcels"] == 150
+    assert by_d.set_index(["nh", "district"]).loc[("161", "NANDED"), "stretches"] == 2
+
+
+def test_la_complexity_reproduces_every_real_stretch():
+    la = pd.read_csv(X.EXTERNAL / "land_acquisition_maharashtra.csv")
+    got = B.la_complexity(la["num_districts"], la["notif_span_days"], la["num_parcels"], la["total_area_ha"])
+    assert len(la) == 347 and got.tolist() == la["acquisition_complexity_score"].tolist()
+
+
+EXPORT_HEADER = ["State", " highway name ", "Chainage", "DISTRICT", "Sub-District", "Village", "Survey No.",
+                 "Area (Ha)", "Publish Date"]
+EXPORT_ROWS = [["GUJARAT", "48", "10.000 - 30.000", "SURAT", "Olpad", "Kim", "12/A", "1.5", "15/01/2019"],
+               ["", "", "", "", "", "", "13", "2.25", "20/03/2020"],
+               ["", "", "", "BHARUCH", "Ankleshwar", "Kosamba", "7", "", "01/02/2022"],
+               ["", "48", "30.000 - 30.000", "BHARUCH", "Ankleshwar", "Kosamba", "8", "0.5", "05/05/2021"]]
+
+
+def write_export(path, header=EXPORT_HEADER, rows=EXPORT_ROWS, th=False):
+    """A Bhoomi Rashi-style export: an HTML table saved as .xls, header as its first row (th: a real header row),
+    group cells blank."""
+    tr = lambda cells, td="td": "<tr>" + "".join(f"<{td}>{c}</{td}>" for c in cells) + "</tr>"   # noqa: E731
+    body = tr(header, "th" if th else "td") + "".join(tr(r) for r in rows)
+    path.write_text("<html><body><table>" + body + "</table></body></html>", encoding="utf-8")
+    return path
+
+
+def test_parse_and_aggregate_a_bhoomi_rashi_export(tmp_path):
+    p = B.parse_bhoomi_rashi(write_export(tmp_path / "gujarat.xls"))
+    assert len(p) == 4 and p["state"].eq("GUJARAT").all()                        # forward-filled
+    assert p["district"].tolist() == ["SURAT", "SURAT", "BHARUCH", "BHARUCH"]
+    assert p["publish_date"].iloc[1] == pd.Timestamp("2020-03-20")                # dd/mm/YYYY
+    assert p["chainage_start_km"].iloc[0] == 10.0 and p["chainage_end_km"].iloc[0] == 30.0
+    th = B.parse_bhoomi_rashi(write_export(tmp_path / "th.xls", th=True))       # numeric NH column read as 48.0
+    assert th["highway_name"].eq("48").all() and th["survey_no"].tolist() == ["12/A", "13", "7", "8"]
+    s = B.aggregate_stretches(p)
+    assert s.columns.tolist() == pd.read_csv(X.EXTERNAL / "land_acquisition_maharashtra.csv", nrows=1).columns.tolist()
+    r = s.set_index("chainage_raw").loc["10.000 - 30.000"]
+    assert (r.districts_touched, r.num_districts, r.num_subdistricts, r.num_villages, r.num_parcels) == (
+        "BHARUCH|SURAT", 2, 2, 2, 3)
+    assert (r.total_area_ha, r.avg_area_per_parcel_ha, r.chainage_length_km, r.parcels_per_km) == (3.75, 1.875, 20.0,
+                                                                                                    0.15)
+    assert (r.first_notif_date, r.last_notif_date, r.notif_span_days) == ("2019-01-15", "2022-02-01", 1113)
+    assert r.acquisition_complexity_score == 3                                    # 2 districts, span >= 1 and 3 years
+    z = s.set_index("chainage_raw").loc["30.000 - 30.000"]
+    assert pd.isna(z.parcels_per_km) and z.acquisition_complexity_score == 0
+    with pytest.raises(ValueError, match=r"lacks \['publish_date'\].*columns found"):
+        B.parse_bhoomi_rashi(write_export(tmp_path / "bad.xls", EXPORT_HEADER[:-1], [r[:-1] for r in EXPORT_ROWS]))
+
+
+def test_load_land_reads_every_state_and_dedupes(tmp_path):
+    LA.assign(chainage_raw=["0 - 9", "9 - 12", "0 - 4", "0 - 2"]).to_csv(tmp_path / "land_acquisition_maharashtra.csv",
+                                                                       index=False)
+    (tmp_path / "bhoomi_rashi").mkdir()
+    write_export(tmp_path / "bhoomi_rashi" / "gujarat.xls")
+    B.aggregate_stretches(B.parse_bhoomi_rashi(tmp_path / "bhoomi_rashi" / "gujarat.xls")).assign(
+        state="Gujarat").to_csv(tmp_path / "land_acquisition_gujarat.csv", index=False)   # same stretches again
+    la = X.load_land(tmp_path)
+    assert len(la) == len(LA) + 2
+    assert X.state_key(la["state"]).value_counts().to_dict() == {"MAHARASHTRA": 4, "GUJARAT": 2}
+
+
+def test_load_land_takes_a_pulled_state_whole_from_its_newest_pull(tmp_path):
+    LA.assign(chainage_raw=["0 - 9", "9 - 12", "0 - 4", "0 - 2"]).to_csv(tmp_path / "land_acquisition_maharashtra.csv",
+                                                                       index=False)
+    guj = B.aggregate_stretches(B.parse_bhoomi_rashi(write_export(tmp_path / "gujarat.xls")))
+    guj.to_csv(tmp_path / "land_acquisition_gujarat.csv", index=False)
+    (tmp_path / "bhoomi_rashi_pulls").mkdir()
+    pd.concat([guj, LA.head(1)]).to_csv(tmp_path / "bhoomi_rashi_pulls" / "2026-06-01.csv", index=False)
+    guj.head(1).to_csv(tmp_path / "bhoomi_rashi_pulls" / "2026-09-01.csv", index=False)       # Gujarat only
+    la = X.load_land(tmp_path)
+    assert X.state_key(la["state"]).value_counts().to_dict() == {"MAHARASHTRA": 1, "GUJARAT": 1}
+    assert la.loc[X.state_key(la["state"]) == "GUJARAT", "chainage_raw"].tolist() == [guj["chainage_raw"].iloc[0]]
+
+
+def test_link_land_needs_the_state_of_the_stretch():
+    guj = pd.DataFrame({"state": "Gujarat", "highway_name": ["48"], "districts_touched": ["SURAT"],
+                        "num_parcels": [300], "total_area_ha": [25.0], "acquisition_complexity_score": [2],
+                        "notif_span_days": [10], "first_notif_date": ["2020-01-01"], "last_notif_date": ["2020-01-11"]})
+    st = X.stretches(pd.concat([LA, guj], ignore_index=True))
+    master = pd.DataFrame({
+        "project_key": ["G1", "G2", "B1", "M1", "U1"], "sector": "Roads & Highways",
+        "state": ["Gujarat", "Gujarat", "Bihar", "Multi-State", "Maharashtra"],
+        "project_name": ["Six laning of NH-48 Surat section", "Widening of NH-161", "Four laning of NH-161 in Bihar",
+                         "NH-48 Vadodara - Surat - Mumbai", "Six laning of NH-48 near Pune"], "codes_seen": None})
+    land, _ = X.link_land(master, st)
+    r = land.set_index("project_key")
+    assert r.la_match_method.tolist() == ["nh_district", "nh_not_in_table", "no_land_data_for_state", "nh_district",
+                                          "nh_not_in_table"]
+    assert r.la_state.tolist() == ["possible", "unknown", "unknown", "possible", "unknown"]
+    assert r.loc["G1", "la_parcels"] == 300 and "NH-48 (Surat): 300 parcels" in r.loc["G1", "la_evidence"]
+
+
+@pytest.mark.parametrize("name, want", [
+    ("4L of NH-31 from Km 217.500 to Km 254.430", (217.5, 254.43)),
+    ("WIDENING OF NH-65 FROM EXISTING KM 267+500 TO KM 290+000", (267.5, 290.0)),
+    ("NH-12 FROM EXISTING KM 193/0 TO KM 255/300", (193.0, 255.3)),
+    ("4L from Km 55.00 Kuru to Km 95.400 Udaipura on NH-75", (55.0, 95.4)),
+    ("Greenfield Alignment at Km 82000 to Helipad Km 94030", (82.0, 94.03)),
+    ("km 2915 to km 37728 of NH-44", (2.915, 37.728)),
+    ("4 Lane with PS from Des. Ch 182.300 to Des. Ch. 228.500 of NH-748A", (182.3, 228.5)),
+    ("KM 377-700 of NH-44", None),                     # a 323 km 'range' is a misread
+    ("Length 43.2 Km. of NH-146B", None),
+])
+def test_km_range_in_a_project_name(name, want):
+    r = X.km_range(pd.Series([name])).iloc[0]
+    assert (None if pd.isna(r.km_from) else (round(r.km_from, 3), round(r.km_to, 3))) == want
+
+
+def test_link_land_on_the_km_range_and_not_on_end_points():
+    la = pd.DataFrame({
+        "state": "BIHAR", "highway_name": ["31", "31", "31", "83", "30"],
+        "districts_touched": ["PATNA", "PATNA", "NALANDA", "GAYA|PATNA", "PATNA"],
+        "chainage_start_km": [0.0, 49.15, 100.0, 0.0, 0.0], "chainage_end_km": [49.15, 64.53, 150.0, 127.0, 23.5],
+        "num_parcels": [10, 20, 30, 40, 50], "total_area_ha": 1.0, "acquisition_complexity_score": [4, 2, 5, 5, 2],
+        "notif_span_days": 10, "first_notif_date": "2020-01-01", "last_notif_date": "2020-01-11"})
+    st = X.stretches(la)
+    master = pd.DataFrame({
+        "project_key": ["A", "B", "C", "D", "E"], "sector": "Roads & Highways", "state": "Bihar", "codes_seen": None,
+        "project_name": ["Four laning of NH-31 from Km 49.150 to Km 64.535 in Patna",    # only the overlapping stretch
+                         "Widening of NH-31 from Km 200 to Km 230 near Patna",           # no stretch at its km
+                         "4L Greenfield starting from NH-30 near Patna to Gaya section of NH-83",
+                         "Bypass from Junction with Patna-Gaya road NH-83 to Junction with NH-30",
+                         "Widening of NH-31 from Km 110 to Km 140"]})
+    r = X.link_land(master, st)[0].set_index("project_key")
+    assert r.la_match_method.tolist() == ["nh_chainage", "no_stretch_at_its_km", "nh_district", "nh_only_as_end_point",
+                                          "nh_chainage"]
+    assert r.la_state.tolist() == ["clear", "unknown", "possible", "unknown", "flagged"]
+    assert r.loc["A", "la_stretches"] == 1 and r.loc["A", "la_parcels"] == 20            # 0-49.15 only touches it
+    assert r.loc["A", "la_evidence"].startswith("NH-31 (km 49.15-64.535): 20 parcels")
+    assert r.loc["C", "la_nh"] == "83"                                                    # NH-30 is its start point
+    # the model's link (strict=False): no km rule, no end-point rule, as it was backtested
+    old = X.link_land(master, st, strict=False)[0].set_index("project_key")
+    assert old.la_match_method.tolist() == ["nh_district", "nh_district", "nh_district", "nh_district", "nh_only"]
+    assert old.loc["A", "la_stretches"] == 2
+
+
+MOCK = X.EXTERNAL / "mock"      # SYNTHETIC fixtures (mock/README.md): formula checks only, never model inputs
+
+
+def test_composite_matches_the_teammates_v0_formula():
+    m = pd.read_csv(MOCK / "external_factor_mock_v0.csv")
+    raw = 0.5 * m["fc_complexity_score"] / 7 + 0.5 * m["la_complexity_score"] / 5
+    assert (raw - m["external_factor_composite_score"]).abs().max() < 0.001
+    # our composite on the mock rows with land known equals the mock score; without land the mock counts land as 0
+    fc = pd.DataFrame({"project_key": m["project_id"], "fc_expected_complexity": m["fc_complexity_score"].astype(float),
+                       "fc_area_ha": float("nan"), "fc_violation": m["fc_violation_flag"].eq(1)})
+    land = pd.DataFrame({"project_key": m["project_id"], "la_linked": m["la_required"].eq(1),
+                         "la_complexity_max": m["la_complexity_score"].astype("Int64"), "la_nh": "1"})
+    c = X.external_composite(fc, land)
+    both = m["la_required"].eq(1)
+    assert (c["external_factor_score"] - m["external_factor_composite_score"])[both].abs().max() < 0.001
+    assert c["coverage"][both].eq("fc+la").all() and c["coverage"][~both].eq("fc_only").all()
+
+
+def test_composite_coverage_never_counts_unknown_land_as_zero():
+    fc = pd.DataFrame({"project_key": ["A", "B", "C"], "fc_expected_complexity": [3.0, 3.0, 7.0],
+                       "fc_area_ha": [float("nan"), 12.5, float("nan")], "fc_violation": [False, False, True]})
+    land = pd.DataFrame({"project_key": ["A", "B", "C"], "la_linked": [True, False, False],
+                         "la_complexity_max": pd.array([4, None, None], dtype="Int64"),
+                         "la_nh": ["161;161A", None, None]})
+    c = X.external_composite(fc, land).set_index("project_key")
+    assert c["coverage"].tolist() == ["fc+la", "fc_only", "fc_only"]
+    assert c["external_factor_score"].round(4).tolist() == [round(0.5 * 3 / 7 + 0.5 * 4 / 5, 4), round(3 / 7, 4), 1.0]
+    assert c["la_component"].isna().tolist() == [False, True, True]
+    assert c.loc["A", "ext_score_evidence"] == ("forest 3/7 (rulebook, area unknown) + land 4/5 (NH-161, NH-161A, "
+                                                "Bhoomi Rashi)")
+    assert c.loc["B", "ext_score_evidence"] == "forest 3/7 (rulebook, 12.5 ha); land unknown"
+    assert c.loc["C", "ext_score_evidence"] == "forest 7/7 (rulebook, area unknown, violation); land unknown"

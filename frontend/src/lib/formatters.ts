@@ -88,6 +88,19 @@ export function formatDate(isoDate: string): string {
 }
 
 /**
+ * Formats an ISO 8601 timestamp to day, month and local time.
+ * Example: "2026-09-27T15:17:36+00:00" → "27 Sep, 8:47 pm" (IST)
+ */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
  * Formats a date range as "start → end".
  * Example: "2022-06-30", "2027-09-30" → "Jun 2022 → Sep 2027"
  */
@@ -154,6 +167,36 @@ export function formatPct(value: number, decimals = 1): string {
 export function formatPctDelta(value: number, decimals = 1): string {
   const sign = value >= 0 ? '+' : ''
   return `${sign}${formatPct(value, decimals)}`
+}
+
+// ── Probabilities and missing values ─────────────────────────────────────────
+
+/**
+ * Formats a model probability (0–1) as a percentage.
+ * Example: formatProb(0.9505) → "95%"
+ */
+export function formatProb(p: number, decimals = 0): string {
+  return formatPct(p * 100, decimals)
+}
+
+/** Formats v with f, or "—" when the value is missing (null is shown as unknown, never as 0). */
+export function orDash<T>(v: T | null | undefined, f: (v: T) => string): string {
+  return v === null || v === undefined ? '—' : f(v)
+}
+
+/** A ratio as a signed percent: 0.56 → "+56%", missing → "—" (agency schedule and cost bias). */
+export function formatSignedRatio(v: number | null): string {
+  return orDash(v, (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`)
+}
+
+/** Two ratios as a signed-percent range: "+12% … +40%". */
+export function formatRatioRange(lo: number | null, hi: number | null): string {
+  return lo === null || hi === null ? '—' : `${formatSignedRatio(lo)} … ${formatSignedRatio(hi)}`
+}
+
+/** ' 90% CI [..]', or for a shrunk median ' raw +x%, 90% CI [..]': the CI is of the raw median. */
+export function formatBiasCi(shrunk: boolean, raw: number | null, lo: number | null, hi: number | null): string {
+  return `${shrunk ? ` raw ${formatSignedRatio(raw)},` : ''} 90% CI ${formatRatioRange(lo, hi)}`
 }
 
 // ── Risk Score ────────────────────────────────────────────────────────────────

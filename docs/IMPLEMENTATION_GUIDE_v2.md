@@ -61,7 +61,7 @@ Sources:
 | Source | File | Grain | How it links to projects |
 |---|---|---|---|
 | Parivesh forest-clearance rules | `dataset/raw/external/parivesh_fc_scenarios.csv` | 27 approval scenarios (violation, shape, form, area band, category) with approving authority, authority level 1-4, PSC/REC/FAC/site-inspection gates and a complexity score | Rule-based: each project is mapped to the scenarios it can fall under from its sector (linear vs non-linear, mining), any forest area in its remarks, and violation mentions. Output is the expected and worst-case clearance complexity and the approving authority. |
-| Bhoomi Rashi land acquisition (Maharashtra NH) | `dataset/raw/external/land_acquisition_maharashtra.csv` | 347 NH stretches: highway, chainage, districts, villages, parcels, area, notification span, acquisition complexity 0-5 | Road projects in Maharashtra matched on NH number in the project name, then district. Outside Maharashtra the state is `unknown`, never `clear`. |
+| Bhoomi Rashi land acquisition (Maharashtra NH) | `dataset/raw/external/land_acquisition_maharashtra.csv` | 347 NH stretches: highway, chainage, districts, villages, parcels, area, notification span, acquisition complexity 0-5 | Road projects matched to stretches of their own state on NH number in the project name, then district. More states: drop Bhoomi Rashi exports into `dataset/raw/external/bhoomi_rashi/` (parsed by `pipeline/bhoomi_rashi.py`). A state with no land data is `unknown`, never `clear`. |
 | Report remarks | `remarks` in the clean project rows | free text per project per report | Keyword taxonomy (land, forest/environment clearance, litigation, contractor, funding, utility shifting, R&R, inter-agency, law and order, weather) gives `project_events` with first seen, last seen and open/closed status. |
 | News scout | Google News RSS, PIB RSS | articles | Entity-linked to projects by name tokens plus location; ambiguous links go to an unlinked pool. |
 
@@ -272,8 +272,22 @@ PR-AUC and calibration; the decision is recorded in the registry.
 `gold/predictions_<mv>_<asof>.parquet`: probabilities, expected months and
 cost %, intervals, SHAP top-5 with values, and a risk tier. Tiers by rank, not
 by threshold: Critical = top 5%, High = next 15%, Medium = next 30%, Low =
-rest, with the rule-based stagnation override allowed to lift a project one
-tier.
+rest. The rule-based stagnation flag (no progress 2+ quarters) is a badge
+only: in the backtest flagged projects slipped at or below the base rate, and
+lifting them made every tier less precise. A project with no anticipated
+completion date has no date-based score and sits in the Watch tier, ordered
+by flagged checklist rows and then P(cost revision); that order is not
+validated.
+
+Validation and promotion (ml/backtest.py, ml/registry.py): besides the
+quarterly-era validation folds, every cutoff from 2025-07 with 100+ labelled
+rows forms a flash block (the report format live scoring uses; for the
+2-quarter targets it includes the test cutoff). A challenger is promoted only
+when its PR-AUC is not lower on either block and beats the champion on one by
+twice the measured seed sd. Each pooled metric also has a not-yet-due slice
+(anticipated completion after t + h). Only the cost revision is
+Platt-calibrated; calibrating the date targets and training h4 from 2014 both
+lost on the flash block and were reverted.
 
 ### 4. Serving
 
@@ -348,7 +362,7 @@ one line of evidence, the source, and the date.
 |---|---|---|
 | Schedule slip | model P(date push) >= tier threshold | "P = 0.71; velocity 0.8%/q vs sector 2.1%" |
 | Cost escalation | model P(cost rev) | "P = 0.44; cost variation already +18%" |
-| Execution stagnation | rule: SPI < 0.1 at >= 30% elapsed | "12% progress at 64% elapsed" |
+| Execution stagnation | rule: SPI < 0.1 at >= 30% elapsed, or the stagnation override's rule (no progress 2+ quarters) | "12% progress at 64% elapsed; no progress for 3 quarters" |
 | Expenditure lag | burn gap < -15 or > +25 | "spent 61%, built 38%" |
 | Repeated revisions | >= 2 revisions in history | "3 date revisions since 2021" |
 | Sector headwind | sector_context trend negative | "sector output 9% below target, 3q declining" |

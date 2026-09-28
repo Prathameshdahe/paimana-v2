@@ -3,7 +3,9 @@ Gold build: point-in-time features and horizon labels (docs/IMPLEMENTATION_GUIDE
 
 Run from repo root after the silver build:  python -m pipeline.run gold
 
-Inputs   silver/observations.parquet, silver/sector_context.parquet, silver/silver_manifest.json
+Inputs   silver/observations.parquet, silver/sector_context.parquet, silver/silver_manifest.json,
+         gold/project_mentions.parquet, gold/external_fc.parquet, gold/external_land_pairs.parquet (the external
+         step, pipeline/external.py)
 Outputs  gold/features.parquet, gold/labels_h2.parquet, gold/labels_h4.parquet, gold/sector_scurve.parquet,
          gold/agency_stats.parquet, gold/manifest.json
 
@@ -11,6 +13,10 @@ Point-in-time rule: the feature row at (key, t) reads only rows with period <= t
 groupby cumulative ops and backward as-of joins; cross-project statistics use rows at or before t only: the
 sector velocity median uses the same quarter, the S-curve for calendar year Y is fitted on rows before Y-01-01
 of projects completed before Y-01-01, and agency rates use label rows whose outcome period t0 + h is <= t.
+The external group reads remark quarters <= t and land stretches first notified by t (parcels and complexity only
+of stretches last notified by t); the forest-clearance prior (sector and name) does not change with t. A remark flag
+open at t also expires OPEN_MAX_AGE_Q calendar quarters after its last mention: free text ends in 2023-Q2, and
+without the expiry a project's 2023 flag stayed open in every later quarter.
 """
 import hashlib
 import json
@@ -23,6 +29,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.external import OPEN_LAST_Q, TAXONOMY  # noqa: E402
 from pipeline.silver import ROOT, SILVER, months  # noqa: E402
 
 GOLD = ROOT / "dataset" / "gold"
@@ -30,6 +37,7 @@ GOLD = ROOT / "dataset" / "gold"
 HORIZONS = (2, 4)
 AGENCY_H = 2              # agency rates come from the 2-quarter labels (more realised outcomes, sooner)
 SHRINK_K = 10             # pseudo-counts pulling agency rates toward the sector rate
+RECENT_Q = 4              # the recent-window agency and sector slip rates count labels realised in the last 4 quarters
 COST_STEP = 1.05          # anticipated cost up >= 5% is a cost revision
 DATE_STEP = 3             # anticipated completion pushed >= 3 months is a schedule slip
 STAGNANT_PP = 0.5         # |progress velocity| below this (pp per quarter) counts as stagnant
@@ -38,6 +46,14 @@ SCURVE_MIN_ROWS = 20      # sector bins with fewer rows use the all-sector curve
 ALL = "*"
 COST_BANDS = [0, 500, 1000, 5000, np.inf]   # crore; band 0-3
 PK = ["project_key", "period"]
+EXT_CATS = list(TAXONOMY)
+EXT_FIRST = ["land", "forest_env"]            # months since the first mention
+OPEN_MAX_AGE_Q = 4        # an open remark flag expires this many calendar quarters after its last mention
+# the prior's worst complexity (always 7) and highest authority level (always 4) are constant over every training
+# row, like ministry (null before 2025-Q3): no split ever uses them, so they are not features
+FC_FEATURES = ["fc_expected_complexity"]
+EXTERNAL_FILES = {"mentions": "project_mentions.parquet", "fc": "external_fc.parquet",
+                  "land_pairs": "external_land_pairs.parquet"}
 BINARY = ["y_date_push", "y_cost_rev", "y_any"]
 TARGETS = BINARY + ["y_months", "y_cost_pct"]
 
@@ -48,11 +64,17 @@ FEATURE_GROUPS = {
     "dynamics": ["progress_velocity_2q", "progress_velocity_4q", "spend_velocity_2q", "acceleration",
                  "stagnation_quarters", "velocity_vs_sector_median"],
     "context": ["expected_progress_scurve", "scurve_deviation", "sector_actual_target_ratio", "sector_yoy_growth",
-                "sector_trend_4q", "agency_slip_rate", "agency_cost_optimism", "agency_n", "ministry", "sector",
-                "state"],
+                "sector_trend_4q", "agency_slip_rate", "agency_cost_optimism", "agency_n", "agency_slip_4q",
+                "sector_slip_4q", "sector", "state"],
     "freshness": ["obs_count_in_quarter", "months_since_last_obs", "dq_score", "period_type"],
+    # no age-of-open-flag feature: it cost y_any_h2 0.0025 validation and 0.0063 flash-block PR-AUC (3 seeds,
+    # paired project bootstrap CIs above 0), likely as a report-era proxy (stale flags are ~13 quarters old in 2026)
+    "external": [f"ext_open_{c}" for c in EXT_CATS] + ["ext_open_total"]
+                + [f"ext_ever_{c}" for c in EXT_CATS]
+                + [f"ext_months_since_first_{c}" for c in EXT_FIRST] + ["ext_remark_quarters"] + FC_FEATURES
+                + ["la_linked", "la_complexity_max_by_t", "la_parcels_by_t", "la_notif_span_by_t"],
 }
-CATEGORICAL = ["ministry", "sector", "state", "period_type"]
+CATEGORICAL = ["sector", "state", "period_type"]
 BASELINE = ["slipped_last_period", "rule_score"]
 META = ["project_key", "period", "agency", "is_completed"]
 FEATURES = [f for fs in FEATURE_GROUPS.values() for f in fs]
@@ -211,15 +233,27 @@ def realised(lab, d, by):
 def agency_context(d):
     """Point-in-time agency rates from the AGENCY_H labels realised at or before each row's period:
     schedule-slip rate and mean cost change % (clipped to -50..100), shrunk toward the sector rate
-    (else the all-project rate) with SHRINK_K pseudo-counts. Returns a frame aligned with d."""
+    (else the all-project rate) with SHRINK_K pseudo-counts. agency_slip_4q and sector_slip_4q are the schedule-slip
+    rates of the labels realised in the last RECENT_Q quarters, (t - RECENT_Q, t]: the same cumulative sums at t minus
+    those at t - RECENT_Q, the agency's shrunk toward its sector's recent rate and the sector's toward the all-project
+    recent rate (null when no label was realised in the window). The all-time rate lags an agency's drift (NHAI's
+    flash-era rate is about 0.76 against an all-time 0.47). Returns a frame aligned with d."""
     lab = build_labels(d, AGENCY_H)
     lab = lab.merge(d[PK + ["agency", "sector"]], on=PK, how="left", validate="1:1").assign(
         slip=lambda x: x["y_date_push"].astype("float64"),
         cost=lambda x: x["y_cost_pct"].clip(-50, 100), _all=0)
-    rows = d[["period", "agency", "sector"]].assign(_all=0)
-    a = realised(lab[lab["agency"].notna()], rows.fillna({"agency": ""}), "agency")
-    s = realised(lab, rows, "sector")
-    t = realised(lab, rows, "_all")
+    rows = d[["period", "agency", "sector"]].assign(_all=0).fillna({"agency": ""})
+    back = rows.assign(period=rows["period"] - pd.DateOffset(months=3 * RECENT_Q))
+    by_lab = {"agency": lab[lab["agency"].notna()], "sector": lab, "_all": lab}
+    a, s, t = (realised(by_lab[by], rows, by) for by in by_lab)
+
+    def recent(now, by):
+        """Slip sum and count of the labels realised in (t - RECENT_Q, t]: the sums at t minus those at t - RECENT_Q."""
+        then = realised(by_lab[by], back, by)
+        return now["s_sum"].fillna(0) - then["s_sum"].fillna(0), now["s_n"].fillna(0) - then["s_n"].fillna(0)
+
+    (a4, an), (s4, sn), (t4, tn) = recent(a, "agency"), recent(s, "sector"), recent(t, "_all")
+    sector_4q = (s4 + SHRINK_K * t4 / tn.where(tn > 0)) / (sn + SHRINK_K)
     prior_slip = (s["s_sum"] / s["s_n"]).fillna(t["s_sum"] / t["s_n"])
     prior_cost = (s["c_sum"] / s["c_n"]).fillna(t["c_sum"] / t["c_n"])
     a0 = a[["n", "s_n", "s_sum", "c_n", "c_sum"]].fillna(0)
@@ -228,6 +262,7 @@ def agency_context(d):
         "n_cost": a0["c_n"], "cost_pct_raw": a["c_sum"] / a["c_n"], "last_outcome_period": a["target_period"],
         "agency_slip_rate": (a0["s_sum"] + SHRINK_K * prior_slip) / (a0["s_n"] + SHRINK_K),
         "agency_cost_optimism": (a0["c_sum"] + SHRINK_K * prior_cost) / (a0["c_n"] + SHRINK_K),
+        "agency_slip_4q": (a4 + SHRINK_K * sector_4q) / (an + SHRINK_K), "sector_slip_4q": sector_4q,
     }, index=d.index)
 
 
@@ -251,11 +286,85 @@ def rule_score(d):
             + 0.15 * (spend / 1.5 * 100).clip(0, 100))
 
 
-def build_features(obs, cutoff=None, sectors=None):
+def load_external(gold=GOLD):
+    return {k: pd.read_parquet(gold / f) for k, f in EXTERNAL_FILES.items()}
+
+
+def external_until(ext, t):
+    """The external inputs as they stood at t: later remark quarters and later-notified stretches removed, and a
+    stretch still being notified at t has no parcels, complexity or last notification yet."""
+    m, p = ext["mentions"], ext["land_pairs"]
+    p = p[p["first_notif_date"] <= t]
+    live = p["last_notif_date"] > t
+    p = p.assign(**{c: p[c].mask(live) for c in ["num_parcels", "acquisition_complexity_score", "last_notif_date"]})
+    return {**ext, "mentions": m[m["period"] <= t], "land_pairs": p}
+
+
+def asof_join(d, right, cols):
+    """cols of the latest right row of the same key with period <= each row's period (null when none)."""
+    left = d[PK].reset_index()
+    m = pd.merge_asof(left.sort_values("period", kind="mergesort"),
+                      right[PK + cols].sort_values("period", kind="mergesort"),
+                      on="period", by="project_key", direction="backward")
+    return m.set_index("index").reindex(d.index)[cols]
+
+
+def external_features(d, ext):
+    """External group at each (project_key, period) row of d. A category is open at t when it is mentioned in one
+    of the key's last OPEN_LAST_Q remark-observed quarters up to t, that latest mention does not report it done
+    (the pipeline/external.py rule applied at t, not the final status) and it is less than OPEN_MAX_AGE_Q calendar
+    quarters old. Land: a key is linked at t when a stretch
+    of its NH (pipeline/external.py link_land) was first notified by t; the notification span is cut at t, parcels
+    and complexity count only stretches fully notified by t, and the land values of a key not linked at t are null
+    (unknown), not 0."""
+    out = pd.DataFrame(index=d.index)
+    mq = ext["mentions"]
+    seen = mq[PK].drop_duplicates().sort_values(PK, kind="mergesort")
+    seen = seen.assign(qn=seen.groupby("project_key").cumcount().astype("float64"))
+    qn_t = asof_join(d, seen, ["qn"])["qn"]
+    ment = mq.loc[mq["category"].notna(), PK + ["category", "resolved"]].merge(seen, on=PK)
+    ment["cq"] = qindex(ment["period"]).astype("float64")
+    for c in EXT_CATS:
+        mc = ment[ment["category"].eq(c)]
+        last = asof_join(d, mc, ["qn", "resolved", "cq"])
+        ever = last["qn"].notna()
+        done = last["resolved"].fillna(False).astype(bool)
+        age = qindex(d["period"]) - last["cq"]
+        by_remarks = ever & (last["qn"] >= qn_t - (OPEN_LAST_Q - 1)) & ~done
+        out[f"ext_open_{c}"] = (by_remarks & (age < OPEN_MAX_AGE_Q)).astype("float64")
+        out[f"ext_ever_{c}"] = ever.astype("float64")
+        if c in EXT_FIRST:
+            first = d["project_key"].map(months(mc["period"]).astype("float64").groupby(mc["project_key"]).min())
+            out[f"ext_months_since_first_{c}"] = (months(d["period"]) - first).where(ever)
+    out["ext_open_total"] = out[[f"ext_open_{c}" for c in EXT_CATS]].sum(axis=1)
+    out["ext_remark_quarters"] = (qn_t + 1).fillna(0)
+    fc = ext["fc"].set_index("project_key")
+    for c in FC_FEATURES:
+        out[c] = d["project_key"].map(fc[c.replace("fc_", "fc_prior_")]).astype("float64")
+    r = d[PK].reset_index().merge(ext["land_pairs"], on="project_key")
+    r = r[r["first_notif_date"] <= r["period"]]
+    # parcels and complexity are snapshot totals that count later notifications: only a stretch whose last
+    # notification is by t gives them; one still being notified gives its span so far
+    done = r["last_notif_date"] <= r["period"]
+    span = r["last_notif_date"].where(done, r["period"]) - r["first_notif_date"]
+    g = r.assign(span=span.dt.days, parcels=r["num_parcels"].where(done),
+                 complexity=r["acquisition_complexity_score"].where(done)).groupby("index")
+    la = pd.DataFrame({"la_complexity_max_by_t": g["complexity"].max(),
+                       "la_parcels_by_t": g["parcels"].sum(min_count=1), "la_notif_span_by_t": g["span"].max()})
+    la = la.reindex(d.index).astype("float64")
+    out["la_linked"] = la["la_notif_span_by_t"].notna().astype("float64")
+    out[list(la.columns)] = la
+    return out
+
+
+def build_features(obs, cutoff=None, sectors=None, external=None):
     """One row per (project_key, period <= cutoff): META + FEATURES + BASELINE, using for each row only
-    rows at or before its own period. sectors defaults to silver/sector_context.parquet."""
+    rows at or before its own period. sectors defaults to silver/sector_context.parquet, external to the external
+    step's gold files (load_external)."""
     if sectors is None:
         sectors = pd.read_parquet(SILVER / "sector_context.parquet")
+    if external is None:
+        external = load_external()
     d = base(obs, cutoff)
     prog = d["physical_progress_pct"]
     d["progress_velocity_2q"], _ = velocity(d, "physical_progress_pct", 2, 2)
@@ -274,7 +383,9 @@ def build_features(obs, cutoff=None, sectors=None):
     d["scurve_deviation"] = prog - d["expected_progress_scurve"]
     ctx = sectors[["sector", "period", *SECTOR_CONTEXT]].rename(columns=SECTOR_CONTEXT)
     d = d.merge(ctx, on=["sector", "period"], how="left", validate="m:1")
-    d = pd.concat([d, agency_context(d)[["agency_slip_rate", "agency_cost_optimism", "agency_n"]]], axis=1)
+    d = pd.concat([d, agency_context(d)[["agency_slip_rate", "agency_cost_optimism", "agency_n", "agency_slip_4q",
+                                         "sector_slip_4q"]]], axis=1)
+    d = pd.concat([d, external_features(d, external)], axis=1)
     d["rule_score"] = rule_score(d)
 
     out = d[META + FEATURES + BASELINE].copy()
@@ -292,12 +403,13 @@ def label_summary(lab):
     return out
 
 
-def truncation_check(obs, sectors, feats, cutoffs):
-    """Features at each cutoff are identical whether built on the full panel or on the panel cut there."""
+def truncation_check(obs, sectors, ext, feats, cutoffs):
+    """Features at each cutoff are identical whether built on the full panel and external inputs or on both cut
+    there."""
     out = {}
     for c in cutoffs:
         a = feats[feats["period"] == c].reset_index(drop=True)
-        b = build_features(obs, cutoff=c, sectors=sectors)
+        b = build_features(obs, cutoff=c, sectors=sectors, external=external_until(ext, c))
         b = b[b["period"] == c].reset_index(drop=True)
         out[str(c.date())] = {"rows": len(a), "identical": bool(a.equals(b))}
     return out
@@ -314,7 +426,8 @@ def main(silver=SILVER, out=GOLD):
     t0 = time.time()
     obs = pd.read_parquet(silver / "observations.parquet")
     sectors = pd.read_parquet(silver / "sector_context.parquet")
-    feats = build_features(obs, sectors=sectors)
+    ext = load_external(out)
+    feats = build_features(obs, sectors=sectors, external=ext)
     d = base(obs)
     frames = {"features": feats, **{f"labels_h{h}": build_labels(obs, h) for h in HORIZONS},
               "sector_scurve": fit_scurves(d), "agency_stats": agency_table(d)}
@@ -322,7 +435,7 @@ def main(silver=SILVER, out=GOLD):
     periods = np.sort(obs["period"].unique())
     cutoffs = [pd.Timestamp(periods[int(len(periods) * f)]) for f in (0.25, 0.5, 0.75)] + [pd.Timestamp(periods[-2])]
     ag = frames["agency_stats"]
-    checks = {"truncation": truncation_check(obs, sectors, feats, cutoffs),
+    checks = {"truncation": truncation_check(obs, sectors, ext, feats, cutoffs),
               "agency_outcomes_realised": bool((ag["last_outcome_period"].isna()
                                                 | (ag["last_outcome_period"] <= ag["period"])).all()),
               **{f"labels_h{h}": label_checks(frames[f"labels_h{h}"], obs, h) for h in HORIZONS}}
@@ -352,10 +465,11 @@ def main(silver=SILVER, out=GOLD):
         "categorical": CATEGORICAL,
         "baselines": BASELINE,
         "meta": META,
-        "params": {"agency_label_horizon": AGENCY_H, "shrink_k": SHRINK_K, "cost_step": COST_STEP,
-                   "date_step_months": DATE_STEP, "stagnant_pp_per_quarter": STAGNANT_PP,
+        "params": {"agency_label_horizon": AGENCY_H, "shrink_k": SHRINK_K, "recent_q": RECENT_Q,
+                   "cost_step": COST_STEP, "date_step_months": DATE_STEP, "stagnant_pp_per_quarter": STAGNANT_PP,
                    "scurve_bins": SCURVE_BINS, "scurve_min_rows": SCURVE_MIN_ROWS,
-                   "cost_bands_cr": COST_BANDS[:-1]},
+                   "cost_bands_cr": COST_BANDS[:-1], "external_open_last_q": OPEN_LAST_Q,
+                   "external_open_max_age_q": OPEN_MAX_AGE_Q},
         "rows": {name: len(f) for name, f in frames.items()},
         "labelled": {f"h{h}": label_summary(frames[f"labels_h{h}"]) for h in HORIZONS},
         "labelled_by_year": years,

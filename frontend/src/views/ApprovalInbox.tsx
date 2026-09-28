@@ -1,38 +1,26 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useRole } from '@/lib/auth/RoleContext'
 import type { DispatchDraft } from '@/contracts/workers'
-import { API_BASE } from '@/lib/api'
+import { apiPost } from '@/lib/api'
+import { useDispatchDrafts } from '@/lib/queries'
 
-async function fetchDispatchDrafts(): Promise<DispatchDraft[]> {
-  const res = await fetch(`${API_BASE}/api/dispatch`)
-  if (!res.ok) throw new Error(`dispatch fetch failed: ${res.status}`)
-  return res.json()
-}
-
-async function postApproval(draftId: string, decision: 'approved' | 'rejected', role: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/approvals`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ draftId, decision, role }),
-  })
-  if (!res.ok) throw new Error(`approval failed: ${res.status}`)
-}
-
+/**
+ * Memos from the worker cell. The backend sends only what the role may see (ported from Pranjal's
+ * frontend-dev: an agency or ministry official sees the memos addressed to their role, on their own
+ * projects; IPMD sees all) and lets only the addressee decide.
+ */
 export function ApprovalInbox() {
   const { role } = useRole()
   const queryClient = useQueryClient()
-
-  const { data: drafts, isError } = useQuery({
-    queryKey: ['dispatch', 'drafts'],
-    queryFn: fetchDispatchDrafts,
-  })
+  const { data: drafts, isError } = useDispatchDrafts()
 
   const decide = useMutation({
     mutationFn: (vars: { draftId: string; decision: 'approved' | 'rejected' }) =>
-      postApproval(vars.draftId, vars.decision, role ?? ''),
+      apiPost<DispatchDraft>('/api/approvals', vars),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dispatch'] })
     },
@@ -45,25 +33,21 @@ export function ApprovalInbox() {
   })
 
   return (
-    <div className="mx-auto max-w-[1100px] px-4 py-4 space-y-4">
-      <h1 className="font-mono text-sm font-medium uppercase tracking-wider text-fg-base">
-        Approval Inbox
-      </h1>
-
-      <div className="h-px bg-border-subtle" />
+    <Page narrow>
+      <PageHeader title="Approvals" subtitle="Memos from the worker cell, addressed to your role" />
 
       {decide.isError && (
-        <p className="font-mono text-[11px] text-critical">
+        <p className="text-xs text-critical">
           Decision failed to save — is the FastAPI server running?
         </p>
       )}
 
       {isError || sorted.length === 0 ? (
         <Card>
-          <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+          <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
             {isError
               ? 'Backend not running — start the FastAPI server to see dispatch drafts.'
-              : 'No dispatch drafts yet.'}
+              : 'No memos for you yet.'}
           </div>
         </Card>
       ) : (
@@ -78,12 +62,12 @@ export function ApprovalInbox() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-fg-base">{draft.projectName}</div>
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-fg-dimmed">
+                      <div className="text-xs text-fg-dimmed">
                         recommended for {draft.recommendedRecipientRole.replace('_', ' ')}
                       </div>
                     </div>
-                    <Badge variant={draft.status === 'pending' ? 'accent' : 'muted'}>
-                      [{draft.status.toUpperCase()}]
+                    <Badge variant={draft.status === 'pending' ? 'accent' : 'muted'} className="capitalize">
+                      {draft.status}
                     </Badge>
                   </div>
 
@@ -101,7 +85,7 @@ export function ApprovalInbox() {
                             target="_blank"
                             rel="noreferrer"
                             title={ev.note}
-                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 font-mono text-[10px] text-accent hover:border-accent"
+                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-accent hover:border-accent"
                           >
                             {ev.tag}
                           </a>
@@ -109,7 +93,7 @@ export function ApprovalInbox() {
                           <span
                             key={i}
                             title={ev.note}
-                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 font-mono text-[10px] text-fg-dimmed"
+                            className="rounded-sm border border-border-default bg-surface-elevated px-2 py-0.5 text-xs text-fg-dimmed"
                           >
                             {ev.tag}
                           </span>
@@ -144,6 +128,6 @@ export function ApprovalInbox() {
           })}
         </div>
       )}
-    </div>
+    </Page>
   )
 }

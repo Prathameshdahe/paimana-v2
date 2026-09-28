@@ -1,19 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Page, PageHeader } from '@/components/layout/Page'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import type { WorkerRun } from '@/contracts/workers'
-import { API_BASE } from '@/lib/api'
+import { apiGet, apiPost } from '@/lib/api'
 
-async function fetchWorkerRuns(): Promise<WorkerRun[]> {
-  const res = await fetch(`${API_BASE}/api/worker-runs`)
-  if (!res.ok) throw new Error(`worker-runs fetch failed: ${res.status}`)
-  return res.json()
-}
-
-async function triggerMonitoringCycle(): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/worker-runs/trigger`, { method: 'POST' })
-  if (!res.ok) throw new Error(`trigger failed: ${res.status}`)
-}
+const fetchWorkerRuns = () => apiGet<WorkerRun[]>('/api/worker-runs')
+const triggerMonitoringCycle = () => apiPost<unknown>('/api/worker-runs/trigger')
 
 export function WorkerConsole() {
   const queryClient = useQueryClient()
@@ -36,14 +29,14 @@ export function WorkerConsole() {
   )
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-4 space-y-4">
-      <div className="flex items-baseline justify-between">
-        <h1 className="font-mono text-sm font-medium uppercase tracking-wider text-fg-base">
-          Worker Console
-        </h1>
+    <Page>
+      <PageHeader
+        title="Workers"
+        subtitle="Runs of the monitoring workers and the alerts they raised"
+        actions={
         <div className="flex items-center gap-3">
           {trigger.isError && (
-            <span className="font-mono text-[11px] text-critical">
+            <span className="text-xs text-critical">
               Trigger failed — is the FastAPI server running?
             </span>
           )}
@@ -51,13 +44,12 @@ export function WorkerConsole() {
             {trigger.isPending ? 'Running… (1–3 min)' : 'Run Monitoring Cycle Now'}
           </Button>
         </div>
-      </div>
-
-      <div className="h-px bg-border-subtle" />
+        }
+      />
 
       {isError || sorted.length === 0 ? (
         <Card>
-          <div className="px-5 py-8 text-center font-mono text-xs text-fg-dimmed">
+          <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
             {isError
               ? 'Backend not running — start the FastAPI server to see worker activity.'
               : 'No worker runs yet.'}
@@ -68,7 +60,7 @@ export function WorkerConsole() {
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
-                <tr className="border-b border-border-subtle text-[10px] uppercase tracking-widest text-fg-dimmed">
+                <tr className="border-b border-border-subtle text-xs text-fg-dimmed">
                   <th className="px-5 py-2 font-medium">Worker</th>
                   <th className="px-3 py-2 font-medium">Model / Version</th>
                   <th className="px-3 py-2 font-medium">Dataset</th>
@@ -103,6 +95,6 @@ export function WorkerConsole() {
           </div>
         </Card>
       )}
-    </div>
+    </Page>
   )
 }
