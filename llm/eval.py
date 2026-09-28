@@ -173,9 +173,11 @@ def summary(results: list[dict], llm: bool) -> dict:
            "first_card_s": (_pct([r["first_card_s"] for r in results], 0.5),
                             _pct([r["first_card_s"] for r in results], 0.9)),
            "done_s": (_pct([r["done_s"] for r in results], 0.5), _pct([r["done_s"] for r in results], 0.9))}
-    if llm:
-        out.update({"accepted": f"{ok('accepted')}/{n}", "template": f"{ok('template')}/{n}",
-                    "retried": f"{sum(r['retries'] > 0 for r in results)}/{n}",
+    if llm:  # over the answers the model was asked to write ('skipped': nothing found, the template by design)
+        used = [r for r in results if r["llm"] != "skipped"]
+        out.update({"accepted": f"{sum(r['accepted'] for r in used)}/{len(used)}",
+                    "template": f"{sum(r['template'] for r in used)}/{len(used)}",
+                    "retried": f"{sum(r['retries'] > 0 and r['accepted'] for r in used)}/{len(used)}",
                     "llm_states": {s: sum(r["llm"] == s for r in results) for s in
                                    sorted({r["llm"] for r in results})}})
     return out
@@ -187,8 +189,9 @@ def table(s: dict) -> str:
     rows = [("Questions", s["questions"]), ("Routing accuracy (router alone)", s["routing"]),
             ("Tool accuracy (all rounds)", s["tools"]), ("Checks passed", s["checks"])]
     if "accepted" in s:
-        rows += [("LLM answer accepted by the check", s["accepted"]), ("Retried once", s["retried"]),
-                 ("Deterministic answer (fallback)", s["template"]), ("LLM states", s["llm_states"])]
+        rows += [("Answers the model wrote, accepted by the check", s["accepted"]),
+                 ("... after one strict retry", s["retried"]),
+                 ("... replaced by the deterministic answer", s["template"]), ("LLM states", s["llm_states"])]
     rows += [("Time to first card, median / p90", secs(s["first_card_s"])),
              ("Time to done, median / p90", secs(s["done_s"]))]
     return "\n".join(["| Metric | Value |", "|---|---|"] + [f"| {a} | {b} |" for a, b in rows])
