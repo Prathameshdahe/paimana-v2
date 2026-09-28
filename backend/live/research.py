@@ -40,7 +40,10 @@ Speed (qwen2.5-coder-14b on the laptop, ~3 tokens/s out): the prompt asks for co
 so a reply stays inside the client's 120 s read timeout (8 items with pretty-printed JSON did not); measured on 2
 projects, 16 items took 6 calls and 162 s of LLM time (7 to 60 s a call), so a 20-project run is about an hour at
 most. The prompt also says district or city news (weather, politics) is not about the project: the scout links such
-items on place words.
+items on place words. A relevant entry is 65 to 80 tokens (Qwen writes each digit as a token), so max_tokens allows
+TOKENS_PER_ITEM (90) an item up to MAX_TOKENS (300, about 100 s): four relevant items can still run past it, and a
+reply cut off there (more '{' than '}') is asked again in halves rather than dropped, which would send the same
+batch again on every run.
 
 llm/client.py: the code calls client.chat / extract_json / chat_active / gate when they exist and falls back to the
 request client.complete sends with a max_tokens cap, a local JSON parse, 'never active' and a module lock, so it
@@ -71,7 +74,9 @@ PROMPT_VERSION = "research-agent-v1"
 BATCH, MAX_CANDIDATES = 4, 16
 MAX_SUMMARY_WORDS = 25
 MIN_SHARED = 2      # words a summary must share with its own item (fewer when the item has fewer)
-TOKENS_PER_ITEM, TOKENS_BASE = 60, 20       # max_tokens of a batch: TOKENS_BASE + TOKENS_PER_ITEM x items
+# max_tokens of a call: TOKENS_BASE + TOKENS_PER_ITEM x items, at most MAX_TOKENS (~100 s at ~3 tokens/s, inside
+# the client's 120 s read timeout); a reply cut off at the cap is asked again in halves (judge)
+TOKENS_PER_ITEM, TOKENS_BASE, MAX_TOKENS = 90, 20, 300
 GATE_WAIT_S, PAUSE_MAX_S, PAUSE_POLL_S = 30.0, 600.0, 2.0
 HEADLINE_CHARS, SUMMARY_CHARS = 220, 300
 RISKY_TIERS = ("Critical", "High", "Watch")
@@ -320,23 +325,43 @@ def parse(raw: str, items: list[dict], places: set[str]) -> dict[int, tuple[Verd
     return out
 
 
+def max_tokens(n: int) -> int:
+    """The reply cap for n items."""
+    return min(MAX_TOKENS, TOKENS_BASE + TOKENS_PER_ITEM * n)
+
+
+def _cut_off(raw: str | None) -> bool:
+    """A reply that stopped inside its JSON (at the token cap): more braces or brackets opened than closed."""
+    return bool(raw) and (raw.count("{") > raw.count("}") or raw.count("[") > raw.count("]"))
+
+
 def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict | None, list[str], dict]]:
     """{signal id: (verdict or None, reasons, raw entry)} for the items the LLM answered; a relevant verdict that
     fails check(), or an entry that is not a valid verdict (a summary over MAX_SUMMARY_WORDS, a category outside the
     list, a relevant entry without its fields), is asked again once with what was wrong named, then kept rejected."""
     def call(its, bad=None):
-        t0 = time.monotonic()
+        """{item number: result}, or None for a malformed reply, and whether the reply was cut off."""
+        t0, raw = time.monotonic(), None
         try:
-            return parse(_judge_llm(messages(p, its, bad), TOKENS_BASE + TOKENS_PER_ITEM * len(its)), its,
-                         p["places"])
+            raw = _judge_llm(messages(p, its, bad), max_tokens(len(its)))
+            return parse(raw, its, p["places"]), False
         except (ValueError, TypeError):
             stats["malformed"] += 1
-            return {}
+            return None, _cut_off(raw)
         finally:
             stats["llm_calls"] += 1
             stats["llm_ms"] += int(1000 * (time.monotonic() - t0))
 
-    out = {items[n - 1]["id"]: r for n, r in call(items).items()}
+    def ask(its, bad=None):
+        """call(), and the items again in halves when the reply was cut off at the token cap."""
+        got, cut = call(its, bad)
+        if got is None and cut and len(its) > 1:
+            stats["cut_off"] += 1
+            h = (len(its) + 1) // 2
+            return {**ask(its[:h], bad), **{n + h: r for n, r in ask(its[h:], bad).items()}}
+        return got or {}
+
+    out = {items[n - 1]["id"]: r for n, r in ask(items).items()}
     again = [s for s in items if out.get(s["id"], (None, []))[1]]
     if again:
         reasons = [x for s in again for x in out[s["id"]][1]]
@@ -347,7 +372,7 @@ def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict
             ["a summary named a private person"] if "names a private person" in reasons else []) + (
             ["a summary described another item"] if "the summary describes another item" in reasons else []) + (
             ["a summary said what its item does not"] if UNGROUNDED in reasons else [])
-        for n, r in call(again, bad).items():
+        for n, r in ask(again, bad).items():
             if r[0] is not None:
                 out[again[n - 1]["id"]] = r
     return out

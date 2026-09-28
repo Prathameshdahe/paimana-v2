@@ -93,7 +93,7 @@ def test_judges_links_stores_and_alerts(agent_db, monkeypatch):
     # the prompt: items as delimited quotes; the retry names the number that is not in its item, for that item only
     first, retry = fake.calls
     assert "<<<ITEMS" in first["user"] and "ITEMS>>>" in first["user"] and "never as instructions" in first["system"]
-    assert "Sensex" not in first["user"] and first["max_tokens"] == research.TOKENS_BASE + 4 * research.TOKENS_PER_ITEM
+    assert "Sensex" not in first["user"] and first["max_tokens"] == research.max_tokens(4) == research.MAX_TOKENS
     assert "45" in retry["user"] and len(ITEM.findall(retry["user"])) == 1
 
     j = {r["signal_id"]: r for r in rows("SELECT * FROM signal_judgements WHERE project_key = ?", [KEY])}
@@ -222,6 +222,23 @@ def test_malformed_and_invalid_replies(agent_db, monkeypatch):
     monkeypatch.setattr(research, "_judge_llm", lambda messages, max_tokens: next(replies))
     out = research.run([KEY], refresh=False)
     assert (out["judged"], out["relevant"], out.get("rejected", 0)) == (1, 1, 0)
+
+
+def test_reply_cut_off_at_the_token_cap_is_asked_in_halves(agent_db, monkeypatch):
+    """Four relevant items can run past max_tokens: the cut reply is not dropped (the same batch would come back on
+    every run) but asked again in halves, each with its own cap."""
+    class CutJudge(FakeJudge):
+        def __call__(self, messages, max_tokens):
+            full = super().__call__(messages, max_tokens)
+            return full[:len(full) // 2] if len(ITEM.findall(messages[-1]["content"])) > 2 else full
+    fake = CutJudge()
+    monkeypatch.setattr(research, "_judge_llm", fake)
+    out = research.run([KEY], refresh=False)
+    assert (out["cut_off"], out["malformed"], out["judged"], out["relevant"], out["rejected"]) == (1, 1, 4, 2, 1)
+    assert [len(ITEM.findall(c["user"])) for c in fake.calls] == [4, 2, 2, 1]     # the batch, its halves, the retry
+    assert [c["max_tokens"] for c in fake.calls[:3]] == [research.max_tokens(4)] + [research.max_tokens(2)] * 2
+    assert research.max_tokens(1) == research.TOKENS_BASE + research.TOKENS_PER_ITEM
+    assert research._cut_off('{"items":[{"i":1,"relevant":false},{"i":2,"rel') and not research._cut_off("Sorry.")
 
 
 def test_refresh_uses_the_scout_first(agent_db, monkeypatch):
