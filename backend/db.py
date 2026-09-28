@@ -1,4 +1,5 @@
-"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, briefs, research facts, audit log.
+"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, briefs, research facts, second
+opinions, audit log.
 
 database/paimana.db, or the path in PAIMANA_DB. One short connection per call
 (single backend process); the analytics side stays in backend/serving.py.
@@ -63,7 +64,13 @@ CREATE TABLE IF NOT EXISTS researched (
 CREATE TABLE IF NOT EXISTS signal_judgements (
     signal_id INTEGER NOT NULL REFERENCES signals (id), project_key TEXT NOT NULL, relevant INTEGER,
     verdict_json TEXT, model TEXT, prompt_version TEXT, judged_at TEXT, PRIMARY KEY (signal_id, project_key));
+-- the LLM second opinion (llm/second_opinion.py) per evidence version: json holds the status (ok | rejected), the
+-- opinion or the reasons, the tier and model version it was set against and the evidence items it read
+CREATE TABLE IF NOT EXISTS second_opinions (
+    project_key TEXT NOT NULL, evidence_hash TEXT NOT NULL, model TEXT NOT NULL, prompt_version TEXT, asof TEXT,
+    generated_at TEXT, json TEXT, PRIMARY KEY (project_key, evidence_hash, model));
 """
+SECOND_OPINION_COLS = ("project_key", "evidence_hash", "model", "prompt_version", "asof", "generated_at")
 RESEARCH_FACT_COLS = ("fact_id", "project_key", "category", "taxonomy", "direction", "severity", "event_date",
                       "date_precision", "published_date", "status", "summary", "headline", "source", "url", "domain",
                       "match", "match_reason", "origin", "researched_on", "live", "signal_id", "model",
@@ -348,6 +355,46 @@ def add_alerts_once(rows: list[dict]) -> int:
             "SELECT 1 FROM alerts WHERE project_key IS ? AND kind = ? AND source = ?",
             [r.get("project_key"), r["kind"], r.get("source")]).fetchone()]
     return add_alerts(fresh) if fresh else 0
+
+
+def signal_verdicts(project_key: str) -> dict[int, int | None]:
+    """signal id -> the research agent's verdict on it for this project (1 relevant, 0 not, None rejected)."""
+    return {r[0]: r[1] for r in _read("SELECT signal_id, relevant FROM signal_judgements WHERE project_key = ?",
+                                      [project_key])}
+
+
+def _opinion(r: sqlite3.Row) -> dict:
+    return {**json.loads(r["json"] or "{}"), **{c: r[c] for c in SECOND_OPINION_COLS}}
+
+
+def second_opinion(project_key: str, evidence_hash: str, model: str) -> dict | None:
+    """The stored second opinion (accepted or rejected) for this evidence version and LLM model, or None."""
+    rows = _read("SELECT * FROM second_opinions WHERE project_key = ? AND evidence_hash = ? AND model = ?",
+                 [project_key, evidence_hash, model])
+    return _opinion(rows[0]) if rows else None
+
+
+def second_opinions(project_key: str | None = None) -> list[dict]:
+    """Every stored second opinion of one project (None: every project), newest first: the prospective log."""
+    sql, params = "SELECT * FROM second_opinions", []
+    if project_key is not None:
+        sql, params = sql + " WHERE project_key = ?", [project_key]
+    return [_opinion(r) for r in _read(sql + " ORDER BY generated_at DESC, project_key", params)]
+
+
+def second_opinion_times() -> dict[str, str]:
+    """project_key -> when its newest second opinion (any evidence version, accepted or rejected) was made."""
+    return {r[0]: r[1] for r in _read("SELECT project_key, max(generated_at) FROM second_opinions GROUP BY 1", [])}
+
+
+def save_second_opinion(row: dict) -> None:
+    """One second opinion (the SECOND_OPINION_COLS and everything else as json); replaces the one for the same
+    project, evidence version and LLM model."""
+    body = {k: v for k, v in row.items() if k not in SECOND_OPINION_COLS}
+    with closing(connect()) as con, con:
+        con.execute(f"INSERT OR REPLACE INTO second_opinions ({', '.join(SECOND_OPINION_COLS)}, json) VALUES "
+                    f"({', '.join('?' * (len(SECOND_OPINION_COLS) + 1))})",
+                    [row.get(c) for c in SECOND_OPINION_COLS] + [json.dumps(body, ensure_ascii=False, default=str)])
 
 
 def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None:
