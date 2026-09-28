@@ -80,7 +80,8 @@ administration. Every test signs in real accounts through `tests/viewers.py`.
 
 The developer is hidden. It is never listed to administrators, and `GET`/`POST /api/admin/users/{id}` and its reset
 answer 404 for it. It is never a sign-up or approval choice, and its audit rows are shown to developers only.
-`Me.role` is `developer` only in the developer's own `/api/auth/me`.
+`Me.role` is `developer` only in the developer's own `/api/auth/me`. An alert the developer acknowledges shows
+`ackedAt` with no `ackedBy`.
 
 The scope applies to everything built from project rows: portfolio KPIs and tier counts, the map, the project list
 and search, the project page (404 outside it), alerts and the live alert stream, bottleneck members (a cluster with

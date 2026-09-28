@@ -261,19 +261,22 @@ def alerts_after(alert_id: int, limit=100) -> list[dict]:
                      {"id": alert_id, "limit": limit})
 
 
-def ack(alert_id: int, role: str, keys=None, actor: Mapping | None = None) -> dict | None:
+def ack(alert_id: int, role: str, keys=None, actor: Mapping | None = None, named: bool = True) -> dict | None:
     """Mark an alert acknowledged by role (the first ack stands); None if there is no such alert (or it is not on
-    one of keys, when given). actor: who, for the audit row."""
+    one of keys, when given). actor: who, for the audit row. named=False (a hidden role's ack, backend/access.py
+    HIDDEN_ROLES) leaves acked_by empty: every reader of the alert sees that it was acknowledged, not by whom; the
+    audit row keeps the role."""
     with connect() as con:
         row = _one(con, "SELECT * FROM app.alerts WHERE id = :id FOR UPDATE", {"id": alert_id})
         if row is None or (keys is not None and row["project_key"] not in keys):
             return None
         if row["acked_at"] is None:
-            con.execute(sa.text("UPDATE app.alerts SET acked_by = :role, acked_at = :at WHERE id = :id"),
-                        {"role": role, "at": now(), "id": alert_id})
+            con.execute(sa.text("UPDATE app.alerts SET acked_by = :by, acked_at = :at WHERE id = :id"),
+                        {"by": role if named else None, "at": now(), "id": alert_id})
             _audit(con, role, "alert.ack", str(alert_id), actor=actor)
         else:
-            _audit(con, role, "alert.ack", str(alert_id), f"already acked by {row['acked_by']}", actor=actor)
+            by = f" by {row['acked_by']}" if row["acked_by"] else ""
+            _audit(con, role, "alert.ack", str(alert_id), f"already acked{by}", actor=actor)
         return _one(con, "SELECT * FROM app.alerts WHERE id = :id", {"id": alert_id})
 
 

@@ -391,3 +391,20 @@ def test_shutdown_stops_an_llm_run_started_from_the_api():
     asyncio.run(scheduler.stop([]))
     assert ended.is_set() and time.monotonic() - t0 < 5 and not research.stopping()
     t.join(5)
+
+
+def test_the_developer_is_never_named_on_an_alert(client, fresh_db):
+    """Review finding (unit B, round 1): an alert the developer acknowledges names no acknowledger, for anyone who
+    reads it (the hidden role's name stays in the audit log, which only developers read)."""
+    coal = "Ministry of Coal"
+    key = sorted(serving.scope_keys(("ministry", coal)))[0]
+    db.add_alerts([{"project_key": key, "kind": "signal", "severity": 2, "title": "t"}])
+    aid = db.max_alert_id()
+    r = client.post(f"/api/alerts/{aid}/ack", headers=as_role(client, "developer"))
+    assert r.status_code == 200 and r.json()["ackedAt"] and r.json()["ackedBy"] is None
+    h = ministry(coal)
+    items = client.get("/api/alerts").json()["items"]
+    assert [a["ackedBy"] for a in items if a["id"] == aid] == [None] and "developer" not in str(items)
+    again = client.post(f"/api/alerts/{aid}/ack", headers=h).json()        # the first ack stands
+    assert again["ackedBy"] is None and "developer" not in str(again)
+    assert [a["role"] for a in db.audit_rows(action="alert.ack")["items"]] == ["ministry_official", "developer"]

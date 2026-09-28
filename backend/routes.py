@@ -14,7 +14,7 @@ from starlette.datastructures import UploadFile as StarletteUpload
 from llm import agent, second_opinion, worker
 
 from . import brief, db, ratelimit, serving, store
-from .access import Viewer, in_scope, need, viewer
+from .access import HIDDEN_ROLES, Viewer, in_scope, need, viewer
 from .auth import sessions
 from .live import opinions, portals, research, scheduler, scout, watcher
 from .schemas import (
@@ -260,7 +260,8 @@ def get_alerts(since: datetime | None = None, kind: AlertKind | None = None, ack
 
 @router.post("/alerts/{alert_id}/ack", response_model=Alert)
 def post_alert_ack(alert_id: int, body: RoleBody | None = None, v: Viewer = Depends(need("ack"))):
-    out = db.ack(alert_id, v.acting_as(body and body.role), keys=v.keys, actor=v.actor)
+    role = v.acting_as(body and body.role)
+    out = db.ack(alert_id, role, keys=v.keys, actor=v.actor, named=role not in HIDDEN_ROLES)
     if out is None:
         raise HTTPException(status_code=404, detail=f"alert {alert_id} not found")
     return out
