@@ -11,8 +11,9 @@ Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summar
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
 The newest usable cutoff is the test fold; the N_VAL usable cutoffs before it that sit in the newest reliable block
-and before FLASH_FROM are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
-label was known by c) and predict the rows at t = c. Completed projects are left out: there is nothing to warn about.
+and before FLASH_FROM are the validation folds. At every cutoff c the models train on label rows whose outcome quarter
+t + h is <= c (the label was known by c) and predict the rows at t = c. Completed projects are left out: there is
+nothing to warn about.
 
 The validation block is quarterly-report (QPISR) era: anticipated vs anticipated dates, and 0% remarks or progress at
 some folds. Live scoring and the test fold are the flash-report era (revised vs revised, a higher slip rate), where
@@ -84,21 +85,22 @@ LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_
                   subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0, random_state=0,
                   n_jobs=8, verbose=-1)
 # target -> LightGBM params that differ from LGB_PARAMS for that target alone. One enters only after it passed the
-# promotion rule on that target in ml/experiment.py (3 seeds, paired project bootstrap) with a CI above 0 on a block.
-# half_life_q is not a LightGBM param: fit_lgbm turns it into sample weights that halve every half_life_q quarters
-# of row age. Tried and left out (docs/MODEL_UPGRADES_2026-09.md): the y_any_h2 validation search's picks lost
-# 0.038-0.055 flash PR-AUC on y_any_h2 and y_date_push_h2 (early stopping on an inner time split kept 20-400 trees)
-# and 0.018-0.024 validation on y_any_h4; the mean of 5 seeds stayed inside the noise everywhere (y_any_h2 flash
-# +0.0048 against a 0.0076 margin); age weights lost on both blocks for y_any_h2 and y_cost_rev_h2 and on the flash
-# block for y_date_push_h2; flash-report rows weighted 3x cleared the noise nowhere (y_cost_rev_h2 flash -0.010).
+# promotion rule on that target in ml/experiment.py (3 seeds, within-cutoff PR-AUC, paired project bootstrap) with a
+# CI above 0 on a block that clears its margin. half_life_q is not a LightGBM param: fit_lgbm turns it into sample
+# weights that halve every half_life_q quarters of row age. Tried and left out (docs/MODEL_UPGRADES_2026-09.md,
+# within-cutoff deltas against ML-20260927-222602): age weights on y_any_h4 (8 quarters shipped at first on a pooled
+# validation gain of +0.0124, but it ranked worse inside 4 of the 6 validation folds, -0.0031: the pooled gain was
+# its score level following each fold's base rate; 16 quarters +0.0003) and on the 2-quarter targets (flash -0.013 to
+# -0.027); the y_any_h2 validation search's picks on y_any_h2 and y_date_push_h2 (flash -0.039 to -0.058; early
+# stopping on an inner time split kept 20-400 trees) and on y_any_h4 (flash -0.012 to -0.017); the mean of 5 seeds
+# (y_any_h2 flash +0.0060 against a 0.0134 margin); flash-report rows weighted 3x (y_cost_rev_h2 flash -0.009).
 TARGET_PARAMS = {
-    # rows halve in weight every 8 quarters of age: +0.0124 validation PR-AUC [+0.0050, +0.0204], +0.0031 flash
-    # [-0.0135, +0.0200] (one fold of 335 rows). Deadline feasibility also passed here (+0.0060, +0.0041) but lost on
-    # the flash block together with the half-life, which gained more on its own.
-    ("y_any", 4): {"half_life_q": 8},
     # the best tree-count trial of the y_any_h2 validation search (ml/experiment.py TUNED_TREES), picked there and
-    # not on this target: +0.0105 validation [-0.0052, +0.0251], +0.0288 flash [+0.0077, +0.0499]; the early-stopped
-    # pick did as well (+0.0113, +0.0284) and this one is simpler, with the lower validation ECE
+    # not on this target: validation +0.0073 [-0.0106, +0.0263] (2023-07..2024-10, 4 of 6 folds up), flash +0.0365
+    # [+0.0059, +0.0631] (3 of 3 up). Provisional: this target and this variant (over the early-stopped pick, which
+    # also passes) were chosen after the flash results had been seen, so no untouched block backs it. Pre-registered
+    # check: the 2026-04 fold, once its outcome quarter 2026-10 is reported; if these params' within-cutoff PR-AUC
+    # there (3 seeds) is below LGB_PARAMS', revert: python -m ml.registry revert y_cost_rev_h2
     ("y_cost_rev", 2): {"learning_rate": 0.02, "num_leaves": 63, "min_child_samples": 20, "colsample_bytree": 0.8,
                         "subsample": 0.8, "reg_lambda": 20.0, "reg_alpha": 0.0, "min_split_gain": 0.02,
                         "n_estimators": 150},

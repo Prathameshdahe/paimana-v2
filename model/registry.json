@@ -21592,10 +21592,10 @@
       "since": "2026-09-28T05:19:08+00:00"
     },
     "y_any_h4": {
-      "entry_id": "ML-20260928-051908/lightgbm/y_any_h4",
-      "run_id": "ML-20260928-051908",
+      "entry_id": "ML-20260927-222602/lightgbm/y_any_h4",
+      "run_id": "ML-20260927-222602",
       "model": "lightgbm",
-      "since": "2026-09-28T05:19:08+00:00"
+      "since": "2026-09-28T07:26:03+00:00"
     }
   },
   "decisions": [
@@ -22246,6 +22246,15 @@
       "champion_before": "ML-20260928-051908/lightgbm/y_any_h4",
       "decision": "rejected",
       "reason": "pooled PR-AUC 0.8064 vs champion 0.8811; PR-AUC gain val -0.0747, flash -0.0835 (lower on a block, no block clears the noise margin 0.0022); ECE 0.0665 vs 0.0830 + 0.02 (ok)"
+    },
+    {
+      "at": "2026-09-28T07:26:03+00:00",
+      "target": "y_any",
+      "horizon": 4,
+      "challenger": "ML-20260927-222602/lightgbm/y_any_h4",
+      "champion_before": "ML-20260928-051908/lightgbm/y_any_h4",
+      "decision": "reverted",
+      "reason": "promotion of ML-20260928-051908/lightgbm/y_any_h4 (2026-09-28T05:19:08+00:00) undone: under the corrected rule (within-cutoff PR-AUC, per-block margins) d1_decay_8q against ML-20260927-222602 over 3 seeds is -0.0031 [-0.0097, +0.0035] on validation, lower on 4 of 6 folds in every seed, and +0.0031 [-0.0135, +0.0200] on the one-fold flash block (model/experiments/d1_decay_8q.csv); its pooled gain (+0.0124) came from score levels following each fold's base rate. TARGET_PARAMS drops the half-life."
     }
   ]
 }
