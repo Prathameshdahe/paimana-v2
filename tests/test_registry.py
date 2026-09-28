@@ -154,7 +154,7 @@ def test_register_scores_the_incumbent_first_and_gates_the_new_configuration(tmp
 def test_revert_restores_the_champion_a_promotion_replaced():
     reg = {"runs": [], "champions": {}, "decisions": []}
     add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75))
-    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2"))
+    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2", params={"num_leaves": 63}))
     assert reg["champions"]["y_any_h2"]["entry_id"] == "R2/lightgbm/y_any_h2"
     d = registry.revert(reg, "y_any_h2", "fails the corrected rule", at="now")
     assert reg["champions"]["y_any_h2"] == {"entry_id": "R1/lightgbm/y_any_h2", "run_id": "R1", "model": "lightgbm",
@@ -172,7 +172,7 @@ def test_revert_restores_the_champion_a_promotion_replaced():
 def test_revert_cli_writes_the_registry(tmp_path, monkeypatch):
     reg = {"runs": [], "champions": {}, "decisions": []}
     add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75))
-    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2"))
+    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2", params={"num_leaves": 63}))
     path = tmp_path / "registry.json"
     path.write_text(json.dumps(reg), encoding="utf-8")
     monkeypatch.setattr(registry, "REGISTRY", path)
@@ -181,3 +181,15 @@ def test_revert_cli_writes_the_registry(tmp_path, monkeypatch):
     out = json.loads(path.read_text(encoding="utf-8"))
     assert out["champions"]["y_any_h2"]["entry_id"] == "R1/lightgbm/y_any_h2"
     assert out["decisions"][-1]["decision"] == "reverted"
+
+
+def test_revert_skips_rescores_of_the_same_configuration():
+    """R2's params were promoted over R1's, then re-scored on new folds as R3: reverting R3 undoes R2's promotion."""
+    reg = {"runs": [], "champions": {}, "decisions": []}
+    add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75, features=["a"], cats=[], params=P))
+    tuned = dict(features=["a"], cats=[], params={**P, "num_leaves": 63})
+    add(reg, entry("lightgbm", 0.80, 0.05, flash=0.80, run="R2", **tuned))
+    assert add(reg, entry("lightgbm", 0.60, 0.05, flash=0.70, run="R3", folds=("2023-10-01",), **tuned)) == "promoted"
+    d = registry.revert(reg, "y_any_h2", "the tuned params fail", at="now")
+    assert reg["champions"]["y_any_h2"]["entry_id"] == "R1/lightgbm/y_any_h2"
+    assert d["champion_before"] == "R3/lightgbm/y_any_h2" and "promotion of R2/lightgbm/y_any_h2" in d["reason"]

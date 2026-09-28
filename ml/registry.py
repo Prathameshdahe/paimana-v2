@@ -166,20 +166,27 @@ def run_folds(feats, labels, coverage):
 
 
 def revert(reg, key, reason, at=None):
-    """Undo the promotion that made the current champion of key: the champion it replaced (the decision's
-    champion_before) is champion again, recorded as a "reverted" decision with reason (the evidence: a harness CSV, a
-    corrected rule). Returns the decision."""
+    """Undo the promotion that brought the current champion's configuration in: walking back through the promotions
+    that only re-scored that same configuration (new folds or gold), the first champion with another configuration
+    is champion again, recorded as a "reverted" decision with reason (the evidence: a harness CSV, a corrected rule).
+    Returns the decision."""
     at = at or datetime.now(timezone.utc).isoformat(timespec="seconds")
     cur_id = reg["champions"][key]["entry_id"]
-    promo = next((d for d in reversed(reg["decisions"]) if d["challenger"] == cur_id and d["decision"] == "promoted"),
-                 None)
-    assert promo and promo["champion_before"], f"{cur_id} did not replace a champion; nothing to revert to"
-    before = next(r for r in reg["runs"] if r["entry_id"] == promo["champion_before"])
+    entry_of = lambda i: next(r for r in reg["runs"] if r["entry_id"] == i)
+    cur = step = entry_of(cur_id)
+    while True:
+        promo = next((d for d in reversed(reg["decisions"])
+                      if d["challenger"] == step["entry_id"] and d["decision"] == "promoted"), None)
+        assert promo and promo["champion_before"],             f"{step['entry_id']} did not replace a champion; nothing to revert to"
+        before = entry_of(promo["champion_before"])
+        if config(before) != config(cur):
+            break
+        step = before
     reg["champions"][key] = {"entry_id": before["entry_id"], "run_id": before["run_id"], "model": before["model"],
                              "since": at}
     decision = {"at": at, "target": before["target"], "horizon": before["horizon"], "challenger": before["entry_id"],
                 "champion_before": cur_id, "decision": "reverted",
-                "reason": f"promotion of {cur_id} ({promo['at']}) undone: {reason}"}
+                "reason": f"promotion of {step['entry_id']} ({promo['at']}) undone: {reason}"}
     reg["decisions"].append(decision)
     return decision
 
