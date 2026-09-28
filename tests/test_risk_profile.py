@@ -237,8 +237,29 @@ def test_web_research_flags_but_never_clears():
     assert checklist(research=research.iloc[:0]).equals(base)
 
 
-def test_research_applies_at_the_latest_asof_only():
+def test_research_applies_at_the_latest_asof_only(tmp_path, monkeypatch):
     latest = T("2026-07-01")
-    assert R.research_at(T("2026-04-01"), latest) is None                 # a later snapshot is not point in time
+    facts = pd.DataFrame([web_fact("P2", "land")])
+    monkeypatch.setattr(R, "GOLD", tmp_path)
+    assert R.research_at(latest, latest) is None                          # the research step has not run
+    facts.to_parquet(tmp_path / "research_facts.parquet", index=False)
     got = R.research_at(latest, latest)
-    assert got is None or {"taxonomy", "match", "severity", "summary", "source"} <= set(got.columns)
+    assert got is not None and got.equals(facts)                          # it has: read at the latest asof
+    assert R.research_at(T("2026-09-30"), latest) is not None
+    assert R.research_at(T("2026-04-01"), latest) is None                 # a later snapshot is not point in time
+
+
+def test_committed_research_lines_are_the_live_high_severe_facts():
+    """The committed gold research facts at the committed asof: a research line exactly where a fact is live,
+    negative, severity >= 2 and match high in one of the four checklist taxonomies (whatever the sweep holds)."""
+    latest = pd.read_parquet(R.SILVER / "observations.parquet", columns=["period"])["period"].max()
+    research = R.research_at(latest, latest)
+    assert research is not None and len(research), "the committed gold research_facts.parquet is missing"
+    keys = pd.Series(sorted(research["project_key"].unique()))
+    lines = R.research_lines(keys, research, latest)
+    ok = research[research["match"].eq("high") & research["severity"].ge(R.RESEARCH_MIN_SEVERITY)
+                  & R.web_research.live(research, latest)]
+    for tax, dim in R.RESEARCH_DIMENSION.items():
+        want = set(ok.loc[ok["taxonomy"].eq(tax), "project_key"])
+        assert set(keys[lines[dim].ne("")]) == want, dim
+    assert sum(lines[d].ne("").sum() for d in lines) >= 1   # the pilot flags 3 rows and adds 1 line
