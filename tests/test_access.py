@@ -1,7 +1,6 @@
 """Role-scoped API (backend/access.py): each role sees its own projects, the public a redacted page, POLICY 403s."""
 import asyncio
 import sys
-from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -27,12 +26,10 @@ def agency(name):
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory):
+def client():
     """No default headers: a request without any is the public."""
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app) as c:
-            yield c
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture(scope="module")
@@ -268,11 +265,10 @@ def test_signal_state_filter_keeps_the_viewer_scope(client, scopes):
     theirs_x = next(k for k, p in idx.items() if k not in keys and p["state"] == x)
     y = idx[theirs_y]["state"]
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with closing(db.connect()) as con, con:
-        sids = [con.execute("INSERT INTO signals (url, title, source, published_at, severity) VALUES (?, ?, 'PTI', ?, 3)",
-                            [f"https://n/state-{i}", f"s{i}", now]).lastrowid for i in range(2)]
-        con.executemany("INSERT INTO signal_projects (signal_id, project_key) VALUES (?, ?)",
-                        [(sids[0], mine), (sids[0], theirs_y), (sids[1], theirs_x)])
+    sids = db.save_signals([{"url": "https://n/state-0", "title": "s0", "source": "PTI", "published_at": now,
+                             "severity": 3, "links": [(mine, None, None), (theirs_y, None, None)]},
+                            {"url": "https://n/state-1", "title": "s1", "source": "PTI", "published_at": now,
+                             "severity": 3, "links": [(theirs_x, None, None)]}])
     feed = lambda h, **p: client.get("/api/signals/feed", headers=h, params=p).json()  # noqa: E731
     base = feed(ministry(m))
     assert {h["state"]: h["n"] for h in base["stateHeat"]} == {x: 1}
@@ -287,8 +283,7 @@ def test_signal_state_filter_keeps_the_viewer_scope(client, scopes):
     assert {p["key"] for s in ipmd["items"] if s["id"] == sids[0] for p in s["projects"]} == {mine, theirs_y}
 
 
-def test_stream_skips_alerts_outside_the_scope(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def test_stream_skips_alerts_outside_the_scope(fresh_db, monkeypatch):
     monkeypatch.setattr(scheduler, "POLL_S", 0.05)
     db.init()
     start = db.max_alert_id()

@@ -4,7 +4,6 @@ import asyncio
 import json
 import sys
 import time
-from contextlib import closing
 from itertools import islice
 from pathlib import Path
 
@@ -47,8 +46,7 @@ def fake_chat(calls):
 
 
 @pytest.fixture()
-def job_db(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def job_db(fresh_db, monkeypatch):
     db.init()
     calls = []
     monkeypatch.setattr(client, "chat", fake_chat(calls))
@@ -209,8 +207,7 @@ def test_job_route_live_status_and_access(job_db):
             assert r["started"] and ran == [(len(opinions.batch_keys()), opinions.per_run())]
     with TestClient(app) as pub:
         assert pub.post("/api/jobs/second-opinion", params={"project_key": KEY}).status_code == 403
-    with closing(db.connect()) as con:
-        assert con.execute("SELECT count(*) FROM audit_log WHERE action = 'jobs.second_opinion'").fetchone()[0] == 2
+    assert db.audit_rows(action="jobs.second_opinion")["total"] == 2
 
 
 def test_scheduler_runs_the_second_opinion_loop(monkeypatch):

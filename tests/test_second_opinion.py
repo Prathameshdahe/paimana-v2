@@ -4,7 +4,6 @@ import re
 import sys
 import threading
 import time
-from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -22,20 +21,17 @@ NUM = re.compile(r"\b\d+(?:,\d{3})*(?:\.\d+)?\b")   # a number as validate reads
 
 def add_signal(url, title, published="2026-08-02T06:00:00+00:00", severity=2, key=KEY, relevant=None):
     """A scout news item linked to key; relevant 0/1: the research agent's verdict on it."""
-    with closing(db.connect()) as con, con:
-        sid = con.execute("""INSERT INTO signals (url, url_hash, title, source, published_at, fetched_at, summary,
-            category, severity, text_hash) VALUES (?, ?, ?, 'PTI', ?, ?, '', 'law_order', ?, ?)""",
-                          [url, url[-12:], title, published, published, severity, url]).lastrowid
-        con.execute("INSERT INTO signal_projects VALUES (?, ?, 0.75, 'places+context')", [sid, key])
-        if relevant is not None:
-            con.execute("INSERT INTO signal_judgements (signal_id, project_key, relevant) VALUES (?, ?, ?)",
-                        [sid, key, relevant])
+    (sid,) = db.save_signals([{"url": url, "url_hash": url[-12:], "title": title, "source": "PTI",
+                               "published_at": published, "fetched_at": published, "summary": "",
+                               "category": "law_order", "severity": severity, "text_hash": url,
+                               "links": [(key, 0.75, "places+context")]}])
+    if relevant is not None:
+        db.save_research(key, [{"signal_id": sid, "project_key": key, "relevant": relevant}], [], [])
     return sid
 
 
 @pytest.fixture()
-def opinion_db(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def opinion_db(fresh_db):
     db.init()
     add_signal("https://n/stopped", "Work stopped at Vishnugad site after protest", relevant=1)   # a current hold-up
     yield
@@ -73,8 +69,8 @@ class FakeLLM:
 
 
 def stored():
-    with closing(db.connect()) as con:
-        return [dict(r) for r in con.execute("SELECT * FROM second_opinions ORDER BY generated_at")]
+    """The stored opinions, oldest first, as db.second_opinions merges them (the json body and the key columns)."""
+    return sorted(db.second_opinions(), key=lambda r: r["generated_at"])
 
 
 # ------------------------------------------------------------------ pack
@@ -308,8 +304,7 @@ def test_generate_retries_once_naming_the_reasons_then_caches(opinion_db, monkey
     row = stored()[0]
     assert (row["project_key"], row["evidence_hash"], row["model"], row["prompt_version"]) == (
         KEY, so.evidence_hash(p), client.LLM_MODEL, so.PROMPT_VERSION)
-    body = json.loads(row["json"])
-    assert body["status"] == "ok" and body["evidence"] == p["items"] and body["tier"] == "Medium"
+    assert row["status"] == "ok" and row["evidence"] == p["items"] and row["tier"] == "Medium"
     again = so.generate(KEY)
     assert again["cached"] and again["narrative"] == out["narrative"] and len(fake.calls) == 2
     assert so.cached(KEY)["headline"] == out["headline"]
@@ -334,7 +329,7 @@ def test_rejected_twice_is_stored_and_never_served(opinion_db, monkeypatch):
     out = so.generate(KEY)
     assert out["status"] == "rejected" and out["attempts"] == 2 and len(fake.calls) == 2
     assert any("97.5" in r for r in out["reasons"]) and "97.5" in fake.calls[1]["messages"][1]["content"]
-    assert json.loads(stored()[0]["json"])["status"] == "rejected" and so.cached(KEY) is None
+    assert stored()[0]["status"] == "rejected" and so.cached(KEY) is None
     malformed = FakeLLM("I think the project is fine.")
     monkeypatch.setattr(client, "chat", malformed)
     out = so.generate(KEY)          # asked on demand again: a rejection is not an answer

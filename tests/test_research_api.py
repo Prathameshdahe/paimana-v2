@@ -2,7 +2,6 @@
 Expectations come from the committed gold research tables, so the tests hold for the pilot sample and the full
 sweep alike."""
 import sys
-from contextlib import closing
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,9 +44,7 @@ def add_agent_fact(key, url, fact_id, **kw):
            "match": "medium", "match_reason": "LLM judge: names the project and its place", "origin": "agent",
            "researched_on": "2026-09-30", "live": 1, "signal_id": None, "model": "qwen", "prompt_version": "t",
            "judged_at": "2026-09-30T10:00:00+00:00", **kw}
-    with closing(db.connect()) as con, con:
-        con.execute(f"INSERT INTO research_facts ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
-                    list(row.values()))
+    db.save_research(key, [], [row], [])
 
 
 @pytest.fixture(scope="module")
@@ -67,24 +64,21 @@ def sweep():
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory, sweep):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app) as c:
-            add_agent_fact(sweep.key, AGENT_URL, "agentfact001")
-            # the sweep cites this story already: the agent has it as a Google News link, its headline with the
-            # feed's ' - Source' tail, other case and punctuation
-            add_agent_fact(sweep.key, AGENT_SAME_URL, "agentfact002", source=sweep.source,
-                           headline=f"{sweep.headline.upper().replace(':', ' -')}!  - {sweep.source}")
-            add_agent_fact(sweep.key, AGENT_OLD_URL, "agentfact003", direction="positive", event_date=None,
-                           published_date="2020-01-10", severity=1, live=0, headline="Approach road work resumes")
-            # the same story as agentfact001 from a second feed: one fact
-            add_agent_fact(sweep.key, AGENT_URL + "b", "agentfact004", source="The Tribune",
-                           headline="Work on approach road stopped | The Tribune",
-                           judged_at="2026-09-29T10:00:00+00:00")
-            with closing(db.connect()) as con, con:
-                con.execute("INSERT INTO researched VALUES (?, '2026-09-30T10:00:00+00:00', 5, 2)", [sweep.key])
-            yield c
+def client(sweep):
+    with TestClient(app) as c:
+        add_agent_fact(sweep.key, AGENT_URL, "agentfact001")
+        # the sweep cites this story already: the agent has it as a Google News link, its headline with the
+        # feed's ' - Source' tail, other case and punctuation
+        add_agent_fact(sweep.key, AGENT_SAME_URL, "agentfact002", source=sweep.source,
+                       headline=f"{sweep.headline.upper().replace(':', ' -')}!  - {sweep.source}")
+        add_agent_fact(sweep.key, AGENT_OLD_URL, "agentfact003", direction="positive", event_date=None,
+                       published_date="2020-01-10", severity=1, live=0, headline="Approach road work resumes")
+        # the same story as agentfact001 from a second feed: one fact
+        add_agent_fact(sweep.key, AGENT_URL + "b", "agentfact004", source="The Tribune",
+                       headline="Work on approach road stopped | The Tribune",
+                       judged_at="2026-09-29T10:00:00+00:00")
+        db.mark_researched(sweep.key, 5, 2, researched_at="2026-09-30T10:00:00+00:00")
+        yield c
 
 
 def test_project_research_merges_sweep_and_agent_facts(client, sweep):

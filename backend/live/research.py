@@ -59,7 +59,7 @@ import re
 import threading
 import time
 from collections import Counter
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -559,9 +559,7 @@ def batch_keys(n: int | None = None) -> list[str]:
     n = n or per_run()
     idx = scout.index()["projects"]
     last = db.researched()
-    with closing(db.connect()) as con:
-        watched = [r[0] for r in con.execute("SELECT project_key FROM watchlist GROUP BY 1 ORDER BY min(added_at)")]
-    watched = sorted((k for k in dict.fromkeys(watched) if k in idx), key=lambda k: last.get(k) or "")
+    watched = sorted((k for k in db.watched_keys() if k in idx), key=lambda k: last.get(k) or "")
     risky = sorted((k for k, p in idx.items() if p["tier"] in RISKY_TIERS and k not in set(watched)),
                    key=lambda k: (last.get(k) or "", -(idx[k]["p_any_2q"] or 0)))
     share = watched[:(n + 1) // 2]

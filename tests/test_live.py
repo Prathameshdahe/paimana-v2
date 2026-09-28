@@ -17,8 +17,7 @@ from backend.live import opinions, research, scheduler, scout, watcher  # noqa: 
 from backend.main import app  # noqa: E402
 
 
-def test_scheduler_is_off_in_tests(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def test_scheduler_is_off_in_tests():
     assert scheduler.start() == []  # LIVE_JOBS=0 from conftest.py
     with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
         s = c.get("/api/live/status").json()
@@ -139,9 +138,8 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def test_stream_pushes_a_new_alert(tmp_path, monkeypatch):
+def test_stream_pushes_a_new_alert(monkeypatch):
     """A real server (TestClient buffers whole responses, an endless stream never returns)."""
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     monkeypatch.setattr(scheduler, "POLL_S", 0.1)
     port = free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", ws="none",

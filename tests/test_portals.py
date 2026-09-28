@@ -55,9 +55,8 @@ def streamed(body: bytes, length: int | None = None) -> httpx.Response:
 
 
 @pytest.fixture
-def portal(tmp_path, monkeypatch):
+def portal(fresh_db, tmp_path, monkeypatch):
     """Canned portals behind an httpx MockTransport; every request is logged in calls."""
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     db.init()
     monkeypatch.setattr(portals, "SNAPSHOTS", tmp_path / "parivesh2_snapshots")
     monkeypatch.setattr(portals, "PULLS", tmp_path / "bhoomi_rashi_pulls")

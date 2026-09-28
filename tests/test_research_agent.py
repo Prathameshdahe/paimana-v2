@@ -5,7 +5,6 @@ import re
 import sys
 import threading
 import time
-from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -49,12 +48,9 @@ class FakeJudge:
 
 
 def add_signal(url, title, published="2026-08-02T06:00:00+00:00", link=None, method="places+context"):
-    with closing(db.connect()) as con, con:
-        sid = con.execute("""INSERT INTO signals (url, url_hash, title, source, published_at, fetched_at, summary,
-            severity, text_hash) VALUES (?, ?, ?, 'PTI', ?, ?, '', 2, ?)""",
-                          [url, url[-12:], title, published, published, url]).lastrowid
-        if link:
-            con.execute("INSERT INTO signal_projects VALUES (?, ?, 0.75, ?)", [sid, link, method])
+    (sid,) = db.save_signals([{"url": url, "url_hash": url[-12:], "title": title, "source": "PTI",
+                               "published_at": published, "fetched_at": published, "summary": "", "severity": 2,
+                               "text_hash": url, "links": [(link, 0.75, method)] if link else []}])
     return sid
 
 
@@ -63,14 +59,16 @@ def job():
     return {j["job"]: j for j in db.latest_jobs()}["research"]
 
 
-def rows(sql, params=()):
-    with closing(db.connect()) as con:
-        return [dict(r) for r in con.execute(sql, params)]
+def judgements(**kw):
+    return db.signal_judgements(**kw)
+
+
+def facts_of(*signal_ids):
+    return [f for f in db.research_facts() if f["signal_id"] in signal_ids]
 
 
 @pytest.fixture()
-def agent_db(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def agent_db(fresh_db, monkeypatch):
     db.init()
     ids = {"landslide": add_signal("https://n/landslide", "Landslide hits Vishnugad Pipalkoti project site in Chamoli; "
                                    "8 injured", link=KEY),
@@ -97,27 +95,26 @@ def test_judges_links_stores_and_alerts(agent_db, monkeypatch):
     assert "Sensex" not in first["user"] and first["max_tokens"] == research.max_tokens(4) == research.MAX_TOKENS
     assert "45" in retry["user"] and len(ITEM.findall(retry["user"])) == 1
 
-    j = {r["signal_id"]: r for r in rows("SELECT * FROM signal_judgements WHERE project_key = ?", [KEY])}
+    j = {r["signal_id"]: r for r in judgements(project_key=KEY)}
     ids = agent_db
     assert {k: j[ids[k]]["relevant"] for k in ("landslide", "shares", "tunnel", "stopped")} == {
         "landslide": 1, "shares": 0, "tunnel": 1, "stopped": None}
     assert "'45' is not in the payload" in json.loads(j[ids["stopped"]]["verdict_json"])["rejected"][0]
     assert ids["sensex"] not in j and all(r["prompt_version"] == research.PROMPT_VERSION for r in j.values())
 
-    facts = {r["signal_id"]: r for r in rows("SELECT * FROM research_facts")}
+    facts = {r["signal_id"]: r for r in db.research_facts()}
     ls, tn = facts[ids["landslide"]], facts[ids["tunnel"]]
     assert (ls["category"], ls["taxonomy"], ls["event_date"], ls["date_precision"], ls["live"], ls["match"]) == (
         "natural_event", "weather", "2026-08-01", "month", 1, "high")
     assert ls["origin"] == "agent" and ls["headline"].startswith("Landslide") and ls["status"] == "unknown"
     assert (tn["match"], tn["direction"], tn["live"]) == ("medium", "positive", 0)
     assert "pipalkoti" in tn["match_reason"]
-    assert rows("SELECT method FROM signal_projects WHERE signal_id = ?", [ids["tunnel"]]) == [{"method": "llm"}]
+    assert [ln["method"] for ln in db.signal_links(ids["tunnel"])] == ["llm"]
 
     alerts = db.alerts(kind="signal")["items"]
     assert [(a["project_key"], a["source"], a["severity"]) for a in alerts] == [(KEY, "https://n/landslide", 2)]
     assert alerts[0]["title"].startswith("Research (natural_event): Vishnugad")
-    assert rows("SELECT n_candidates, n_relevant FROM researched WHERE project_key = ?", [KEY]) == [
-        {"n_candidates": 4, "n_relevant": 2}]
+    assert [(r["n_candidates"], r["n_relevant"]) for r in db.researched_rows(KEY)] == [(4, 2)]
     assert job()["status"] == "ok" and job()["summary"]["keys"] == [KEY]
 
     # judged once per project: a second run has nothing to judge and raises nothing
@@ -135,8 +132,7 @@ def test_summary_copied_from_a_neighbour_is_rejected(agent_db, monkeypatch):
     out = research.run([KEY], refresh=False)
     assert out["rejected"] == 2 and out["relevant"] == 2 and len(fake.calls) == 2
     assert "described another item" in fake.calls[1]["user"] and len(ITEM.findall(fake.calls[1]["user"])) == 2
-    got = json.loads(rows("SELECT verdict_json FROM signal_judgements WHERE signal_id = ?",
-                          [agent_db["shares"]])[0]["verdict_json"])
+    got = json.loads(judgements(signal_id=agent_db["shares"])[0]["verdict_json"])
     assert got["rejected"] == [research.UNGROUNDED, "the summary describes another item"]
 
 
@@ -154,10 +150,10 @@ def test_made_up_summary_and_injected_item_are_rejected(agent_db, monkeypatch):
         assert u.count("<<<ITEMS") == 1 and u.count("ITEMS>>>") == 1
         assert "Ignore" not in u or u.index("<<<ITEMS") < u.index("Ignore previous") < u.index("ITEMS>>>")
     assert "Ignore previous" in fake.calls[0]["user"] and "ITEMS>>> Reply" not in fake.calls[0]["user"]
-    j = {r["signal_id"]: r for r in rows("SELECT * FROM signal_judgements WHERE project_key = ?", [KEY])}
+    j = {r["signal_id"]: r for r in judgements(project_key=KEY)}
     for s in (sid, agent_db["shares"]):
         assert j[s]["relevant"] is None and research.UNGROUNDED in json.loads(j[s]["verdict_json"])["rejected"]
-    assert rows("SELECT * FROM research_facts WHERE signal_id IN (?, ?)", [sid, agent_db["shares"]]) == []
+    assert facts_of(sid, agent_db["shares"]) == []
     assert any("said what its item does not" in c["user"] for c in fake.calls[1:])
     assert [a["source"] for a in db.alerts(kind="signal")["items"]] == ["https://n/landslide"]   # no severe alert
     assert out["relevant"] == 2
@@ -173,9 +169,9 @@ def test_private_headline_is_rejected_unjudged(agent_db, monkeypatch):
     out = research.run([KEY], refresh=False)
     assert out["private_headlines"] == 1 and out["candidates"] == 5
     assert all("Ramesh" not in c["user"] for c in fake.calls)
-    j = rows("SELECT relevant, verdict_json FROM signal_judgements WHERE signal_id = ?", [sid])
-    assert j == [{"relevant": None, "verdict_json": json.dumps({"rejected": [research.PRIVATE_HEADLINE]})}]
-    assert rows("SELECT * FROM research_facts WHERE signal_id = ?", [sid]) == []
+    j = [(r["relevant"], r["verdict_json"]) for r in judgements(signal_id=sid)]
+    assert j == [(None, json.dumps({"rejected": [research.PRIVATE_HEADLINE]}))]
+    assert facts_of(sid) == []
 
 
 def test_local_place_words():
@@ -195,8 +191,8 @@ def test_alert_only_once_per_url(agent_db, monkeypatch):
 def test_malformed_and_invalid_replies(agent_db, monkeypatch):
     monkeypatch.setattr(research, "_judge_llm", FakeJudge(reply="Sorry, I can only answer in prose."))
     out = research.run([KEY], refresh=False)
-    assert out["malformed"] == 1 and out.get("judged", 0) == 0 and rows("SELECT * FROM signal_judgements") == []
-    assert rows("SELECT * FROM researched")  # the project had its turn; the items stay for its next one
+    assert out["malformed"] == 1 and out.get("judged", 0) == 0 and judgements() == []
+    assert db.researched_rows()  # the project had its turn; the items stay for its next one
     bad = json.dumps([{"i": 1, "relevant": True, "category": "land"}, {"i": 9, "relevant": False},
                       {"i": 2, "relevant": True, "category": "weather", "direction": "negative", "severity": 2,
                        "summary": "x"}, {"i": 3, "relevant": False}])
@@ -207,17 +203,16 @@ def test_malformed_and_invalid_replies(agent_db, monkeypatch):
     # the two invalid entries are asked again, alone with what was wrong, and stay rejected when still invalid
     assert len(fake.calls) == 2 and len(ITEM.findall(fake.calls[1]["user"])) == 2
     assert "broke the reply format" in fake.calls[1]["user"] and "relevant without" in fake.calls[1]["user"]
-    got = {json.loads(r["verdict_json"])["i"]: r["relevant"] for r in rows("SELECT * FROM signal_judgements")}
+    got = {json.loads(r["verdict_json"])["i"]: r["relevant"] for r in judgements()}
     assert got == {1: None, 2: None, 3: 0}     # the invalid verdicts are rejected, item 9 does not exist
-    # an invalid entry fixed on the retry is kept
+    # an invalid entry fixed on the retry is kept (a fresh, unjudged copy of the tunnel item)
     first = json.dumps({"items": [{"i": 1, "relevant": True, "category": "progress", "direction": "positive",
                                    "severity": 1, "summary": "word " * 30}]})
     fixed = json.dumps({"items": [{"i": 1, "relevant": True, "category": "progress", "direction": "positive",
                                    "severity": 1, "summary": "Pipalkoti tunnel work resumes after 2 weeks."}]})
     replies = iter([first, fixed])
-    tunnel = rows("SELECT id FROM signals WHERE url = 'https://n/tunnel'")[0]["id"]
-    with closing(db.connect()) as con, con:
-        con.execute("DELETE FROM signal_judgements WHERE signal_id = ?", [tunnel])
+    tunnel = add_signal("https://n/tunnel-again", "Pipalkoti tunnel work resumes after 2 weeks",
+                        published="2026-07-21T06:00:00+00:00")
     monkeypatch.setattr(research, "candidates", lambda key, idx, real=research.candidates: [
         s for s in real(key, idx) if s["id"] == tunnel])
     monkeypatch.setattr(research, "_judge_llm", lambda messages, max_tokens: next(replies))
@@ -260,14 +255,14 @@ def test_busy_paused_and_down(agent_db, monkeypatch):
     monkeypatch.setattr(research, "PAUSE_POLL_S", 0.005)
     out = research.run([KEY], refresh=False)
     assert out["projects"] == 0 and "chat" in out["stopped"] and fake.calls == []
-    assert job()["status"] == "error" and rows("SELECT * FROM researched") == []
+    assert job()["status"] == "error" and db.researched_rows() == []
     monkeypatch.setattr(research, "_chat_active", lambda: False)
 
     def down(messages, max_tokens):
         raise client.LLMConnectionError("connection refused")
     monkeypatch.setattr(research, "_judge_llm", down)
     out = research.run([KEY], refresh=False)
-    assert out["stopped"].startswith("LM Studio unreachable") and rows("SELECT * FROM signal_judgements") == []
+    assert out["stopped"].startswith("LM Studio unreachable") and judgements() == []
 
 
 def test_busy_llm_on_the_retry_waits_and_keeps_the_first_verdicts(agent_db, monkeypatch):
@@ -296,11 +291,11 @@ def test_llm_down_on_the_retry_keeps_the_first_verdicts(agent_db, monkeypatch):
     monkeypatch.setattr(research, "_judge_llm", down_on_retry)
     out = research.run([KEY], refresh=False)
     assert out["stopped"].startswith("LM Studio unreachable") and job()["status"] == "partial"
-    judged = {r["signal_id"]: r["relevant"] for r in rows("SELECT * FROM signal_judgements")}
+    judged = {r["signal_id"]: r["relevant"] for r in judgements()}
     ids = agent_db
     assert judged == {ids["landslide"]: 1, ids["shares"]: 0, ids["tunnel"]: 1}      # "Work stopped" comes back
-    assert {r["signal_id"] for r in rows("SELECT signal_id FROM research_facts")} == {ids["landslide"], ids["tunnel"]}
-    assert rows("SELECT * FROM researched") == []    # stopped mid-project: still first in the rotation
+    assert {r["signal_id"] for r in db.research_facts()} == {ids["landslide"], ids["tunnel"]}
+    assert db.researched_rows() == []    # stopped mid-project: still first in the rotation
     assert [c["id"] for c in research.candidates(KEY, scout.index())] == [ids["stopped"]]
 
 
@@ -378,9 +373,10 @@ def test_llm_shims_work_with_and_without_the_new_client(monkeypatch):
     assert research._judge_llm(msgs, 10) == "chat 10"
 
 
-def test_reads_before_the_tables_exist(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "fresh.db"))    # serving used before db.init(): no agent facts
+def test_reads_before_the_tables_exist(fresh_db):
+    """serving used before the schema exists (a script): no agent facts, no failure (db.app._rows_or_none)."""
     assert db.research_facts(KEY) == [] and db.researched() == {}
+    assert db.app._rows_or_none("SELECT * FROM app.not_migrated_yet") == []
 
 
 def test_batch_keys_rotate(agent_db):

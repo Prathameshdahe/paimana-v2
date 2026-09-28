@@ -2,7 +2,6 @@
 import json
 import sys
 import time
-from contextlib import closing
 from pathlib import Path
 from urllib.parse import quote
 
@@ -21,21 +20,17 @@ URL = "/api/projects/{}/second-opinion"
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
-            yield c
+def client():
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+        yield c
     llm_client._down_at = -1e9
 
 
 def add_signal(key, url, title, published="2026-08-02T06:00:00+00:00"):
     """A severity-2 news item linked to key: a current hold-up in its evidence pack."""
-    with closing(db.connect()) as con, con:
-        sid = con.execute("""INSERT INTO signals (url, url_hash, title, source, published_at, fetched_at, summary,
-            category, severity, text_hash) VALUES (?, ?, ?, 'PTI', ?, ?, '', 'law_order', 2, ?)""",
-                          [url, url[-12:], title, published, published, url]).lastrowid
-        con.execute("INSERT INTO signal_projects VALUES (?, ?, 0.75, 'places+context')", [sid, key])
+    db.save_signals([{"url": url, "url_hash": url[-12:], "title": title, "source": "PTI", "published_at": published,
+                      "fetched_at": published, "summary": "", "category": "law_order", "severity": 2,
+                      "text_hash": url, "links": [(key, 0.75, "places+context")]}])
 
 
 def answer(narrative=None):

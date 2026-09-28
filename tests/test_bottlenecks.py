@@ -1,4 +1,3 @@
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -28,7 +27,7 @@ def event(key, category="land", authority=None, status="open", first="2019-01-01
 def test_three_projects_make_a_bottleneck_with_capital_and_tiers():
     ev = pd.DataFrame([event("P1"), event("P2"), event("P3", first="2017-04-01"), event("P4", status="closed"),
                        event("P5"), event("P6", category="forest_env"), event("GONE")])   # GONE: not current
-    b, mem = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals("nowhere.db")), cur_frame())
+    b, mem = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals([])), cur_frame())
     assert len(b) == 1
     r = b.iloc[0]
     assert (r["category"], r["authority"], r["state"], r["level"]) == ("land", "unspecified", "Maharashtra",
@@ -45,8 +44,8 @@ def test_three_projects_make_a_bottleneck_with_capital_and_tiers():
 def test_ids_are_stable_and_authorities_split_clusters():
     ev = pd.DataFrame([event("P1", authority="State Govt"), event("P2", authority="State Govt"),
                        event("P3", authority="High Court"), event("P5"), event("P6"), event("P7")])
-    b1, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals("nowhere.db")), cur_frame())
-    b2, _ = bn.cluster(bn.members(ev.iloc[::-1], cur_frame(), bn.load_signals("nowhere.db")), cur_frame())
+    b1, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals([])), cur_frame())
+    b2, _ = bn.cluster(bn.members(ev.iloc[::-1], cur_frame(), bn.load_signals([])), cur_frame())
     # Maharashtra: 2 + 1 named, no cluster of 3 and mostly named, so no rollup; Odisha: 3 unspecified
     assert b1[["bottleneck_id", "state", "n_projects"]].values.tolist() == [
         [bn.bottleneck_id("authority", "land", "unspecified", "Odisha"), "Odisha", 3]]
@@ -55,27 +54,23 @@ def test_ids_are_stable_and_authorities_split_clusters():
 
 def test_state_rollup_when_authority_is_mostly_unspecified():
     ev = pd.DataFrame([event("P1"), event("P2"), event("P3", authority="State Govt")])
-    b, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals("nowhere.db")), cur_frame())
+    b, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals([])), cur_frame())
     assert b[["level", "authority", "n_projects"]].values.tolist() == [["state", None, 3]]
     # no rollup that repeats the unspecified cluster's projects
     ev = pd.DataFrame([event("P1"), event("P2"), event("P3")])
-    b, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals("nowhere.db")), cur_frame())
+    b, _ = bn.cluster(bn.members(ev, cur_frame(), bn.load_signals([])), cur_frame())
     assert b["level"].tolist() == ["authority"]
 
 
-def test_signals_add_members_and_evidence_from_the_database(tmp_path):
-    db = tmp_path / "app.db"
-    with sqlite3.connect(db) as con:
-        con.executescript("""CREATE TABLE signals (id INTEGER PRIMARY KEY, url TEXT, title TEXT, source TEXT,
-            published_at TEXT, category TEXT, severity INTEGER);
-            CREATE TABLE signal_projects (signal_id INTEGER, project_key TEXT);""")
-        con.executemany("INSERT INTO signals VALUES (?, ?, ?, ?, ?, ?, ?)", [
-            (1, "u1", "Farmers stall land handover", "Daily", "2026-08-01T00:00:00+00:00", "land", 2),
-            (2, "u2", "Mention only", "Daily", "2026-08-02T00:00:00+00:00", "land", 1),        # severity 1
-            (3, "u3", "Protest", "Daily", "2026-08-03T00:00:00+00:00", None, 3),               # no category
-            (4, "u4", "Land row at P1", "Daily", "2026-08-04T00:00:00+00:00", "land", 3)])
-        con.executemany("INSERT INTO signal_projects VALUES (?, ?)", [(1, "P3"), (2, "P4"), (3, "P4"), (4, "P1")])
-    sig = bn.load_signals(db)
+def test_signals_add_members_and_evidence_from_the_database(fresh_db):
+    from backend import db
+    db.save_signals([{"url": f"u{i}", "title": t, "source": "Daily", "published_at": p, "category": c, "severity": s,
+                      "links": [(k, None, None)]} for i, (t, p, c, s, k) in enumerate([
+        ("Farmers stall land handover", "2026-08-01T00:00:00+00:00", "land", 2, "P3"),
+        ("Mention only", "2026-08-02T00:00:00+00:00", "land", 1, "P4"),        # severity 1
+        ("Protest", "2026-08-03T00:00:00+00:00", None, 3, "P4"),               # no category
+        ("Land row at P1", "2026-08-04T00:00:00+00:00", "land", 3, "P1")], 1)])
+    sig = bn.load_signals()
     assert sorted(sig["project_key"]) == ["P1", "P3"]
     ev = pd.DataFrame([event("P1", authority="State Govt"), event("P2")])
     b, mem = bn.cluster(bn.members(ev, cur_frame(), sig), cur_frame())
@@ -89,12 +84,12 @@ def test_multi_state_needs_a_named_authority_and_cleared_events_are_left_out():
     cur = pd.DataFrame([{"project_key": k, "project_name": k, "state": "Multi-State", "tier": "Low", "p_any_2q": .2,
                          "months_p50": 1.0, "anticipated_cost_cr": 10.0} for k in ("M1", "M2", "M3", "M4")])
     ev = pd.DataFrame([event(k, category="forest_env") for k in ("M1", "M2", "M3")])
-    b, _ = bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)
+    b, _ = bn.cluster(bn.members(ev, cur, bn.load_signals([])), cur)
     assert b.empty                                   # no shared place, no shared authority, no rollup
     ev = pd.DataFrame([event(k, category="forest_env", authority="MoEFCC") for k in ("M1", "M2", "M3", "M4")])
     ev.loc[3, "evidence"] = "Forest clearance got on 28.10.2021 and work started"
-    b, mem = bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)
+    b, mem = bn.cluster(bn.members(ev, cur, bn.load_signals([])), cur)
     assert b[["authority", "state", "n_projects"]].values.tolist() == [["MoEFCC", "Multi-State", 3]]
     assert "M4" not in set(mem["project_key"])
     ev.loc[3, "evidence"] = "Forest clearance obtained but land not yet handed over"   # a hold-up: still open
-    assert bn.cluster(bn.members(ev, cur, bn.load_signals("nowhere.db")), cur)[0].iloc[0]["n_projects"] == 4
+    assert bn.cluster(bn.members(ev, cur, bn.load_signals([])), cur)[0].iloc[0]["n_projects"] == 4

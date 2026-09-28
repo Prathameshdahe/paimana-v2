@@ -19,14 +19,12 @@ reads "searched, nothing found" only for projects that were searched ("unknown i
 """
 import hashlib
 import html
-import json
 import os
 import re
 import threading
 import time
 import xml.etree.ElementTree as ET
 from collections import Counter
-from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -217,40 +215,42 @@ def google_news(get, query: str) -> list[dict]:
 # ------------------------------------------------------------ store
 
 def store(items: list[dict], idx: dict) -> dict:
-    """Dedupe, link, classify and store items; returns counts and raises 'signal' alerts."""
-    counts, alerts, fetched_at = Counter(), [], _now().isoformat(timespec="seconds")
-    with closing(db.connect()) as con, con:
-        for it in items:
-            if _non_latin(it["title"]) > NON_LATIN_MAX:
-                counts["regional_skipped"] += 1
-                continue
-            text = f"{it['title']} {it['summary']}"
-            url_hash, text_hash = _hash(it["url"]), _hash(" ".join(text.lower().split()))
-            if con.execute("SELECT 1 FROM signals WHERE url_hash = ? OR text_hash = ?", [url_hash, text_hash]).fetchone():
-                counts["duplicate"] += 1
-                continue
-            key, score, how = link(text, idx)
-            counts[how] += 1
-            if how == "none":
-                continue
-            category, severity = classify(text)
-            sid = con.execute("""INSERT INTO signals (url, url_hash, title, source, published_at, fetched_at, summary,
-                category, severity, text_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                              [it["url"], url_hash, it["title"], it["source"], it["published_at"], fetched_at,
-                               it["summary"], category, severity, text_hash]).lastrowid
-            counts["stored"] += 1
-            if key is None:
-                continue
-            proj = idx["projects"][key]
-            method = "places+context" if _context(proj, text, tokens(text)) else "places"
-            con.execute("INSERT INTO signal_projects (signal_id, project_key, link_score, method) VALUES (?, ?, ?, ?)",
-                        [sid, key, score, method])
-            if severity >= 2:
-                alerts.append({"project_key": key, "kind": "signal", "severity": severity,
-                               "title": f"News ({category or 'mention'}): {proj['project_name']}",
-                               "detail": f"{it['title']} ({it['source']}, {(it['published_at'] or '')[:10]})",
-                               "asof": str(serving.state()["asof"]), "model_version": serving.state()["model_version"],
-                               "source": it["url"]})
+    """Dedupe, link, classify and store items (one transaction); returns counts and raises 'signal' alerts."""
+    counts, alerts, rows, fetched_at = Counter(), [], [], _now().isoformat(timespec="seconds")
+    hashed = [(it, _hash(it["url"]), _hash(" ".join(f"{it['title']} {it['summary']}".lower().split())))
+              for it in items]
+    seen_url, seen_text = db.known_signal_hashes([u for _, u, _ in hashed], [t for _, _, t in hashed])
+    for it, url_hash, text_hash in hashed:
+        if _non_latin(it["title"]) > NON_LATIN_MAX:
+            counts["regional_skipped"] += 1
+            continue
+        text = f"{it['title']} {it['summary']}"
+        if url_hash in seen_url or text_hash in seen_text:  # stored before, or earlier in this batch
+            counts["duplicate"] += 1
+            continue
+        key, score, how = link(text, idx)
+        counts[how] += 1
+        if how == "none":
+            continue
+        category, severity = classify(text)
+        seen_url.add(url_hash)
+        seen_text.add(text_hash)
+        row = {"url": it["url"], "url_hash": url_hash, "title": it["title"], "source": it["source"],
+               "published_at": it["published_at"], "fetched_at": fetched_at, "summary": it["summary"],
+               "category": category, "severity": severity, "text_hash": text_hash, "links": []}
+        rows.append(row)
+        counts["stored"] += 1
+        if key is None:
+            continue
+        proj = idx["projects"][key]
+        row["links"].append((key, score, "places+context" if _context(proj, text, tokens(text)) else "places"))
+        if severity >= 2:
+            alerts.append({"project_key": key, "kind": "signal", "severity": severity,
+                           "title": f"News ({category or 'mention'}): {proj['project_name']}",
+                           "detail": f"{it['title']} ({it['source']}, {(it['published_at'] or '')[:10]})",
+                           "asof": str(serving.state()["asof"]), "model_version": serving.state()["model_version"],
+                           "source": it["url"]})
+    db.save_signals(rows)
     db.add_alerts(alerts)
     return {**counts, "alerts": len(alerts)}
 
@@ -291,10 +291,7 @@ def run(keys: list[str], pib: bool = True, get=None) -> dict:
         counts["items"] = len(items)
         out = {**counts, **store(items, idx), "projects": len(done), "errors": errors[:20],
                "seconds": round(time.time() - t0, 1)}
-        with closing(db.connect()) as con, con:
-            now = _now().isoformat(timespec="seconds")
-            con.executemany("INSERT OR REPLACE INTO scouted (project_key, scouted_at, n_items) VALUES (?, ?, ?)",
-                            [(k, now, n) for k, n in done])
+        db.mark_scouted(done)
         ok = counts["queries"] > 0 or (not keys and counts["pib_items"])
         db.record_job("scout", started, "ok" if ok else "error", out)
         return out
@@ -309,9 +306,7 @@ def busy() -> bool:
 def batch_keys(n: int = MAX_PROJECTS) -> list[str]:
     """Watchlisted projects first, then Critical and High, the least recently scouted (never first) and riskiest."""
     idx = index()["projects"]
-    with closing(db.connect()) as con:
-        watched = [r[0] for r in con.execute("SELECT project_key FROM watchlist GROUP BY 1 ORDER BY min(added_at)")]
-        last = dict(con.execute("SELECT project_key, scouted_at FROM scouted").fetchall())
+    watched, last = db.watched_keys(), db.scouted_at()
     risky = sorted((k for k, p in idx.items() if p["tier"] in ("Critical", "High")),
                    key=lambda k: (last.get(k) or "", -(idx[k]["p_any_2q"] or 0)))
     return list(dict.fromkeys(k for k in watched + risky if k in idx))[:n]
@@ -347,38 +342,15 @@ def lead_time(key: str, published_at: str | None) -> dict:
     return {"cuf_change_period": change, "lead_days": (change - pub).days if change else None}
 
 
-LINKED_TO_KEYS = f"s.id IN (SELECT signal_id FROM signal_projects WHERE {db.IN_KEYS})"
-
-
 def feed(since=None, category=None, state=None, severity=None, linked=None, page=1, size=50, keys=None) -> dict:
     """One page of stored signals, newest first, each with its linked projects and their lead time. keys (a
     viewer's project keys, backend/access.py): only signals linked to one of them, with only those links; the
     unlinked pool is then empty."""
     idx = index()["projects"]
-    conds, params = [], []
-    if keys is not None:
-        conds.append(LINKED_TO_KEYS)
-        params.append(json.dumps(sorted(keys)))
-    for sql, v in (("s.published_at >= ?", since), ("s.category = ?", category), ("s.severity >= ?", severity)):
-        if v is not None:
-            conds.append(sql)
-            params.append(v)
-    if state:  # linked to a project of that state (of the viewer's); links and heat stay the viewer's
-        state_keys = [k for k, p in idx.items() if p["state"] == state and (keys is None or k in keys)]
-        conds.append(f"s.id IN (SELECT signal_id FROM signal_projects WHERE project_key IN "
-                     f"({','.join('?' * len(state_keys))}))" if state_keys else "0")
-        params += state_keys
-    if linked is not None:
-        conds.append(("" if linked else "NOT ") + "EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id)")
-    where = (" WHERE " + " AND ".join(conds)) if conds else ""
-    with closing(db.connect()) as con:
-        total = con.execute(f"SELECT count(*) FROM signals s{where}", params).fetchone()[0]
-        rows = [dict(r) for r in con.execute(f"""SELECT s.* FROM signals s{where}
-            ORDER BY s.published_at DESC NULLS LAST, s.id DESC LIMIT ? OFFSET ?""", params + [size, (page - 1) * size])]
-        links = {}
-        for r in con.execute(f"""SELECT * FROM signal_projects WHERE signal_id IN ({','.join('?' * len(rows))})""",
-                             [r["id"] for r in rows]):
-            links.setdefault(r["signal_id"], []).append(dict(r))
+    # state: linked to a project of that state (of the viewer's); links and heat stay the viewer's
+    state_keys = [k for k, p in idx.items() if p["state"] == state and (keys is None or k in keys)] if state else None
+    total, rows, links = db.signal_feed(since=since, category=category, severity=severity, linked=linked,
+                                        state_keys=state_keys, page=page, size=size, keys=keys)
     for r in rows:
         r["projects"] = [{"key": ln["project_key"], "name": idx.get(ln["project_key"], {}).get("project_name"),
                           "state": idx.get(ln["project_key"], {}).get("state"),
@@ -392,9 +364,7 @@ def heat(days: int = HEAT_DAYS, keys=None) -> list[dict]:
     """Signals of severity >= 2 in the last `days` days per state of their linked projects (in keys, if given)."""
     idx = index()["projects"]
     since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
-    with closing(db.connect()) as con:
-        pairs = con.execute("""SELECT DISTINCT sp.signal_id, sp.project_key FROM signal_projects sp
-            JOIN signals s ON s.id = sp.signal_id WHERE s.severity >= 2 AND s.published_at >= ?""", [since]).fetchall()
+    pairs = db.severe_links(since)
     n = Counter(st for _, st in {(sid, idx[k]["state"]) for sid, k in pairs
                                  if k in idx and (keys is None or k in keys)})
     return [{"state": s, "n": c} for s, c in n.most_common()]
@@ -405,28 +375,13 @@ def radar_summary(days: int = HEAT_DAYS, keys=None) -> dict:
     unlinked; lead time over every linked signal (a positive gap: the news came before the CUF row changed). keys
     (a viewer's project keys): only the signals linked to them, those links and the scouting of those projects."""
     since = (_now() - timedelta(days=days)).isoformat(timespec="seconds")
-    linked_sql = "EXISTS (SELECT 1 FROM signal_projects sp WHERE sp.signal_id = s.id)"
-    signals_in, keys_in, kp = "true", "true", []
-    if keys is not None:
-        signals_in, keys_in, kp = LINKED_TO_KEYS, db.IN_KEYS, [json.dumps(sorted(keys))]
-    with closing(db.connect()) as con:
-        def counts(col, limit=20):
-            return [{"name": r[0], "n": r[1]} for r in con.execute(
-                f"""SELECT {col}, count(*) FROM signals s WHERE s.published_at >= ? AND {signals_in} GROUP BY 1
-                    ORDER BY 2 DESC, 1 LIMIT {limit}""", [since] + kp)]
-        total = con.execute(f"SELECT count(*) FROM signals s WHERE {signals_in}", kp).fetchone()[0]
-        n_window, n_linked = con.execute(f"""SELECT count(*), count(*) FILTER (WHERE {linked_sql}) FROM signals s
-            WHERE s.published_at >= ? AND {signals_in}""", [since] + kp).fetchone()
-        by_category, by_severity, by_source = counts("coalesce(s.category, 'none')"), counts("s.severity"), counts(
-            "s.source", 10)
-        pairs = con.execute(f"""SELECT project_key, s.published_at FROM signal_projects
-            JOIN signals s ON s.id = signal_id WHERE {keys_in}""", kp).fetchall()
-        scouted = con.execute(f"SELECT count(*) FROM scouted WHERE {keys_in}", kp).fetchone()[0]
+    c = db.radar_counts(since, keys=keys)
+    pairs = c["pairs"]
     gaps = [g for g in (lead_time(k, pub)["lead_days"] for k, pub in pairs) if g is not None]
     gaps.sort()
-    return {"window_days": days, "since": since, "n_signals_total": total, "n_window": n_window,
-            "n_linked": n_linked, "n_unlinked": n_window - n_linked, "by_category": by_category,
-            "by_severity": by_severity, "by_source": by_source, "n_projects_scouted": scouted,
+    return {"window_days": days, "since": since, "n_signals_total": c["total"], "n_window": c["n_window"],
+            "n_linked": c["n_linked"], "n_unlinked": c["n_window"] - c["n_linked"], "by_category": c["by_category"],
+            "by_severity": c["by_severity"], "by_source": c["by_source"], "n_projects_scouted": c["scouted"],
             "lead_time": {"n_linked_pairs": len(pairs), "n_with_later_change": len(gaps),
                           "median_lead_days": gaps[len(gaps) // 2] if gaps else None,
                           "basis": "every linked signal: the first report period after its date whose CUF row "

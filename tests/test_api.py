@@ -14,11 +14,9 @@ MAX_ROWS = 100
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))  # startup seeds the app DB
-        with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
-            yield c
+def client():
+    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:  # startup seeds the app database
+        yield c
 
 
 def project_rows(body):

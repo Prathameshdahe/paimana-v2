@@ -60,18 +60,17 @@ import logging
 import math
 import os
 import re
-import sqlite3
 import sys
 import threading
 import time
 from collections import Counter
-from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sqlalchemy.exc import ProgrammingError
 
 from backend import db, serving
 from llm import client
@@ -235,20 +234,6 @@ def _quote(s, n: int = QUOTE_MAX) -> str | None:
 
 def _sentences(*parts) -> str:
     return " ".join(p for p in parts if p)
-
-
-def _ro_db() -> sqlite3.Connection | None:
-    """A read-only connection to the app database, None when it does not exist (never creates it)."""
-    p = db.path()
-    if not p.exists():
-        return None
-    con = sqlite3.connect(p.resolve().as_uri() + "?mode=ro", uri=True)
-    con.row_factory = sqlite3.Row
-    return con
-
-
-def _tables(con) -> set[str]:
-    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
 # ------------------------------------------------------------------ markdown
@@ -475,16 +460,25 @@ def event_chunks(s: dict, names: dict) -> list[dict]:
     return out
 
 
+def _app_rows(fn, *args) -> list[dict]:
+    """Rows of an app-database read, or none when the database cannot be reached (the index is built from what
+    there is; the fingerprint records the outage, so the next check rebuilds)."""
+    try:
+        return fn(*args)
+    except db.Unavailable as e:
+        log.warning("app database unavailable while building chunks: %s", str(e).splitlines()[0])
+        return []
+
+
 def _research_rows() -> pd.DataFrame:
-    """Research facts: the sweep's gold file and the agent's SQLite table, one per project and URL (sweep first)."""
+    """Research facts: the sweep's gold file and the agent's app-database table, one per project and URL (sweep
+    first)."""
     frames = []
     if RESEARCH_FACTS.exists():
         frames.append(pd.read_parquet(RESEARCH_FACTS).assign(origin="sweep"))
-    con = _ro_db()
-    if con is not None:
-        with closing(con):
-            if "research_facts" in _tables(con):
-                frames.append(pd.read_sql_query("SELECT * FROM research_facts", con).assign(origin="agent"))
+    agent = _app_rows(db.research_facts)
+    if agent:
+        frames.append(pd.DataFrame(agent).assign(origin="agent"))
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
@@ -542,20 +536,8 @@ def research_chunks(names: dict) -> list[dict]:
 
 
 def news_chunks(names: dict) -> list[dict]:
-    con = _ro_db()
-    if con is None:
-        return []
-    with closing(con):
-        if not {"signals", "signal_projects"} <= _tables(con):
-            return []
-        rows = [dict(r) for r in con.execute("""SELECT id, title, source, published_at, category, severity, url,
-                project_key FROM (
-                SELECT s.id, s.title, s.source, s.published_at, s.category, s.severity, s.url, sp.project_key,
-                    row_number() OVER (PARTITION BY sp.project_key ORDER BY s.published_at DESC, s.id DESC) AS n
-                FROM signal_projects sp JOIN signals s ON s.id = sp.signal_id WHERE coalesce(s.title, '') != '')
-            WHERE n <= ? ORDER BY id, project_key""", [NEWS_PER_PROJECT])]
     out = []
-    for r in rows:
+    for r in _app_rows(db.news_for_index, NEWS_PER_PROJECT):
         title, source = _quote(r["title"]), _quote(r["source"], 100)
         if not title:
             continue
@@ -720,21 +702,12 @@ def _mtime(p: Path) -> int | None:
 
 
 def _app_marks() -> dict:
+    """The app database's part of the fingerprint (the newest signal, the links, the agent's facts); an outage is
+    recorded as such, so the index is rebuilt once the database answers again."""
     try:
-        con = _ro_db()
-        if con is None:
-            return {}
-        with closing(con):
-            t, out = _tables(con), {}
-            if "signals" in t:
-                out["signals"] = con.execute("SELECT max(id) FROM signals").fetchone()[0]
-            if "signal_projects" in t:
-                out["links"] = con.execute("SELECT count(*) FROM signal_projects").fetchone()[0]
-            if "research_facts" in t:
-                out["research"] = list(con.execute("SELECT count(*), max(rowid) FROM research_facts").fetchone())
-            return out
-    except sqlite3.Error as e:
-        return {"error": str(e)}
+        return db.index_marks()
+    except (db.Unavailable, ProgrammingError) as e:
+        return {"error": str(e).splitlines()[0]}
 
 
 def _code_mark() -> str:

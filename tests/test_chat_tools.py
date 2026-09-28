@@ -21,11 +21,8 @@ CARD_TYPES = {"projects", "stats", "project", "explain", "history", "compare", "
 
 
 @pytest.fixture(scope="module", autouse=True)
-def app_db(tmp_path_factory):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        db.init()
-        yield
+def app_db():
+    db.init()
 
 
 @pytest.fixture(scope="module")
@@ -189,22 +186,18 @@ def test_research_sources_keep_the_dates_precision(keys):
     assert months or row is None      # the month-precise ones came out without a day
 
 
-def test_knowledge_search_never_shows_a_research_agent_headline(tmp_path, monkeypatch):
+def test_knowledge_search_never_shows_a_research_agent_headline(fresh_db, monkeypatch):
     """The real index (every real chunk, TF-IDF) with one research-agent fact whose raw feed headline names a
     private person: search_knowledge finds the fact for the public and an official, and neither the sources card
     nor a passage carries the headline (serving.public_facts drops it; so does the index)."""
-    import sqlite3
     import time
     name = "Ramesh Kumar"
-    dbp = tmp_path / "app.db"
-    with sqlite3.connect(dbp) as con:
-        con.execute("CREATE TABLE research_facts (fact_id, project_key, category, direction, severity, event_date, "
-                    "summary, headline, source, url)")
-        con.execute("INSERT INTO research_facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
-            "agent-1", "PRJ-000698", "land", "negative", 2, "2026-09-01",
-            "Villagers protested at the Pipalkoti tunnel site over land compensation.",
-            f"Farmer {name} beaten by police at Pipalkoti tunnel protest", "Local Paper", "https://example.org/p"))
-    monkeypatch.setenv("PAIMANA_DB", str(dbp))
+    db.init()   # the module's seeded alerts again (fresh_db emptied them; the tests after this one read them)
+    db.save_research("PRJ-000698", [], [{
+        "fact_id": "agent-1", "project_key": "PRJ-000698", "category": "land", "direction": "negative", "severity": 2,
+        "event_date": "2026-09-01", "summary": "Villagers protested at the Pipalkoti tunnel site over land compensation.",
+        "headline": f"Farmer {name} beaten by police at Pipalkoti tunnel protest", "source": "Local Paper",
+        "url": "https://example.org/p", "origin": "agent"}], [])
     monkeypatch.setattr(rag, "EMBED", False)
     rag.reset()
     try:

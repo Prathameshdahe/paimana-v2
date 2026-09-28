@@ -49,11 +49,9 @@ def fake_llm(monkeypatch):
 
 
 @pytest.fixture(scope="module")
-def api(tmp_path_factory):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app) as c:
-            yield c
+def api():
+    with TestClient(app) as c:
+        yield c
 
 
 def events(text: str) -> list[tuple[str, dict]]:
@@ -160,8 +158,7 @@ def test_rate_limit_windows():
     assert ratelimit.check("o", "ministry_official", t + 5) is not None
 
 
-def test_the_stream_is_live_and_a_hang_up_frees_the_llm(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def test_the_stream_is_live_and_a_hang_up_frees_the_llm(monkeypatch):
     long_answer = ["word "] * 40 + ["[1]."]
 
     def slow(messages, **kw):

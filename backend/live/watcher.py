@@ -9,8 +9,9 @@ first, one pipeline run per file:
   2. the extractor, pipeline/build_clean_projects.py, then python -m pipeline.run silver (which resolves identity
      first), external, research, gold, score and profile. train is the monthly run and is started by hand.
   3. success: the inbox file moves to dataset/raw/<csv|pdf>/<fiscal year>/, the old and new predictions are diffed
-     into tier_up / tier_down / new_project alerts, and prediction_log rows whose t + 2q is now labelled get their
-     realised outcome (a slip_realised alert when they were High / Critical and slipped).
+     into tier_up / tier_down / new_project alerts, prediction_log rows whose t + 2q is now labelled get their
+     realised outcome (a slip_realised alert when they were High / Critical and slipped), and the accepted report
+     and its run are registered in ingest.source_documents / load_runs.
      failure: the predictions pointer and file, the prediction log and the clean input the run replaced are put
      back, serving stays on the version it had (pinned), the file stays in the inbox and a pipeline_error alert is
      raised. The source row keeps status error, so the file is retried only under a new pipeline version.
@@ -238,6 +239,10 @@ def _archive(path: Path, kind: str, period: str | None, sha: str) -> Path:
     return path.replace(dest)
 
 
+def _first(frame: pd.DataFrame, col: str) -> str | None:
+    return str(frame[col].iloc[0]) if col in frame and len(frame) and pd.notna(frame[col].iloc[0]) else None
+
+
 def _rows(kind: str, copied: Path | None) -> int:
     if kind == "portal_csv":
         return len(pd.read_csv(CLEAN / "portal" / "portal_projects.csv", usecols=["project_code"]))
@@ -248,7 +253,7 @@ def _rows(kind: str, copied: Path | None) -> int:
 
 def _fail(row: dict, started: str, error: str, summary: dict) -> dict:
     s = serving.state()
-    row.update(status="error", error=error)
+    row.update(status="error", error=error, started_at=started)
     db.record_source(row)
     db.record_job("ingest", started, "error", {**summary, "file": row["filename"], "error": error})
     db.add_alerts([{"project_key": None, "kind": "pipeline_error", "severity": 3,
@@ -299,7 +304,10 @@ def ingest(path: Path, sha: str, pv: str) -> dict:
         return _fail(row, started, f"{type(e).__name__}: {e}", {**summary, "seconds": round(time.time() - t0, 1)})
     serving.pin(False)
     row.update(status="ok", rows=n_rows, archived_as=archived.relative_to(ROOT).as_posix())
-    db.record_source(row)
+    # the lineage row of ingest.source_documents / load_runs: the run and the versions its scores carry
+    db.record_source({**row, "started_at": started, "rows_read": n_rows, "rows_loaded": n_rows, "rows_failed": 0,
+                      "silver_version": _first(new, "silver_version"), "gold_version": _first(new, "gold_version"),
+                      "model_version": _first(new, "model_version")})
     db.record_job("ingest", started, "ok", {
         **summary, "rows": n_rows, "archived_as": row["archived_as"], "asof": str(new["asof"].max().date()),
         "model_version": new["model_version"].iloc[0], "alerts": dict(Counter(a["kind"] for a in alerts)),

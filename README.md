@@ -19,7 +19,7 @@ paimana-v2/
     raw/         QPISR PDFs and MoSPI CSVs, never edited; raw/inbox/ takes new reports
     silver/      cleaned observations (Parquet)
     gold/        features, labels, scores, risk profile (Parquet + JSON)
-  database/      paimana.db (SQLite app state, gitignored) and JSON for worker runs and memo drafts
+  database/      postgres/ (schema migrations and Manamrit's loaders; docs/DATABASE.md) and JSON for worker runs and memo drafts
   docs/          design notes and pitch
   temp/          scratch, gitignored
 ```
@@ -90,9 +90,11 @@ at once from "Check inbox now" on Home (IPMD Analyst). New alerts reach the top
 bar bell and the Home inbox through `/api/stream`.
 
 The backend reads `dataset/silver/` and `dataset/gold/` through DuckDB and
-reloads when a new score or profile lands. Alerts, watchlists and the audit log
-are in SQLite (`database/paimana.db`, created on first start); worker runs and
-memo drafts stay JSON in `database/`. Routes are in `backend/routes.py`.
+reloads when a new score or profile lands. Alerts, watchlists, news signals,
+research facts, second opinions, users and the audit log are in PostgreSQL
+(`.env.db` holds the credentials; the schema is migrated on first start:
+`docs/DATABASE.md`); worker runs and memo drafts stay JSON in `database/`.
+Routes are in `backend/routes.py`.
 
 Gotchas:
 

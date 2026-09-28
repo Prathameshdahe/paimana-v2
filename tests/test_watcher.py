@@ -1,7 +1,6 @@
 import io
 import json
 import sys
-from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -72,9 +71,8 @@ def test_fill_realised_is_idempotent_and_alerts_flagged_slips():
 
 
 @pytest.fixture()
-def live(tmp_path, monkeypatch):
+def live(fresh_db, tmp_path, monkeypatch):
     """The watcher's files in tmp_path; the real serving data stays loaded for asof / model_version."""
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     db.init()
     gold, clean, inbox = tmp_path / "gold", tmp_path / "clean", tmp_path / "raw" / "inbox"
     for d in (gold, clean / "portal", inbox):
@@ -112,8 +110,7 @@ def fake_pipeline(monkeypatch, fail_at=None):
 
 def alerts_of(kind):
     """Alerts the watcher raised (not the seeded feed)."""
-    with closing(db.connect()) as con:
-        return [dict(r) for r in con.execute("SELECT * FROM alerts WHERE kind = ? AND source LIKE 'ingest:%'", [kind])]
+    return [a for a in db.alerts(kind=kind, size=100)["items"] if (a["source"] or "").startswith("ingest:")]
 
 
 def test_ingest_runs_once_per_sha256(live, monkeypatch):
@@ -134,6 +131,12 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     (watcher.INBOX / "copy.csv").write_text(PORTAL_CSV, encoding="utf-8")
     assert watcher.pending() == [] and watcher.watch_once()["files"] == []
     assert len(calls) == 8
+    # the accepted report and its run are registered for the lineage (ingest.source_documents / load_runs)
+    (doc,) = db.source_documents(row["sha256"])
+    assert (doc["file_type"], doc["report_type"], doc["source_path"]) == ("csv", "portal_csv", row["archived_as"])
+    (run,) = db.load_runs("INGEST")
+    assert (run["status"], run["rows_loaded"], run["source_document_id"]) == ("SUCCESS", 2, doc["source_document_id"])
+    assert run["model_version"] == "mv-new"
     # a new pipeline version ingests it again
     monkeypatch.setattr(watcher, "pipeline_version", lambda: "next")
     assert [p.name for p, _ in watcher.pending()] == ["copy.csv"]

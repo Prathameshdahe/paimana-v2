@@ -16,8 +16,8 @@ load) and is retried after RETRY_S seconds. The DuckDB copy runs under a memory
 cap and a thread cap (DUCKDB_MEMORY_LIMIT, default 2GB, and DUCKDB_THREADS,
 default 4, read from the environment; backend/settings.py carries the same
 names), so a query over the wide tables cannot take the process with it. The
-in-app research agent's facts live in SQLite (backend/db.py) and are read per
-request, next to the cached gold part.
+in-app research agent's facts live in the app database (backend/db, PostgreSQL)
+and are read per request, next to the cached gold part.
 """
 from __future__ import annotations
 
