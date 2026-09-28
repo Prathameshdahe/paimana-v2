@@ -7,9 +7,11 @@ when it is not scored, has no evidence about the project itself (second_opinion.
 line and the model) or was already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an
 opinion accepted or rejected under it, or a rejection under it noted on an older prompt's accepted opinion
 (last_rejected), so a rejection is not asked again every night, only when the evidence or the prompt changes. An
-accepted opinion that fails a check tightened since (second_opinion._accepted) is due again: it is no longer served. Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
-(second_opinion.generate as a background job: the gate lets chat requests go first; fresh, so an opinion made under
-an older prompt is redone), until `limit` projects were asked (SECOND_OPINION_PER_RUN, default 15). LM Studio down, or
+accepted opinion that fails a check tightened since (second_opinion._accepted) is due again: it is no longer served.
+Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
+(second_opinion.generate as a background job: the gate lets chat requests go first, also between an opinion's first
+ask and its retry; fresh, so an opinion made under an older prompt is redone), until `limit` projects were asked
+(SECOND_OPINION_PER_RUN, default 15). LM Studio down, or
 busy past the waits, ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep
 their opinions. One run at a time (a module lock: a second call returns busy); a run given keys records
 db.record_job('second_opinion', ...), with the counts per status and concern level.

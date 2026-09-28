@@ -65,9 +65,10 @@ A rejected reply is asked again once: the same prompt with the reasons named aft
 the rejected reply as the assistant's turn at TEMPERATURE, the model sent it back unchanged). A second rejection is
 stored as such and returned with its reasons; when an accepted opinion made under an older prompt is stored for the
 same evidence, it stays and the rejection is noted on it (last_rejected: prompt version, time, reasons), so the
-nightly job does not ask again until the evidence or PROMPT_VERSION changes either way. Accepted and rejected replies go to SQLite second_opinions per (project, evidence_hash, LLM model) with
-the prompt version, asof and the pack items, so every opinion can later be compared with what happened
-(docs/SECOND_OPINION.md); a cached opinion is checked again when read.
+nightly job does not ask again until the evidence or PROMPT_VERSION changes either way. Accepted and rejected replies
+go to SQLite second_opinions per (project, evidence_hash, LLM model) with the prompt version, asof and the pack items,
+so every opinion can later be compared with what happened (docs/SECOND_OPINION.md); a cached opinion is checked again
+when read.
 
 generate(key) returns {'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} like backend/brief.py; it
 takes the LLM gate (llm/client.py): a person asking (interactive) marks the gate as a chat request, so background
