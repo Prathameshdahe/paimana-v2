@@ -51,7 +51,8 @@ Each current project gets a checklist of 12 risk checks plus one combined land-a
 The checks are: a likely date push or cost revision (the project is in the top 20% for that chance); work slowed or
 stopped; spending out of step with work done; the cost or date revised twice or more already; the sector behind its
 targets; the agency's past projects finishing later than planned; land not fully acquired; a forest or environment
-clearance pending; a court case; contractor problems; and an old or low-quality latest report.
+clearance pending; a court case; contractor problems; and a gap of more than 3 months before the latest report or a
+low data-quality score.
 
 The project page shows up to three flagged checks in plain words, for example "Land for the project is not fully
 acquired yet." The **early notice** flag marks a project with a flagged outside factor (land, forest, a court case,
@@ -79,8 +80,8 @@ is still in the Low or Medium tier.
 
 Scores are recalculated when a new report arrives, and every score carries the date it is "as of". At the time of
 writing (September 2026) the scores are as of July 2026, from the July 2026 flash report; the assistant can tell you
-the current date. Each project's figures come from its own latest report, which can be older; the "old report" check
-flags a report more than 3 months old. Remark issues end in 2023. The land register and the PARIVESH lists were read
+the current as-of date. Every current project is in the latest report, but a report can leave a field blank, and then
+that figure is unknown. Remark issues end in 2023. The land register and the PARIVESH lists were read
 in September 2026, and news is searched daily for a rotating set of projects.
 
 ## What the assistant can do
