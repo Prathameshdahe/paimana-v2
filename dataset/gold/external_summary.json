@@ -1,7 +1,7 @@
 {
   "as_of_date": "2026-07-01",
   "n_projects": 1763,
-  "model_version": "lgbm-any2q-20260927-222602",
+  "model_version": "lgbm-any2q-20260927-222602+20260928-051908",
   "rule": "early notice = a flagged external factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the CUF numbers show no slip yet: slip to date <= 0 months or tier Low/Medium",
   "factors": {
     "land": {
