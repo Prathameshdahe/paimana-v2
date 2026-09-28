@@ -64,7 +64,9 @@ def check_result(r: tools.ToolResult):
         assert c["type"] in CARD_TYPES
         assert all("_" not in k for k in c), c.keys()
     for s in r.sources:
-        assert set(s) == {"kind", "title", "source", "url", "date", "projectKey"}
+        assert set(s) == {"kind", "title", "source", "url", "date", "datePrecision", "projectKey"}
+        assert s["datePrecision"] in (None, "day", "month", "year") and (s["date"] is None) == (
+            s["datePrecision"] is None)
     ok, reasons, _ = brief.validate(r.summary, r.facts)
     assert ok, (r.summary, reasons)
     json.dumps(r.facts)  # plain JSON for the prompt
@@ -162,10 +164,15 @@ def test_research_sources_keep_the_dates_precision(keys):
     """A month-precise fact is stored as the first of its month; the sources card gets '2026-07', not a day the
     source never gave (Segment 8 review, contract lens). _src takes the precision; the facts already used it."""
     from datetime import date
-    assert tools._src("research", "t", "s", when=date(2026, 7, 1), precision="month")["date"] == "2026-07"
-    assert tools._src("research", "t", "s", when=date(2026, 7, 1), precision="year")["date"] == "2026"
-    assert tools._src("research", "t", "s", when=date(2026, 7, 1))["date"] == "2026-07-01"
-    assert tools._src("research", "t", "s", when=None, precision="month")["date"] is None
+
+    def src(**kw):
+        s = tools._src("research", "t", "s", **kw)
+        return s["date"], s["datePrecision"]
+    assert src(when=date(2026, 7, 1), precision="month") == ("2026-07", "month")
+    assert src(when=date(2026, 7, 1), precision="year") == ("2026", "year")
+    assert src(when=date(2026, 7, 1)) == ("2026-07-01", "day")
+    assert src(when=date(2026, 7, 1), precision="day") == ("2026-07-01", "day")
+    assert src(when=None, precision="month") == (None, None)
     s = serving.state()
     row = serving._one(s, "SELECT project_key AS k FROM rfacts WHERE date_precision = 'month' ORDER BY 1 LIMIT 1")
     key = row["k"] if row else keys["researched"]
@@ -173,6 +180,7 @@ def test_research_sources_keep_the_dates_precision(keys):
     facts = {f["url"]: f for f in serving.public_research(serving.research(key))["facts"]}
     research = [x for x in r.sources if x["kind"] == "research"]
     assert research and all(x["date"] == source_date(facts[x["url"]]) for x in research)
+    assert all(x["datePrecision"] == {4: "year", 7: "month"}.get(len(x["date"] or ""), "day") for x in research)
     whole = tools.run(PUBLIC, "project_research", {})
     blockers = {b["url"]: b for b in serving.research_summary(scope=None)["top_recent_blockers"]}
     for x in whole.sources[1:]:

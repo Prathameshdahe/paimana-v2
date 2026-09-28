@@ -53,6 +53,7 @@ Then open **http://localhost:3000** in your browser.
 | Agency | Only their own projects shown, plus the alerts bell and the assistant on those projects |
 | Ministry | Only their ministry's projects, plus the alerts bell and the assistant on those projects |
 | IPMD Analyst | Everything, plus jobs, the worker console and the assistant on every project |
+| IPMD Administrator | Everything an analyst sees, plus Administration (`/admin`): access requests, users, the audit log |
 
 **Key stat to know:** The risk bar updates automatically every time a new report is processed.
 

@@ -79,7 +79,7 @@ Code: `llm/router.py` (routing), `llm/tools.py` (tools), `llm/agent.py` (planner
 |---|---|
 | `status` | `{stage: routing \| planning \| tools \| writing \| checking, detail}` |
 | `tool` | `{id: 't1', name, label, args, status: running \| done \| error, summary}` |
-| `card` | `projects`, `stats`, `project`, `explain`, `history`, `compare`, `opinion`, then one `sources` card `{items: [{n, kind, title, source, url, date, projectKey}]}`; `date` is ISO at the precision the source gives (`2026`, `2026-07` for a month-precise research fact, else a day). In a `stats` card's rows `nCritical` and `nHigh` are null when the count is unknown (an agency with open projects outside the viewer's scope: not zero) |
+| `card` | `projects`, `stats`, `project`, `explain`, `history`, `compare`, `opinion`, then one `sources` card `{items: [{n, kind, title, source, url, date, datePrecision, projectKey}]}`; `date` is ISO at the precision the source gives (`2026`, `2026-07` for a month-precise research fact, else a day) and `datePrecision` names it (`day` \| `month` \| `year`, null with no date). In a `stats` card's rows `nCritical` and `nHigh` are null when the count is unknown (an agency with open projects outside the viewer's scope: not zero) |
 | `token` | `{text}`, the answer as it streams |
 | `retry` | `{reasons}`: clear the streamed text; a replacement follows (the strict attempt, or the deterministic answer as one `token`) |
 | `done` | `{text, validated, reasons, llm: ok \| unavailable \| busy \| skipped, elapsedMs}`; `text` is the final answer |

@@ -102,7 +102,8 @@ def test_a_confident_question_streams_cards_then_a_checked_answer(monkeypatch):
     d = done(ev)
     assert d == {**d, "validated": True, "llm": "ok", "reasons": []} and d["text"].startswith("Web research found")
     assert "".join(e["data"]["text"] for e in ev if e["event"] == "token").strip() == d["text"]
-    assert all(set(s) == {"n", "kind", "title", "source", "url", "date", "projectKey"} for s in sources)
+    assert all(set(s) == {"n", "kind", "title", "source", "url", "date", "datePrecision", "projectKey"}
+               for s in sources)
     assert [s["n"] for s in sources] == list(range(1, len(sources) + 1))
     assert fake.chats == []  # the router was sure: no planner call
     system = fake.streams[-1][0]["content"]

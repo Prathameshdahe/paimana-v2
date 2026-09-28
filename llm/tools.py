@@ -20,8 +20,8 @@ A ToolResult has
            otherwise shortens to 'next quarter'), money in Rs crore, dates as 'June 2028', small lists capped;
            a dict item with "cite": i points at the i-th of the result's own sources (1-based; the agent renumbers),
            the whole block at its first source unless it says otherwise,
-  sources  what the answer may cite, {kind, title, source, url, date, projectKey}; date is ISO at the precision
-           the source gives ('2026', '2026-07' or a day: _src),
+  sources  what the answer may cite, {kind, title, source, url, date, datePrecision, projectKey}; date is ISO at
+           the precision the source gives ('2026', '2026-07' or a day) and datePrecision names it (_src),
   keys     the projects the result is about (follow-up questions, the second planning round),
   found    False when there is nothing to show (unknown or out-of-scope project, no match).
 Outside text (report remarks, headlines, research notes and status lines, PARIVESH and register lines, search hits that
@@ -198,11 +198,14 @@ def _official(viewer) -> bool:
 def _src(kind: str, title: str, source: str, url: str | None = None, when=None, key: str | None = None,
          precision: str | None = None) -> dict:
     """A source for the sources card; its date is ISO at the precision the source gives (precision 'year' 'YYYY',
-    'month' 'YYYY-MM', else the day), so a month-precise research fact, stored as the first of its month, never
-    shows a day the source did not give ('Jul 2026', not '1 Jul 2026')."""
+    'month' 'YYYY-MM', else the day) and datePrecision says which ('day' | 'month' | 'year'; None with no date),
+    so a month-precise research fact, stored as the first of its month, never shows a day the source did not give
+    ('Jul 2026', not '1 Jul 2026'). The keys are the ChatSource contract's (camelCase)."""
     d = _iso(when)
+    precision = precision if precision in ("month", "year") else "day"
     d = d and (d[:4] if precision == "year" else d[:7] if precision == "month" else d)
-    return {"kind": kind, "title": title, "source": source, "url": url, "date": d, "projectKey": key}
+    return {"kind": kind, "title": title, "source": source, "url": url, "date": d,
+            "datePrecision": d and precision, "projectKey": key}
 
 
 def _resolve(viewer, key: str | None) -> str | None:

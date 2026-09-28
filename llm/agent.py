@@ -5,6 +5,7 @@ run(viewer, messages, project_key) yields {"event": name, "data": payload} dicts
   status  {stage: routing|planning|tools|writing|checking, detail}
   tool    {id, name, label, args, status: running|done|error, summary}
   card    a tool's cards as each tool finishes, then {type: 'sources', items: [{n, kind, title, source, url, date,
+          datePrecision,
           projectKey}]} once the tools are done
   token   {text} the writer's answer as it streams; retry {reasons}: the client clears the streamed text and a
           replacement follows (the strict second attempt, or the deterministic answer when that fails too)
