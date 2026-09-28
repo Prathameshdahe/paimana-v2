@@ -47,7 +47,8 @@ vs_model (agrees|higher|lower) is not asked: it is the concern against the tier'
 High 'concern', Medium and the Watch tier 'watch', Low 'none'), computed, since the LLM got that comparison wrong in 2
 of 10 tuning replies and each cost a retry. check() rejects a reply unless:
   - every cited id is one the prompt shows (narrative, headline, key_evidence, gaps), the narrative cites one and
-    cites only as [E4] (not '[status]');
+    cites only as [E4] (not '[status]'), and no id stands outside a citation ('E42 says', '(E7)': those were never
+    checked against the list);
   - every number and date in the headline, narrative and gaps is in the items the prompt shows (backend/brief.validate
     against the project name and citable(), citations taken out first: a figure from the context it never saw, the
     status line's progress or the model's probabilities, is rejected), each one in a narrative claim is in the items
@@ -549,6 +550,13 @@ def check(op: dict, p: dict) -> tuple[list[str], int]:
     odd = [b for b in BRACKET.findall(op["narrative"]) if not CITE.fullmatch(b) and b not in p["name"]]
     if odd:
         reasons.append(f"cite items only by their ids, as [E4], not {', '.join(odd[:3])}")
+    # an id outside a citation ('E42 says', '(E7)') is never checked against the list: only one the items write
+    written = set(BARE_ID.findall(" ".join([p["name"], *(it["text"] for it in ids.values())])))
+    out_of_brackets = CITE.sub(" ", " | ".join([op["headline"], op["narrative"], *op["gaps"]]))
+    bare = [x for x in dict.fromkeys(BARE_ID.findall(out_of_brackets)) if x not in written]
+    if bare:
+        reasons.append(f"cite items only in square brackets after a claim, as [E4], not {', '.join(bare[:3])} in the "
+                       "text")
     every = cited + cites(op["headline"]) + [c for g in op["gaps"] for c in cites(g)] + op["key_evidence"]
     unknown = sorted(set(every) - set(ids), key=lambda x: (len(x), x))
     if unknown:

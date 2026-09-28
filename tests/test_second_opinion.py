@@ -171,6 +171,9 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
         f"not in the list: {n_ctx}": {"narrative": f"Work stopped after a protest [{negative}] with most work done "
                                                    f"[{n_ctx}]."},
         "not [status, model]": {"narrative": f"Work stopped after a protest [{negative}], most done [status, model]."},
+        "as [E4], not E42, E77 in the text": {"narrative": f"Work stopped after a protest [{negative}], and E42 (E77) "
+                                                           "says the site is shut."},
+        "not E3 in the text": {"gaps": ["Nothing says when E3 ends"]},
         "'97.5' is not in the evidence items": {"narrative": f"Work stopped for 97.5 days after a protest [{negative}] "
                                                              "on the dam site."},
         "cites no item": {"narrative": "Work on the site stopped after a protest and nothing says it restarted."},
