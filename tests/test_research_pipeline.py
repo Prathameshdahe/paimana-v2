@@ -110,6 +110,30 @@ def test_unknown_keys_bad_external_and_private_status():
     assert R.validate_fact("PRJ-A", {**FACT, "status": "Stalled"})[0]["status"] == "unknown"
 
 
+def test_wrong_types_are_reasons_not_crashes(tmp_path):
+    """A field of the wrong type drops its fact, entry or line with a reason: the step (and the report watcher's
+    ingest after it) never stops on one bad line."""
+    bad = [{**FACT, "source": 123}, {**FACT, "match_reason": ["x"]}, {**FACT, "headline": 5},
+           {**FACT, "category": ["land"]}, {**FACT, "event_date": 2026.5}, {**FACT, "summary": {"a": 1}}]
+    for f in bad:
+        row, why = R.validate_fact("PRJ-A", f)
+        assert row is None and why, f
+    assert R.validate_fact("PRJ-A", {**FACT, "status": ["ongoing"]})[0]["status"] == "unknown"
+    ext = {**line()["external"], "contractor": {"company": ["IRB"], "status": "slow", "as_of": "2026-09"}}
+    proj, facts, issues = R.validate_line(line(facts=[FACT, *bad], external=ext), {"PRJ-A"})
+    assert len(facts) == 1 and proj["contractor"] is None and ("external.contractor", "company is not text") in issues
+    assert R.validate_line(line(key=["PRJ-A"]), {"PRJ-A"})[0] is None
+    assert R.validate_line(line(searched="false"), {"PRJ-A"})[2] == [("line", "searched is not true or false")]
+    assert R.validate_line(line(searched=False), {"PRJ-A"})[0]["searched"] is False
+    path = tmp_path / "research_sweep_2026-09.jsonl"
+    path.write_text("\n".join(json.dumps(x) for x in [line(facts=[FACT, *bad]), line(key=["PRJ-A"]), [1, 2],
+                                                        line(key="PRJ-B", researched_on=20260901)]) + "\n",
+                    encoding="utf-8")
+    got, counts = R.load([path], {"PRJ-A", "PRJ-B"})
+    assert [p["project_key"] for p, _ in got] == ["PRJ-A"] and counts["lines_dropped"] == 3
+    assert counts["facts_dropped"] == len(bad)
+
+
 def test_categories_map_to_the_remark_taxonomy():
     from pipeline.external import TAXONOMY
     assert {R.TAXONOMY_OF[c] for c in ("funds", "natural_event")} == {"funding", "weather"}

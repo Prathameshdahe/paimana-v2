@@ -138,8 +138,11 @@ def _names_thing(run: str) -> bool:
 
 
 def private_names(text) -> list[str]:
-    """Honorific + capitalised-name runs in text that do not name an organisation or place (see the docstring)."""
-    return [m.group(0) for m in HONORIFIC.finditer(text or "") if not _names_thing(m.group(1))]
+    """Honorific + capitalised-name runs in text that do not name an organisation or place (see the docstring).
+    Anything but a string has none (the validators reject a field of the wrong type themselves)."""
+    if not isinstance(text, str):
+        return []
+    return [m.group(0) for m in HONORIFIC.finditer(text) if not _names_thing(m.group(1))]
 
 
 def fact_id(key: str, url: str, category: str, event_date) -> str:
@@ -176,13 +179,24 @@ def _text(v, what) -> str:
     return v.strip()
 
 
+def _opt_text(v, what) -> str | None:
+    """An optional text field: None or '' -> None; anything but a string is a ValueError."""
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise ValueError(f"{what} is not text")
+    return v.strip() or None
+
+
 def validate_fact(key: str, f: dict) -> tuple[dict | None, str | None]:
-    """One raw fact -> (a FACT_COLS row without live / researched_on / origin, None) or (None, reason)."""
+    """One raw fact -> (a FACT_COLS row without live / researched_on / origin, None) or (None, reason). A field of
+    the wrong type is a reason like any other, never an exception: one bad line must not stop the step (and with it
+    the report watcher's ingest)."""
     try:
         if not isinstance(f, dict):
             raise ValueError("fact is not an object")
         cat, direction, match = f.get("category"), f.get("direction"), f.get("match")
-        if cat not in TAXONOMY_OF:
+        if not isinstance(cat, str) or cat not in TAXONOMY_OF:
             raise ValueError(f"category {cat!r}")
         if direction not in DIRECTIONS:
             raise ValueError(f"direction {direction!r}")
@@ -199,20 +213,22 @@ def validate_fact(key: str, f: dict) -> tuple[dict | None, str | None]:
         summary, headline = _text(f.get("summary"), "summary"), _text(f.get("headline"), "headline")
         if len(summary.split()) > MAX_WORDS:
             raise ValueError(f"summary over {MAX_WORDS} words")
-        ev, precision = parse_date(f.get("event_date"))
-        pub, _ = parse_date(f.get("published_date"))
-        texts = [summary, headline, f.get("source"), f.get("match_reason")]
-        if any(private_names(t) for t in texts):
+        source, reason = _opt_text(f.get("source"), "source"), _opt_text(f.get("match_reason"), "match_reason")
+        event_date, published_date = (_opt_text(f.get(c), c) for c in ("event_date", "published_date"))
+        ev, precision = parse_date(event_date)
+        pub, _ = parse_date(published_date)
+        if any(private_names(t) for t in (summary, headline, source, reason)):
             raise ValueError("privacy: names a person")   # the name itself never goes into the summary
-    except ValueError as e:
-        return None, str(e)
-    status = str(f.get("status") or "").strip().lower()
-    return {"fact_id": fact_id(key, url, cat, f.get("event_date")), "project_key": key, "category": cat,
+        status = f.get("status")
+        status = status.strip().lower() if isinstance(status, str) else ""
+    except (ValueError, TypeError, AttributeError) as e:
+        return None, str(e) if isinstance(e, ValueError) else f"malformed fact ({type(e).__name__})"
+    return {"fact_id": fact_id(key, url, cat, event_date), "project_key": key, "category": cat,
             "taxonomy": TAXONOMY_OF[cat], "direction": direction, "severity": sev, "event_date": ev,
             "date_precision": precision, "published_date": pub,
             "status": status if status in STATUSES else "unknown", "summary": summary, "headline": headline,
-            "source": (f.get("source") or domain(url)).strip(), "url": url, "domain": domain(url), "match": match,
-            "match_reason": (f.get("match_reason") or "").strip() or None, "verified": f["verified"]}, None
+            "source": source or domain(url), "url": url, "domain": domain(url), "match": match,
+            "match_reason": reason, "verified": f["verified"]}, None
 
 
 def validate_external(ext) -> tuple[dict, list[tuple[str, str]]]:
@@ -230,10 +246,13 @@ def validate_external(ext) -> tuple[dict, list[tuple[str, str]]]:
             if not isinstance(v, dict):
                 raise ValueError("not an object")
             vals = {f: v.get(f) for f in fields}
+            num = {"land_acquired_pct": "value", "cost_revision": "new_cost_cr"}.get(entry)
+            for f in fields:
+                if f != num and vals[f] is not None and not isinstance(vals[f], str):
+                    raise ValueError(f"{f} is not text")
             parse_date(vals["as_of"])
             if entry == "new_target":
                 parse_date(vals["date"])
-            num = {"land_acquired_pct": "value", "cost_revision": "new_cost_cr"}.get(entry)
             if num:
                 x = vals[num]
                 if isinstance(x, bool) or not isinstance(x, (int, float)) or x < 0 or (
@@ -242,8 +261,8 @@ def validate_external(ext) -> tuple[dict, list[tuple[str, str]]]:
                 vals[num] = float(x)
             if any(private_names(x) for x in vals.values() if isinstance(x, str)):
                 raise ValueError("privacy: names a person")
-        except ValueError as e:
-            issues.append((f"external.{entry}", str(e)))
+        except (ValueError, TypeError, AttributeError) as e:
+            issues.append((f"external.{entry}", str(e) if isinstance(e, ValueError) else type(e).__name__))
             continue
         for f, x in vals.items():
             out[EXT_COLS[(entry, f)]] = x
@@ -256,14 +275,16 @@ def validate_line(obj, known) -> tuple[dict | None, list[dict], list[tuple[str, 
     if not isinstance(obj, dict):
         return None, [], [("line", "not an object")]
     key = obj.get("project_key")
-    if key not in known:
+    if not isinstance(key, str) or key not in known:
         return None, [], [("line", "unknown project key")]
     try:
-        researched, _ = parse_date(obj.get("researched_on"))
+        researched, _ = parse_date(_opt_text(obj.get("researched_on"), "researched_on"))
         if researched is None:
             raise ValueError("researched_on is missing")
         if not isinstance(obj.get("facts", []), list):
             raise ValueError("facts is not a list")
+        if not isinstance(obj.get("searched", True), bool):   # 'false' as a string would read as True
+            raise ValueError("searched is not true or false")
     except ValueError as e:
         return None, [], [("line", str(e))]
     issues, facts, seen = [], [], set()
@@ -280,7 +301,7 @@ def validate_line(obj, known) -> tuple[dict | None, list[dict], list[tuple[str, 
         issues.append(("latest_status", "privacy: names a person"))
         status = None
     queries = obj.get("queries") if isinstance(obj.get("queries"), list) else []
-    return ({"project_key": key, "researched_on": researched, "searched": bool(obj.get("searched", True)),
+    return ({"project_key": key, "researched_on": researched, "searched": obj.get("searched", True),
              "n_queries": len(queries), "latest_status": (status or "").strip() or None, **ext},
             facts, issues + ext_issues)
 
@@ -291,17 +312,25 @@ def load(paths=None, known=None) -> tuple[list[tuple[dict, list[dict]]], dict]:
     paths = sorted(RESEARCH.glob("research_sweep_*.jsonl")) if paths is None else paths
     best, reasons, n_lines, n_bad = {}, Counter(), 0, 0
     for path in paths:
-        for i, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            reasons[f"file: {Path(path).name} is not UTF-8"] += 1
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
             if not line.strip():
                 continue
             n_lines += 1
             try:
                 obj = json.loads(line)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, RecursionError):
                 n_bad += 1
                 reasons[f"line: {Path(path).name}:{i} is not JSON"] += 1
                 continue
-            proj, facts, issues = validate_line(obj, known)
+            try:
+                proj, facts, issues = validate_line(obj, known)
+            except (ValueError, TypeError, AttributeError, KeyError) as e:   # a shape no check foresaw: drop it
+                proj, facts, issues = None, [], [("line", f"{Path(path).name}:{i} malformed ({type(e).__name__})")]
             reasons.update(f"{where}: {why}" for where, why in issues)
             if proj is None:
                 n_bad += 1
