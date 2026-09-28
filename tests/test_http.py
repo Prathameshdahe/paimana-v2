@@ -200,6 +200,23 @@ def test_client_address_behind_the_proxy(small, monkeypatch):
         assert c.get("/who", headers=headers).json() == {"ip": "203.0.113.5", "scheme": "http"}
 
 
+def test_a_malformed_trusted_proxy_entry(client, monkeypatch):
+    """Review finding (unit B, round 1): a malformed TRUSTED_PROXIES entry stops the settings from loading with a
+    message that names it (the api refuses to start), instead of a plain-text 500 on every request, the health probe
+    included; one that gets in anyway (settings replaced at run time) is logged and left out."""
+    with pytest.raises(ValueError, match=r"TRUSTED_PROXIES.*10\.201\.0\.0/33"):
+        cfg.load({"TRUSTED_PROXIES": "10.201.0.0/24, 10.201.0.0/33"})
+    assert cfg.load({"TRUSTED_PROXIES": "10.201.0.0/24, 127.0.0.1"}).trusted_proxies == ("10.201.0.0/24", "127.0.0.1")
+    with_settings(monkeypatch, trusted_proxies=("10.201.0.0/33", "10.201.0.0/24"))
+    middleware._networks.cache_clear()
+    try:
+        r = client.get("/healthz")
+        assert r.status_code == 200 and r.headers["x-request-id"] and r.headers["x-content-type-options"] == "nosniff"
+        assert middleware.forwarded_client("10.201.0.5", "203.0.113.9", cfg.settings.trusted_proxies) == "203.0.113.9"
+    finally:
+        middleware._networks.cache_clear()
+
+
 def test_health_and_readiness(client, monkeypatch):
     assert client.get("/healthz").json() == {"status": "ok"}
     monkeypatch.setattr(main.llm_client, "LLM_BASE_URL", "http://127.0.0.1:9/v1")

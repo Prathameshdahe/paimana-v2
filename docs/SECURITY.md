@@ -223,7 +223,8 @@ changes, reset tokens and bootstrap runs. Failed sign-ins are recorded in `app.l
 read by the developer only (`GET /api/admin/audit`, newest first, filtered by date, account or action).
 
 **Client address.** Behind nginx the api believes `X-Forwarded-For` and `X-Forwarded-Proto` only from a peer inside
-`TRUSTED_PROXIES` (the compose network), and takes the right-most hop that is not a proxy. uvicorn runs with
+`TRUSTED_PROXIES` (the compose network; an entry that is not an address or CIDR network stops the api at start
+with a message naming it), and takes the right-most hop that is not a proxy. uvicorn runs with
 `--no-proxy-headers`, so a client cannot choose its own address for the limits or the audit trail. The chat limit
 keys on the account when signed in and on that address for the public.
 

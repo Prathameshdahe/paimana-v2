@@ -14,6 +14,7 @@ not a copy.
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +79,18 @@ def _list(v: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
     return default if v is None else tuple(x.strip() for x in v.split(",") if x.strip())
 
 
+def _networks(v: str | None) -> tuple[str, ...]:
+    """A list of IP addresses or networks (CIDR); ValueError naming the first entry that is neither, so a typo stops
+    the api at start with that message instead of failing every request."""
+    out = _list(v, ())
+    for c in out:
+        try:
+            ipaddress.ip_network(c, strict=False)
+        except ValueError:
+            raise ValueError(f"TRUSTED_PROXIES: {c!r} is not an IP address or network (CIDR)") from None
+    return out
+
+
 def _url(user: str, password: str | None, host: str, port: str | int, name: str) -> str:
     auth = quote(user, safe="") + (f":{quote(password, safe='')}" if password else "")
     return f"postgresql+psycopg://{auth}@{host}:{port}/{name}"
@@ -116,7 +129,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         secure_cookies=_bool(e.get("SECURE_COOKIES"), d["secure_cookies"].default),
         allowed_origins=_list(e.get("ALLOWED_ORIGINS"), DEFAULT_ORIGINS),
         allowed_hosts=_list(e.get("ALLOWED_HOSTS"), ("*",)),
-        trusted_proxies=_list(e.get("TRUSTED_PROXIES"), ()),
+        trusted_proxies=_networks(e.get("TRUSTED_PROXIES")),
         session_idle_h=_int(e.get("SESSION_IDLE_H"), d["session_idle_h"].default),
         session_max_d=_int(e.get("SESSION_MAX_D"), d["session_max_d"].default),
         duckdb_memory_limit=e.get("DUCKDB_MEMORY_LIMIT") or d["duckdb_memory_limit"].default,

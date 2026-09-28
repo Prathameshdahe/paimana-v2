@@ -108,7 +108,17 @@ def internal_error(scope: Scope) -> JSONResponse:
 
 @lru_cache(maxsize=8)
 def _networks(cidrs: tuple[str, ...]) -> tuple:
-    return tuple(ipaddress.ip_network(c.strip(), strict=False) for c in cidrs if c.strip())
+    """The trusted networks; an entry that is not an address or network is logged and left out (settings.load refuses
+    one at start; this keeps a later bad value from failing every request, the health probe's too)."""
+    out = []
+    for c in (c.strip() for c in cidrs):
+        if not c:
+            continue
+        try:
+            out.append(ipaddress.ip_network(c, strict=False))
+        except ValueError:
+            log.error("TRUSTED_PROXIES: %r is not an IP address or network; left out", c)
+    return tuple(out)
 
 
 def _ip(v: str):
