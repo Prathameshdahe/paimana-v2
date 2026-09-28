@@ -39,6 +39,9 @@ import type {
 import type { ModelsOut } from '@/contracts/audit'
 import type { AgencyMatrix, BottleneckDetail, BottleneckPage } from '@/contracts/intel'
 import type { DispatchDraft } from '@/contracts/workers'
+import type {
+  ApproveSignup, AuditPage, AuditQuery, RejectSignup, ResetToken, SignupRow, SignupStatus, User, UserPage, UserUpdate,
+} from '@/contracts/auth'
 import { useScopeKey } from '@/lib/auth/SessionContext'
 
 export type PortfolioFilters = {
@@ -324,5 +327,59 @@ export function useScoutNow() {
   return useMutation({
     mutationFn: () => apiPost<JobStarted>('/api/jobs/scout'),
     onSuccess: () => client.invalidateQueries({ queryKey: ['live'] }),
+  })
+}
+
+/* administration (need admin; contracts/auth.ts): sign-up requests, accounts and the audit log. Under ['admin'] so
+   one review or update refetches every admin list. */
+
+export function useSignups(status: SignupStatus) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['admin', 'signups', status, scope],
+    queryFn: () => apiGet<SignupRow[]>('/api/admin/signups', { status }),
+  })
+}
+
+/** approve (the role and scope may be corrected in the body; answers the User) or reject one request */
+export function useReviewSignup() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, decision, body }: { id: number; decision: 'approve' | 'reject'; body: ApproveSignup | RejectSignup }) =>
+      apiPost<User | undefined>(`/api/admin/signups/${id}/${decision}`, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin'] }),
+  })
+}
+
+/** one page of accounts, filtered by q over email and name */
+export function useUsers(q: string, page: number, size = 25) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['admin', 'users', q, page, size, scope],
+    queryFn: () => apiGet<UserPage>('/api/admin/users', { q, page, size }),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** status, role, scope or the admin flag of one account; the backend refuses an admin's own demotion or disabling */
+export function useUpdateUser() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: UserUpdate }) => apiPost<User>(`/api/admin/users/${id}`, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  })
+}
+
+/** a one-time reset token for the account: the page shows it once and never stores it */
+export function useResetUserPassword() {
+  return useMutation({ mutationFn: (id: number) => apiPost<ResetToken>(`/api/admin/users/${id}/reset-password`) })
+}
+
+export function useAudit(query: AuditQuery) {
+  const scope = useScopeKey()
+  return useQuery({
+    queryKey: ['admin', 'audit', query, scope],
+    queryFn: () => apiGet<AuditPage>('/api/admin/audit', query),
+    placeholderData: keepPreviousData,
   })
 }

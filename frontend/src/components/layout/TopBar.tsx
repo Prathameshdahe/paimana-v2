@@ -1,20 +1,21 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import * as Popover from '@radix-ui/react-popover'
-import { ChevronDown, LogOut } from 'lucide-react'
+import { ChevronDown, KeyRound, LogOut, ShieldCheck } from 'lucide-react'
 import { NavigationMenuWithActiveItem } from '@/components/ui/navigation-menu-05'
 import { useSession } from '@/lib/auth/SessionContext'
-import { can } from '@/lib/auth/access'
+import { can, canAdmin } from '@/lib/auth/access'
 import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
 import { formatDate } from '@/lib/formatters'
 import { useAlertStream } from '@/lib/useAlertStream'
 import { AlertBell } from './AlertBell'
+import { ChangePasswordDialog } from './ChangePasswordDialog'
 
 const ROLE_LABELS: Record<string, string> = {
   ipmd_analyst: 'IPMD Analyst',
   ministry_official: 'Ministry Official',
   agency_official: 'Implementing Agency',
-  public: 'Public',
 }
 
 /** 'Asha Rao' -> 'AR'; no name: the role's initials */
@@ -23,19 +24,23 @@ function initials(name: string, role: string): string {
   return words.slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
+const ITEM = 'flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-fg-muted hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:bg-surface-elevated focus-visible:text-fg-base'
+
 /**
- * Persistent top bar: logo, the pages the role may open, a compact data pill, the scope the
- * pages are cut to, the alert bell and the user menu. Model versions live on Models and the
- * project page's provenance line, not here.
+ * Persistent top bar: logo, the pages the role may open, a compact data pill, the scope the pages are cut to, the
+ * alert bell and the account menu (name, email, role and scope; change password, administration for admins, sign
+ * out). The public gets a Sign in link; nothing shows in that slot until the session is known. A session that
+ * expired mid-way says so under the bar. Model versions live on Models and the project page's provenance line.
  */
 export function TopBar() {
   const meta = useMeta()
   const { data: p } = usePortfolio()
   const m = meta.data
-  const { role, displayName, ministry, agency, status, signOut } = useSession()
+  const session = useSession()
+  const { role, displayName, email, ministry, agency, isAdmin, status, expired, signOut } = session
   const scope = ministry ?? agency
   const navigate = useNavigate()
-  const signedIn = !!role
+  const [changing, setChanging] = useState(false)
   useAlertStream()
 
   return (
@@ -72,7 +77,7 @@ export function TopBar() {
 
           {can(role, 'canSeeAlerts') && <AlertBell />}
 
-          {signedIn ? (
+          {role ? (
             <Popover.Root>
               <Popover.Trigger
                 aria-label="account"
@@ -81,37 +86,54 @@ export function TopBar() {
                 <span className="flex size-8 items-center justify-center rounded-full bg-fg-base text-xs font-semibold text-fg-inverse">
                   {initials(displayName, role)}
                 </span>
-                <ChevronDown className="size-3.5" />
+                <ChevronDown className="size-3.5" aria-hidden="true" />
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content
                   align="end"
                   sideOffset={8}
-                  className="z-50 w-64 overflow-hidden rounded-xl border border-border-default bg-surface-panel shadow-pop"
+                  className="z-50 w-72 overflow-hidden border border-border-default bg-surface-panel shadow-pop"
                 >
                   <div className="space-y-0.5 px-4 py-3">
                     <div className="truncate text-sm font-semibold text-fg-base">{displayName || ROLE_LABELS[role]}</div>
-                    <div className="text-xs text-fg-muted">{ROLE_LABELS[role]}</div>
-                    {scope && <div className="text-xs text-fg-dimmed">{scope}</div>}
+                    {email && <div className="truncate text-xs text-fg-muted" title={email}>{email}</div>}
+                    <div className="truncate text-xs text-fg-dimmed">
+                      {ROLE_LABELS[role]}{scope && ` · ${scope}`}{isAdmin && ' · administrator'}
+                    </div>
                   </div>
-                  <Popover.Close asChild>
-                    <button
-                      onClick={async () => {
-                        await signOut()
-                        navigate('/')
-                      }}
-                      className="flex w-full items-center gap-2 border-t border-border-subtle px-4 py-2.5 text-left text-sm text-fg-muted hover:bg-surface-elevated hover:text-fg-base"
-                    >
-                      <LogOut className="size-4" /> Sign out
-                    </button>
-                  </Popover.Close>
+                  <div className="border-t border-border-subtle py-1">
+                    <Popover.Close asChild>
+                      <button type="button" onClick={() => setChanging(true)} className={ITEM}>
+                        <KeyRound className="size-4" aria-hidden="true" /> Change password
+                      </button>
+                    </Popover.Close>
+                    {canAdmin(session) && (
+                      <Popover.Close asChild>
+                        <Link to="/admin" className={ITEM}>
+                          <ShieldCheck className="size-4" aria-hidden="true" /> Administration
+                        </Link>
+                      </Popover.Close>
+                    )}
+                    <Popover.Close asChild>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await signOut()
+                          navigate('/')
+                        }}
+                        className={ITEM}
+                      >
+                        <LogOut className="size-4" aria-hidden="true" /> Sign out
+                      </button>
+                    </Popover.Close>
+                  </div>
                 </Popover.Content>
               </Popover.Portal>
             </Popover.Root>
           ) : status === 'loading' ? null : (
             <Link
               to="/login"
-              className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85"
+              className="inline-flex h-8 items-center bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85"
             >
               Sign in
             </Link>
@@ -119,11 +141,20 @@ export function TopBar() {
         </div>
       </div>
 
-      {isOffline(meta.error) && (
-        <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center text-xs text-critical">
-          backend not reachable at {API_BASE} — start uvicorn: <code className="font-mono">{START_BACKEND}</code>
+      {expired && (
+        <div className="border-t border-warning/30 bg-warning/5 px-4 py-1.5 text-center text-xs text-warning">
+          Your session expired.{' '}
+          <Link to="/login" className="font-medium underline underline-offset-2">Sign in again</Link>
         </div>
       )}
+
+      {isOffline(meta.error) && (
+        <div className="border-t border-critical/30 bg-critical/5 px-4 py-1.5 text-center text-xs text-critical">
+          backend not reachable at {API_BASE || 'this origin'} — start uvicorn: <code className="font-mono">{START_BACKEND}</code>
+        </div>
+      )}
+
+      <ChangePasswordDialog open={changing} onOpenChange={setChanging} email={email} />
     </header>
   )
 }

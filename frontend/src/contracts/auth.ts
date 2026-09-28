@@ -155,7 +155,8 @@ export interface AuditPage {
   items: AuditRow[]
 }
 
-export interface AuditQuery {
+/** a type, not an interface, so it passes as query Params (lib/api.ts) like AlertQuery does */
+export type AuditQuery = {
   /** ISO date or time; rows at or after it */
   since?: string
   /** an email or a user id */

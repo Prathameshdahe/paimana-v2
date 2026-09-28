@@ -19,6 +19,7 @@ const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ de
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
 const Bottlenecks = lazy(() => import('@/views/Bottlenecks').then(m => ({ default: m.Bottlenecks })))
 const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar })))
+const Admin = lazy(() => import('@/views/Admin').then(m => ({ default: m.Admin })))
 // its own chunk (recharts, motion): the main bundle does not wait for it
 const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDetailDrawer').then(m => ({ default: m.ProjectDetailDrawer })))
 
@@ -79,6 +80,8 @@ function Shell() {
 
               {/* Worker Console: IPMD only */}
               <Route path="/workers" element={<RequireRole><WorkerConsole /></RequireRole>} />
+              {/* Administration: IPMD analysts with the admin flag (RequireRole checks it) */}
+              <Route path="/admin" element={<RequireRole><Admin /></RequireRole>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
