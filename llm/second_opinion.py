@@ -41,9 +41,11 @@ High 'concern', Medium and the Watch tier 'watch', Low 'none'), computed, since 
 of 10 tuning replies and each cost a retry. check() rejects a reply unless:
   - every cited id is one the prompt shows (narrative, headline, key_evidence, gaps), the narrative cites one and
     cites only as [E4] (not '[status]');
-  - every number and date in the headline, narrative and gaps is in the pack (backend/brief.validate against the
-    project name and the items, citations taken out first), each one in a narrative claim is in the items that claim
-    cites (claims(): the text before a citation, from the start of its sentence), and it names no private person;
+  - every number and date in the headline, narrative and gaps is in the items the prompt shows (backend/brief.validate
+    against the project name and citable(), citations taken out first: a figure from the context it never saw, the
+    status line's progress or the model's probabilities, is rejected), each one in a narrative claim is in the items
+    that claim cites (claims(): the text before a citation, from the start of its sentence), and it names no private
+    person;
   - the concern level fits the evidence (allowed()): 'concern' cites a current negative item of severity >= 2;
     'watch' cites some negative item; 'none' is not allowed while a current negative item of severity >= 2 is in the
     pack. The prompt states the allowed levels, so a reply that follows it passes;
@@ -524,7 +526,7 @@ def check(op: dict, p: dict) -> tuple[list[str], int]:
         reasons.append(f"cited items that are not in the list: {', '.join(unknown)} (the items with an id are "
                        f"{min(ids, key=_n)} to {max(ids, key=_n)})")
     text = "\n".join([op["headline"], op["narrative"], *op["gaps"]])
-    ok, bad, n_checked = validate(_plain(text), facts(p))
+    ok, bad, n_checked = validate(_plain(text), facts(p, list(ids.values())))   # what it was shown, not the context
     if not ok:
         reasons += [b.replace("the payload", "the evidence items").replace("payload numbers", "numbers")
                     for b in bad]

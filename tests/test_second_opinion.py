@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import db, serving  # noqa: E402
+from backend.brief import validate  # noqa: E402
 from llm import client  # noqa: E402
 from llm import second_opinion as so  # noqa: E402
 
@@ -51,6 +52,12 @@ def reply(p, concern=None, narrative=None, **kw) -> str:
                                                  "The report shows most of the work done [E1].",
                        "key_evidence": [strong],
                        "gaps": ["No source says when work restarts"], **kw})
+
+
+def number_only_in(p, where, not_in):
+    """The first number written in the items `where` that validate does not find in the items `not_in`."""
+    return next((m[0] for it in where for m in NUM.finditer(it["text"])
+                 if not validate(m[0], so.facts(p, not_in))[0]), None)
 
 
 class FakeLLM:
@@ -160,18 +167,33 @@ def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
 
 def test_a_claims_numbers_must_be_in_the_items_it_cites(opinion_db):
     p = so.pack(KEY)
-    good = so.parse(reply(p))
-    status = next(it for it in p["items"] if it["kind"] == "status")
-    pct = status["text"].split("Physical progress ")[1].split("%")[0]            # in the pack, in the status line
-    neg = next(it for it in so.citable(p) if it["direction"] == "negative" and not it["stale"]
-               and pct not in it["text"] and NUM.search(it["text"]))
+    good, shown = so.parse(reply(p)), so.citable(p)
+    neg = next(it for it in shown if it["direction"] == "negative" and not it["stale"] and it["severity"] >= 2
+               and NUM.search(it["text"]))
     num = NUM.search(neg["text"])[0]                                              # a number in that item
+    other = number_only_in(p, [it for it in shown if it is not neg], [neg])       # in another item the LLM saw
+    assert other is not None
     assert so.claims("A [E1]. B 5 km, C [E2, E3]; D.") == [("A", ["E1"]), ("B 5 km, C", ["E2", "E3"])]
-    wrong = {**good, "narrative": f"Work stopped after a protest with {pct}% of the work done [{neg['id']}]."}
-    assert so.check(wrong, p)[0] == [f"'{pct}%' is not in {neg['id']}: cite the item it comes from, or leave it out"]
+    wrong = {**good, "narrative": f"Work stopped after a protest with {other} of the work done [{neg['id']}]."}
+    assert so.check(wrong, p)[0] == [f"'{other}' is not in {neg['id']}: cite the item it comes from, or leave it out"]
     for fine in (f"Work was reported stopped at {num} on the site [{neg['id']}].",
-                 f"The report shows {pct}% done. Work stopped after a protest on the site [{neg['id']}]."):
+                 f"The items show {other} here. Work stopped after a protest on the site [{neg['id']}]."):
         assert so.check({**good, "narrative": fine}, p)[0] == [], fine     # cited where it is, or not cited at all
+
+
+def test_numbers_are_checked_against_the_items_the_llm_was_shown(opinion_db):
+    p = so.pack(KEY)
+    good, shown = so.parse(reply(p)), so.citable(p)
+    hidden = [it for it in p["items"] if it not in shown]
+    assert {it["kind"] for it in hidden} >= {"status", "model"}
+    model = next(it for it in hidden if it["kind"] == "model")
+    prob = re.search(r"0\.\d\d", model["text"])[0]
+    for num in (number_only_in(p, hidden, shown), f"{round(float(prob) * 100)}%", prob):
+        assert validate(num, so.facts(p))[0] and not validate(num, so.facts(p, shown))[0], num   # in the pack only
+        for change in ({"headline": f"{num} built and work stopped by a protest"},
+                       {"gaps": [f"Why the model gives {num} within 4 quarters"]}):
+            reasons = so.check({**good, **change}, p)[0]
+            assert f"'{num}' is not in the evidence items" in reasons, (change, reasons)
 
 
 def test_parse_forgives_case_brackets_and_extra_gaps():
