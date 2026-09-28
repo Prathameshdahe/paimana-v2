@@ -5,14 +5,17 @@ Entities, each matched against the served portfolio (never a hand list that goes
   project   a PRJ key ('PRJ-000698', 'prj 698'); 'this project' / 'this one' -> the open project (projectKey); a name
             by its distinctive words: the scout's place words (backend/live/scout.py: name words of 4+ letters in at
             most DF_MAX current project names, not the state's own words), matched exactly or, for a word of 5+
-            letters, by rapidfuzz ratio >= FUZZ_MIN with the same first letter (a typo). Each matched word votes for
-            its projects weighted 1 / (projects that share it); the project with the most words wins, ties are
-            ambiguous (narrowed by a sector, state or tier the question names, else the candidates are listed, never
-            guessed). Only projects in the viewer's scope take part, so an out-of-scope name matches nothing. A
+            letters, by rapidfuzz ratio >= FUZZ_MIN with the same first letter (a typo; not the word with a plural
+            ending added or taken away, 'train' is no typo of 'trains'); question and filler words never match.
+            Each matched word votes for its projects weighted 1 / (projects that share it); the project with the
+            most words wins, ties are ambiguous (narrowed by a sector, state or tier the question names, else the
+            candidates are listed, never guessed; below CONFIDENT when the word was only a near match). Only
+            projects in the viewer's scope take part, so an out-of-scope name matches nothing. A
             place too common to be a place word ('nagpur') is searched as a name fragment when a project name in
             scope contains it. A question naming no project but reading as a follow-up ('it', 'its',
-            'that project', 'what about ...', or an intent that needs a project with no filter) takes the previous
-            turn's project (its user message, else a PRJ key in the answer), else the open project.
+            'that project', 'what about ...', 'tell me more', or an intent that needs a project with no filter)
+            takes the previous turn's project (its user message, else a PRJ key in the answer), else the open
+            project.
   filters   tier words (Critical anywhere; High, Medium, Low, Watch next to risk/tier/projects), sector words (the
             sectors' own words and a few aliases: road, rail, airport ...), state names (with & / and), 'ministry of X'
             / 'X ministry', single-word agency names (upper case only when short or an English word: OIL, DOT),
@@ -46,6 +49,8 @@ THIS_RX = re.compile(r"\b(?:this|the open|the current|same)\s+(?:project|one|sch
                      re.I)
 PRONOUN_RX = re.compile(r"\b(?:it|its|it's|that project|that one|the project)\b|^\s*(?:and|what about|how about"
                         r"|also)\b", re.I)
+MORE_RX = re.compile(r"^\s*(?:(?:please\s+)?(?:tell|show|give) me\s+)?more(?:\s+(?:details?|info(?:rmation)?))?"
+                     r"(?:\s+please)?\s*[?.!]*\s*$", re.I)  # 'tell me more': a follow-up with no pronoun
 INTENTS = {
     "compare": r"\bcompar\w*|\bvs\.?(?=\s)|\bversus\b|\bdifference between\b",
     "explain": r"\bwhy\b|\breasons?\b|\bdrivers?\b|\bexplain\w*|\bcaus\w*|\bwhat makes\b|\bbehind\b",
@@ -275,17 +280,24 @@ class _AnyViewer:  # validates filter spellings only; never runs a tool
 _ANY = _AnyViewer()
 
 
+def _inflection(w: str, hit: str) -> bool:
+    """hit is w with a plural ending added or taken away ('train' / 'trains', 'bridge' / 'bridges'): an ordinary
+    English word, not a typo of a place word."""
+    return any(a == b + end for a, b in ((w, hit), (hit, w)) for end in ("s", "es"))
+
+
 def _names(viewer, text: str, skip: set[str]) -> tuple[list[str], list[str], str | None]:
     """(projects named, in order; the candidates of an ambiguous name; the best name word) by place words."""
     v = vocab()
     by_token, keys = v["index"]["by_token"], viewer.keys
-    words = [w for w in dict.fromkeys(scout.WORD_RX.findall(text.lower())) if w not in QUESTION_WORDS and w not in skip]
+    words = [w for w in dict.fromkeys(scout.WORD_RX.findall(text.lower()))
+             if w not in QUESTION_WORDS and w not in FILLER and w not in skip]
     owners: dict[str, list[str]] = {}  # matched place word -> its projects in the viewer's scope
     for w in words:
         hit = w if w in by_token else None
         if hit is None and len(w) >= 5:
             best = process.extractOne(w, v["vocab"], scorer=fuzz.ratio, score_cutoff=FUZZ_MIN)
-            hit = best[0] if best and best[0][0] == w[0] else None
+            hit = best[0] if best and best[0][0] == w[0] and not _inflection(w, best[0]) else None
         ks = [k for k in by_token.get(hit, ()) if keys is None or k in keys] if hit else []
         if ks and hit not in owners:
             owners[hit] = ks
@@ -366,7 +378,7 @@ def route(viewer, messages: list[dict], project_key: str | None = None) -> Route
         wants_project = bool(set(intents) & PER_PROJECT) and unfiltered and not set(intents) & {"count", "stats"}
         if THIS_RX.search(q) and open_key:
             keys, followup = [open_key], True
-        elif (PRONOUN_RX.search(q) and unfiltered) or wants_project:
+        elif ((PRONOUN_RX.search(q) or MORE_RX.match(q)) and unfiltered) or wants_project:
             prev = _previous_project(viewer, messages)
             if prev or open_key:
                 keys, followup = [prev or open_key], True
@@ -432,7 +444,10 @@ def _portfolio_calls(viewer, r: Route, calls: list, official: bool) -> None:
     narrowed = bool(scoped or word)
     if r.candidates:  # a name that fits several projects: list them, the writer asks which
         calls.append(_call(viewer, "search_projects", q=r.name_word, limit=MAX_CANDIDATES))
-        r.confidence, r.reason = 0.7, "ambiguous name"
+        if r.name_word in scout.WORD_RX.findall(q.lower()):
+            r.confidence, r.reason = 0.7, "ambiguous name"
+        else:  # only a near match of a word of the question (a typo, or not a name at all): the planner decides
+            r.confidence, r.reason = 0.4, "ambiguous near match"
         return
     if "help" in it and HELP_TOPIC.search(q) and not (it & {"count", "stats", "bottleneck", "agency"}) \
             and not (scoped - {"tier"}):

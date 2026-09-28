@@ -44,8 +44,9 @@ Code: `llm/router.py` (routing), `llm/tools.py` (tools), `llm/agent.py` (planner
 
 1. **Router** (`llm/router.py`, no LLM). It reads project keys (`PRJ-` and six digits, or `prj 698`), "this project" (the
    project open in the app), project names by their distinctive words (the scout's place words, exact or a
-   typo within rapidfuzz ratio 88; a name shared by several projects is listed, never guessed), follow-ups ("and
-   what changed lately?" takes the previous turn's project), and filters matched against the served portfolio
+   typo within rapidfuzz ratio 88 but not a plural of an ordinary word, "train" for "trains"; a name shared by
+   several projects is listed, never guessed, and a near match only is left to the planner), follow-ups ("and
+   what changed lately?" or "tell me more" takes the previous turn's project), and filters matched against the served portfolio
    (tier, sector, state, ministry, agency, outside factor, "top 5", riskiest / biggest / most delayed, near
    completion, "by state"). Keyword intents (count, list, stats, explain, history, news, external, compare,
    opinion, agency, bottleneck, help) map to tool calls with a confidence.

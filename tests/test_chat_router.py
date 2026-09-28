@@ -130,12 +130,35 @@ def test_ambiguous_names_list_the_candidates():
     r = ask("ipmd", "status of the Darbhanga project")
     assert r.keys == [] and len(r.candidates) > 1 and DARBHANGA_AIRPORT in r.candidates
     assert r.calls[0]["tool"] == "search_projects" and r.calls[0]["args"]["q"] == "darbhanga"
+    assert r.confidence >= router.CONFIDENT
+    r = ask("ipmd", "status of the Darbangha project")  # only a near match: listed, but the planner may decide
+    assert DARBHANGA_AIRPORT in r.candidates and r.calls[0]["args"]["q"] == "darbhanga"
+    assert r.confidence < router.CONFIDENT
+
+
+def test_ordinary_words_are_no_project_names():
+    """A plural of an ordinary word ('train' -> 'trains', 'bridge' -> 'bridges') is no typo of a place word, and
+    filler ('more') is no name: the real name word decides, or nothing is guessed at a confident level."""
+    r = ask("public", "Is the Mumbai Ahmedabad bullet train delayed?")
+    assert r.name_word == "ahmedabad" and "PRJ-002948" in r.candidates  # Mumbai-Ahmedabad High Speed Rail
+    assert r.calls[0]["args"]["q"] == "ahmedabad"
+    r = ask("public", "Tell me about the Chenab bridge")
+    assert r.name_word != "bridges" and not any(c["args"].get("q") == "bridges" for c in r.calls)
+    assert r.confidence < router.CONFIDENT  # the planner or the fallback decides, nothing is listed as a guess
+    r = ask("public", "Pipalkothi hydro project status")  # a real typo still matches
+    assert r.keys == [PIPALKOTI]
+    assert router._inflection("train", "trains") and router._inflection("bridges", "bridge")
+    assert not router._inflection("pipalkothi", "pipalkoti")
 
 
 def test_follow_ups_take_the_previous_project_then_the_open_one():
     turns = [{"role": "user", "content": "why is Pipalkoti Medium?"}, {"role": "assistant", "content": "Because [1]."}]
     r = ask("ipmd", "and what changed lately?", turns)
     assert r.followup and r.keys == [PIPALKOTI] and [c["tool"] for c in r.calls] == ["project_history"]
+    for q in ("tell me more", "Tell me more details please.", "more?"):  # no pronoun, no name: still a follow-up
+        r = ask("public", q, turns)
+        assert r.followup and r.keys == [PIPALKOTI] and r.calls == [{"tool": "get_project",
+                                                                     "args": {"key": PIPALKOTI}}], q
     r = ask("ipmd", "what is its latest news?", [{"role": "user", "content": "hi"},
                                                   {"role": "assistant", "content": "PRJ-002112 is High [1]."}])
     assert r.keys == ["PRJ-002112"] and r.calls[0]["tool"] == "project_research"
