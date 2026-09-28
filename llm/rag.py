@@ -83,7 +83,9 @@ ROOT, GOLD = serving.ROOT, serving.GOLD
 RAG_DIR = ROOT / "dataset" / "rag"
 HELP = "docs/HELP.md"
 DOCS = ("README.md", "docs/ACCESS_CONTROL.md", "docs/AI_ASSISTANT.md", "docs/EXTERNAL_RESEARCH_2026-09.md",
-        "docs/EXTERNAL_DATA_CROSSCHECK.md", "docs/IMPLEMENTATION_GUIDE_v2.md", "dataset/raw/external/README.md")
+        "docs/EXTERNAL_DATA_CROSSCHECK.md", "docs/IMPLEMENTATION_GUIDE_v2.md", "dataset/raw/external/README.md",
+        "docs/RESEARCH_SWEEP_2026-09.md", "docs/MODEL_UPGRADES_2026-09.md", "docs/SECOND_OPINION.md",
+        "dataset/raw/external/research/README.md")
 FEATURE_LABELS = "frontend/src/lib/featureLabels.ts"
 RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
 KINDS = ("help", "doc", "project", "event", "research", "news", "external", "glossary")
