@@ -12,22 +12,22 @@ written to; a number matches a payload number rounded to the decimals written, a
 unless the same word is in the payload (a project named 'Four Laning of ...'). Cached briefs are checked again.
 A rejected draft is retried once with the offending numbers named; a second rejection returns the reasons. Accepted
 briefs are cached per (project, asof, model_version) in the app database; LM Studio down is 'llm_unavailable'
-(connect timeout llm.client.CONNECT_TIMEOUT; Windows retries a refused connection, so about 5 s), remembered for
-DOWN_S seconds so a page that asks again does not wait again.
+(connect timeout llm.client.CONNECT_TIMEOUT; Windows retries a refused connection, so about 5 s), remembered through
+the client's shared circuit breaker (client.mark_down / down_recently, client.DOWN_S seconds) with the chat and the
+second opinion, so a page that asks again does not wait again and a refusal any of them found spares the others. A
+slow answer (LLMTimeoutError) or an HTTP error is 'llm_unavailable' too but does not trip the breaker: LM Studio is
+up.
 """
 import json
 import math
 import re
-import time
 from datetime import date, datetime, timezone
 
 from llm import client
 
 from . import db, serving
 
-DOWN_S = 30
 BUSY_WAIT_S = 120  # a chat answer takes about a minute at most on the laptop
-_down_at = -DOWN_S  # time.monotonic() of the last unreachable LM Studio
 
 _MONTH = (r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?"
           r"|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
@@ -204,15 +204,17 @@ def generate(key: str) -> dict:
     hit = db.cached_brief(key, asof, mv)
     if hit and validate(hit["text"], facts)[0]:   # a brief cached under an older, looser validator is redone
         return {**hit, "paragraphs": paragraphs(hit["text"]), "status": "ok", "cached": True, "payload": facts}
-    global _down_at
-    if time.monotonic() - _down_at < DOWN_S:
-        return {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {DOWN_S} s"}
+    down = {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
+    if client.down_recently():
+        return down
     reasons, attempts = [], 0
     try:
         # one generation at a time on the local model (llm/client.py LLM_GATE); chat answers go first
         with client.gate(BUSY_WAIT_S) as free:
             if not free:
                 return {"status": "llm_unavailable", "detail": f"the local LLM stayed busy for {BUSY_WAIT_S} s"}
+            if client.down_recently():   # the request that held the gate found LM Studio down
+                return down
             for attempt in range(2):
                 attempts = attempt + 1
                 text = _ask(facts, re.findall(r"'([^']*)'", " ".join(reasons)) if attempt else None)
@@ -220,7 +222,8 @@ def generate(key: str) -> dict:
                 if ok:
                     break
     except client.LLMConnectionError as e:
-        _down_at = time.monotonic()
+        if e.down:   # refused: shared with the chat and the second opinion; a timeout or HTTP error is not
+            client.mark_down()
         return {"status": "llm_unavailable", "detail": str(e)[:300]}
     if not ok:
         return {"status": "rejected", "reasons": reasons, "attempts": attempts}

@@ -1,5 +1,6 @@
 """Agency matrix, bottlenecks, radar summary, models page and the project brief (B 6, B 8 rows 7-9)."""
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -162,7 +163,36 @@ def test_brief_is_503_quickly_when_the_llm_is_down(client, top_key, monkeypatch)
     assert time.time() - t0 < 10
     t0 = time.time()                                   # remembered: the next ask does not wait again
     assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and time.time() - t0 < 1
-    brief._down_at = -brief.DOWN_S                     # forget the outage for the next tests
+    assert llm_client.down_recently()                  # through the client's breaker, shared with the chat
+    llm_client._down_at = -1e9                         # forget the outage for the next tests
+
+
+def test_brief_shares_the_clients_breaker_and_a_timeout_does_not_trip_it(client, top_key, monkeypatch):
+    calls = []
+
+    def slow(system, user):
+        calls.append(user)
+        raise llm_client.LLMTimeoutError("LM Studio did not answer in time (ReadTimeout)")
+    monkeypatch.setattr(llm_client, "complete", slow)
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
+    r = client.get(f"/api/projects/{top_key}/brief")
+    assert r.status_code == 503 and "did not answer in time" in r.json()["detail"]
+    assert not llm_client.down_recently()              # LM Studio is up, only slow: not marked down
+    assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and len(calls) == 2   # asked again
+    llm_client.mark_down()                             # the chat found the connection refused just now
+    assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and len(calls) == 2   # not asked
+    assert "unreachable in the last" in client.get(f"/api/projects/{top_key}/brief").json()["detail"]
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
+    with llm_client.gate(1) as ok:                     # the request ahead holds the LLM and finds it down
+        assert ok
+        seen = []
+        t = threading.Thread(target=lambda: seen.append(client.get(f"/api/projects/{top_key}/brief").json()))
+        t.start()
+        time.sleep(0.2)
+        llm_client.mark_down()
+    t.join(5)
+    assert seen[0]["status"] == "llm_unavailable" and "unreachable" in seen[0]["detail"] and len(calls) == 2
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
 
 
 def test_brief_waits_for_the_llm_gate_and_says_busy(client, top_key, monkeypatch):
