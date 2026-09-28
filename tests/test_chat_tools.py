@@ -151,6 +151,39 @@ def test_research_and_knowledge(keys, monkeypatch):
     assert kn.sources[1]["url"] == "https://example.org/n"
 
 
+def test_knowledge_search_never_shows_a_research_agent_headline(tmp_path, monkeypatch):
+    """The real index (every real chunk, TF-IDF) with one research-agent fact whose raw feed headline names a
+    private person: search_knowledge finds the fact for the public and an official, and neither the sources card
+    nor a passage carries the headline (serving.public_facts drops it; so does the index)."""
+    import sqlite3
+    import time
+    name = "Ramesh Kumar"
+    dbp = tmp_path / "app.db"
+    with sqlite3.connect(dbp) as con:
+        con.execute("CREATE TABLE research_facts (fact_id, project_key, category, direction, severity, event_date, "
+                    "summary, headline, source, url)")
+        con.execute("INSERT INTO research_facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            "agent-1", "PRJ-000698", "land", "negative", 2, "2026-09-01",
+            "Villagers protested at the Pipalkoti tunnel site over land compensation.",
+            f"Farmer {name} beaten by police at Pipalkoti tunnel protest", "Local Paper", "https://example.org/p"))
+    monkeypatch.setenv("PAIMANA_DB", str(dbp))
+    monkeypatch.setattr(rag, "EMBED", False)
+    rag.reset()
+    try:
+        rows = rag.build_chunks()
+        agent_chunk = next(c for c in rows if c["id"] == "research:agent-1")
+        assert agent_chunk["visibility"] == "public" and name not in agent_chunk["title"] + agent_chunk["text"]
+        rag._publish(rag.build_index(rows, "test"))
+        monkeypatch.setattr(rag, "CHECK_S", 1e9)
+        monkeypatch.setattr(rag, "_checked_at", time.monotonic())
+        for viewer in (PUBLIC, IPMD):
+            r = tools.run(viewer, "search_knowledge", {"q": "villagers protested over land compensation"})
+            assert any(s["url"] == "https://example.org/p" for s in r.sources), r.sources  # the fact is found
+            assert name not in json.dumps([r.summary, r.facts, r.sources, r.cards])
+    finally:
+        rag.reset()
+
+
 def test_public_outputs_are_redacted(keys):
     k = keys["critical"]
     pub, full = tools.run(PUBLIC, "get_project", {"key": k}), tools.run(IPMD, "get_project", {"key": k})

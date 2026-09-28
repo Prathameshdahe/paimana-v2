@@ -15,7 +15,8 @@ QUOTE_MAX characters; hits of the kinds that carry it have trusted False. Kinds,
             (no drivers, intervals, rank or evidence lines) ...................................... public
   event     one per report-remark event with its quote; officials also get its document and page ......... public
   research  web research facts (gold/research_facts.parquet from the sweep, the agent's SQLite research_facts,
-            one per project and URL) and the latest status per project (gold/research_projects.parquet) ... public
+            one per project and URL; the agent's raw feed headline is left out, as serving.public_facts drops it)
+            and the latest status per project (gold/research_projects.parquet) ......................... public
   news      scout headlines linked to a project (the newest NEWS_PER_PROJECT per project): headline, publisher,
             date, category, never article text ..................................................... official
   external  land-register and forest-rulebook evidence per current project .......................... public;
@@ -515,7 +516,10 @@ def research_chunks(names: dict) -> list[dict]:
                                      r.get("status") and f"status {_quote(r['status'], 40)}",
                                      r.get("live") in (True, 1) and "a live blocker") if x)
         pub = _iso(r.get("published_date"))
-        summary, headline, source = _quote(r["summary"], 800), _quote(r.get("headline")), _quote(r.get("source"), 100)
+        # the research agent's headline is the raw feed title, which can name a private person: never indexed, as
+        # serving.public_facts drops it for the public (the sweep's headlines are public)
+        headline = _quote(r.get("headline")) if r.get("origin") != "agent" else None
+        summary, source = _quote(r["summary"], 800), _quote(r.get("source"), 100)
         text = _sentences(f"{ref}, web research: {summary}",
                           f"({kind}" + (f"; event date {when})." if when else ")."),
                           source and f"Source: {source}" + (f", {pub}" if pub else "")

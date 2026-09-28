@@ -456,6 +456,9 @@ def test_research_chunks_from_the_sweep_and_the_agent(tmp_path, monkeypatch):
     assert f1["visibility"] == "public" and f1["url"] == "https://x.org/1" and f1["date"] == "2026-08"
     assert "a live blocker" in f1["text"] and "severity 2 of 3" in f1["text"]
     assert "Water Power, 2026-08-19" in f1["text"] and out[agent_id]["date"] == "2026-09-01"
+    assert f1["title"] == "Search operation ends at the project" and "Search operation" in f1["text"]  # the sweep's
+    agent_fact = out[agent_id]  # the agent's raw feed headline (it can name a private person) is left out
+    assert agent_fact["title"] == "Contractor terminated." and "Contract ends" not in agent_fact["text"]
     assert out["research:f2"]["title"] == "Land handed over." and "None" not in out["research:f2"]["text"]
     assert "Unit-1 in 2027." in out["research:PRJ-A:status"]["text"]
 
