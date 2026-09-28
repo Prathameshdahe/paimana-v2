@@ -229,7 +229,7 @@ def paths(world, role) -> list[str]:
            "/api/agencies/matrix?include_hidden=true", f"/api/agencies/{agency}/projects", "/api/bottlenecks?size=100",
            "/api/external/summary", "/api/alerts?size=100", "/api/alerts?kind=slip_realised&size=100",
            "/api/watchlist", "/api/jobs", "/api/live/status",
-           "/api/signals/feed", "/api/radar/summary", "/api/dispatch"]
+           "/api/signals/feed", "/api/radar/summary", "/api/dispatch", "/api/models", "/api/worker-runs"]
     return out + ([f"/api/bottlenecks/{bid}"] if bid else [])
 
 
@@ -257,6 +257,7 @@ def test_no_hidden_number_reaches_a_viewer_without_numbers(client, world, role):
         must |= {f"/api/projects/{k}/forecast", "/api/agencies/matrix?include_hidden=true", "/api/bottlenecks?size=100",
                  "/api/alerts?size=100", "/api/watchlist", f"/api/projects/{k}/signals"}
     assert must <= set(got), must - set(got)
+    assert not {"/api/models", "/api/worker-runs"} & set(got)   # the models page and the worker console: developer's
     for path, body in got.items():
         assert not leaks(body), (role, path, leaks(body)[:5])
         assert not text_leaks(body), (role, path, text_leaks(body)[:3])

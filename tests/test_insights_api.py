@@ -89,7 +89,7 @@ def test_new_endpoints_never_return_more_than_100_project_rows(client, top_key):
     for path in ("/api/agencies/matrix", "/api/agencies/matrix?include_hidden=true", "/api/agencies/NHAI/projects",
                  "/api/agencies/NHAI/projects?size=100", "/api/bottlenecks", "/api/bottlenecks?size=100",
                  f"/api/bottlenecks/{bid}?size=100", "/api/radar/summary", "/api/models"):
-        r = client.get(path)
+        r = client.get(path, headers=as_role(client, "developer") if path == "/api/models" else None)
         assert r.status_code == 200, path
 
         def lists(v):
@@ -111,7 +111,7 @@ def test_radar_summary_on_an_empty_database(client):
 
 
 def test_models_page_has_registry_calibration_shap_and_honest_live_accuracy(client):
-    m = client.get("/api/models").json()
+    m = client.get("/api/models", headers=as_role(client, "developer")).json()
     assert 0 < len(m["shapSummary"]) <= 20 and "meanAbsShap" in m["shapSummary"][0]
     shap = [r["meanAbsShap"] for r in m["shapSummary"]]
     assert shap == sorted(shap, reverse=True)

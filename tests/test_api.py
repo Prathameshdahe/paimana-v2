@@ -136,8 +136,9 @@ def test_no_endpoint_returns_more_than_100_project_rows(client):
     key = client.get("/api/projects", params={"size": 1}).json()["items"][0]["key"]
     paths = ["/api/meta", "/api/portfolio", "/api/projects", "/api/projects?size=100", "/api/external/summary",
              "/api/models", f"/api/projects/{key}", f"/api/projects/{key}/timeline", f"/api/projects/{key}/forecast"]
+    dev = as_role(client, "developer")   # the models page is the developer's
     for path in paths:
-        r = client.get(path)
+        r = client.get(path, headers=dev if path == "/api/models" else None)
         assert r.status_code == 200, path
         for rows in project_rows(r.json()):
             assert len(rows) <= MAX_ROWS, path
@@ -155,7 +156,7 @@ def test_external_and_models(client):
     assert e["earlyNotice"]["n_projects"] == client.get("/api/projects", params={"flag": "early_notice"}).json()[
         "total"]
     assert e["coverage"]["land_linked"] > 0 and e["caveats"]
-    m = client.get("/api/models").json()
+    m = client.get("/api/models", headers=as_role(client, "developer")).json()
     assert m["champions"]["y_any_h2"]["run_id"] == m["runId"] and m["backtest"] and m["ablation"]
     assert "prAuc" in m["backtest"][0]
 
