@@ -9,6 +9,7 @@ import asyncio
 import json
 import re
 import sys
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -374,14 +375,15 @@ def test_external_summary_bands(client, world):
 
 
 def test_map_rows_and_top_reason(client, world):
-    ipmd, pub = headers(client, world, "ipmd"), as_role(client, "public")
-    m = client.get("/api/projects/map", headers=ipmd).json()
+    # a viewer's headers are taken when the request goes out: as_role signs the client in, so the last call decides
+    ipmd, pub = partial(headers, client, world, "ipmd"), partial(as_role, client, "public")
+    m = client.get("/api/projects/map", headers=ipmd()).json()
     assert m["total"] == len(m["items"]) == serving.meta()["n_current"]
     rank = {t: i for i, t in enumerate(serving.TIERS + [serving.WATCH])}
     order = [(rank.get(r["tier"], len(rank)), r["key"]) for r in m["items"]]
     assert order == sorted(order)   # by tier, then key: a row's place says nothing of its hidden chance of a slip
-    crit = client.get("/api/projects/map", headers=ipmd, params={"tier": "Critical"}).json()
-    assert crit["total"] == client.get("/api/projects", headers=ipmd, params={"tier": "Critical", "size": 1}).json()[
+    crit = client.get("/api/projects/map", headers=ipmd(), params={"tier": "Critical"}).json()
+    assert crit["total"] == client.get("/api/projects", headers=ipmd(), params={"tier": "Critical", "size": 1}).json()[
         "total"] and all(r["tier"] == "Critical" for r in crit["items"])
     scoped = client.get("/api/projects/map", headers=headers(client, world, "ministry")).json()
     assert scoped["total"] == serving.projects(scope=world["scope"]["ministry"], size=1)["total"]
@@ -395,14 +397,14 @@ def test_map_rows_and_top_reason(client, world):
         assert r["topReason"] == w["top_reason"]
         assert r["topReason"] is None or r["topReason"] in checks or r["topReason"] in {
             d["label"] for d in w["drivers_plain"] if d["direction"] == "raises"}
-    public = client.get("/api/projects/map", headers=pub).json()["items"]
+    public = client.get("/api/projects/map", headers=pub()).json()["items"]
     assert all(r["topReason"] == words[r["key"]]["top_check"] for r in public[:200])
     assert all(r["topReason"] is None or r["topReason"] in checks for r in public)
-    rows = client.get("/api/projects", headers=ipmd, params={"size": 50}).json()["items"]
+    rows = client.get("/api/projects", headers=ipmd(), params={"size": 50}).json()["items"]
     assert all(r["topReason"] == words[r["key"]]["top_reason"] for r in rows)
-    top = client.get("/api/portfolio", headers=pub).json()["top"]   # the public's top list: a check, never a driver
+    top = client.get("/api/portfolio", headers=pub()).json()["top"]   # the public's top list: a check, never a driver
     assert top and all(r["topReason"] == words[r["key"]]["top_check"] for r in top)
-    top = client.get("/api/portfolio", headers=ipmd).json()["top"]
+    top = client.get("/api/portfolio", headers=ipmd()).json()["top"]
     assert all(r["topReason"] == words[r["key"]]["top_reason"] for r in top)
     assert client.get("/api/projects/map", params={"tier": "Severe"}).status_code == 422
 
@@ -477,7 +479,7 @@ def test_alert_stream_sends_words(fresh_db, monkeypatch):
                     "detail": "entered Critical at asof 2026-07-01; P(date push or cost revision, 2q) = 0.95"}])
 
     async def first(redact):
-        async for line in scheduler.alert_stream(start, None, redact):
+        async for line in scheduler.alert_stream(start, None, redact=redact):
             if line.startswith("id:"):
                 return line
     plain = asyncio.run(asyncio.wait_for(first(serving.plain_alert), 10))
@@ -506,15 +508,16 @@ def test_brief_views_are_worded_and_cached_apart(client, world, monkeypatch):
         words if "outlook is given in words" in system else f"It is {full['prediction']['tier']}, "
         f"{full['prediction']['p_any_2q']}.\n\nSo."))
     monkeypatch.setattr(llm_client, "_down_at", -1e9)
-    ipmd, dev = headers(client, world, "ipmd"), headers(client, world, "developer")
-    a = client.get(f"/api/projects/{k}/brief", headers=ipmd).json()
-    b = client.get(f"/api/projects/{k}/brief", headers=dev).json()
+    # a viewer's headers are taken when the request goes out: as_role signs the client in, so the last call decides
+    ipmd, dev = partial(headers, client, world, "ipmd"), partial(headers, client, world, "developer")
+    a = client.get(f"/api/projects/{k}/brief", headers=ipmd()).json()
+    b = client.get(f"/api/projects/{k}/brief", headers=dev()).json()
     assert a["status"] == b["status"] == "ok" and a["view"] == "plain" and b["view"] == "numbers"
     assert a["text"] == words and a["text"] != b["text"] and systems == [brief.SYSTEM_PLAIN, brief.SYSTEM]
     assert not leaks(a["payload"]) and leaks(b["payload"])
-    again = client.get(f"/api/projects/{k}/brief", headers=ipmd).json()
+    again = client.get(f"/api/projects/{k}/brief", headers=ipmd()).json()
     assert again["cached"] and again["text"] == words and len(systems) == 2
-    assert client.get(f"/api/projects/{k}/brief", headers=dev).json()["text"] == b["text"]
+    assert client.get(f"/api/projects/{k}/brief", headers=dev()).json()["text"] == b["text"]
 
 
 def _opinion_reply(p) -> str:
@@ -547,12 +550,13 @@ def test_second_opinion_views_are_worded_and_stored_apart(client, world, fresh_d
     monkeypatch.setattr(llm_client, "_down_at", -1e9)
     out = so.generate(k, numbers=True)
     assert out["status"] == "ok" and out["view"] == "numbers"
-    ipmd, dev = headers(client, world, "ipmd"), headers(client, world, "developer")
-    assert client.get(f"/api/projects/{k}/second-opinion?cached=1", headers=ipmd).json()["status"] == "none"
-    got = client.get(f"/api/projects/{k}/second-opinion?cached=1", headers=dev).json()
+    # a viewer's headers are taken when the request goes out: as_role signs the client in, so the last call decides
+    ipmd, dev = partial(headers, client, world, "ipmd"), partial(headers, client, world, "developer")
+    assert client.get(f"/api/projects/{k}/second-opinion?cached=1", headers=ipmd()).json()["status"] == "none"
+    got = client.get(f"/api/projects/{k}/second-opinion?cached=1", headers=dev()).json()
     assert got["status"] == "ok" and got["view"] == "numbers" and got["cached"]
     monkeypatch.setattr(llm_client, "chat", lambda messages, **kw: _opinion_reply(plain))
-    o = client.get(f"/api/projects/{k}/second-opinion", headers=ipmd).json()
+    o = client.get(f"/api/projects/{k}/second-opinion", headers=ipmd()).json()
     assert o["status"] == "ok" and o["view"] == "plain" and not o["cached"]
     assert not leaks(o) and not text_leaks(o) and o["evidenceHash"] == so.evidence_hash(plain)
     assert {r["view"] for r in db.second_opinions(k)} == {"numbers", "plain"}

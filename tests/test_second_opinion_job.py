@@ -194,8 +194,11 @@ def test_job_route_live_status_and_access(job_db):
         c.headers.update(as_role(c, "developer"))
         r = c.post("/api/jobs/second-opinion", params={"project_key": KEY}).json()
         assert r["started"] is True and r["pending"] == 1
-        got = c.get(f"/api/projects/{KEY}/second-opinion", params={"cached": 1}).json()   # the task has run
-        assert got["status"] == "ok" and got["cached"] and len(job_db) == 1
+        # the task has run; the job asks in the plain view, the opinion officials read (the developer's numbers
+        # view is asked for on demand)
+        got = c.get(f"/api/projects/{KEY}/second-opinion", params={"cached": 1}, headers=as_role(c, "ipmd")).json()
+        assert got["status"] == "ok" and got["view"] == "plain" and got["cached"] and len(job_db) == 1
+        c.headers.update(as_role(c, "developer"))
         assert c.post("/api/jobs/second-opinion", params={"project_key": "PRJ-999999"}).status_code == 404
         live = c.get("/api/live/status").json()
         assert live["secondOpinion"]["lastRun"]["job"] == "second_opinion"
