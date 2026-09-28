@@ -18,7 +18,7 @@ A request with no headers is the public.
 | Side | File | What it does |
 |---|---|---|
 | Backend | `backend/access.py` `POLICY` | Per role: its features and its scope. Routes take the viewer as a dependency, answer 403 for a feature the role lacks and cut every project row, alert, signal and memo to the scope. An out-of-scope project is 404. |
-| Frontend | `frontend/src/lib/auth/access.ts` | The same rules for display: `ROUTE_ROLES` (page to roles) and `FEATURE_ROLES` (`canSeeDrivers`, `canSeeAlerts`, `canAck`, `canChat`, `canSeeLive`, `canSeeNews`, `canRunJobs`, `canSeeModelVersion`). Routes, nav, bell, chat, live controls and the project page read it. |
+| Frontend | `frontend/src/lib/auth/access.ts` | The same rules for display: `ROUTE_ROLES` (page to roles) and `FEATURE_ROLES` (`canSeeDrivers`, `canSeeAlerts`, `canAck`, `canChat`, `canSeeLive`, `canSeeNews`, `canSeeSecondOpinion`, `canRunJobs`, `canSeePipelineErrors`, `canSeeModelVersion`). Routes, nav, bell, chat, live controls, the Home inbox and the project page read it. |
 
 The two maps are kept by hand. The backend is the one that holds: a page shown by
 mistake still gets 403 or the scoped rows. `tests/test_access.py` checks the
@@ -53,7 +53,8 @@ list per role, cut to the scope; it becomes per person once there is real sign-i
 | Home: early warning inbox | – | ✓ scoped | ✓ scoped | ✓ |
 | Project list and search (`/command`) | ✓ | ✓ scoped | ✓ scoped | ✓ |
 | Project page | simple: tier, progress, cost, completion, top 3 risks in plain words, progress history | ✓ full, scoped | ✓ full, scoped | ✓ full |
-| SHAP drivers, analogues, quantile intervals, provenance, forecast, brief, project news | – | ✓ | ✓ | ✓ |
+| SHAP drivers, analogues, quantile intervals, provenance, forecast, brief, project news, AI second opinion | – | ✓ | ✓ | ✓ |
+| Web research (project page, External Factors) | facts without match reasons or the research agent's headlines; on External Factors the counts and the sweep's blockers | ✓ scoped | ✓ scoped | ✓ |
 | External Factors summary | counts, factors, map and measured delays; no evidence lines or PARIVESH lists | ✓ scoped | ✓ scoped | ✓ |
 | External Factors news feed | – | ✓ scoped | ✓ scoped | ✓ |
 | Bottlenecks | – | ✓ scoped | ✓ scoped | ✓ |
@@ -65,7 +66,7 @@ list per role, cut to the scope; it becomes per person once there is real sign-i
 | Approvals | – | memos addressed to agency officials, own projects | memos addressed to ministry officials, own projects | every memo |
 | Decide a memo | – | only its addressee | only its addressee | only its addressee |
 | Live job status | – | ✓ | ✓ | ✓ |
-| Check inbox, run scout, upload a report | – | – | – | ✓ |
+| Check inbox, run scout, upload a report (and from the API: the research agent, the second-opinion job, portal pulls) | – | – | – | ✓ |
 | Models page | – | – | ✓ read-only | ✓ |
 | Workers (console, trigger) | – | – | – | ✓ |
 | Model version in the top bar | – | ✓ | ✓ | ✓ |
@@ -88,7 +89,7 @@ the per-project PARIVESH lists (open proposals, the proposals named in the remar
 | `/api/meta`, `/api/scopes` | ✓ | ✓ | ✓ | ✓ |
 | `/api/portfolio`, `/api/projects`, `/api/projects/{key}`, `.../timeline`, `/api/external/summary` | ✓ (detail redacted) | scoped | scoped | ✓ |
 | `.../research`, `/api/research/summary` | ✓ (no match reasons, no headline on the research agent's facts; summary: counts, the sweep's blockers as headline, URL, dates) | scoped | scoped | ✓ |
-| `.../forecast`, `.../brief`, `.../signals` | 403 | scoped | scoped | ✓ |
+| `.../forecast`, `.../brief`, `.../signals`, `.../second-opinion` (generated on demand, `?cached=1` never generates) | 403 | scoped | scoped | ✓ |
 | `/api/alerts`, `/api/stream` | 403 | scoped | scoped | ✓ |
 | `POST /api/alerts/{id}/ack` | 403 | 403 | scoped | ✓ |
 | `/api/watchlist` | 403 | scoped | scoped | ✓ |
@@ -96,7 +97,7 @@ the per-project PARIVESH lists (open proposals, the proposals named in the remar
 | `/api/signals/feed`, `/api/radar/summary` | 403 | linked, scoped | linked, scoped | ✓ |
 | `/api/dispatch`, `POST /api/approvals` | 403 | addressed, scoped | addressed, scoped | ✓ |
 | `/api/live/status`, `/api/jobs` | 403 | ✓ | ✓ | ✓ |
-| `POST /api/jobs/*` | 403 | 403 | 403 | ✓ |
+| `POST /api/jobs/*` (ingest, watch, scout, research, second-opinion, parivesh-snapshot, bhoomi-pull) | 403 | 403 | 403 | ✓ |
 | `/api/models` | 403 | 403 | ✓ | ✓ |
 | `/api/worker-runs`, `POST /api/worker-runs/trigger` | 403 | 403 | 403 | ✓ |
 | `POST /api/chat` | ✓ public tools, 6 a minute and 40 an hour | scoped, 20 a minute | scoped, 20 a minute | ✓, 20 a minute |
