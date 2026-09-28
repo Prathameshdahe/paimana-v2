@@ -131,8 +131,8 @@ Public outputs are built from `serving.public_project`, `public_page`, `public_e
 - **The public prompt** talks about tiers, chances, progress, cost and dates and never mentions model internals;
   public tools carry no drivers, intervals or evidence lines, and a public answer naming one is rejected.
 - **One LLM call at a time.** The answer holds `client.gate(chat=True)` from its first LLM call to its end;
-  background jobs that take the gate (the research agent) and the search index's embedding refresh pause while a
-  chat is active. The project brief (waits up to 120 s, then says the LLM is busy) and the worker cell take the
+  background jobs that take the gate (the research agent, the second-opinion job) and the search index's embedding
+  refresh pause while a chat is active. The project brief (waits up to 120 s, then says the LLM is busy) and the worker cell take the
   same gate, so no two generations run at once. The writer waits for the gate at most 20 s (`busy`); the planner, which holds up
   the first card, only 2 s, after which the router's and the fallback's calls run instead. A refused connection
   trips the shared circuit breaker (`unavailable`, no waiting for 30 s); a slow reply does not.
@@ -158,10 +158,14 @@ the model is free, a list answer that is rejected and retried up to about 2 minu
 
 **A faster model.** Load a smaller instruct model in LM Studio (generation speed falls roughly with the number of
 parameters, so a 3-8B instruct model writes faster than the 14B one on the same laptop) and set `LLM_CHAT_MODEL`
-in `.env` to its LM Studio id, for example `LLM_CHAT_MODEL=qwen2.5-7b-instruct`; the chat's planner and writer
-use it, the brief and the other jobs keep `LLM_MODEL`. Nothing else changes: the checker still guards every
-number. Run `python -m llm.eval --llm subset` after a switch to see how often the smaller model's answers pass
-the check. `CHAT_WRITER=0` turns the model off for chat altogether (cards and deterministic answers only).
+in `.env` to its LM Studio id, for example `LLM_CHAT_MODEL=qwen2.5-7b-instruct`. It switches only the chat's
+planner and writer. The project brief, the worker cell, the research agent's news judge and the second opinion
+(the nightly job, the project page's and the chat's cached one alike) stay on `LLM_MODEL`, so their prompts keep
+the model they were tuned on and the stored second opinions, keyed by their LLM, keep being served. LM Studio then
+serves two models: keep both loaded, or a chat and a job may wait for it to swap them. Nothing else changes: the
+checker still guards every number. Run `python -m llm.eval --llm subset` after a switch to see how often the
+smaller model's answers pass the check. `CHAT_WRITER=0` turns the model off for chat altogether (cards and
+deterministic answers only).
 
 ## Evaluation
 

@@ -300,9 +300,9 @@ Until steps 2 to 4 have data, present it as what it is: a checked summary of the
   or 3 item got `concern` in tuning unless an item said the hold-up was being solved. The judgement the LLM adds is
   whether a hold-up is being solved, and the wording. So `concern` on a Medium or Watch project (`higher`) often only
   means that a current negative item exists; the informative cases are `watch` or `none` against a high tier.
-- **A small model misreads.** The model is a 14B coder model. It can overstate an item ("remains unresolved" for a
-  hold-up being worked on), mislabel a minor item as a hold-up, or add an uncited closing remark. The checks bound the
-  ids, numbers and level, not the reasoning.
+- **A small model misreads.** The model is a 14B coder model (`LLM_MODEL`; `LLM_CHAT_MODEL` does not change it). It
+  can overstate an item ("remains unresolved" for a hold-up being worked on), mislabel a minor item as a hold-up, or
+  add an uncited closing remark. The checks bound the ids, numbers and level, not the reasoning.
 - **Severity comes from upstream.** Which items are hold-ups (severity 2 or 3, recent) is decided by the checklist,
   the research sweep, the research agent and the PARIVESH rule limits, not by the LLM. A headline makes a hold-up only
   when the research agent judged it about the project; the scout's keyword severity still picks which headlines are
