@@ -124,6 +124,27 @@ def test_agency_scope_filters_project_chunks(env):
     assert rag.search("Beta", agency, project_key="PRJ-B") == []
 
 
+def test_scope_covers_the_projects_a_chunk_names(env):
+    chunks = [dict(c) for c in CHUNKS] + [
+        chunk("doc:named", "doc", "official", "Crosscheck: PRJ-000002 filed its proposal and has no Stage-I."),
+        chunk("doc:by-proposal", "doc", "official", "Crosscheck: FP/KL/ROAD/12345/2020 has no Stage-I either."),
+        chunk("news:9:PRJ-A", "news", "official", "Alpha bridge proposal FP/KL/ROAD/12345/2020 Stage-I.", "PRJ-A")]
+    rag.bind_mentions(chunks, {"FP/KL/ROAD/12345/2020": {"PRJ-000002"}})
+    named = {c["id"]: c["mentions"] for c in chunks}
+    assert named["doc:named"] == named["doc:by-proposal"] == "PRJ-000002"
+    assert named["news:9:PRJ-A"] is None                    # a proposal number binds only chunks with no project
+    assert all(named[c["id"]] is None for c in CHUNKS)
+    env["chunks"] = chunks
+    rag.ensure_index(background=False)
+    q = "crosscheck proposal Stage-I"
+    outside = ScopedViewer("agency_official", frozenset({"PRJ-A"}))
+    assert not {"doc:named", "doc:by-proposal"} & set(ids(rag.search(q, outside, k=10)))
+    assert "news:9:PRJ-A" in ids(rag.search(q, outside, k=10))
+    inside = ScopedViewer("ministry_official", frozenset({"PRJ-A", "PRJ-000002"}))
+    assert {"doc:named", "doc:by-proposal"} <= set(ids(rag.search(q, inside, k=10)))
+    assert {"doc:named", "doc:by-proposal"} <= set(ids(rag.search(q, IPMD, k=10)))
+
+
 def test_kind_and_project_filters(env):
     rag.ensure_index(background=False)
     hits = rag.search("tier", IPMD, k=10, kinds={"help"})
@@ -374,6 +395,28 @@ def test_real_chunks_visibility(real_chunks):
     assert "Pipalkoti" in card["text"] and "%" in card["text"] and card["project_key"] == "PRJ-000698"
     assert all(c["official_source"] and ".pdf" in c["official_source"] and ".pdf" not in c["source"]
                for c in real_chunks if c["kind"] == "event")
+
+
+def test_real_scope_of_an_agency_official(real_chunks):
+    """The real Viewer of a real agency: no hit about a project outside its keys, bound or named."""
+    by_id = {c["id"]: c for c in real_chunks}
+    cross = [c for c in real_chunks if c["kind"] == "doc" and "FP/JH/MIN/44804/2020" in c["text"]]
+    assert cross and all("PRJ-001354" in c["mentions"].split() for c in cross)   # by key or by proposal number
+    assert any("PRJ-002234" in (c["mentions"] or "").split() for c in real_chunks
+               if c["source"] == "docs/EXTERNAL_RESEARCH_2026-09.md")             # named by its proposal number only
+    idx = rag.build_index(real_chunks, "test")
+    agency = Viewer("agency_official", agency="POWERGRID")
+    keys = agency.keys
+    assert keys and not {"PRJ-001354", "PRJ-002234"} & keys
+    for q in ("Muraidih colliery Stage-I PARIVESH", "Katni Singrauli tiger reserve DFO query",
+              "land acquisition pending", "transmission line forest clearance", "Watch tier"):
+        for kinds in (None, {"doc"}, {"external"}, {"news"}):
+            for h in idx.search(q, agency, k=10, kinds=kinds):
+                c = by_id[h["id"]]
+                assert c["project_key"] in keys or c["project_key"] is None, (q, h["id"])
+                assert set((c["mentions"] or "").split()) <= keys, (q, h["id"])
+    assert any("Muraidih" in h["text"] for h in idx.search("Muraidih", IPMD, kinds={"doc"}))
+    assert not any("Muraidih" in h["text"] for h in idx.search("Muraidih", agency, kinds={"doc"}))
 
 
 def test_real_index_redacts_sources_for_the_public(real_chunks):

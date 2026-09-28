@@ -2,7 +2,9 @@
 visibility and a project, ranked by keywords and by meaning.
 
 A chunk is {id, kind, project_key, visibility, title, text, source, url, date}; official_source, when set, replaces
-source for signed-in officials. Kinds, and who may read them:
+source for signed-in officials, and mentions lists the other projects its text names (by PRJ key, and in a chunk bound
+to no project also by a linked PARIVESH proposal number): a scoped official reads a chunk only when its project and
+every project it mentions are in scope. Kinds, and who may read them:
   help      docs/HELP.md, by section ............................................................. public
   doc       the maintained docs in DOCS (not docs/PROJECT_DOCUMENTATION.md, which is stale, nor the mock-data notes)
             .................................................................................... official
@@ -26,7 +28,7 @@ Ranking: TF-IDF (word 1-2 grams, sublinear tf, English stop words) over title an
 project cards, help, docs and glossary alone (TITLE_RANK: a name finds its project card before the shorter chunks
 that also name it); and nomic embeddings ('search_document: ' before a chunk, 'search_query: ' before a question).
 Each ranks only the chunks the viewer may read: visibility (the public reads public chunks), scope (Viewer.keys, for
-chunks bound to a project), kinds and project are filtered before ranking, so a hidden chunk never takes a place. The
+the chunk's project and the projects it mentions), kinds and project are filtered before ranking, so a hidden chunk never takes a place. The
 rankings (top POOL each) are fused by reciprocal rank, score = sum of 1 / (RRF_K + rank). Without embeddings (still
 computing, LM Studio down or its embedding model not loaded, or RAG_EMBED=0) TF-IDF ranks alone: search() never
 raises for an LLM outage.
@@ -81,8 +83,11 @@ DOCS = ("README.md", "docs/ACCESS_CONTROL.md", "docs/AI_ASSISTANT.md", "docs/EXT
 FEATURE_LABELS = "frontend/src/lib/featureLabels.ts"
 RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
 KINDS = ("help", "doc", "project", "event", "research", "news", "external", "glossary")
-COLUMNS = ["id", "kind", "project_key", "visibility", "title", "text", "source", "official_source", "url", "date"]
-VERSION = 1                     # the chunker's version: a change rebuilds every index
+COLUMNS = ["id", "kind", "project_key", "visibility", "title", "text", "source", "official_source", "url", "date",
+           "mentions"]
+VERSION = 2                     # the chunks' schema (2: mentions); a change rebuilds every index, vectors are reused
+PRJ_KEY = re.compile(r"\bPRJ-\d{6}\b")
+PROPOSAL_NO = re.compile(r"\bFP/[A-Z]{2}/[A-Z0-9]+/\d+/\d{4}\b")
 MIN_WORDS, MAX_WORDS = 180, 350
 RRF_K, POOL = 60, 50
 DOC_PREFIX, QUERY_PREFIX = "search_document: ", "search_query: "
@@ -198,7 +203,7 @@ def _chunk(id_, kind, visibility, title, text, source, *, project_key=None, offi
            date_=None) -> dict:
     return {"id": id_, "kind": kind, "project_key": project_key, "visibility": visibility, "title": title[:200],
             "text": text.strip(), "source": source, "official_source": official_source, "url": url,
-            "date": _iso(date_)}
+            "date": _iso(date_), "mentions": None}
 
 
 def _sentences(*parts) -> str:
@@ -628,6 +633,32 @@ def glossary_chunks() -> list[dict]:
     return out
 
 
+def _proposal_keys(s: dict) -> dict[str, set[str]]:
+    """PARIVESH proposal number -> the projects it is linked to (the remark-named proposals and the portal links)."""
+    out: dict[str, set[str]] = {}
+    for r in serving._rows(s, "SELECT project_key AS k, proposal_no AS p FROM fcprop WHERE proposal_no IS NOT NULL"):
+        out.setdefault(r["p"].strip(), set()).add(r["k"])
+    for r in serving._rows(s, "SELECT project_key AS k, proposals AS ps FROM portal WHERE proposals IS NOT NULL"):
+        for p in r["ps"].split(";"):
+            if p.strip():
+                out.setdefault(p.strip(), set()).add(r["k"])
+    return out
+
+
+def bind_mentions(chunks: list[dict], proposals: dict[str, set[str]]) -> None:
+    """Set each chunk's mentions: the projects other than its own that its title or text names by PRJ key and, in a
+    chunk bound to no project (a doc, help or glossary text), by a linked PARIVESH proposal number; space-separated,
+    None when there are none. The docs name projects (docs/EXTERNAL_DATA_CROSSCHECK.md gives the PARIVESH status of
+    PRJ-001354): a scoped official must not read that about a project outside the scope."""
+    for c in chunks:
+        text = f"{c['title']}\n{c['text']}"
+        named = set(PRJ_KEY.findall(text))
+        if not c["project_key"]:
+            named |= {k for p in PROPOSAL_NO.findall(text) for k in proposals.get(p, ())}
+        named.discard(c["project_key"])
+        c["mentions"] = " ".join(sorted(named)) or None
+
+
 def build_chunks(s: dict | None = None) -> list[dict]:
     """Every chunk of the current inputs (module docstring), ids unique; s is the served data state (serving.state()
     by default)."""
@@ -639,6 +670,7 @@ def build_chunks(s: dict | None = None) -> list[dict]:
     dup = [k for k, n in Counter(c["id"] for c in out).items() if n > 1]
     if dup:
         raise ValueError(f"duplicate chunk ids: {dup[:5]}")
+    bind_mentions(out, _proposal_keys(s))
     return out
 
 
@@ -758,13 +790,15 @@ class Index:
         self.kind = np.array([r["kind"] for r in self.rows], dtype=object)
         self.public = np.array([r["visibility"] == "public" for r in self.rows], dtype=bool)
         self.pkey = np.array([r["project_key"] or "" for r in self.rows], dtype=object)
+        self.named = {i: frozenset(r["mentions"].split()) for i, r in enumerate(self.rows) if r.get("mentions")}
 
     @property
     def dense_ready(self) -> bool:
         return self.emb is not None and len(self.rows) > 0 and self.has_emb.mean() >= DENSE_MIN_SHARE
 
     def candidates(self, viewer, kinds=None, project_key=None) -> np.ndarray:
-        """Indices of the chunks this viewer may read that pass the filters: visibility, scope, kinds, project."""
+        """Indices of the chunks this viewer may read that pass the filters: visibility, scope (the chunk's project
+        and every project it mentions), kinds, project."""
         mask = np.ones(len(self.rows), dtype=bool)
         if _role(viewer) == "public":
             mask &= self.public
@@ -774,7 +808,11 @@ class Index:
             mask &= self.pkey == project_key
         keys = getattr(viewer, "keys", None)
         if keys is not None:
+            keys = keys if isinstance(keys, (set, frozenset)) else set(keys)
             mask &= (self.pkey == "") | np.isin(self.pkey, list(keys))
+            for i, named in self.named.items():
+                if mask[i] and not named <= keys:
+                    mask[i] = False
         return np.flatnonzero(mask)
 
     def dense(self, qv: np.ndarray, cand: np.ndarray) -> list[int]:
@@ -884,8 +922,9 @@ def save(idx: Index, where: Path | None = None) -> None:
     idx.meta = meta
 
 
-def load(where: Path | None = None) -> Index | None:
-    """The saved index, or None when there is none or it cannot be read."""
+def load(where: Path | None = None, *, any_version: bool = False) -> Index | None:
+    """The saved index, or None when there is none or it cannot be read. any_version also reads an index of another
+    chunk VERSION, only to reuse its vectors (they are matched to chunks by content hash, not by schema)."""
     d = where or RAG_DIR
     try:
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
@@ -894,7 +933,7 @@ def load(where: Path | None = None) -> Index | None:
         if not isinstance(e, FileNotFoundError):
             log.warning("rag: cannot read the saved index in %s: %s", d, e)
         return None
-    if meta.get("version") != VERSION:
+    if meta.get("version") != VERSION and not any_version:
         return None
     rows = [{k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()}
             for r in df.drop(columns="embedded").to_dict("records")]
@@ -933,7 +972,7 @@ def rebuild(embed: bool = True, previous: Index | None = None, s: dict | None = 
     t0 = time.monotonic()
     s = serving.state() if s is None else s
     fp = fingerprint(s)
-    previous = previous or _index or load()
+    previous = previous or _index or load(any_version=True)
     rows = build_chunks(s)
     t1 = time.monotonic()
     idx = build_index(rows, fp, previous)
