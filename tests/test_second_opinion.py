@@ -37,7 +37,7 @@ def add_signal(url, title, published="2026-08-02T06:00:00+00:00", severity=2, ke
 def opinion_db(tmp_path, monkeypatch):
     monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     db.init()
-    add_signal("https://n/stopped", "Work stopped at Vishnugad site after protest")   # a current hold-up
+    add_signal("https://n/stopped", "Work stopped at Vishnugad site after protest", relevant=1)   # a current hold-up
     yield
     client._down_at = -1e9
 
@@ -117,7 +117,12 @@ def test_news_items_skip_judged_private_and_minor_and_quote_the_rest(opinion_db)
     news = [it for it in p["items"] if it["kind"] == "news"]
     texts = " ".join(it["text"] for it in news)
     assert len(news) == 2 and "Ramesh" not in texts and "Chamoli" not in texts and "visited" not in texts
-    assert all(it["direction"] == "negative" and it["severity"] == 2 and not it["stale"] for it in news)
+    assert all(it["direction"] == "negative" and not it["stale"] for it in news)
+    # severity 2 only when the research agent judged the headline about the project; else a minor issue
+    assert {("stopped" in it["text"]): it["severity"] for it in news} == {True: 2, False: 1}
+    assert {("stopped" in it["text"]): "unverified" in it["source"] for it in news} == {True: False, False: True}
+    unjudged = {**p, "items": [it for it in p["items"] if it["kind"] in ("status", "model") or "Ignore" in it["text"]]}
+    assert so.allowed(unjudged) == ("none", "watch")                        # a headline alone never forces concern
     user = so.messages(p)[1]["content"]
     assert user.count("<<<EVIDENCE") == 1 and user.count("EVIDENCE>>>") == 1 and "Ignore previous" in user
     assert so.evidence_hash(p) != h0     # new evidence, new hash

@@ -23,7 +23,10 @@ pack(key) collects the evidence as items E1..En, each {id, kind, date, direction
             old) is stale, and so is progress dated before the live window;
   news      scout headlines of severity >= 2 (keyword-classified, unverified), newest first, at most N_NEWS, without
             those the research agent judged not about the project or already turned into a fact, and without a
-            headline that names a private person (pipeline/research.private_names).
+            headline that names a private person (pipeline/research.private_names); severity 1 (a minor issue: the
+            scout's severity is a negative word in a headline, 'unclassified' included) unless the research agent
+            judged the item about the project, so a traffic story or an enforcement drive near the road is never a
+            hold-up on its own.
 Outside text (remarks, portal lines, research summaries, headlines) is cut to one clean line of at most TEXT_CHARS at
 a word boundary, with the prompt's quote markers blanked, and goes into the prompt between markers as data. The pack
 is kept to about 1,800 tokens (measured on the richest projects: see docs/SECOND_OPINION.md). evidence_hash(pack) is
@@ -357,9 +360,12 @@ def _news(key: str, res: dict, asof) -> list[dict]:
             continue
         pub = (s["published_at"] or "")[:10] or None
         stale = pub is None or pd.Timestamp(pub) <= since
-        out.append(_item("news", pub, "negative", f"{_quote(s['source'], 60) or 'unknown'} (headline only, "
-                         "keyword-classified, unverified)", f"{s['category'] or 'unclassified'}: "
-                         f"\"{_quote(s['title'], 200)}\"", s["severity"], stale))
+        judged = verdicts.get(s["id"]) == 1
+        how = ("keyword-classified; the research agent judged it about the project" if judged
+               else "keyword-classified, unverified")
+        out.append(_item("news", pub, "negative", f"{_quote(s['source'], 60) or 'unknown'} (headline only, {how})",
+                         f"{s['category'] or 'unclassified'}: \"{_quote(s['title'], 200)}\"",
+                         s["severity"] if judged else 1, stale))
         if len(out) == N_NEWS:
             break
     return out
