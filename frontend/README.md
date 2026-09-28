@@ -71,12 +71,19 @@ CI, lift, analogue distance or rate, or scenario value. They read the tier, the
 outlook in words (`Scores.outlook` / `ProjectRow.outlook`: delay and cost
 "very likely / likely / possible / unlikely", slip "under 6 months ... over 2
 years"), the drivers in words (`Scores.driversPlain`), the agencies' words
-(`scheduleWord`, `costWord`), the measured delay as a band (`extraMonthsWord`),
-and report facts (cost, spend, progress, dates, counts). The backend cuts the
+(`scheduleWord`, `costWord`), the measured delay as a band (`extraMonthsWord`;
+`extra_months_word` in the external summary's snake_case rows), what happened to
+similar past projects (each analogue's `outcome` and `yearsAgo`), and report
+facts (cost, spend, progress, dates, counts). The backend cuts the
 numbers out of their answers; the pages also never render one outside
 `can(role, 'canSeeNumbers')`, so a page stays clean against an older backend
 that still sends them (it then says "not available yet" where words are
-missing). `src/lib/outlook.ts` is the one place that picks words over numbers;
+missing). Such a backend also writes statistics into free text (the checklist's
+"P = 0.77 (High-tier cut 0.62)", an agency's timeline bias, a composite score,
+a measured prior's months and intervals, the chat's chance of a slip); every
+place that shows such text reads it through `plainText` (`src/lib/outlook.ts`),
+which drops them for the four roles and keeps the report facts around them.
+`src/lib/outlook.ts` is the one place that picks words over numbers;
 `src/lib/headline.ts` writes the opening sentences (the week's brief, a
 project's headline) from facts, tiers and words, never a number.
 
@@ -121,8 +128,12 @@ animate nothing; elsewhere motion is one short fade and honours reduced motion.
 The command centre (`src/views/CommandCenter.tsx`) is the week's brief, one
 filter bar shared by the risk map (`command-center/RiskMap.tsx`, geometry in
 `riskMapLayout.ts`: every project by due date and delay outlook, a dot's spot
-from its due date and a hash of its key only), where the risk sits by sector,
-where the delays come from, and the project list. The map reads
+from its due date and a hash of its key only; a month's projects fill the
+columns inside that month's stretch of the axis, and a column too tall for its
+lane folds into a "+n" mark that lists those projects on click, is taken by a
+brush and is visited by the keyboard walk), where the risk sits by sector,
+where the delays come from, and the project list. The side panel gives focus
+back to what opened it (`src/lib/useProjectPanel.ts`). The map reads
 `GET /api/projects/map`; against a backend without it, it shows the 100 most at
 risk from `/api/projects` and says so.
 
