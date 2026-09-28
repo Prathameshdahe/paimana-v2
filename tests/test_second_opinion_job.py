@@ -100,6 +100,30 @@ def test_rejections_wait_for_new_evidence_and_old_prompts_are_redone(job_db, mon
     assert opinions.run([key])["ok"] == 1 and len(job_db) == calls + 1        # the job redoes it
 
 
+def test_a_new_prompt_rejected_keeps_the_old_opinion_and_is_not_asked_every_night(job_db, monkeypatch):
+    key = next(k for k in opinions.batch_keys() if so.has_evidence(so.pack(k)))
+    assert opinions.run([key])["ok"] == 1
+    old = so.cached(key)
+    monkeypatch.setattr(so, "PROMPT_VERSION", "second-opinion-test")
+    monkeypatch.setattr(so, "_now", lambda: "2099-01-01T00:00:00+00:00")
+    monkeypatch.setattr(client, "chat", lambda messages, **kw: job_db.append(messages) or "not JSON")
+    calls = len(job_db)
+    assert opinions.run([key])["rejected"] == 1 and len(job_db) == calls + 2
+    for night in range(2):                                                    # the next nights: not asked again
+        assert opinions.due(key) == "up_to_date" and opinions.run([key])["up_to_date"] == 1
+    assert len(job_db) == calls + 2
+    kept = so.cached(key)                                                     # the accepted opinion stays
+    assert kept["narrative"] == old["narrative"] and kept["prompt_version"] == old["prompt_version"]
+    row = db.second_opinion(key, so.evidence_hash(so.pack(key)), client.LLM_CHAT_MODEL)
+    assert row["last_rejected"]["prompt_version"] == "second-opinion-test" and row["last_rejected"]["reasons"]
+    assert db.second_opinion_times()[key] == "2099-01-01T00:00:00+00:00"      # asked: to the back of the rotation
+    assert opinions.batch_keys()[-1] == key
+    monkeypatch.setattr(so, "PROMPT_VERSION", "second-opinion-test-2")         # a newer prompt: asked again
+    monkeypatch.setattr(client, "chat", fake_chat(job_db))
+    assert opinions.due(key) == "due" and opinions.run([key])["ok"] == 1
+    assert "last_rejected" not in db.second_opinion(key, so.evidence_hash(so.pack(key)), client.LLM_CHAT_MODEL)
+
+
 def test_run_stops_for_a_busy_chat_and_for_lm_studio_down(job_db, monkeypatch):
     keys = with_evidence(opinions.batch_keys(), 2)
     monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5: False)

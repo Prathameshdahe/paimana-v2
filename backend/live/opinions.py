@@ -1,12 +1,12 @@
 """The nightly job `second_opinion`: the LLM second opinion (llm/second_opinion.py) on the riskiest projects whose
 current evidence has none yet, fitted in between the chat answers.
 
-batch_keys() orders the Critical, High and Watch projects by when they last got an opinion (never first), then by
+batch_keys() orders the Critical, High and Watch projects by when they were last asked (never first), then by
 tier and the riskiest first. run(keys, limit) takes them in turn and, for each, builds the evidence pack and skips it
 when it is not scored, has no evidence about the project itself (second_opinion.has_evidence: nothing but the status
-line and the model) or already has an opinion, accepted or rejected, under the current PROMPT_VERSION for its
-evidence_hash and LLM model (a rejection is not asked again every night: only when the evidence or the prompt
-changes). Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
+line and the model) or was already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an
+opinion accepted or rejected under it, or a rejection under it noted on an older prompt's accepted opinion
+(last_rejected), so a rejection is not asked again every night, only when the evidence or the prompt changes. Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
 (second_opinion.generate as a background job: the gate lets chat requests go first; fresh, so an opinion made under
 an older prompt is redone), until `limit` projects were asked (SECOND_OPINION_PER_RUN, default 15). LM Studio down, or
 busy past the waits, ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep
@@ -55,7 +55,11 @@ def due(key: str) -> str:
     if not so.has_evidence(p):
         return "no_evidence"
     row = db.second_opinion(key, so.evidence_hash(p), client.LLM_CHAT_MODEL)
-    return "up_to_date" if row and row.get("prompt_version") == so.PROMPT_VERSION else "due"
+    if row is None:
+        return "due"
+    # asked under this prompt: its opinion, or a rejection noted on an older prompt's accepted opinion
+    tried = {row.get("prompt_version"), (row.get("last_rejected") or {}).get("prompt_version")}
+    return "up_to_date" if so.PROMPT_VERSION in tried else "due"
 
 
 def batch_keys() -> list[str]:

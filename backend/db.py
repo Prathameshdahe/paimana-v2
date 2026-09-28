@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS signal_judgements (
     signal_id INTEGER NOT NULL REFERENCES signals (id), project_key TEXT NOT NULL, relevant INTEGER,
     verdict_json TEXT, model TEXT, prompt_version TEXT, judged_at TEXT, PRIMARY KEY (signal_id, project_key));
 -- the LLM second opinion (llm/second_opinion.py) per evidence version: json holds the status (ok | rejected), the
--- opinion or the reasons, the tier and model version it was set against and the evidence items it read
+-- opinion or the reasons, the tier and model version it was set against and the evidence items it read, and on an
+-- accepted one last_rejected when a newer prompt's reply for the same evidence was rejected
 CREATE TABLE IF NOT EXISTS second_opinions (
     project_key TEXT NOT NULL, evidence_hash TEXT NOT NULL, model TEXT NOT NULL, prompt_version TEXT, asof TEXT,
     generated_at TEXT, json TEXT, PRIMARY KEY (project_key, evidence_hash, model));
@@ -383,8 +384,11 @@ def second_opinions(project_key: str | None = None) -> list[dict]:
 
 
 def second_opinion_times() -> dict[str, str]:
-    """project_key -> when its newest second opinion (any evidence version, accepted or rejected) was made."""
-    return {r[0]: r[1] for r in _read("SELECT project_key, max(generated_at) FROM second_opinions GROUP BY 1", [])}
+    """project_key -> when it was last asked for a second opinion: its newest one (any evidence version, accepted or
+    rejected) or a newer rejection noted on an accepted one (json last_rejected.at)."""
+    return {r[0]: r[1] for r in _read(
+        "SELECT project_key, max(max(coalesce(generated_at, ''), coalesce(json_extract(json, '$.last_rejected.at'), "
+        "''))) FROM second_opinions GROUP BY 1", [])}
 
 
 def save_second_opinion(row: dict) -> None:

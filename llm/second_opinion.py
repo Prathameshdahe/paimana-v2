@@ -53,8 +53,9 @@ of 10 tuning replies and each cost a retry. check() rejects a reply unless:
     filled with the narrative's citations (neither adds content).
 A rejected reply is asked again once: the same prompt with the reasons named after it, at RETRY_TEMPERATURE (given
 the rejected reply as the assistant's turn at TEMPERATURE, the model sent it back unchanged). A second rejection is
-stored as such (the nightly job does not ask again until the evidence or PROMPT_VERSION changes) and returned with
-its reasons. Accepted and rejected replies go to SQLite second_opinions per (project, evidence_hash, LLM model) with
+stored as such and returned with its reasons; when an accepted opinion made under an older prompt is stored for the
+same evidence, it stays and the rejection is noted on it (last_rejected: prompt version, time, reasons), so the
+nightly job does not ask again until the evidence or PROMPT_VERSION changes either way. Accepted and rejected replies go to SQLite second_opinions per (project, evidence_hash, LLM model) with
 the prompt version, asof and the pack items, so every opinion can later be compared with what happened
 (docs/SECOND_OPINION.md); a cached opinion is checked again when read.
 
@@ -625,7 +626,8 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
     """{'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} for one canonical key; an accepted
     opinion for the current evidence is returned from the cache (fresh: only one made under the current
     PROMPT_VERSION). interactive: a person is waiting (the LLM gate as a chat request, INTERACTIVE_WAIT_S); else the
-    nightly job (JOB_WAIT_S, after any chat request). A rejection does not replace an accepted opinion."""
+    nightly job (JOB_WAIT_S, after any chat request). A rejection does not replace an accepted opinion: it is noted
+    on it (last_rejected)."""
     p = pack(key)
     if p is None:
         return {"status": "not_scored", "detail": f"project {key} is not in the current scored portfolio"}
@@ -656,12 +658,16 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
             if e.down:
                 client.mark_down()
             return {"status": "llm_unavailable", "detail": str(e)[:300]}
-        row = {"project_key": key, "evidence_hash": h, "model": model, "prompt_version": PROMPT_VERSION,
-               "asof": p["asof"], "generated_at": _now(), "status": "ok" if op else "rejected", "tier": p["tier"],
-               "model_version": p["model_version"], "attempts": attempts, "n_numbers_checked": n, "llm_ms": ms,
-               **(op or {"reasons": reasons}), "evidence": p["items"]}
-        if op is not None or not kept:   # stored before the gate opens, so the next one in line finds it
+        # stored before the gate opens, so the next one in line finds it
+        if op is not None or not kept:
+            row = {"project_key": key, "evidence_hash": h, "model": model, "prompt_version": PROMPT_VERSION,
+                   "asof": p["asof"], "generated_at": _now(), "status": "ok" if op else "rejected", "tier": p["tier"],
+                   "model_version": p["model_version"], "attempts": attempts, "n_numbers_checked": n, "llm_ms": ms,
+                   **(op or {"reasons": reasons}), "evidence": p["items"]}
             db.save_second_opinion(row)
+        else:   # the accepted opinion stays; the rejection under this prompt is noted on it (the job reads it)
+            db.save_second_opinion({**row, "last_rejected": {"prompt_version": PROMPT_VERSION, "at": _now(),
+                                                             "reasons": reasons, "attempts": attempts, "llm_ms": ms}})
     if op is None:
         return {"status": "rejected", "key": key, "reasons": reasons, "attempts": attempts, "llm_ms": ms}
     return _out(row, p, False)
