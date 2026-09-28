@@ -65,6 +65,7 @@ TEMPLATE_CHARS = 900
 WRITER = os.environ.get("CHAT_WRITER", "1") != "0"
 CITE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 TOP_RX = re.compile(r"\btop\s+(\d{1,2})\b", re.I)  # the one number of a question the answer may echo
+WORDY = re.compile(r"\w\w")                          # a question the planner may take: two letters or digits
 WORD_VALUES = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
     "seventeen eighteen nineteen".split())} | {w: 10 * i for i, w in enumerate(
@@ -226,6 +227,8 @@ def _check_cancel(cancel: threading.Event | None) -> None:
 
 def _run_tools(viewer, calls: list[dict], first_id: int, cancel) -> Iterator[dict]:
     """Tool events and cards as the calls finish (in parallel); returns [(call, ToolResult | None)] in call order."""
+    if not calls:  # '?': no call survived its argument check; the answer is the nothing-found template
+        return []
     ids = [f"t{first_id + i}" for i in range(len(calls))]
     shown = [{_camel(k): v for k, v in c["args"].items()} for c in calls]
 
@@ -460,7 +463,7 @@ def _answer(viewer, messages, project_key, question, public, llm: _LLM, t0, canc
     route = router.route(viewer, messages, project_key)
     calls, planned = route.calls, False
     if route.confidence < router.CONFIDENT:
-        if llm.usable():
+        if llm.usable() and WORDY.search(question):  # '?' or 'a' is no question to plan for
             yield event("status", stage="planning", detail="Choosing what to look up")
             if llm.acquire():
                 raw = _ask(llm, _planner_messages(viewer, messages, project_key), PLAN_TOKENS)

@@ -171,6 +171,17 @@ def test_nothing_found_skips_the_llm(monkeypatch):
     assert d["llm"] == "skipped" and fake.streams == [] and "Odisha" in d["text"]
 
 
+@pytest.mark.parametrize("q", ["?", "a", " . "])
+def test_a_one_character_question_ends_with_done(monkeypatch, q):
+    """No call survives its argument check (search_knowledge needs 2 characters): no tool runs, no planner call
+    holds the LLM, and the stream still ends with the nothing-found answer, never an error."""
+    fake = FakeLLM(monkeypatch)
+    ev = run(PUBLIC, q)
+    d = done(ev)
+    assert "error" not in names(ev) and "tool" not in names(ev) and fake.chats == [] and fake.streams == []
+    assert d["llm"] == "skipped" and d["validated"] and d["text"]
+
+
 def test_planner_replies_are_parsed_and_checked():
     plan = agent._plan_calls
     fenced = '```json\n{"calls": [{"tool": "get_project", "args": {"key": "prj-698"}}]}\n```'
