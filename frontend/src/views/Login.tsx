@@ -62,7 +62,7 @@ function ScopePicker({ options, value, onChange, noun, plural }: {
                 <span className="block truncate text-sm font-medium text-fg-base">{o.name}</span>
                 {o.ministry && <span className="block truncate text-xs text-fg-dimmed">{o.ministry}</span>}
               </span>
-              <span className="shrink-0 rounded-full bg-surface-elevated px-2 py-0.5 text-xs tabular-nums text-fg-muted">
+              <span className="shrink-0 bg-surface-elevated px-2 py-0.5 text-xs tabular-nums text-fg-muted">
                 {o.n}
               </span>
             </button>

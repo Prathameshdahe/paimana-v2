@@ -56,7 +56,7 @@ export function ProjectChips({ detail }: { detail: ProjectDetail }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {[m.sector, m.state, m.agency].filter(Boolean).map((v) => (
-        <span key={String(v)} className="max-w-[260px] truncate rounded-full bg-surface-elevated px-2.5 py-0.5 text-xs text-fg-muted ring-1 ring-inset ring-border-subtle" title={String(v)}>
+        <span key={String(v)} className="max-w-[260px] truncate bg-surface-elevated px-2.5 py-0.5 text-xs text-fg-muted ring-1 ring-inset ring-border-subtle" title={String(v)}>
           {String(v)}
         </span>
       ))}
@@ -156,8 +156,8 @@ export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: bo
 
 function Bar({ pct, className, children }: { pct: number; className: string; children?: React.ReactNode }) {
   return (
-    <div className="relative h-2.5 overflow-hidden rounded-full bg-surface-input">
-      <motion.div className={cn('h-full rounded-full', className)} initial={{ width: 0 }} animate={{ width: `${clamp(pct)}%` }} transition={GROW} />
+    <div className="relative h-2.5 overflow-hidden bg-surface-input">
+      <motion.div className={cn('h-full', className)} initial={{ width: 0 }} animate={{ width: `${clamp(pct)}%` }} transition={GROW} />
       {children}
     </div>
   )
@@ -185,7 +185,7 @@ export function TimeVsWork({ detail }: { detail: ProjectDetail }) {
       title="Time vs work"
       info="Time: the share of the sanctioned schedule (sanction to scheduled completion) already used. Work: physical progress in the latest report. The shaded part is how far work trails time."
       right={gap !== null && Math.abs(gap) >= 1 && (
-        <span className={cn('rounded-full px-2 py-0.5 font-medium', gap > 0 ? 'bg-critical/10 text-critical' : 'bg-stable/10 text-stable')}>
+        <span className={cn(' px-2 py-0.5 font-medium', gap > 0 ? 'bg-critical/10 text-critical' : 'bg-stable/10 text-stable')}>
           {gap > 0 ? `${gap.toFixed(0)} pts behind` : `${(-gap).toFixed(0)} pts ahead`}
         </span>
       )}
@@ -234,7 +234,7 @@ export function MoneyBar({ detail }: { detail: ProjectDetail }) {
   return (
     <Section title="Money" right={<span className="font-mono tabular-nums">{formatINR(cost)}</span>}
       info="Spent and remaining of the anticipated cost from the latest report; the red hatch is what the cost grew past the original sanctioned cost.">
-      <div className="relative h-3 overflow-hidden rounded-full bg-accent/20">
+      <div className="relative h-3 overflow-hidden bg-accent/20">
         {spent !== null && (
           <motion.div className="absolute inset-y-0 left-0 bg-accent" initial={{ width: 0 }} animate={{ width: `${clamp(pct(spent))}%` }} transition={GROW} />
         )}
@@ -375,13 +375,13 @@ export function TimelineStrip({ detail, plain }: { detail: ProjectDetail; plain?
         ? 'Predicted: the anticipated completion plus the model’s median slip over the next 2 quarters; the shaded band is its 5th–95th percentile.'
         : `Predicted: the ${plain ? 'expected' : 'anticipated'} completion plus the expected slip over the next 2 quarters.`}
       right={slip !== null && slip > 0 && (
-        <span className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning">+{slip} mo vs schedule</span>
+        <span className=" bg-warning/10 px-2 py-0.5 font-medium text-warning">+{slip} mo vs schedule</span>
       )}
     >
       <div className="relative h-12" aria-hidden="true">
-        <div className="absolute inset-x-0 top-8 h-1.5 rounded-full bg-surface-input" />
+        <div className="absolute inset-x-0 top-8 h-1.5 bg-surface-input" />
         {band[0] && band[1] && (
-          <div className="absolute top-7 h-3.5 rounded-full bg-critical/15 ring-1 ring-inset ring-critical/25"
+          <div className="absolute top-7 h-3.5 bg-critical/15 ring-1 ring-inset ring-critical/25"
             style={{ left: `${x(band[0])}%`, width: `${Math.max(1, x(band[1]) - x(band[0]))}%` }} />
         )}
         <div className="absolute top-0 flex -translate-x-1/2 flex-col items-center" style={{ left: `${x(today)}%` }}>
@@ -641,13 +641,13 @@ function NewsChips({ research, news }: { research: ResearchBrief | null | undefi
   return (
     <>
       {live > 0 && (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-critical/10 px-2.5 py-1 text-xs font-medium text-critical ring-1 ring-inset ring-critical/20"
+        <span className="inline-flex items-center gap-1.5 bg-critical/10 px-2.5 py-1 text-xs font-medium text-critical ring-1 ring-inset ring-critical/20"
           title="negative web research facts, not resolved, dated within 4 quarters">
           <Newspaper className="size-3.5" strokeWidth={2} />
           {live} live blocker{live === 1 ? '' : 's'} in web research
         </span>
       )}
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
+      <span className="inline-flex items-center gap-1.5 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
         <Newspaper className="size-3.5" strokeWidth={2} />
         {text.charAt(0).toUpperCase() + text.slice(1)}
       </span>
@@ -690,12 +690,12 @@ export function ExternalChips({ detail, news, research }: {
         {open.map(({ f, n, live, last }) => {
           const Icon = FLAG_ICON[f]
           return live > 0 ? (
-            <span key={f} className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning ring-1 ring-inset ring-warning/20">
+            <span key={f} className="inline-flex items-center gap-1.5 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning ring-1 ring-inset ring-warning/20">
               <Icon className="size-3.5" strokeWidth={2} />
               {FLAG_LABEL[f]} open{n > 1 && ` ×${n}`}
             </span>
           ) : (
-            <span key={f} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-fg-dimmed/60 px-2.5 py-1 text-xs text-fg-muted"
+            <span key={f} className="inline-flex items-center gap-1.5 border border-dashed border-fg-dimmed/60 px-2.5 py-1 text-xs text-fg-muted"
               title="open when last mentioned; not mentioned since, so not counted as open today">
               <Icon className="size-3.5" strokeWidth={2} />
               {FLAG_LABEL[f]} · last known {last ? formatQuarter(last) : 'n/a'}
@@ -703,7 +703,7 @@ export function ExternalChips({ detail, news, research }: {
           )
         })}
         {open.length === 0 && !forest && !land && (
-          <span className="rounded-full bg-fg-dimmed/10 px-2.5 py-1 text-xs text-fg-muted">No open issue in the remarks</span>
+          <span className=" bg-fg-dimmed/10 px-2.5 py-1 text-xs text-fg-muted">No open issue in the remarks</span>
         )}
         <NewsChips research={research} news={news} />
       </div>

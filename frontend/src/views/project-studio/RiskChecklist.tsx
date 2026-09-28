@@ -41,7 +41,7 @@ export function RiskChecklist({ rows }: { rows: RiskRow[] }) {
           {rows.map((r) => (
             <div key={r.dimension} className="grid grid-cols-[170px_96px_1fr] gap-3 px-4 py-2.5 items-start">
               <span className="text-xs font-medium text-fg-base">{RISK_DIMENSION[r.dimension]?.label ?? r.dimension}</span>
-              <span className={cn('justify-self-start rounded-full px-2 py-0.5 text-xs font-medium', RISK_STATE_CHIP[r.state])}>
+              <span className={cn('justify-self-start px-2 py-0.5 text-xs font-medium', RISK_STATE_CHIP[r.state])}>
                 {CHIP_TEXT[r.state]}
               </span>
               <div className="min-w-0">

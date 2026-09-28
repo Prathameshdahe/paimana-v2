@@ -35,8 +35,8 @@ export function Tile({ icon, tone, label, value, children }: {
 /** a thin rounded bar: `pct` filled */
 export function Meter({ pct, className }: { pct: number; className: string }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
-      <div className={cn('h-full rounded-full transition-[width] duration-700', className)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+    <div className="h-1.5 overflow-hidden bg-surface-input">
+      <div className={cn('h-full transition-[width] duration-700', className)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   )
 }
@@ -45,7 +45,7 @@ export function Meter({ pct, className }: { pct: number; className: string }) {
 export function TierBar({ tiers, total, className = 'h-2' }: { tiers: TierCount[]; total: number; className?: string }) {
   const n = (t: string) => tiers.find((x) => x.tier === t)?.n ?? 0
   return (
-    <div className={cn('flex gap-px overflow-hidden rounded-full bg-surface-input', className)}>
+    <div className={cn('flex gap-px overflow-hidden bg-surface-input', className)}>
       {[...TIERS, 'Watch' as const].map((t) => (
         <Tooltip key={t} content={`${TIER_LABEL[t]}: ${n(t).toLocaleString()} projects`}>
           <div style={{ width: `${(n(t) / Math.max(total, 1)) * 100}%`, background: TIER_COLOR[t] }} className="h-full transition-[width] duration-700" />

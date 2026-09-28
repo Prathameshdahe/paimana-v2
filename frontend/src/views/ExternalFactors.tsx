@@ -40,8 +40,8 @@ const slip = (v: number | null) => orDash(v, (x) => `${x.toFixed(0)}mo`)
 /** a rounded bar, `share` of 0-1 filled */
 function Bar({ share, className = 'bg-warning' }: { share: number; className?: string }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
-      <div className={cn('h-full rounded-full', className)} style={{ width: `${Math.min(100, Math.max(0, share * 100))}%` }} />
+    <div className="h-1.5 overflow-hidden bg-surface-input">
+      <div className={cn('h-full', className)} style={{ width: `${Math.min(100, Math.max(0, share * 100))}%` }} />
     </div>
   )
 }
@@ -686,7 +686,7 @@ function RemarkFlagsPanel({ s }: { s: ExternalSummary }) {
             <div key={cat} className="grid grid-cols-[1rem_7rem_1fr_auto] items-center gap-2.5 text-xs">
               <Icon className="size-3.5 text-fg-dimmed" />
               <span className="truncate text-fg-base">{EVENT_CATEGORY[cat]?.label ?? cat}</span>
-              <div className="flex h-1.5 overflow-hidden rounded-full bg-surface-input">
+              <div className="flex h-1.5 overflow-hidden bg-surface-input">
                 <div className="bg-warning" style={{ width: `${(c.live / max) * 100}%` }} />
                 <div className="bg-fg-dimmed/40" style={{ width: `${(stale / max) * 100}%` }} />
               </div>

@@ -61,9 +61,9 @@ function Fact({ f, group }: { f: ResearchFact; group: ResearchGroup }) {
           {cat.label}
         </span>
         {date && <span className="text-fg-dimmed">{date}</span>}
-        {f.status === 'ongoing' && <span className="rounded-full bg-warning/10 px-2 py-px font-medium text-warning">ongoing</span>}
-        {f.status === 'resolved' && <span className="rounded-full bg-stable/10 px-2 py-px font-medium text-stable">resolved</span>}
-        {f.direction === 'negative' && f.severity >= 3 && <span className="rounded-full bg-critical/10 px-2 py-px font-medium text-critical">severe</span>}
+        {f.status === 'ongoing' && <span className=" bg-warning/10 px-2 py-px font-medium text-warning">ongoing</span>}
+        {f.status === 'resolved' && <span className=" bg-stable/10 px-2 py-px font-medium text-stable">resolved</span>}
+        {f.direction === 'negative' && f.severity >= 3 && <span className=" bg-critical/10 px-2 py-px font-medium text-critical">severe</span>}
       </div>
       <p className="mt-1 text-sm leading-snug text-fg-base">{f.summary}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-dimmed">
@@ -110,7 +110,7 @@ function Body({ data, panel }: { data: ProjectResearch; panel: boolean }) {
           {lines.length > 0 && (
             <ul className="flex flex-wrap gap-1.5" aria-label="What the sources say now">
               {lines.map((l) => (
-                <li key={l.key} className="rounded-full bg-surface-elevated px-2.5 py-0.5 text-xs text-fg-base ring-1 ring-inset ring-border-subtle">
+                <li key={l.key} className=" bg-surface-elevated px-2.5 py-0.5 text-xs text-fg-base ring-1 ring-inset ring-border-subtle">
                   {l.text}
                   {l.asOf && <span className="text-fg-dimmed"> · as of {l.asOf}</span>}
                 </li>

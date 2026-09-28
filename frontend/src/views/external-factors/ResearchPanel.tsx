@@ -40,8 +40,8 @@ function ByCategory({ s }: { s: ResearchSummary }) {
                   <span className="size-2 shrink-0 rounded-full" style={{ background: c.color }} aria-hidden="true" />
                   <span className="truncate">{c.label}</span>
                 </span>
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
-                  <div className="h-full rounded-full bg-critical/70" style={{ width: `${(r.nLive / max) * 100}%` }} />
+                <div className="h-1.5 overflow-hidden bg-surface-input">
+                  <div className="h-full bg-critical/70" style={{ width: `${(r.nLive / max) * 100}%` }} />
                 </div>
                 <span className="text-right tabular-nums text-fg-base">{r.nLive}</span>
               </div>
@@ -69,7 +69,7 @@ function Blocker({ b }: { b: ResearchBlocker }) {
           </span>
         )}
         {date && <span>{date}</span>}
-        {b.severity !== null && b.severity >= 3 && <span className="rounded-full bg-critical/10 px-2 py-px font-medium text-critical">severe</span>}
+        {b.severity !== null && b.severity >= 3 && <span className=" bg-critical/10 px-2 py-px font-medium text-critical">severe</span>}
       </div>
       {b.summary && <p className="text-sm leading-snug text-fg-base">{b.summary}</p>}
       {href ? (

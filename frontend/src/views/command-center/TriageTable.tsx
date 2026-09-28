@@ -50,8 +50,8 @@ function readCols(): Extra[] {
 function MiniBar({ pct, color, label }: { pct: number; color: string; label: string }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-input">
-        <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: color }} />
+      <div className="h-1.5 w-20 overflow-hidden bg-surface-input">
+        <div className="h-full" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: color }} />
       </div>
       <span className="w-10 text-right font-mono text-sm tabular-nums text-fg-base">{label}</span>
     </div>
@@ -153,7 +153,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                 aria-pressed={on}
                 onClick={() => onChange({ tier: t === 'ALL' ? undefined : t })}
                 className={cn(
-                  'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
+                  'inline-flex h-8 items-center gap-1.5 px-3 text-xs font-medium transition-colors',
                   on ? `text-white shadow-sm ${TIER_BUTTON_ON[t]}` : 'text-fg-muted hover:bg-surface-elevated hover:text-fg-base'
                 )}
                 title={t === 'Watch' ? 'no anticipated completion date in the reports — schedule not scored; listed by flagged checklist rows, then P(cost revision), an order no backtest has checked' : undefined}

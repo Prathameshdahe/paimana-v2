@@ -69,8 +69,8 @@ function SummaryStrip({ s }: { s: RadarSummary }) {
           <div className="mt-2 space-y-1">
             {cats.map((c) => (
               <div key={String(c.name)} className="grid grid-cols-[1fr_2rem] items-center gap-2 text-xs" title={categoryLabel(String(c.name))}>
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-input">
-                  <div className="h-full rounded-full" style={{ width: `${(c.n / catMax) * 100}%`, background: EVENT_CATEGORY[String(c.name)]?.color ?? '#9a968c' }} />
+                <div className="h-1.5 overflow-hidden bg-surface-input">
+                  <div className="h-full" style={{ width: `${(c.n / catMax) * 100}%`, background: EVENT_CATEGORY[String(c.name)]?.color ?? '#9a968c' }} />
                 </div>
                 <span className="text-right tabular-nums text-fg-base">{c.n}</span>
               </div>
@@ -147,7 +147,7 @@ function HeatMap({ feed, state, onState }: { feed: SignalFeed | undefined; state
       <div className="border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed space-y-1">
         <div className="flex items-center gap-2">
           <span>0</span>
-          <span className="h-2 w-16 rounded-full" style={{ background: `linear-gradient(90deg, #eeebe4, ${TIER_COLOR.Critical})` }} />
+          <span className="h-2 w-16" style={{ background: `linear-gradient(90deg, #eeebe4, ${TIER_COLOR.Critical})` }} />
           <span>{heat.length ? max : 0} severe signals</span>
         </div>
         {heat.length === 0 && <div>no severe signal in the last 90 days — or the scout has not searched those projects</div>}

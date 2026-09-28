@@ -132,7 +132,7 @@ export function IndiaMap() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed">
           <span className="flex items-center gap-2">
             <span>0</span>
-            <span className="h-2 w-16 rounded-full" style={{ background: `linear-gradient(90deg, #e9e5dc, ${TIER_COLOR.Critical})` }} />
+            <span className="h-2 w-16" style={{ background: `linear-gradient(90deg, #e9e5dc, ${TIER_COLOR.Critical})` }} />
             <span>{maxAtRisk} critical + high</span>
           </span>
           {offMap.length > 0 && (
@@ -142,7 +142,7 @@ export function IndiaMap() {
                 <InfoTip label="About the map">The boundary file predates Telangana and Ladakh, so their projects are listed here.</InfoTip>
               </span>
               {offMap.map((s, i) => (
-                <button key={s.name ?? i} onClick={() => open(s)} className="rounded-full bg-surface-elevated px-2 py-0.5 hover:text-fg-base">
+                <button key={s.name ?? i} onClick={() => open(s)} className=" bg-surface-elevated px-2 py-0.5 hover:text-fg-base">
                   {s.name ?? 'state unknown'} {s.n}
                   {s.nCritical + s.nHigh > 0 && <span className="text-critical"> · {s.nCritical + s.nHigh} at risk</span>}
                 </button>
@@ -163,7 +163,7 @@ export function IndiaMap() {
             >
               <span className="truncate text-sm font-medium text-fg-base">{s.name ?? 'state unknown'}</span>
               {/* the state's open projects, critical and high as their share */}
-              <span className="flex h-2 overflow-hidden rounded-full bg-surface-input" title={`${s.n} projects: ${s.nCritical} critical, ${s.nHigh} high`}>
+              <span className="flex h-2 overflow-hidden bg-surface-input" title={`${s.n} projects: ${s.nCritical} critical, ${s.nHigh} high`}>
                 <span style={{ width: `${(s.nCritical / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.Critical }} />
                 <span style={{ width: `${(s.nHigh / Math.max(s.n, 1)) * 100}%`, background: TIER_COLOR.High }} />
               </span>
