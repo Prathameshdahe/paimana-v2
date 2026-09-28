@@ -61,6 +61,17 @@ The command refuses when an administrator already exists; `--force-reset` resets
 the api container at every start (`--developer-only`, `deploy/api-entrypoint.sh`), creates or updates the developer
 from `PAIMANA_DEVELOPER_EMAIL` / `PAIMANA_DEVELOPER_PASSWORD` in `.env.db`.
 
+**One-click demo sign-in (prototype recordings only).** With `DEMO_LOGIN=1` (off by default; `0` in
+`.env.production.example`) the sign-in page lists the roles as buttons, Public, IPMD analyst, Ministry official,
+Implementing agency, Administrator and, when its account exists, Developer, and the account menu gets "Switch role
+(demo)". `GET /api/auth/demo` says whether it is on; `POST /api/auth/demo {role}` signs in to that role's demo
+account (`ipmd.demo@`, `ministry.demo@`, `agency.demo@`, `admin.demo@paimana.local`, created on first use with a random
+password nobody knows; the ministry and the agency with the most current projects) or to the configured developer,
+without a password. It is a real session (cookie, CSRF on the next switch, the scope and the numbers policy exactly
+as for a real account) with an `auth.demo_login` audit row, and the api logs a warning at start. Off, both routes
+answer as if absent (404; the GET says `enabled: false`). Anyone who can reach the server with it on can open any
+role, the developer included: use it on the recording laptop only.
+
 ## Where the rules live
 
 | Side | File | What it does |

@@ -254,7 +254,9 @@ can change its password with the current one, so a stolen live session plus the 
 answer (409) says that a request or an account exists for an email: rate-limited, but an enumeration signal. The
 api's in-memory chat and reset limits reset when it restarts (the sign-in limits do not). The 30 s time limit
 cannot stop a synchronous route's thread; the database's 15 s statement timeout bounds its queries. The watchlist
-is still one list per role, cut to each viewer's scope.
+is still one list per role, cut to each viewer's scope. `DEMO_LOGIN=1` (the one-click demo sign-in for recording
+the prototype, docs/ACCESS_CONTROL.md) removes the password from every role, the developer included: it is off by
+default and in `.env.production.example`, and the api logs a warning at start when it is on.
 
 ## Deployment
 

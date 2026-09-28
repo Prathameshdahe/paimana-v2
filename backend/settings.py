@@ -48,6 +48,7 @@ class Settings:
     admin_email: str | None = None
     allowed_email_domains: tuple[str, ...] = ()
     api_docs: bool = True             # /docs, /redoc and /openapi.json (0 in production)
+    demo_login: bool = False          # one-click demo sign-in per role (POST /api/auth/demo); never in production
 
     @property
     def database_name(self) -> str:
@@ -142,6 +143,7 @@ def load(env: Mapping[str, str] | None = None) -> Settings:
         admin_email=e.get("ADMIN_EMAIL") or None,
         allowed_email_domains=_list(e.get("ALLOWED_EMAIL_DOMAINS"), ()),
         api_docs=_bool(e.get("API_DOCS"), d["api_docs"].default),
+        demo_login=_bool(e.get("DEMO_LOGIN"), d["demo_login"].default),
     )
 
 

@@ -6,7 +6,9 @@
  * them is cached; each is one action with one answer. loginError puts a failed sign-in into one sentence.
  */
 import { ApiError, apiGet, apiPost, isOffline, waitText } from '@/lib/api'
-import type { LoginRequest, Me, PasswordChange, PasswordReset, SignupAccepted, SignupRequest } from '@/contracts/auth'
+import type {
+  DemoInfo, DemoRole, LoginRequest, Me, PasswordChange, PasswordReset, SignupAccepted, SignupRequest,
+} from '@/contracts/auth'
 
 /**
  * Who the cookie says is signed in, or null for the public. 401 is the public's normal answer; so is 404 from a
@@ -24,6 +26,20 @@ export async function fetchMe(): Promise<Me | null> {
 /** 200 Me (and the cookie) | 401 generic | 423 locked (retryAfter) | 429 (retryAfter) */
 export function login(body: LoginRequest): Promise<Me> {
   return apiPost<Me>('/api/auth/login', body, undefined, { quiet401: true })
+}
+
+/** whether the one-click demo sign-in is on; off (or an older backend without the route) is { enabled: false } */
+export async function demoInfo(): Promise<DemoInfo> {
+  try {
+    return await apiGet<DemoInfo>('/api/auth/demo', undefined, { quiet401: true })
+  } catch {
+    return { enabled: false, roles: [] }
+  }
+}
+
+/** 200 Me (and the cookie) for the role's demo account; replaces the current session, so it switches roles */
+export function demoLogin(role: DemoRole): Promise<Me> {
+  return apiPost<Me>('/api/auth/demo', { role }, undefined, { quiet401: true })
 }
 
 /** 204; the session is revoked on the backend and the cookie cleared */

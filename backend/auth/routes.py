@@ -6,9 +6,15 @@ Sign-in answers one generic 401 (GENERIC) for an unknown email, a wrong password
 spends the same argon2 time and runs the same statements on each before answering (_fail); 423 and 429 carry
 Retry-After (backend/auth/limits.py). The developer (backend/access.py) is invisible here to anyone else: not listed,
 404 to fetch, change or reset, never a sign-up or approval role (the models allow the three official roles only).
+
+With DEMO_LOGIN=1 (a prototype setting, off by default and in production) GET /api/auth/demo lists the roles and
+POST /api/auth/demo signs in to that role's demo account in one click: a real session, so the pages, the scopes and
+the numbers policy behave exactly as for a real account; the switch only skips typing a password. Off, both 404
+(the GET answers enabled false).
 """
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
@@ -16,7 +22,8 @@ from fastapi.responses import JSONResponse
 from psycopg.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
-from backend import ratelimit
+from backend import ratelimit, serving
+from backend import settings as cfg
 from backend.access import HIDDEN_ROLES, OFFICIAL_ROLES, Viewer, known_scope, need
 from backend.db import accounts
 from backend.db import app as appdb
@@ -24,6 +31,8 @@ from backend.db.engine import now
 from backend.schemas import (
     ApproveSignup,
     AuditPage,
+    DemoInfo,
+    DemoLogin,
     LoginRequest,
     Me,
     PasswordChange,
@@ -93,6 +102,82 @@ def _fail(email: str, ip: str | None, background: BackgroundTasks | None = None)
         background.add_task(accounts.count_failure, email, lock)
     else:
         accounts.count_failure(email, lock)
+
+
+# ---------------------------------------------------------------- /api/auth/demo (DEMO_LOGIN=1 only)
+
+# demo role -> (email, display name, account role, administrator flag, label); the developer is the one account the
+# bootstrap names (PAIMANA_DEVELOPER_EMAIL), never a demo copy (the bootstrap disables any other developer)
+DEMO = {
+    "ipmd": ("ipmd.demo@paimana.local", "IPMD Analyst Demo", "ipmd_analyst", False, "IPMD analyst"),
+    "ministry": ("ministry.demo@paimana.local", "Ministry Demo", "ministry_official", False, "Ministry official"),
+    "agency": ("agency.demo@paimana.local", "Agency Demo", "agency_official", False, "Implementing agency"),
+    "admin": ("admin.demo@paimana.local", "Administrator Demo", "ipmd_analyst", True, "Administrator"),
+}
+DEVELOPER_LABEL = "Developer"
+
+
+def _demo_scope(role: str) -> tuple[str | None, str | None]:
+    """(ministry, agency) of a demo account: the ministry or the agency with the most current projects."""
+    sc = serving.scopes()
+    if role == "ministry_official" and sc["ministries"]:
+        return sc["ministries"][0]["name"], None
+    if role == "agency_official" and sc["agencies"]:
+        return None, sc["agencies"][0]["name"]
+    return None, None
+
+
+def _developer() -> dict | None:
+    email = cfg.environment().get("PAIMANA_DEVELOPER_EMAIL")
+    u = accounts.user(email=email) if email else None
+    return u if u is not None and u["role"] == "developer" and u["status"] == "active" else None
+
+
+def _demo_account(key: str) -> dict | None:
+    """The active account a demo role signs in to: created on first use with a random password nobody knows (an
+    existing one keeps its own), and set back to its role, scope and flag when it drifted."""
+    if key == "developer":
+        return _developer()
+    email, name, role, admin, _ = DEMO[key]
+    ministry, agency = _demo_scope(role)
+    u = accounts.user(email=email)
+    if u is None:
+        return accounts.create_user(email, passwords.hash_password(secrets.token_urlsafe(32)), name, role, ministry,
+                                    agency, admin, actor={"user_id": None, "email": None, "ip": None},
+                                    actor_role="demo", action="user.create_demo")
+    want = {"role": role, "ministry": ministry, "agency": agency, "is_admin": admin, "status": "active"}
+    if any(u[k] != v for k, v in want.items()):
+        u = accounts.update_user(u["id"], want)
+    return u
+
+
+@router.get("/auth/demo", response_model=DemoInfo)
+def get_demo():
+    """Whether the one-click demo sign-in is on and the roles it offers, in the order the sign-in page shows them."""
+    if not cfg.settings.demo_login:
+        return {"enabled": False, "roles": []}
+    roles = []
+    for key, (_, _, role, _, label) in DEMO.items():
+        ministry, agency = _demo_scope(role)
+        roles.append({"role": key, "label": label, "scope": ministry or agency})
+    if _developer() is not None:
+        roles.append({"role": "developer", "label": DEVELOPER_LABEL, "scope": None})
+    return {"enabled": True, "roles": roles}
+
+
+@router.post("/auth/demo", response_model=Me, responses={404: {"description": "demo sign-in is off, or no account"}})
+def post_demo(body: DemoLogin, request: Request, response: Response):
+    """Sign in to the role's demo account without a password (DEMO_LOGIN=1): the session, the cookie and the answer
+    are those of POST /api/auth/login, and it ends the session it replaces, so one click switches roles."""
+    if not cfg.settings.demo_login:
+        raise HTTPException(status_code=404, detail="Not Found")
+    user = _demo_account(body.role)
+    if user is None:
+        raise HTTPException(status_code=404, detail="there is no account for this role")
+    ip = sessions.client_ip(request)
+    appdb.audit(user["role"], "auth.demo_login", str(user["id"]), f"one-click demo sign-in as {body.role}",
+                actor={"user_id": user["id"], "email": user["email"], "ip": ip})
+    return _me(sessions.start(user, request, response))
 
 
 # ---------------------------------------------------------------- /api/auth

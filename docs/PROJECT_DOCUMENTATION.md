@@ -587,6 +587,19 @@ The password policy (`backend/auth/passwords.py`, mirrored in `frontend/src/lib/
 
 `python -m backend.auth.bootstrap --email <e> --name <n> [--force-reset]` creates the first administrator, an IPMD analyst with `is_admin`, with the password from `PAIMANA_ADMIN_PASSWORD` or a hidden prompt asked twice (never the command line); it refuses when an active administrator exists unless `--force-reset`. `--developer-only` (also run at every API container start by `deploy/api-entrypoint.sh`) creates or updates the hidden developer account from `PAIMANA_DEVELOPER_EMAIL` and `PAIMANA_DEVELOPER_PASSWORD` in the gitignored `.env.db`: role `developer`, administrator, no scope; the password is reset only when it changed; every other developer account is disabled; an official's e-mail is never promoted; the e-mail is never printed. "Hidden" means: the developer is never a sign-up or approval choice; `GET /api/admin/users` leaves developer rows out for anyone else and the per-user routes answer 404; a review by the developer shows no reviewer; audit rows recorded under `developer` are hidden from others; an alert it acknowledges shows the time but no name; the top bar shows no role label for it, only a small "Developer" tag inside the account menu.
 
+### 8.2a One-click demo sign-in (for recording the prototype)
+
+With `DEMO_LOGIN=1` (off by default; `0` in
+`.env.production.example`) the sign-in page lists the roles as buttons, Public, IPMD analyst, Ministry official,
+Implementing agency, Administrator and, when its account exists, Developer, and the account menu gets "Switch role
+(demo)". `GET /api/auth/demo` says whether it is on; `POST /api/auth/demo {role}` signs in to that role's demo
+account (`ipmd.demo@`, `ministry.demo@`, `agency.demo@`, `admin.demo@paimana.local`, created on first use with a random
+password nobody knows; the ministry and the agency with the most current projects) or to the configured developer,
+without a password. It is a real session (cookie, CSRF on the next switch, the scope and the numbers policy exactly
+as for a real account) with an `auth.demo_login` audit row, and the api logs a warning at start. Off, both routes
+answer as if absent (404; the GET says `enabled: false`). Anyone who can reach the server with it on can open any
+role, the developer included: use it on the recording laptop only.
+
 ### 8.3 Roles, features and scopes
 
 `backend/access.py` `POLICY`:

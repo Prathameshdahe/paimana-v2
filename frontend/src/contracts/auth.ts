@@ -33,6 +33,22 @@ export interface Me {
   sessionExpiresAt: string | null
 }
 
+/** the roles the one-click demo sign-in offers (backend DEMO_LOGIN; 'admin' is an IPMD analyst with the admin flag) */
+export type DemoRole = 'ipmd' | 'ministry' | 'agency' | 'admin' | 'developer'
+
+/** one role of GET /api/auth/demo: its key, its name in words and the ministry or agency its pages are cut to */
+export interface DemoOption {
+  role: DemoRole
+  label: string
+  scope: string | null
+}
+
+/** GET /api/auth/demo: whether one-click demo sign-in is on (a prototype setting) and the roles it offers */
+export interface DemoInfo {
+  enabled: boolean
+  roles: DemoOption[]
+}
+
 export interface LoginRequest {
   email: string
   password: string
