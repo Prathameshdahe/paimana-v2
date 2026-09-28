@@ -368,6 +368,15 @@ export function RiskMap(p: RiskMapProps) {
           <div className="sr-only" aria-live="polite">{live}</div>
         </div>
 
+        {layout && layout.later > 0 && layout.dots.length > 0 && (
+          <p className="text-xs text-fg-muted">
+            {layout.later.toLocaleString('en-IN')} more {layout.later === 1 ? 'is' : 'are'} due after {zoom === '12' ? 'the next 12 months' : 'the next three years'} (the
+            {' '}+n at the right of each lane).{' '}
+            <button type="button" onClick={() => setZoom('all')} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+              Show all
+            </button>
+          </p>
+        )}
         {noDate > 0 && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border-default px-3 py-1.5 text-xs text-fg-muted">
             <span className="size-2 rounded-full" style={{ background: TIER_COLOR.Watch }} aria-hidden="true" />
