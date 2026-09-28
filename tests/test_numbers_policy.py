@@ -360,6 +360,9 @@ def test_map_rows_and_top_reason(client, world):
     ipmd, pub = headers(client, world, "ipmd"), as_role(client, "public")
     m = client.get("/api/projects/map", headers=ipmd).json()
     assert m["total"] == len(m["items"]) == serving.meta()["n_current"]
+    rank = {t: i for i, t in enumerate(serving.TIERS + [serving.WATCH])}
+    order = [(rank.get(r["tier"], len(rank)), r["key"]) for r in m["items"]]
+    assert order == sorted(order)   # by tier, then key: a row's place says nothing of its hidden chance of a slip
     crit = client.get("/api/projects/map", headers=ipmd, params={"tier": "Critical"}).json()
     assert crit["total"] == client.get("/api/projects", headers=ipmd, params={"tier": "Critical", "size": 1}).json()[
         "total"] and all(r["tier"] == "Critical" for r in crit["items"])

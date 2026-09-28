@@ -185,7 +185,8 @@ class MapRow(CamelModel):
 
 
 class MapPage(CamelModel):
-    """GET /api/projects/map: every matching current project in scope (at most 5,000; total counts them all)."""
+    """GET /api/projects/map: every matching current project in scope (at most 5,000; total counts them all), by
+    tier (Critical, High, Medium, Low, Watch) and key."""
     total: int
     items: list[MapRow]
 

@@ -516,11 +516,13 @@ def projects_map(s, q=None, ministry=None, sector=None, state_=None, tier=None, 
                  near_complete=False):
     """Every current project in scope that matches the filters (as projects(), no paging, at most MAP_MAX), as the
     slim risk-map row: dates, cost, progress, tier, flags and the words; no model number, so every viewer gets
-    the same row (the public's top_reason is the first flagged check: public_map)."""
+    the same row (the public's top_reason is the first flagged check: public_map). Ordered by tier (TIERS, then
+    Watch) and key, never by the chance of a slip: a row's place among all of them would give its hidden rank."""
     where, params = _where(ministry, sector, state_, tier, q, flag, None, scope, near_complete)
     total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
+    rank = " ".join(f"WHEN '{t}' THEN {i}" for i, t in enumerate(TIERS + [WATCH]))
     rows = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
-        ORDER BY p_any_2q DESC NULLS LAST, watch_score DESC NULLS LAST, project_key LIMIT ?""", params + [MAP_MAX])
+        ORDER BY CASE tier {rank} ELSE {len(TIERS) + 1} END, project_key LIMIT ?""", params + [MAP_MAX])
     return {"total": total, "items": [{c: r[c] for c in MAP_COLS} for r in with_words(rows)]}
 
 

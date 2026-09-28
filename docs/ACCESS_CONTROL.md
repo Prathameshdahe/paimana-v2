@@ -239,8 +239,8 @@ Words, for every viewer (the developer too, so the UI reads one field):
 | `extraMonthsWord` (`extra_months_word` in the summary's rows) | the project's hidden-delay priors, External Factors | `no measurable extra delay`, `a few months`, `about half a year`, `about a year`, `over a year`; null when too few projects to measure |
 | `completion.band`, analogues' `outcome` and `yearsAgo` | forecast | the slip band; `slipped` / `held` / `unknown` and whole years ago |
 
-`GET /api/projects/map` (every role; the filters of `/api/projects`, unpaged, at most 5,000 rows) serves the
-command centre's risk map with no model number for anyone. The forecast keeps the scenario curves and their band
-for everyone: the chart draws them and prints no value. `backend/schemas.py` documents every shape field by field;
-`tests/test_numbers_policy.py` scans every endpoint recursively for the hidden keys as the public, an agency, a
-ministry and an IPMD viewer, and checks that the developer still gets them.
+`GET /api/projects/map` (every role; the filters of `/api/projects`, unpaged, at most 5,000 rows, ordered by tier and
+key, never by the chance of a slip) serves the command centre's risk map with no model number for anyone. The forecast
+keeps the scenario curves and their band for everyone: the chart draws them and prints no value. `backend/schemas.py`
+documents every shape field by field; `tests/test_numbers_policy.py` scans every endpoint recursively for the hidden
+keys as the public, an agency, a ministry and an IPMD viewer, and checks that the developer still gets them.
