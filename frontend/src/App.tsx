@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { ChatWidget } from '@/components/common/ChatWidget'
+import { ErrorBoundary, RouteErrorBoundary } from '@/components/common/ErrorBoundary'
 import { SessionProvider, useSession } from '@/lib/auth/SessionContext'
 import { RequireRole } from '@/lib/auth/RequireRole'
 
@@ -51,6 +52,8 @@ function Shell() {
       {!bare && <TopBar />}
 
       <main className={bare ? 'flex-1' : 'flex-1 pb-16'}>
+        {/* every route, lazy chunk included, sits inside one boundary that offers Reload; a new path starts it clean */}
+        <RouteErrorBoundary key={location.pathname}>
         <Suspense fallback={<Loading />}>
           {status === 'loading' ? <Loading /> : (
             <Routes>
@@ -87,10 +90,16 @@ function Shell() {
             </Routes>
           )}
         </Suspense>
+        </RouteErrorBoundary>
       </main>
 
-      {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
-      {!bare && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
+      {/* the project side panel, opened from any list with useProjectPanel (?project=KEY); a panel that fails to
+          draw closes on the next open rather than taking the page with it */}
+      {!bare && (
+        <ErrorBoundary key={location.search} fallback={null}>
+          <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* the project assistant, for every role (lib/auth/access.ts canChat); the backend scopes each tool to the viewer */}
       {!bare && <ChatWidget />}
