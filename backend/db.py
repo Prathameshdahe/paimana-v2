@@ -1,4 +1,4 @@
-"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, briefs, audit log.
+"""App state in SQLite: alerts, watchlist, signals, job runs, ingested sources, briefs, research facts, audit log.
 
 database/paimana.db, or the path in PAIMANA_DB. One short connection per call
 (single backend process); the analytics side stays in backend/serving.py.
@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS audit_log (at TEXT NOT NULL, role TEXT, action TEXT N
 CREATE TABLE IF NOT EXISTS briefs (
     project_key TEXT NOT NULL, asof TEXT NOT NULL, model_version TEXT NOT NULL, generated_at TEXT, text TEXT,
     n_numbers_checked INTEGER, attempts INTEGER, PRIMARY KEY (project_key, asof, model_version));
+-- the in-app research agent (backend/live/research.py): its facts (the gold research_facts columns, origin 'agent',
+-- dates as text) and when it last researched each project (its rotation)
+CREATE TABLE IF NOT EXISTS research_facts (
+    fact_id TEXT PRIMARY KEY, project_key TEXT NOT NULL, category TEXT, taxonomy TEXT, direction TEXT,
+    severity INTEGER, event_date TEXT, date_precision TEXT, published_date TEXT, status TEXT, summary TEXT,
+    headline TEXT, source TEXT, url TEXT, domain TEXT, match TEXT, match_reason TEXT, origin TEXT NOT NULL DEFAULT
+    'agent', researched_on TEXT, live INTEGER, signal_id INTEGER REFERENCES signals (id), model TEXT,
+    prompt_version TEXT, judged_at TEXT);
+CREATE INDEX IF NOT EXISTS research_facts_key ON research_facts (project_key);
+CREATE TABLE IF NOT EXISTS researched (
+    project_key TEXT PRIMARY KEY, researched_at TEXT NOT NULL, n_candidates INTEGER, n_relevant INTEGER);
 """
 
 
@@ -251,6 +262,30 @@ def project_signals(project_key: str, limit=100) -> dict:
             WHERE sp.project_key = ? ORDER BY s.published_at DESC, s.id DESC LIMIT ?""", [project_key, limit])]
         last = con.execute("SELECT scouted_at FROM scouted WHERE project_key = ?", [project_key]).fetchone()
     return {"key": project_key, "last_scout_at": last and last[0], "items": items}
+
+
+def research_facts(project_key: str | None = None, keys=None) -> list[dict]:
+    """The research agent's facts of one project, or of keys (None: every project), newest judged first."""
+    conds, params = [], []
+    if project_key is not None:
+        conds.append("project_key = ?")
+        params.append(project_key)
+    if keys is not None:
+        conds.append(IN_KEYS)
+        params.append(json.dumps(sorted(keys)))
+    where = (" WHERE " + " AND ".join(conds)) if conds else ""
+    with closing(connect()) as con:
+        return [dict(r) for r in con.execute(f"SELECT * FROM research_facts{where} ORDER BY judged_at DESC, fact_id",
+                                             params)]
+
+
+def researched(project_key: str | None = None) -> dict[str, str]:
+    """project_key -> when the research agent last researched it (one project, or every one)."""
+    sql, params = ("SELECT project_key, researched_at FROM researched", [])
+    if project_key is not None:
+        sql, params = sql + " WHERE project_key = ?", [project_key]
+    with closing(connect()) as con:
+        return dict(con.execute(sql, params).fetchall())
 
 
 def cached_brief(project_key: str, asof: str, model_version: str) -> dict | None:

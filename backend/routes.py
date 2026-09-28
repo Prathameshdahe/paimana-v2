@@ -31,8 +31,10 @@ from .schemas import (
     Portfolio,
     ProjectDetail,
     ProjectPage,
+    ProjectResearch,
     ProjectSignals,
     RadarSummary,
+    ResearchSummary,
     Role,
     RoleBody,
     Scopes,
@@ -104,6 +106,22 @@ def get_timeline(key: str, v: Viewer = Anyone):
     if not v.can("insights"):  # no source documents on the public page
         points = [{**p, "source_doc_id": None, "source_page": None} for p in points]
     return {"key": k, "points": points}
+
+
+@router.get("/projects/{key}/research", response_model=ProjectResearch)
+def get_project_research(key: str, v: Viewer = Anyone):
+    """The project's web research: sweep facts (checked against their source) and the research agent's, newest
+    first, with the latest status and the external block; for the public without match reasons."""
+    out = serving.research(_key(key, v))
+    return out if v.can("insights") else serving.public_research(out)
+
+
+@router.get("/research/summary", response_model=ResearchSummary)
+def get_research_summary(v: Viewer = Anyone):
+    """Web research over the viewer's current projects: coverage, facts by category and state, the newest live
+    blockers (the public: counts, and of the blockers only headline, URL and date)."""
+    out = serving.research_summary(scope=v.scope)
+    return out if v.can("insights") else serving.public_research_summary(out)
 
 
 @router.get("/projects/{key}/forecast", response_model=Forecast)

@@ -206,6 +206,102 @@ class ReviewBadge(CamelModel):
     note: str
 
 
+class ResearchFact(CamelModel):
+    """A cited web fact (backend/serving.py research). origin 'sweep': found by a research agent and checked by a
+    second one that re-opened the source (verified keep | fix); 'agent': a news item the in-app research agent judged
+    relevant with the local LLM (signal_id, judged_at). live: negative, not resolved, within 4 quarters of asof.
+    match_reason is None on the public page."""
+    fact_id: str
+    category: str
+    taxonomy: str
+    direction: Literal["negative", "positive", "neutral"]
+    severity: int
+    event_date: date | None
+    date_precision: Literal["day", "month", "year"] | None
+    published_date: date | None
+    status: str
+    summary: str
+    headline: str
+    source: str | None
+    url: str
+    domain: str | None
+    match: str | None
+    match_reason: str | None = None
+    verified: str | None = None
+    origin: Literal["sweep", "agent"]
+    researched_on: date | None
+    live: bool
+    signal_id: int | None = None
+    judged_at: str | None = None
+
+
+class LandShare(CamelModel):
+    value: float | None
+    as_of: str | None
+
+
+class ForestStage(CamelModel):
+    stage: str | None
+    as_of: str | None
+
+
+class CourtCase(CamelModel):
+    court: str | None
+    status: str | None
+    as_of: str | None
+
+
+class ContractorState(CamelModel):
+    company: str | None
+    status: str | None
+    as_of: str | None
+
+
+class NewTarget(CamelModel):
+    date: str | None  # 'YYYY-MM' as the source gives it
+    as_of: str | None
+
+
+class CostRevision(CamelModel):
+    new_cost_cr: float | None
+    as_of: str | None
+
+
+class ResearchExternal(CamelModel):
+    """The latest figure the researched sources give, each as of its own date; None when no source gives it."""
+    land_acquired_pct: LandShare | None
+    forest_clearance: ForestStage | None
+    court_case: CourtCase | None
+    contractor: ContractorState | None
+    new_target: NewTarget | None
+    cost_revision: CostRevision | None
+
+
+class ResearchBrief(CamelModel):
+    """The project page's research block. searched False: not researched yet; searched with n_facts 0: searched,
+    nothing found (not 'clear'). top: up to 3 facts, live blockers first."""
+    researched_on: date | None
+    searched: bool
+    agent_researched_at: str | None
+    latest_status: str | None
+    n_facts: int
+    n_negative_live: int
+    top: list[ResearchFact]
+
+
+class ProjectResearch(CamelModel):
+    """GET /api/projects/{key}/research: every research fact of one project (sweep and agent), newest first."""
+    key: str
+    researched_on: date | None
+    searched: bool
+    agent_researched_at: str | None
+    latest_status: str | None
+    external: ResearchExternal
+    n_facts: int
+    n_negative_live: int
+    facts: list[ResearchFact]
+
+
 class ProjectDetail(CamelModel):
     key: str
     master: Record | None
@@ -217,6 +313,7 @@ class ProjectDetail(CamelModel):
     external: External
     provenance: Provenance
     review: ReviewBadge | None
+    research: ResearchBrief | None = None
 
 
 class TimelinePoint(CamelModel):
@@ -318,6 +415,72 @@ class ExternalSummary(CamelModel):
     portal: dict[str, Any] | None = None
     land_coverage: dict[str, Any] | None = None
     hidden_delay_priors: dict[str, Any] | None = None
+
+
+class ResearchRange(CamelModel):
+    first: date | None
+    last: date | None
+
+
+class ResearchCoverage(CamelModel):
+    n_current: int
+    n_searched: int
+    n_with_facts: int
+    n_facts: int
+    n_negative_live: int
+    n_projects_negative_live: int
+    n_agent_facts: int
+    n_agent_projects: int
+
+
+class ResearchCategory(CamelModel):
+    category: str
+    taxonomy: str
+    negative: int
+    positive: int
+    neutral: int
+    n_live: int
+    n_projects_live: int
+
+
+class ResearchState(CamelModel):
+    state: str | None
+    n_current: int
+    n_searched: int
+    n_with_facts: int
+    n_negative_live: int
+    n_projects_negative_live: int
+
+
+class ResearchBlocker(CamelModel):
+    """A live negative fact of severity >= 2 with its project; the public gets headline, url and date only."""
+    headline: str
+    url: str
+    event_date: date | None
+    date_precision: Literal["day", "month", "year"] | None
+    fact_id: str | None = None
+    project_key: str | None = None
+    project_name: str | None = None
+    state: str | None = None
+    tier: str | None = None
+    category: str | None = None
+    severity: int | None = None
+    summary: str | None = None
+    source: str | None = None
+    origin: Literal["sweep", "agent"] | None = None
+
+
+class ResearchSummary(CamelModel):
+    """GET /api/research/summary: web research over the current projects in the viewer's scope."""
+    asof: date
+    live_window_quarters: int
+    researched_on: ResearchRange
+    coverage: ResearchCoverage
+    by_category: list[ResearchCategory]
+    by_state: list[ResearchState]
+    top_recent_blockers: list[ResearchBlocker]
+    agent_last_run: str | None
+    note: str
 
 
 class LiveAccuracy(CamelModel):

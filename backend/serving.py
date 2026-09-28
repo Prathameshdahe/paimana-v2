@@ -7,9 +7,12 @@ plus the cross-project ones: agency matrix and map, bottlenecks and members.
 The version is the mtime of external_summary.json: the profile step writes it
 last, so score and analogues rewriting their files first (predictions_latest.json
 before scenarios_/analogues_/risk_profile_<month>) never serves a half-written
-set. When it changes the tables are reloaded and every cached result goes with
-the old version; a reload that fails keeps serving the loaded version and is
-retried after RETRY_S seconds.
+set; and of research_summary.json, which the research step writes after its two
+tables (research alone does not rewrite external_summary.json). When it changes
+the tables are reloaded and every cached result goes with the old version; a
+reload that fails keeps serving the loaded version and is retried after RETRY_S
+seconds. The in-app research agent's facts live in SQLite (backend/db.py) and
+are read per request, next to the cached gold part.
 """
 from __future__ import annotations
 
@@ -27,6 +30,7 @@ import duckdb
 
 from pipeline import external
 from pipeline.hidden_delay import LIVE_Q, applicable
+from pipeline.research import EXT_COLS, TAXONOMY_OF, is_live
 from pipeline.identity.config import IdentityConfig
 from pipeline.identity.identity_map import IdentityMap
 
@@ -34,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[1]
 GOLD, SILVER, MODEL = ROOT / "dataset" / "gold", ROOT / "dataset" / "silver", ROOT / "model"
 POINTER, SILVER_MANIFEST = GOLD / "predictions_latest.json", SILVER / "silver_manifest.json"
 EXTERNAL_SUMMARY, BOTTLENECKS_SUMMARY = GOLD / "external_summary.json", GOLD / "bottlenecks_summary.json"
+RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
+RESEARCH_SUMMARY = GOLD / "research_summary.json"
 RETRY_S = 30
 TOP_MEMBERS = 5
 N_EVIDENCE = 3  # evidence lines per bottleneck, as pipeline/bottlenecks.py
@@ -106,7 +112,7 @@ log = logging.getLogger(__name__)
 
 
 def _version() -> tuple:
-    return (EXTERNAL_SUMMARY.stat().st_mtime_ns,)
+    return EXTERNAL_SUMMARY.stat().st_mtime_ns, RESEARCH_SUMMARY.exists() and RESEARCH_SUMMARY.stat().st_mtime_ns
 
 
 def _posix(p: Path) -> str:
@@ -147,6 +153,7 @@ def _load() -> dict:
         last_notif=("last_notif_date", "max"))
     con.execute("CREATE TABLE register AS SELECT k, stretches, parcels, area_ha, last_notif::DATE AS last_notif "
                 "FROM register")
+    _load_research(con)
     con.execute(f"CREATE TABLE amap AS SELECT * FROM read_csv_auto('{_posix(GOLD / 'agency_map.csv')}')")
     con.execute(f"""CREATE TABLE review AS SELECT project_key, count(*) AS n_rows, min(period) AS first_period,
         max(period) AS last_period FROM read_parquet('{_posix(SILVER / "observations_review.parquet")}') GROUP BY 1""")
@@ -196,6 +203,29 @@ def _load() -> dict:
         "external_summary": json.loads(EXTERNAL_SUMMARY.read_text(encoding="utf-8")),
         "bottlenecks_summary": json.loads(BOTTLENECKS_SUMMARY.read_text(encoding="utf-8")),
     }
+
+
+# gold research tables (pipeline/research.py FACT_COLS, PROJECT_COLS); empty with these columns before the first run
+RESEARCH_DDL = {
+    "rfacts": (RESEARCH_FACTS, """fact_id VARCHAR, project_key VARCHAR, category VARCHAR, taxonomy VARCHAR,
+        direction VARCHAR, severity TINYINT, event_date TIMESTAMP, date_precision VARCHAR, published_date TIMESTAMP,
+        status VARCHAR, summary VARCHAR, headline VARCHAR, source VARCHAR, url VARCHAR, domain VARCHAR, match VARCHAR,
+        match_reason VARCHAR, verified VARCHAR, origin VARCHAR, researched_on TIMESTAMP, live BOOLEAN"""),
+    "rprojects": (RESEARCH_PROJECTS, """project_key VARCHAR, researched_on TIMESTAMP, searched BOOLEAN,
+        n_queries BIGINT, n_facts BIGINT, n_negative_live BIGINT, latest_status VARCHAR, land_acquired_pct DOUBLE,
+        land_as_of VARCHAR, fc_stage VARCHAR, fc_as_of VARCHAR, court VARCHAR, court_status VARCHAR,
+        court_as_of VARCHAR, contractor VARCHAR, contractor_status VARCHAR, contractor_as_of VARCHAR,
+        new_target VARCHAR, new_target_as_of VARCHAR, cost_revision_cr DOUBLE, cost_revision_as_of VARCHAR"""),
+}
+
+
+def _load_research(con) -> None:
+    """The web research tables rfacts and rprojects: the gold files, or empty tables when research never ran."""
+    for name, (path, ddl) in RESEARCH_DDL.items():
+        if path.exists():
+            con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}') ORDER BY project_key")
+        else:
+            con.execute(f"CREATE TABLE {name} ({ddl})")
 
 
 def pin(on: bool) -> None:
@@ -408,9 +438,15 @@ def top_projects(s, n=10):
 
 # -------------------------------------------------------------------- project
 
+def project(key):
+    """Everything the project page shows for one canonical key (see canonical()), with its web research summary
+    (research_brief: read per call, since the research agent adds facts between data versions)."""
+    return {**_project(key), "research": research_brief(key)}
+
+
 @cached
-def project(s, key):
-    """Everything the project page shows for one canonical key (see canonical())."""
+def _project(s, key):
+    """project() without the research summary, cached per data version."""
     master = _one(s, "SELECT * FROM master WHERE project_key = ?", [key])
     latest = _one(s, f"""SELECT * FROM obs WHERE project_key = ? AND period <= DATE '{s["asof"]}'
         ORDER BY period DESC LIMIT 1""", [key])
@@ -480,13 +516,15 @@ def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, a
 def public_project(d: dict) -> dict:
     """The project page for the public: no SHAP drivers, quantile intervals, identity review, risk evidence lines
     (model probabilities, tier cuts), PARIVESH proposal details, remark status or measured hidden delay, or
-    provenance internals (model, data versions, source documents); tier, progress, cost, completion, risk states
-    and top risks stay."""
+    provenance internals (model, data versions, source documents), and no match reasons on the research facts;
+    tier, progress, cost, completion, risk states, top risks and the cited research facts stay."""
     no_src = {"source_doc_id": None, "source_page": None}
     scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
                               **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
     prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None, **no_src}
+    research = d.get("research")
     return {**d, "scores": scores, "provenance": prov, "review": None,
+            "research": research and {**research, "top": _no_reason(research["top"])},
             "latest": d["latest"] and {**d["latest"], **no_src},
             "risk_profile": [{**r, "evidence": None} for r in d["risk_profile"]],
             "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]],
@@ -509,6 +547,163 @@ def public_external(d: dict) -> dict:
 def public_page(page: dict) -> dict:
     """A project list page for the public: no upper slip quantile or rank percentile (as public_project)."""
     return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None} for r in page["items"]]}
+
+
+# ---------------------------------------------------------------- research
+
+N_RESEARCH_TOP, N_BLOCKERS = 3, 20
+RESEARCH_NOTE = (
+    "Web research is evidence, not a model input. Sweep facts were found by a research agent and checked by a second "
+    "one that re-opened the source; agent facts are news items the in-app research agent judged with the local LLM "
+    "from the headline and feed summary alone. A fact is live when it is negative, not resolved and dated within "
+    f"{LIVE_Q} quarters of the as-of quarter. No news is not no problem: coverage favours large, much-reported "
+    "projects.")
+
+
+def _day(v) -> date | None:
+    """An ISO date or timestamp string (SQLite) -> date."""
+    return date.fromisoformat(v[:10]) if isinstance(v, str) and v else v
+
+
+def _agent_fact(r: dict, asof) -> dict:
+    """A research agent row (db.research_facts) in the gold fact shape, live at the served asof."""
+    ev, pub = _day(r["event_date"]), _day(r["published_date"])
+    return {**{k: v for k, v in r.items() if k not in ("model", "prompt_version")}, "event_date": ev,
+            "published_date": pub, "researched_on": _day(r["researched_on"]), "verified": None,
+            "live": is_live(r["direction"], r["status"], ev, pub, asof)}
+
+
+def _newest(f: dict) -> date:
+    return f["event_date"] or f["published_date"] or date.min
+
+
+def _no_reason(facts: list[dict]) -> list[dict]:
+    return [{**f, "match_reason": None} for f in facts]
+
+
+def _nest(p: dict | None) -> dict:
+    """research_projects' flattened external columns -> {entry: {field: value} | None} (the sweep's shape)."""
+    out: dict = {}
+    for (entry, field), col in EXT_COLS.items():
+        out.setdefault(entry, {})[field] = (p or {}).get(col)
+    return {e: v if any(x is not None for x in v.values()) else None for e, v in out.items()}
+
+
+@cached
+def _research_sweep(s, key):
+    return (_one(s, "SELECT * FROM rprojects WHERE project_key = ?", [key]),
+            _rows(s, "SELECT * FROM rfacts WHERE project_key = ?", [key]))
+
+
+def research(key: str) -> dict:
+    """One project's web research: the sweep's line (researched_on, latest status, the external block) and its facts
+    merged with the research agent's (origin 'agent', SQLite), newest first; an agent fact whose URL the sweep or an
+    earlier agent fact already cites is dropped (two sweep facts from one page stay: they differ in category).
+    searched: the sweep searched it or the agent researched it; with no facts that reads 'searched, nothing found'."""
+    from . import db  # db imports this module
+    asof = state()["asof"]
+    proj, sweep = _research_sweep(key)
+    urls = {f["url"] for f in sweep}
+    agent = []
+    for r in db.research_facts(key):
+        if r["url"] not in urls:
+            urls.add(r["url"])
+            agent.append(_agent_fact(r, asof))
+    facts = sorted([{**f, "signal_id": None, "judged_at": None} for f in sweep] + agent, key=_newest, reverse=True)
+    agent_at = db.researched(key).get(key)
+    return {"key": key, "researched_on": proj and proj["researched_on"],
+            "searched": bool(proj and proj["searched"]) or agent_at is not None, "agent_researched_at": agent_at,
+            "latest_status": proj and proj["latest_status"], "external": _nest(proj), "n_facts": len(facts),
+            "n_negative_live": sum(f["live"] for f in facts), "facts": facts}
+
+
+def research_brief(key: str) -> dict:
+    """research() for the project page: the counts and the top N_RESEARCH_TOP facts (live blockers first, most
+    severe, then newest)."""
+    d = research(key)
+    top = sorted(d["facts"], key=lambda f: (not f["live"], -f["severity"], -_newest(f).toordinal()))
+    return {**{k: d[k] for k in ("researched_on", "searched", "agent_researched_at", "latest_status", "n_facts",
+                                 "n_negative_live")}, "top": top[:N_RESEARCH_TOP]}
+
+
+def public_research(d: dict) -> dict:
+    """research() for the public: the same facts without match_reason."""
+    return {**d, "facts": _no_reason(d["facts"])}
+
+
+@cached
+def _research_scope(s, scope):
+    """The current projects in scope (key -> name, state, tier), their sweep lines and their sweep facts."""
+    sql, params = _scope_sql(scope)
+    cur = {r["project_key"]: r for r in _rows(s, f"""SELECT project_key, project_name, state, tier FROM cur
+        WHERE {sql}""", params)}
+    inscope = f"project_key IN (SELECT project_key FROM cur WHERE {sql})"
+    projects = _rows(s, f"SELECT project_key, searched, researched_on FROM rprojects WHERE {inscope}", params)
+    return cur, projects, _rows(s, f"SELECT * FROM rfacts WHERE {inscope}", params)
+
+
+def research_summary(scope=None) -> dict:
+    """Web research over the current projects in scope, sweep and agent facts together (deduplicated by project and
+    URL as research()): coverage, facts by category x direction with the live ones, by state, and the newest live
+    blockers (severity >= 2) with their project."""
+    from . import db
+    s = state()
+    cur, projects, sweep = _research_scope(scope)
+    seen = {(f["project_key"], f["url"]) for f in sweep}
+    agent = []
+    for r in db.research_facts(keys=frozenset(cur)):
+        if (r["project_key"], r["url"]) not in seen:
+            seen.add((r["project_key"], r["url"]))
+            agent.append(_agent_fact(r, s["asof"]))
+    facts = sweep + agent
+    agent_at = {k: t for k, t in db.researched().items() if k in cur}
+    searched = {p["project_key"] for p in projects if p["searched"]} | set(agent_at)
+    live = [f for f in facts if f["live"]]
+
+    def n_keys(rows):
+        return len({f["project_key"] for f in rows})
+
+    by_cat = []
+    for cat, tax in TAXONOMY_OF.items():
+        fs = [f for f in facts if f["category"] == cat]
+        if fs:
+            lv = [f for f in fs if f["live"]]
+            by_cat.append({"category": cat, "taxonomy": tax, **{d: sum(f["direction"] == d for f in fs) for d in (
+                "negative", "positive", "neutral")}, "n_live": len(lv), "n_projects_live": n_keys(lv)})
+    by_state = []
+    for st in sorted({r["state"] for r in cur.values()}, key=str):
+        keys = {k for k, r in cur.items() if r["state"] == st}
+        lv = [f for f in live if f["project_key"] in keys]
+        by_state.append({"state": st, "n_current": len(keys), "n_searched": len(keys & searched),
+                         "n_with_facts": len(keys & {f["project_key"] for f in facts}), "n_negative_live": len(lv),
+                         "n_projects_negative_live": n_keys(lv)})
+    by_state.sort(key=lambda r: (-r["n_negative_live"], -r["n_searched"], str(r["state"])))
+    # one row per project and page (a page can give a land and a forest fact), the newest and most severe
+    first: dict = {}
+    for f in sorted((f for f in live if f["severity"] >= 2), key=lambda f: (_newest(f), f["severity"]), reverse=True):
+        first.setdefault((f["project_key"], f["url"]), f)
+    blockers = list(first.values())[:N_BLOCKERS]
+    dates = [p["researched_on"] for p in projects if p["researched_on"]]
+    return {
+        "asof": s["asof"], "live_window_quarters": LIVE_Q,
+        "researched_on": {"first": min(dates, default=None), "last": max(dates, default=None)},
+        "coverage": {"n_current": len(cur), "n_searched": len(searched),
+                     "n_with_facts": n_keys(facts), "n_facts": len(facts), "n_negative_live": len(live),
+                     "n_projects_negative_live": n_keys(live), "n_agent_facts": len(agent),
+                     "n_agent_projects": len(agent_at)},
+        "by_category": by_cat, "by_state": by_state,
+        "top_recent_blockers": [{**{k: f.get(k) for k in ("fact_id", "project_key", "category", "severity",
+                                                           "event_date", "date_precision", "summary", "headline",
+                                                           "source", "url", "origin")},
+                                 **{k: cur[f["project_key"]][k] for k in ("project_name", "state", "tier")}}
+                                for f in blockers],
+        "agent_last_run": max(agent_at.values(), default=None), "note": RESEARCH_NOTE}
+
+
+def public_research_summary(d: dict) -> dict:
+    """research_summary() for the public: the counts, and of the blockers only headline, URL and date."""
+    keep = ("headline", "url", "event_date", "date_precision")
+    return {**d, "top_recent_blockers": [{k: f[k] for k in keep} for f in d["top_recent_blockers"]]}
 
 
 @cached

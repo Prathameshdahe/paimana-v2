@@ -87,6 +87,7 @@ the per-project PARIVESH lists (open proposals, the proposals named in the remar
 |---|---|---|---|---|
 | `/api/meta`, `/api/scopes` | ✓ | ✓ | ✓ | ✓ |
 | `/api/portfolio`, `/api/projects`, `/api/projects/{key}`, `.../timeline`, `/api/external/summary` | ✓ (detail redacted) | scoped | scoped | ✓ |
+| `.../research`, `/api/research/summary` | ✓ (no match reasons; summary: counts, blockers as headline, URL, date) | scoped | scoped | ✓ |
 | `.../forecast`, `.../brief`, `.../signals` | 403 | scoped | scoped | ✓ |
 | `/api/alerts`, `/api/stream` | 403 | scoped | scoped | ✓ |
 | `POST /api/alerts/{id}/ack` | 403 | 403 | scoped | ✓ |
