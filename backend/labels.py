@@ -4,8 +4,8 @@ reads.
 
 FEATURE_LABELS mirrors frontend/src/lib/featureLabels.ts and feature_label() its featureLabel(): the same map and the
 same fallback for ext_open_<category> / ext_ever_<category> and for any other name (underscores to spaces, first
-letter up). DIMENSION_LABELS and FACTOR_LABELS mirror RISK_DIMENSION and EXTERNAL_FACTORS in
-frontend/src/lib/riskPalette.ts; SOURCE_LABELS mirrors SOURCE_LABEL in views/project-studio/RiskChecklist.tsx (every
+letter up). DIMENSION_LABELS, FACTOR_LABELS and SOURCE_LABELS mirror RISK_DIMENSION, EXTERNAL_FACTORS
+and SOURCE_LABEL in frontend/src/lib/riskPalette.ts (SOURCE_LABELS: every
 `source` ml/risk_profile.py writes: the frontend map must hold the same keys and words, so a row never shows its raw
 token). The maps are kept by hand on both sides; tests/test_labels.py checks the keys match. The chat (llm/tools.py)
 uses them so a driver or a flagged check reads the same in an answer as on the page.

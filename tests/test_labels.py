@@ -53,7 +53,7 @@ def test_source_labels_cover_every_risk_profile_source_and_agree_with_the_fronte
         import pandas as pd
         seen = set(pd.read_parquet(gold[-1], columns=["source"])["source"].dropna().unique())
         assert seen <= set(labels.SOURCE_LABELS), seen - set(labels.SOURCE_LABELS)
-    ts = ts_map("frontend/src/views/project-studio/RiskChecklist.tsx", "SOURCE_LABEL")
+    ts = ts_map("frontend/src/lib/riskPalette.ts", "SOURCE_LABEL")   # RiskChecklist and WhyBlock read it
     assert ts.keys() <= labels.SOURCE_LABELS.keys() and {"model", "report", "bhoomi_rashi"} <= ts.keys()
     assert all(labels.SOURCE_LABELS[k] == v for k, v in ts.items())
     assert labels.source_label("news_research") == "web research" and labels.source_label(None) == "source unknown"
