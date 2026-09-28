@@ -1,11 +1,12 @@
 import asyncio
 import json
 import math
+import re
 import threading
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm import agent, second_opinion, worker
@@ -61,10 +62,17 @@ from .schemas import (
 router = APIRouter(prefix="/api")
 # who is asking: role and scope from the X-Paimana-* headers (backend/access.py; prototype, no authentication)
 Anyone = Depends(viewer)
+# input bounds: a project key is PRJ- and six digits (400 otherwise, before any lookup); every free-text query or
+# path parameter has a length limit (422 past it), and paging is 1..100 rows a page
+KEY_RX = re.compile(r"PRJ-\d{6}")
+NAME_MAX, SECTOR_MAX, ID_MAX = 100, 60, 64   # a ministry or agency name, a sector or state, a bottleneck id
 
 
 def _key(key: str, v: Viewer | None = None) -> str:
-    """Canonical key, 404 when unknown or (with a viewer) outside the viewer's scope."""
+    """Canonical key; 400 when it does not look like a project key, 404 when unknown or (with a viewer) outside
+    the viewer's scope."""
+    if not KEY_RX.fullmatch(key or ""):
+        raise HTTPException(status_code=400, detail="a project key looks like PRJ-000123")
     k = serving.canonical(key)
     if k is None:
         raise HTTPException(status_code=404, detail=f"project {key} not found")
@@ -85,14 +93,17 @@ def get_scopes():
 
 
 @router.get("/portfolio", response_model=Portfolio)
-def get_portfolio(ministry: str | None = None, sector: str | None = None, state: str | None = None,
-                  tier: Tier | None = None, v: Viewer = Anyone):
+def get_portfolio(ministry: str | None = Query(None, max_length=NAME_MAX),
+                  sector: str | None = Query(None, max_length=SECTOR_MAX),
+                  state: str | None = Query(None, max_length=SECTOR_MAX), tier: Tier | None = None,
+                  v: Viewer = Anyone):
     return serving.portfolio(ministry, sector, state, tier, scope=v.scope)
 
 
 @router.get("/projects", response_model=ProjectPage)
-def get_projects(q: str | None = Query(None, max_length=100), ministry: str | None = None,
-                 sector: str | None = None, state: str | None = None, tier: Tier | None = None,
+def get_projects(q: str | None = Query(None, max_length=100), ministry: str | None = Query(None, max_length=NAME_MAX),
+                 sector: str | None = Query(None, max_length=SECTOR_MAX),
+                 state: str | None = Query(None, max_length=SECTOR_MAX), tier: Tier | None = None,
                  flag: Flag | None = None, sort: Sort = "risk", order: Literal["asc", "desc"] | None = None,
                  page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100), near_complete: bool = False,
                  v: Viewer = Anyone):
@@ -185,8 +196,8 @@ def get_second_opinion(key: str, cached: bool = False, v: Viewer = Depends(need(
 
 
 @router.get("/agencies/matrix", response_model=AgencyMatrix)
-def get_agency_matrix(sector: str | None = Query(None, max_length=60),
-                      ministry: str | None = Query(None, max_length=100), include_hidden: bool = False,
+def get_agency_matrix(sector: str | None = Query(None, max_length=SECTOR_MAX),
+                      ministry: str | None = Query(None, max_length=NAME_MAX), include_hidden: bool = False,
                       v: Viewer = Depends(need("agencies"))):
     """Agency Performance Matrix: one point per canonical agency (n >= 5 unless include_hidden); a ministry
     official sees the agencies of their ministry, an agency official every agency with their own is_self."""
@@ -194,8 +205,8 @@ def get_agency_matrix(sector: str | None = Query(None, max_length=60),
 
 
 @router.get("/agencies/{agency}/projects", response_model=ProjectPage)
-def get_agency_projects(agency: str, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
-                        v: Viewer = Depends(need("agencies"))):
+def get_agency_projects(agency: str = Path(max_length=NAME_MAX), page: int = Query(1, ge=1),
+                        size: int = Query(50, ge=1, le=100), v: Viewer = Depends(need("agencies"))):
     """Current projects of one canonical agency (every printed name that maps to it) in the viewer's scope,
     riskiest first."""
     name = agency.strip().upper()
@@ -205,7 +216,8 @@ def get_agency_projects(agency: str, page: int = Query(1, ge=1), size: int = Que
 
 
 @router.get("/bottlenecks", response_model=BottleneckPage)
-def get_bottlenecks(category: str | None = Query(None, max_length=40), state: str | None = Query(None, max_length=60),
+def get_bottlenecks(category: str | None = Query(None, max_length=40),
+                    state: str | None = Query(None, max_length=SECTOR_MAX),
                     min_projects: int | None = Query(None, ge=1), level: Literal["authority", "state"] | None = None,
                     page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
                     v: Viewer = Depends(need("bottlenecks"))):
@@ -214,8 +226,8 @@ def get_bottlenecks(category: str | None = Query(None, max_length=40), state: st
 
 
 @router.get("/bottlenecks/{bottleneck_id}", response_model=BottleneckDetail)
-def get_bottleneck(bottleneck_id: str, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
-                   v: Viewer = Depends(need("bottlenecks"))):
+def get_bottleneck(bottleneck_id: str = Path(max_length=ID_MAX), page: int = Query(1, ge=1),
+                   size: int = Query(50, ge=1, le=100), v: Viewer = Depends(need("bottlenecks"))):
     out = serving.bottleneck(bottleneck_id, page, size, scope=v.scope)
     if out is None:
         raise HTTPException(status_code=404, detail=f"bottleneck {bottleneck_id} not found")
@@ -381,7 +393,7 @@ def post_parivesh_snapshot(background: BackgroundTasks, v: Viewer = Depends(need
 
 
 @router.post("/jobs/bhoomi-pull", response_model=JobStarted)
-def post_bhoomi_pull(background: BackgroundTasks, state: str | None = Query(None, max_length=60),
+def post_bhoomi_pull(background: BackgroundTasks, state: str | None = Query(None, max_length=SECTOR_MAX),
                      v: Viewer = Depends(need("jobs"))):
     """Pull the Bhoomi Rashi register (one state, or every state) now, in the background; only with BHOOMI_PULL=1."""
     if not scheduler.bhoomi_enabled():
@@ -396,7 +408,8 @@ def post_bhoomi_pull(background: BackgroundTasks, state: str | None = Query(None
 
 @router.get("/signals/feed", response_model=SignalFeed)
 def get_signal_feed(since: datetime | None = None, category: str | None = Query(None, max_length=40),
-                    state: str | None = Query(None, max_length=60), severity: int | None = Query(None, ge=1, le=3),
+                    state: str | None = Query(None, max_length=SECTOR_MAX),
+                    severity: int | None = Query(None, ge=1, le=3),
                     linked: bool | None = None, page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=100),
                     v: Viewer = Depends(need("radar"))):
     """External Evidence Radar: one page of signals (severity = at least) and the state heat. Outside IPMD only the

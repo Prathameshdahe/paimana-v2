@@ -105,8 +105,9 @@ def test_filters(client):
 
 def test_unknown_project_is_404(client):
     for path in ("/api/projects/PRJ-999999", "/api/projects/PRJ-999999/timeline",
-                 "/api/projects/PRJ-999999/forecast", "/api/projects/nonsense"):
+                 "/api/projects/PRJ-999999/forecast"):
         assert client.get(path).status_code == 404
+    assert client.get("/api/projects/nonsense").status_code == 400   # not even a key (tests/test_input_validation.py)
 
 
 def test_detail_bundle_has_provenance(client):
