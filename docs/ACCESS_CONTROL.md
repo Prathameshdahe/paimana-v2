@@ -213,19 +213,20 @@ unit B's `POLICY`). The backend cuts every response for everyone else (`backend/
 `backend/routes.py` when `not v.can("numbers")`), not just the UI: a hidden number keeps its key and goes out as
 null (a list of SHAP values as `[]`), so the response shapes do not change.
 
-Hidden (null without `numbers`): the four probabilities (`pAny2q`, `pDatePush2q`, `pCostRev2q`, `pAny4q`), the slip
-and cost quantiles (`monthsP05/50/95`, `costPctP05/50/95`) and the completion dates derived from them
-(`p05/p50/p95`), `tierRankPct`, `tierByRank`, `shapTop5`; the bottlenecks' `meanPAny2q` and `meanMonthsP50`; the
-agency matrix's `scheduleBias*`, `costBias*`, `sectorScheduleBias`, `sectorCostBias`, `shrinkWeight` and `trend`;
-the analogues' `distance` and outcome figures (`yMonths`, `yCostPct`, `yAny`, `yDatePush`, `yCostRev`); the external
-composite's scores and score distribution; the notice backtest's lifts; the measured hidden-delay priors' months,
-shares, intervals and p-values; the news linker's `linkScore`. Text is cut too: the checklist's evidence lines
-(`P = 0.87 (High-tier cut 0.85)`, the agency's timeline statistics, a composite score, a measured hidden delay with
-its interval) and the alert feed and stream (a tier alert's `P(date push or cost revision, 2q) = 0.91`) are
-rewritten in words. The developer's brief and second opinion keep the numbers; everyone else's are made from a
-payload that has none, so their text, checked against it, cannot carry one; each view is cached on its own. The
-search index keeps the docs that report the model's evaluation statistics for the developer. Report facts stay
-numeric: cost, spend, progress, dates, months of delay to date, counts, parcels, hectares, months in a stage.
+Hidden (null without `numbers`): the four probabilities (`pAny2q`, `pDatePush2q`, `pCostRev2q`, `pAny4q`), the slip and
+cost quantiles (`monthsP05/50/95`, `costPctP05/50/95`) and the completion dates derived from them (`p05/p50/p95`),
+`tierRankPct`, `tierByRank`, `shapTop5`; the bottlenecks' `meanPAny2q` and `meanMonthsP50`; the agency matrix's
+`scheduleBias*`, `costBias*`, `sectorScheduleBias`, `sectorCostBias`, `shrinkWeight` and `trend`; the analogues'
+`distance` and outcome figures (`yMonths`, `yCostPct`, `yAny`, `yDatePush`, `yCostRev`); the external composite's scores
+and score distribution; the notice backtest's lifts and the slip rates with and without a flag they are the ratio of
+(its counts stay); the land-link check's bootstrap interval (`ci_lo`, `ci_hi`; its counts stay); the measured
+hidden-delay priors' months, shares, intervals and p-values; the news linker's `linkScore`. Text is cut too: the
+checklist's evidence lines (`P = 0.87 (High-tier cut 0.85)`, the agency's timeline statistics, a composite score, a
+measured hidden delay with its interval) and the alert feed and stream (a tier alert's `P(date push or cost revision,
+2q) = 0.91`) are rewritten in words. The developer's brief and second opinion keep the numbers; everyone else's are made
+from a payload that has none, so their text, checked against it, cannot carry one; each view is cached on its own. The
+search index keeps the docs that report the model's evaluation statistics for the developer. Report facts stay numeric:
+cost, spend, progress, dates, months of delay to date, counts, parcels, hectares, months in a stage.
 
 Words, for every viewer (the developer too, so the UI reads one field):
 

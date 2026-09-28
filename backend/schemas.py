@@ -544,13 +544,14 @@ class Forecast(CamelModel):
 class ExternalSummary(CamelModel):
     """gold/external_summary.json; the nested blocks keep the file's own keys (snake_case). Every project card
     (factors.*.top, early_notice.top, portal.top_overdue and open_list) carries `outlook` (an Outlook dict) for every
-    viewer. Hidden numbers (null without `numbers`, serving.plain_external): the cards' p_any_2q (their evidence
-    lines in words), notice_backtest's lift and lift_within_sector_year (at any depth; the slip shares and counts
-    stay), external_composite's score distribution (mean, min, 25%, 50%, 75%, max per coverage) and the top_fc_la
-    cards' external_factor_score / fc_component / la_component (n_projects and n_score_ge_high stay), and
-    hidden_delay_priors.rows' extra_months / extra_push and their intervals, holm_* and garvit_band. Every prior row
-    carries extra_months_word (as HiddenDelayPrior); without `numbers` hidden_delay_priors.note is a plain
-    sentence."""
+    viewer. Hidden numbers (null without `numbers`, serving.plain_external): the cards' p_any_2q (their evidence lines
+    in words), notice_backtest's lift, lift_within_sector_year and the slip_rate_with / slip_rate_without the lift is
+    the ratio of (at any depth, by_sector too; n_with, n_without and projects_with stay), land_coverage.link_check's
+    ci_lo / ci_hi (n and correct stay), external_composite's score distribution (mean, min, 25%, 50%, 75%, max per
+    coverage) and the top_fc_la cards' external_factor_score / fc_component / la_component (n_projects and
+    n_score_ge_high stay), and hidden_delay_priors.rows' extra_months / extra_push and their intervals, holm_* and
+    garvit_band. Every prior row carries extra_months_word (as HiddenDelayPrior); without `numbers`
+    hidden_delay_priors.note is a plain sentence."""
     as_of_date: date
     n_projects: int
     model_version: str

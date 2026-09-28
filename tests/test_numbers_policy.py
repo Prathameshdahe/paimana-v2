@@ -35,7 +35,7 @@ HIDDEN = {_to_camel(k) for k in (
     "y_any", "y_date_push", "y_cost_rev", "p05", "p50", "p95", "lift", "lift_within_sector_year", "extra_months",
     "extra_months_lo", "extra_months_hi", "extra_push", "extra_push_lo", "extra_push_hi", "holm_months", "holm_push",
     "garvit_band", "external_factor_score", "fc_component", "la_component", "mean", "min", "25%", "50%", "75%",
-    "max", "link_score")}
+    "max", "link_score", "slip_rate_with", "slip_rate_without", "ci_lo", "ci_hi")}
 # the chat's fact keys that carry a model number (llm/tools.py)
 HIDDEN_FACTS = {"slip_chance_within_2_quarters_pct", "date_push_chance_within_2_quarters_pct",
                 "cost_revision_chance_within_2_quarters_pct", "slip_chance_within_4_quarters_pct",
@@ -282,7 +282,7 @@ def test_the_developer_gets_every_number(client, world):
     found = {_to_camel(f) for f in found}
     want = {"pAny2q", "pDatePush2q", "monthsP95", "tierRankPct", "shapTop5", "contribution", "scheduleBias",
             "scheduleBiasCiLo", "trend", "distance", "yMonths", "p95", "lift", "extraMonths", "meanPAny2q",
-            "externalFactorScore", "mean", "linkScore", "garvitBand"}
+            "externalFactorScore", "mean", "linkScore", "garvitBand", "slipRateWith", "ciLo"}
     assert want <= found, want - found
     detail = got[f"/api/projects/{world['key']['developer']}"]
     assert detail["scores"]["outlook"] and detail["scores"]["driversPlain"]   # the words go to the developer too
@@ -341,8 +341,14 @@ def test_external_summary_bands(client, world):
     assert {r["extra_months_word"] for r in rows} <= {None, serving.NO_EXTRA, "a few months", "about half a year",
                                                        "about a year", "over a year"}
     assert any(r["extra_months_word"] for r in rows)
-    nb = plain["noticeBacktest"]["land_or_forest"]
-    assert nb["lift"] is None and nb["slip_rate_with"] == full["noticeBacktest"]["land_or_forest"]["slip_rate_with"]
+    nb, fb = plain["noticeBacktest"]["land_or_forest"], full["noticeBacktest"]["land_or_forest"]
+    # the lift is with / without: both rates go too (overall and per sector), the counts stay
+    assert nb["lift"] is None and nb["slip_rate_with"] is None and nb["slip_rate_without"] is None
+    assert fb["slip_rate_with"] is not None and (nb["n_with"], nb["n_without"]) == (fb["n_with"], fb["n_without"])
+    assert nb["by_sector"] and all(r["slip_rate_with"] is None and r["lift"] is None for r in nb["by_sector"].values())
+    links = plain["landCoverage"]["link_check"]   # the hand-checked land links: counts, not their bootstrap interval
+    assert links and all(c["ci_lo"] is None and c["ci_hi"] is None and c["n"] >= c["correct"] for c in links.values())
+    assert all(c["ci_lo"] is not None for c in full["landCoverage"]["link_check"].values())
     comp = plain["externalComposite"]["by_coverage"]["fc+la"]
     assert comp["mean"] is None and comp["n_score_ge_high"] == full["externalComposite"]["by_coverage"]["fc+la"][
         "n_score_ge_high"]

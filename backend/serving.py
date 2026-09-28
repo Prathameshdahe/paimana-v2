@@ -696,6 +696,8 @@ HIDDEN_PRIOR = ("extra_months", "extra_months_lo", "extra_months_hi", "extra_pus
 HIDDEN_COMPOSITE = ("external_factor_score", "fc_component", "la_component")
 COMPOSITE_STATS = ("mean", "min", "25%", "50%", "75%", "max")
 LIFTS = ("lift", "lift_within_sector_year")
+BACKTEST_RATES = ("slip_rate_with", "slip_rate_without")   # the lift is their ratio: hidden with it
+LINK_CI = ("ci_lo", "ci_hi")   # the land-link accuracy check's bootstrap interval (landCoverage.link_check)
 BAND_METHOD_PLAIN = (
     "The progress band spans three what-if paths: the project keeps its own recent pace, recovers to its sector's "
     "usual pace, or follows its agency's past pattern; it is a range of scenarios, not a prediction of one path. "
@@ -934,12 +936,14 @@ def _plain_cards(cards: list[dict]) -> list[dict]:
 
 def plain_external(d: dict) -> dict:
     """The External Factors summary without the model's numbers: no chance of a slip on the project cards (their
-    outlook stays; their evidence lines in words), no backtest lifts (the slip shares of past projects with and
-    without a flag stay: counts), no composite score distribution or scores, and the measured priors as words."""
-    po, hd, ec = d.get("portal"), d.get("hidden_delay_priors"), d["external_composite"]
+    outlook stays; their evidence lines in words), no backtest lifts nor the slip rates with and without a flag they
+    are the ratio of (overall and per sector; the counts stay), no composite score distribution or scores, no
+    bootstrap interval on the land-link check (its counts stay), and the measured priors as words."""
+    po, hd, ec, lc = d.get("portal"), d.get("hidden_delay_priors"), d["external_composite"], d.get("land_coverage")
     return {**d, "factors": {n: {**f, "top": _plain_cards(f["top"])} for n, f in d["factors"].items()},
             "early_notice": {**d["early_notice"], "top": _plain_cards(d["early_notice"]["top"])},
-            "notice_backtest": _none_deep(d["notice_backtest"], set(LIFTS)),
+            "notice_backtest": _none_deep(d["notice_backtest"], set(LIFTS) | set(BACKTEST_RATES)),
+            "land_coverage": lc and _none_deep(lc, set(LINK_CI)),
             "external_composite": _none_deep(ec, set(COMPOSITE_STATS) | set(HIDDEN_COMPOSITE)),
             "portal": po and {**po, "top_overdue": _plain_cards(po.get("top_overdue") or []),
                               "open_list": _plain_cards(po.get("open_list") or [])},
