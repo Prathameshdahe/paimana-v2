@@ -91,10 +91,13 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
   const cited = [...new Set([...citedRefs(o.narrative ?? '', 'evidence'), ...(o.keyEvidence ?? [])])]
   const anchor = (id: string) => `${ids}-${id}`
 
+  // a chip highlights its item, scrolls to it and moves the focus there, so keyboard and screen-reader viewers land on it
   const pick = (id: string) => {
     setActive(id === active ? null : id)
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    document.getElementById(anchor(id))?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+    const el = document.getElementById(anchor(id))
+    el?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+    el?.focus({ preventScroll: true })
   }
 
   return (
@@ -120,8 +123,11 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
               const stance = e?.direction ?? e?.stance
               const href = webUrl(e?.url)
               return (
-                <li key={id} id={anchor(id)}
-                  className={cn('flex gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors', active === id && 'bg-accent/10 ring-1 ring-inset ring-accent/30')}>
+                <li key={id} id={anchor(id)} tabIndex={-1}
+                  className={cn(
+                    'flex gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                    active === id && 'bg-accent/10 ring-1 ring-inset ring-accent/30'
+                  )}>
                   <span className={cn(
                     'mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-semibold leading-none',
                     stance === 'negative' ? 'bg-critical/10 text-critical' : stance === 'positive' ? 'bg-stable/10 text-stable' : 'bg-accent/15 text-accent'

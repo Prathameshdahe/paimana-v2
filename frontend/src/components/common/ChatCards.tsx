@@ -449,7 +449,8 @@ export function SourcesList({ items, anchor, flashed }: {
               id={anchor(s.n)}
               tabIndex={-1}
               className={cn(
-                'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none',
+                // a chip moves the focus here: keyboard viewers keep a ring after the highlight fades
+                'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
                 flashed === s.n ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : ''
               )}
             >
