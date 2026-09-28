@@ -643,6 +643,76 @@ class BriefOut(CamelModel):
     payload: dict[str, Any]
 
 
+Concern = Literal["none", "watch", "concern"]
+
+
+class OpinionEvidence(CamelModel):
+    """One item of a second opinion's evidence pack (llm/second_opinion.py), cited as [E#]. direction context: the
+    status line and the model, never grounds for a concern; stale: an old report remark, a resolved or old research
+    fact, an old headline."""
+    id: str
+    kind: Literal["status", "model", "check", "parivesh", "land", "event", "research", "news"]
+    date: str | None
+    direction: Literal["context", "negative", "positive", "neutral"]
+    severity: int | None
+    stale: bool
+    source: str
+    text: str
+
+
+class SecondOpinionOut(CamelModel):
+    """An accepted LLM second opinion for the project's current evidence (evidence_hash). It never changes the tier:
+    model_level is the tier's concern level (Critical and High 'concern', Medium and Watch 'watch', Low 'none') and
+    vs_model compares the two. cited: the ids the narrative cites; evidence: every item the LLM read. model is the
+    LLM, model_version PAIMANA's scoring model."""
+    status: Literal["ok"]
+    key: str
+    name: str
+    asof: str
+    model_version: str | None
+    tier: str | None
+    model_level: Concern
+    concern: Concern
+    headline: str
+    narrative: str
+    key_evidence: list[str]
+    vs_model: Literal["agrees", "higher", "lower"]
+    gaps: list[str]
+    cited: list[str]
+    evidence: list[OpinionEvidence]
+    evidence_hash: str
+    model: str
+    prompt_version: str | None
+    generated_at: str | None
+    cached: bool
+    attempts: int | None = None
+    n_numbers_checked: int | None = None
+    llm_ms: int | None = None
+
+
+class SecondOpinionNone(CamelModel):
+    """?cached=1 and no accepted opinion for the current evidence: nothing was generated."""
+    status: Literal["none"]
+    key: str
+    detail: str
+
+
+class SecondOpinionRejected(CamelModel):
+    """HTTP 422: both replies failed the checks (cited ids, numbers, concern level, lengths); reasons of the last."""
+    status: Literal["rejected"]
+    key: str
+    reasons: list[str]
+    attempts: int
+    llm_ms: int | None = None
+
+
+class SecondOpinionUnavailable(CamelModel):
+    """HTTP 503: LM Studio is unreachable (remembered for a short while) or busy with other answers (busy)."""
+    status: Literal["llm_unavailable"]
+    detail: str
+    busy: bool = False
+
+
 # ---------- app state (SQLite, backend/db.py) ----------
 
 Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]

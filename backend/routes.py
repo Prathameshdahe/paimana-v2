@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from llm import agent, worker
+from llm import agent, second_opinion, worker
 
 from . import brief, db, ratelimit, serving, store
 from .access import Viewer, in_scope, need, stream_viewer, viewer
@@ -44,6 +44,10 @@ from .schemas import (
     Role,
     RoleBody,
     Scopes,
+    SecondOpinionNone,
+    SecondOpinionOut,
+    SecondOpinionRejected,
+    SecondOpinionUnavailable,
     SignalFeed,
     Sort,
     Tier,
@@ -150,6 +154,33 @@ def get_brief(key: str, v: Viewer = Depends(need("insights"))):
         raise HTTPException(status_code=404, detail=out["detail"])
     if out["status"] != "ok":
         return JSONResponse(status_code=503 if out["status"] == "llm_unavailable" else 422, content=out)
+    return out
+
+
+@router.get("/projects/{key}/second-opinion", response_model=SecondOpinionOut | SecondOpinionNone,
+            responses={404: {"description": "not in the scored portfolio"},
+                       422: {"model": SecondOpinionRejected, "description": "status 'rejected' with reasons"},
+                       503: {"model": SecondOpinionUnavailable,
+                             "description": "status 'llm_unavailable': LM Studio is not reachable or busy"}})
+def get_second_opinion(key: str, cached: bool = False, v: Viewer = Depends(need("insights"))):
+    """The local LLM's cited second opinion on the project's evidence (llm/second_opinion.py): generated on demand
+    and stored per evidence version; ?cached=1 never generates and says status 'none' when there is none. It never
+    changes the tier."""
+    k = _key(key, v)
+    if cached:
+        out = second_opinion.cached(k)
+        if out is not None:
+            return out
+        if second_opinion.pack(k) is None:
+            raise HTTPException(status_code=404, detail=f"project {key} is not in the current scored portfolio")
+        return {"status": "none", "key": k, "detail": "no second opinion for the current evidence yet"}
+    out = second_opinion.generate(k)
+    if out["status"] == "not_scored":
+        raise HTTPException(status_code=404, detail=out["detail"])
+    if out["status"] == "rejected":
+        return JSONResponse(status_code=422, content=SecondOpinionRejected(**out).model_dump(by_alias=True))
+    if out["status"] != "ok":
+        return JSONResponse(status_code=503, content=SecondOpinionUnavailable(**out).model_dump(by_alias=True))
     return out
 
 
