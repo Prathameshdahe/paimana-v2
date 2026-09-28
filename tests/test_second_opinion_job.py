@@ -124,6 +124,18 @@ def test_a_new_prompt_rejected_keeps_the_old_opinion_and_is_not_asked_every_nigh
     assert "last_rejected" not in db.second_opinion(key, so.evidence_hash(so.pack(key)), client.LLM_CHAT_MODEL)
 
 
+def test_an_opinion_a_tightened_check_rejects_is_redone(job_db):
+    key = next(k for k in opinions.batch_keys() if so.has_evidence(so.pack(k)))
+    assert opinions.run([key])["ok"] == 1 and opinions.due(key) == "up_to_date"
+    h = so.evidence_hash(so.pack(key))
+    row = db.second_opinion(key, h, client.LLM_CHAT_MODEL)
+    db.save_second_opinion({**row, "narrative": row["narrative"] + " More was said [E99]."})   # fails check() now
+    assert so.cached(key) is None and opinions.due(key) == "due"
+    calls = len(job_db)
+    assert opinions.run([key])["ok"] == 1 and len(job_db) == calls + 1 and so.cached(key) is not None
+    assert opinions.due(key) == "up_to_date"
+
+
 def test_run_stops_for_a_busy_chat_and_for_lm_studio_down(job_db, monkeypatch):
     keys = with_evidence(opinions.batch_keys(), 2)
     monkeypatch.setattr(client, "wait_chat_idle", lambda max_s=300, poll_s=0.5: False)

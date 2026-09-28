@@ -6,7 +6,8 @@ tier and the riskiest first. run(keys, limit) takes them in turn and, for each, 
 when it is not scored, has no evidence about the project itself (second_opinion.has_evidence: nothing but the status
 line and the model) or was already asked under the current PROMPT_VERSION for its evidence_hash and LLM model: an
 opinion accepted or rejected under it, or a rejection under it noted on an older prompt's accepted opinion
-(last_rejected), so a rejection is not asked again every night, only when the evidence or the prompt changes. Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
+(last_rejected), so a rejection is not asked again every night, only when the evidence or the prompt changes. An
+accepted opinion that fails a check tightened since (second_opinion._accepted) is due again: it is no longer served. Otherwise it waits while a chat request uses the LLM (client.wait_chat_idle, at most PAUSE_MAX_S) and asks
 (second_opinion.generate as a background job: the gate lets chat requests go first; fresh, so an opinion made under
 an older prompt is redone), until `limit` projects were asked (SECOND_OPINION_PER_RUN, default 15). LM Studio down, or
 busy past the waits, ends the run early (status 'partial', or 'error' when nothing was asked); the projects done keep
@@ -57,9 +58,12 @@ def due(key: str) -> str:
     row = db.second_opinion(key, so.evidence_hash(p), client.LLM_CHAT_MODEL)
     if row is None:
         return "due"
-    # asked under this prompt: its opinion, or a rejection noted on an older prompt's accepted opinion
-    tried = {row.get("prompt_version"), (row.get("last_rejected") or {}).get("prompt_version")}
-    return "up_to_date" if so.PROMPT_VERSION in tried else "due"
+    if (row.get("last_rejected") or {}).get("prompt_version") == so.PROMPT_VERSION:
+        return "up_to_date"   # a rejection under this prompt, noted on an older prompt's accepted opinion
+    if row.get("prompt_version") != so.PROMPT_VERSION:
+        return "due"
+    # an accepted opinion that a check tightened since rejects is not served (so.cached), so it is redone
+    return "due" if row.get("status") == "ok" and not so._accepted(row, p) else "up_to_date"
 
 
 def batch_keys() -> list[str]:
