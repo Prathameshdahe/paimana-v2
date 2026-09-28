@@ -6,11 +6,29 @@
  * months, push and CIs are hidden numbers (SPEC9_ui section 6): the four roles read the backend's word band and the
  * project count; only the developer (numbers) reads the figures.
  */
-import type { HiddenDelayPrior } from '@/contracts/portfolio'
+import { EXTERNAL_FACTORS } from './riskPalette'
+import { formatINRShort } from './formatters'
+import type { ExternalSummary, HiddenDelayPrior } from '@/contracts/portfolio'
 import type { DelayWord, HiddenDelayMatch } from '@/contracts/project'
 
 /** the one DelayWord that is not an extra delay (unit G's serving.NO_EXTRA: the interval does not lie above zero) */
 export const NO_EXTRA_DELAY: DelayWord = 'no measurable extra delay'
+
+/**
+ * The outside factors' one line, from the summary's counts: "Land acquisition is on record for 212 projects worth
+ * ₹5.10L Cr; 38 of them show no slip in the reports yet." for the factor on record for the most projects.
+ */
+export function delaysTakeaway(s: ExternalSummary | undefined): string | null {
+  if (!s) return null
+  const top = EXTERNAL_FACTORS
+    .map((f) => ({ ...f, x: s.factors[f.key], notice: s.earlyNotice.by_factor[f.key] ?? 0 }))
+    .filter((r) => r.x && r.x.n_flagged > 0)
+    .sort((a, b) => (b.x?.n_flagged ?? 0) - (a.x?.n_flagged ?? 0))[0]
+  if (!top?.x) return null
+  const n = top.x.n_flagged.toLocaleString('en-IN')
+  const notice = top.notice > 0 ? `; ${top.notice.toLocaleString('en-IN')} of them show no slip in the reports yet.` : '.'
+  return `${top.label} is on record for ${n} projects worth ${formatINRShort(top.x.capital_exposed_cr)}${notice}`
+}
 
 /** pipeline/gold.OPEN_MAX_AGE_Q: a remark flag is open today only within this many quarters of its last mention */
 export const LIVE_QUARTERS = 4

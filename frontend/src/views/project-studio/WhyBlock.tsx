@@ -35,10 +35,13 @@ export function WhyBlock({ drivers, checks, numbers, compact, className }: {
   const clear = checks.filter((r) => r.state === 'clear')
   const unknown = checks.filter((r) => r.state === 'unknown')
   const top = drivers.slice(0, 5)
+  // the page's second level under its h1; one level lower inside the side panel, whose title is the h2
+  const H = compact ? 'h3' : 'h2'
+  const Sub = compact ? 'h4' : 'h3'
 
   return (
     <section className={cn('rounded-xl border border-border-subtle bg-surface-panel shadow-card', compact ? 'p-4' : 'p-5', className)}>
-      <h3 className="text-base font-semibold text-fg-base">Why it is happening</h3>
+      <H className="text-base font-semibold text-fg-base">Why it is happening</H>
       {top.length > 0 ? (
         <ol className={cn('mt-3 space-y-2', compact && 'mt-2')}>
           {top.map((d, i) => {
@@ -62,7 +65,7 @@ export function WhyBlock({ drivers, checks, numbers, compact, className }: {
       )}
 
       <div className={cn('border-t border-border-subtle', compact ? 'mt-3 pt-3' : 'mt-4 pt-4')}>
-        <h4 className="text-sm font-semibold text-fg-base">What the checks found</h4>
+        <Sub className="text-sm font-semibold text-fg-base">What the checks found</Sub>
         {checks.length === 0 ? (
           <p className="mt-2 text-sm text-fg-muted">No checks: the project is not in the current portfolio.</p>
         ) : (

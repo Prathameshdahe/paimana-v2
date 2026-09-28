@@ -156,6 +156,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
       id="project-list"
       tabIndex={-1}
       className="scroll-mt-20 focus:outline-none"
+      heading="h2"
       title={<>Projects <span className="font-normal text-fg-dimmed">{total.toLocaleString('en-IN')}</span></>}
       titleRight={
         <span className="flex items-center gap-3">

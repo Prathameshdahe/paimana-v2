@@ -9,7 +9,9 @@ let opener: Element | null = null
  * top. Nothing is remembered for the page body or for an element inside the panel itself (moving to another project
  * from within keeps the first opener).
  */
-export function rememberOpener(active: Element | null = typeof document === 'undefined' ? null : document.activeElement): void {
+export function rememberOpener(
+  active: Element | null = typeof document === 'undefined' ? null : document.activeElement,
+): void {
   if (!active || active === active.ownerDocument?.body) return
   if (active.closest?.('[role="dialog"]')) return
   opener = active

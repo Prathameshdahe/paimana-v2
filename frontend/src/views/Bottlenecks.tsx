@@ -261,6 +261,8 @@ export function Bottlenecks() {
         }
       />
 
+      {data && takeaway(shown) && <p className="max-w-4xl text-lg leading-relaxed text-fg-base">{takeaway(shown)}</p>}
+
       {error ? (
         <Card>
           <ApiErrorNote error={error} />
@@ -314,7 +316,6 @@ export function Bottlenecks() {
                   title={`Where shared issues hold up the most capital · ${shown.length}`}
                   info="Area: capital of the member projects. Colour: issue category. Click a block for its projects."
                 >
-                  {takeaway(shown) && <p className="px-5 pt-4 text-base text-fg-base">{takeaway(shown)}</p>}
                   <div className="h-[380px] p-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <Treemap

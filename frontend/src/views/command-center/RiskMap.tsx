@@ -321,7 +321,8 @@ export function RiskMap(p: RiskMapProps) {
   )
 
   return (
-    <Card className={p.className} title={mode === 'outlook' ? 'Due soon and likely to slip' : 'Due soon, by risk tier'} titleRight={titleRight}>
+    <Card className={p.className} heading="h2" title={mode === 'outlook' ? 'Due soon and likely to slip' : 'Due soon, by risk tier'}
+      titleRight={titleRight}>
       <div className="space-y-3 px-5 pb-4 pt-3">
         {takeaway
           ? <p className="text-base text-fg-base">{takeaway}</p>

@@ -4,6 +4,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useExternalSummary } from '@/lib/queries'
 import { EXTERNAL_FACTORS } from '@/lib/riskPalette'
 import { cn, formatINRShort } from '@/lib/formatters'
+import { delaysTakeaway } from '@/lib/external'
 import type { Flag } from '@/contracts/project'
 
 /**
@@ -24,14 +25,10 @@ export function DelaySources({ selected, onPick, filtersActive, className }: {
     .filter((r) => r.x)
     .sort((a, b) => (b.x?.n_flagged ?? 0) - (a.x?.n_flagged ?? 0))
   const max = Math.max(1, ...rows.map((r) => r.x?.n_flagged ?? 0))
-  const top = rows[0]
-  const takeaway = top?.x && top.x.n_flagged > 0
-    ? `${top.label} is on record for ${top.x.n_flagged.toLocaleString('en-IN')} projects worth ${formatINRShort(top.x.capital_exposed_cr)}`
-      + (top.notice > 0 ? `; ${top.notice.toLocaleString('en-IN')} of them show no slip in the reports yet.` : '.')
-    : null
+  const takeaway = delaysTakeaway(data)
 
   return (
-    <Card title="Where the delays come from" className={className}>
+    <Card title="Where the delays come from" heading="h2" className={className}>
       <div className="space-y-3 px-5 py-4">
         {error ? (
           <ApiErrorNote error={error} className="py-2" />

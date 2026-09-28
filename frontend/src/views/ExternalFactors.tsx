@@ -18,7 +18,7 @@ import { useExternalSummary } from '@/lib/queries'
 import { outlookOf, plainText } from '@/lib/outlook'
 import { formatDate, formatINR, formatINRShort, formatProb, orDash, cn } from '@/lib/formatters'
 import { EXTERNAL_FACTORS as FACTORS, EVENT_CATEGORY, FLAG_ICON } from '@/lib/riskPalette'
-import { details, formatQuarter, fromPrior, verdict } from '@/lib/external'
+import { delaysTakeaway, details, formatQuarter, fromPrior, verdict } from '@/lib/external'
 import type {
   CompositeDistribution, ExternalFactorKey, ExternalProject, ExternalSummary, HiddenDelayPrior, PortalOpen, ProposalCase,
   ProposalStatus,
@@ -97,6 +97,7 @@ export function ExternalFactors() {
         </div>
       ) : (
         <>
+          {delaysTakeaway(data) && <p className="max-w-4xl text-lg leading-relaxed text-fg-base">{delaysTakeaway(data)}</p>}
           <FactorBoard s={data} />
           <EarlyNoticePanel s={data} />
           <PortalPanel s={data} />

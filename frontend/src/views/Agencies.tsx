@@ -24,7 +24,7 @@ import { useAgencyMatrix, useAgencyProjects } from '@/lib/queries'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { outlookOf } from '@/lib/outlook'
-import { COST_PHRASE, SCHEDULE_PHRASE, peerClause } from '@/lib/agencyWords'
+import { COST_PHRASE, SCHEDULE_PHRASE, agencyTakeaway, peerClause } from '@/lib/agencyWords'
 import { RankedAgencies } from './agencies/RankedAgencies'
 import { AgencyDotPlot } from './agencies/AgencyDotPlot'
 import {
@@ -420,6 +420,10 @@ export function Agencies() {
           )
         }
       />
+
+      {data && agencyTakeaway(data.points) && (
+        <p className="max-w-4xl text-lg leading-relaxed text-fg-base">{agencyTakeaway(data.points)}</p>
+      )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
         <Card

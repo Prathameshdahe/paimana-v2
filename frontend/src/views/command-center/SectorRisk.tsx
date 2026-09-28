@@ -41,7 +41,7 @@ export function SectorRisk({ filters, selected, onPick, ignored, className }: {
   const takeaway = sectorTakeaway(rows)
 
   return (
-    <Card title="Where the risk sits" className={className}>
+    <Card title="Where the risk sits" heading="h2" className={className}>
       <div className="space-y-3 px-5 py-4">
         {error ? (
           <ApiErrorNote error={error} className="py-2" />

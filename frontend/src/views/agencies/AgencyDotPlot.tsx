@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { SCHEDULE_PHRASE, COST_PHRASE } from '@/lib/agencyWords'
+import { SCHEDULE_PHRASE, COST_PHRASE, agenciesBySector, agencyTakeaway } from '@/lib/agencyWords'
 import { hashKey } from '@/views/command-center/riskMapLayout'
 import { cn, formatINRShort } from '@/lib/formatters'
 import type { AgencyPoint, ScheduleWord } from '@/contracts/intel'
@@ -15,14 +15,6 @@ const LABEL_W = 132
 const MAX_ROWS = 8
 
 interface Placed { a: AgencyPoint; x: number; y: number; r: number }
-
-/** "5 of 9 agencies in Roads usually finish later than planned" for the sector with the most agencies in words */
-function takeaway(bySector: Array<[string, AgencyPoint[]]>): string | null {
-  const [sector, rows] = bySector[0] ?? []
-  if (!sector || !rows?.length) return null
-  const later = rows.filter((a) => a.scheduleWord === 'usually later').length
-  return `${later} of the ${rows.length} agencies in ${sector} usually ${later === 1 ? 'finishes' : 'finish'} later than planned.`
-}
 
 /**
  * Agencies as dots, one row per sector and three columns by their past schedule word (earlier, about on time,
@@ -40,11 +32,8 @@ export function AgencyDotPlot({ points, selected, onPick }: {
   const colW = (width - LABEL_W) / COLUMNS.length
 
   const { bySector, placed } = useMemo(() => {
-    const worded = points.filter((a) => a.sector && COLUMNS.some((c) => c.word === a.scheduleWord))
-    const groups = new Map<string, AgencyPoint[]>()
-    for (const a of worded) groups.set(a.sector as string, [...(groups.get(a.sector as string) ?? []), a])
-    const bySector = [...groups.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, MAX_ROWS)
-    const maxCap = Math.max(1, ...worded.map((a) => a.capitalCr))
+    const bySector = agenciesBySector(points, MAX_ROWS)
+    const maxCap = Math.max(1, ...bySector.flatMap(([, rows]) => rows.map((a) => a.capitalCr)))
     const placed: Placed[] = []
     bySector.forEach(([, rows], ri) => {
       for (const a of rows) {
@@ -71,11 +60,11 @@ export function AgencyDotPlot({ points, selected, onPick }: {
     )
   }
   const height = bySector.length * ROW_H + 28
-  const line = takeaway(bySector)
+  // the page says the takeaway above the card (views/Agencies); the picture keeps it as its name
+  const line = agencyTakeaway(points)
 
   return (
     <div className="space-y-3 px-5 py-4">
-      {line && <p className="text-base text-fg-base">{line}</p>}
       <div className="relative overflow-x-auto">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[480px]" role="img" aria-label={line ?? 'Agencies by how their projects usually finish'}
           onMouseLeave={() => setHover(null)}>
@@ -96,7 +85,8 @@ export function AgencyDotPlot({ points, selected, onPick }: {
               className={cn('cursor-pointer fill-fg-dimmed/60',
                 p.a.isSelf ? 'stroke-accent' : selected === p.a.agency ? 'stroke-fg-base' : 'stroke-surface-panel')}
               strokeWidth={p.a.isSelf || selected === p.a.agency ? 2.5 : 1}
-              onMouseEnter={() => setHover(p)} onClick={() => onPick(p.a.agency)} />
+              onMouseEnter={() => setHover(p)} onMouseLeave={() => setHover((h) => (h === p ? null : h))}
+              onClick={() => onPick(p.a.agency)} />
           ))}
         </svg>
         {hover && (

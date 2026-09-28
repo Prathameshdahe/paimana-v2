@@ -8,6 +8,28 @@
 import { fractionWord } from './headline'
 import type { AgencyPoint, CostWord, ScheduleWord } from '@/contracts/intel'
 
+/** the three schedule words the dot plot places, left to right */
+export const PLACED_WORDS: ScheduleWord[] = ['usually earlier', 'about on time', 'usually later']
+
+/** agencies with a placed word, by sector, the sector with the most first (at most `max` sectors) */
+export function agenciesBySector(points: AgencyPoint[], max = 8): Array<[string, AgencyPoint[]]> {
+  const groups = new Map<string, AgencyPoint[]>()
+  for (const a of points) {
+    if (!a.sector || !a.scheduleWord || !PLACED_WORDS.includes(a.scheduleWord)) continue
+    groups.set(a.sector, [...(groups.get(a.sector) ?? []), a])
+  }
+  return [...groups.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, max)
+}
+
+/** "5 of the 9 agencies in Roads usually finish later than planned." for the sector with the most agencies in words */
+export function agencyTakeaway(points: AgencyPoint[]): string | null {
+  const [sector, rows] = agenciesBySector(points, 1)[0] ?? []
+  if (!sector || !rows?.length) return null
+  const later = rows.filter((a) => a.scheduleWord === 'usually later').length
+  const verb = later === 1 ? 'finishes' : 'finish'
+  return `${later} of the ${rows.length} agencies in ${sector} usually ${verb} later than planned.`
+}
+
 /** page order: the ones to ask about first */
 export const SCHEDULE_ORDER: ScheduleWord[] = ['usually later', 'about on time', 'usually earlier', 'too few projects']
 
