@@ -114,7 +114,11 @@ def down_recently(s: float = DOWN_S) -> bool:
 # ------------------------------------------------------------------ HTTP
 
 def _http(read_timeout: float = TIMEOUT) -> httpx.Client:
-    return httpx.Client(base_url=LLM_BASE_URL, transport=_transport,
+    transport = _transport
+    if transport is None and httpx.URL(LLM_BASE_URL).host == "localhost":
+        # Windows tries ::1 first and LM Studio listens on IPv4 only: about 2 s lost per request otherwise
+        transport = httpx.HTTPTransport(local_address="0.0.0.0")
+    return httpx.Client(base_url=LLM_BASE_URL, transport=transport,
                         headers={"Authorization": "Bearer not-needed"},
                         timeout=httpx.Timeout(read_timeout, connect=CONNECT_TIMEOUT))
 
