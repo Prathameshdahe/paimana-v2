@@ -7,7 +7,8 @@ as their role, against the real served data and, for the LLM part, the real LM S
   python -m llm.eval --only pub-01,min-03 --json out.json
 
 A question: {id, role, ministry?, agency?, question, messages? (earlier turns), project_key?, tools: the tools it
-should use, checks: [...], llm?}. Its expectations are read from the API at run time as the same viewer (an
+should use (all rounds), route?: the router's own tools when they differ (a question the planner takes over),
+checks: [...], llm?}. Its expectations are read from the API at run time as the same viewer (an
 in-process TestClient, no lifespan), so they follow the data:
   count          {path, params, field}: the number at field (dotted, camelCase) of GET path; passes when the answer
                  states it or a card carries it (a list's total, a stats row); a zero also as 'no' / 'none'
@@ -148,7 +149,8 @@ def run_one(api: TestClient, q: dict) -> dict:
     expected = set(q["tools"])
     accepted = done["llm"] == "ok" and not done["reasons"]  # the model's own text passed the check
     return {"id": q["id"], "role": q["role"], "question": q["question"], "routed": sorted(routed), "ran": ran,
-            "routing_ok": routed == expected, "tools_ok": expected <= set(ran), "checks": checks,
+            "routing_ok": routed == set(q.get("route", q["tools"])), "tools_ok": expected <= set(ran),
+            "checks": checks,
             "checks_ok": all(c["ok"] for c in checks), "llm": done["llm"],
             "accepted": accepted, "template": not accepted,
             "retries": sum(e["event"] == "retry" for e in events), "reasons": done["reasons"][:4],

@@ -30,4 +30,4 @@ def test_the_router_picks_the_expected_tools():
         messages = list(q.get("messages") or []) + [{"role": "user", "content": q["question"]}]
         r = router.route(v, messages, q.get("project_key"))
         routed = {c["tool"] for c in r.calls} | ({r.detail} if r.detail else set())
-        assert routed == set(q["tools"]), (q["id"], r.calls, r.detail)
+        assert routed == set(q.get("route", q["tools"])), (q["id"], r.calls, r.detail)

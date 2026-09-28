@@ -236,6 +236,13 @@ def test_citations_and_public_internals_are_checked():
     assert agent.check("SHAP says High [1].", blocks, src, "why?", False)[0]
     assert not agent.check("It is High [1] and cites 4321.", blocks, src, "why?", True)[0]  # [1] is no number
     assert agent.check("The top 5 are High [1].", blocks, src, "the top 5?", True)[0]  # the question's own numbers
+    # plain number words are read as the numbers they are; the reason names the word the writer used
+    quarters = [{**blocks[0], "horizon_quarters": [2, 4]}]
+    assert agent.check("A slip within two quarters has a sixty-nine percent chance [1].", quarters, src, "?", True)[0]
+    assert agent.check("One of them is High [1].", quarters, src, "?", True)[0]
+    assert agent.check("Three quarters on [1].", quarters, src, "?", True) == (
+        False, ["'Three' is not in the payload"])
+    assert not agent.check("The cost is double [1].", quarters, src, "?", True)[0]  # other number words stay words
 
 
 def test_facts_are_renumbered_deduplicated_and_fitted():
