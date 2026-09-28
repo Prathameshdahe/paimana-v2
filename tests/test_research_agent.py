@@ -202,9 +202,26 @@ def test_malformed_and_invalid_replies(agent_db, monkeypatch):
     fake = FakeJudge(reply=bad)
     monkeypatch.setattr(research, "_judge_llm", fake)
     out = research.run([KEY], refresh=False)
-    assert (out["judged"], out["rejected"], out.get("facts", 0)) == (3, 2, 0) and len(fake.calls) == 1
+    assert (out["judged"], out["rejected"], out.get("facts", 0)) == (3, 2, 0)
+    # the two invalid entries are asked again, alone with what was wrong, and stay rejected when still invalid
+    assert len(fake.calls) == 2 and len(ITEM.findall(fake.calls[1]["user"])) == 2
+    assert "broke the reply format" in fake.calls[1]["user"] and "relevant without" in fake.calls[1]["user"]
     got = {json.loads(r["verdict_json"])["i"]: r["relevant"] for r in rows("SELECT * FROM signal_judgements")}
     assert got == {1: None, 2: None, 3: 0}     # the invalid verdicts are rejected, item 9 does not exist
+    # an invalid entry fixed on the retry is kept
+    first = json.dumps({"items": [{"i": 1, "relevant": True, "category": "progress", "direction": "positive",
+                                   "severity": 1, "summary": "word " * 30}]})
+    fixed = json.dumps({"items": [{"i": 1, "relevant": True, "category": "progress", "direction": "positive",
+                                   "severity": 1, "summary": "Pipalkoti tunnel work resumes after 2 weeks."}]})
+    replies = iter([first, fixed])
+    tunnel = rows("SELECT id FROM signals WHERE url = 'https://n/tunnel'")[0]["id"]
+    with closing(db.connect()) as con, con:
+        con.execute("DELETE FROM signal_judgements WHERE signal_id = ?", [tunnel])
+    monkeypatch.setattr(research, "candidates", lambda key, idx, real=research.candidates: [
+        s for s in real(key, idx) if s["id"] == tunnel])
+    monkeypatch.setattr(research, "_judge_llm", lambda messages, max_tokens: next(replies))
+    out = research.run([KEY], refresh=False)
+    assert (out["judged"], out["relevant"], out.get("rejected", 0)) == (1, 1, 0)
 
 
 def test_refresh_uses_the_scout_first(agent_db, monkeypatch):

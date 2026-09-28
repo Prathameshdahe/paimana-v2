@@ -11,7 +11,7 @@ recently researched first, per the `researched` table):
      shown as the fact's citation;
   3. the LLM judges them in batches of up to BATCH from the headline and the feed summary alone (the article is
      never fetched): per item {i, relevant, category, direction, severity, event_month, summary}, the reply's JSON
-     checked item by item with a pydantic model. The items go into the prompt between markers as quotes, never as
+     checked item by item with a pydantic model (an invalid entry gets the one retry below too). The items go into the prompt between markers as quotes, never as
      instructions (a '<<<' or '>>>' in the feed text is blanked, so an item cannot close the quote), and the model
      output decides nothing but the verdict on the item it was shown. A summary is kept only when every number and
      date in it is in the item's headline, feed summary or publish date (backend/brief.validate), it names no
@@ -77,6 +77,7 @@ HEADLINE_CHARS, SUMMARY_CHARS = 220, 300
 RISKY_TIERS = ("Critical", "High", "Watch")
 PRIVATE_HEADLINE = "the headline names a private person"
 UNGROUNDED = "the summary does not describe its item"
+INVALID = "invalid verdict: "
 SYSTEM = (
     "You check news items for one Indian government infrastructure project. An item is relevant only when it is "
     "about this project itself: its works, site, contractor, land, clearances, funds, deadlines or progress. News "
@@ -313,7 +314,7 @@ def parse(raw: str, items: list[dict], places: set[str]) -> dict[int, tuple[Verd
         try:
             v = Verdict.model_validate(e)
         except ValidationError as err:
-            out[n] = (None, [f"invalid verdict: {err.errors()[0]['msg']}"], e)
+            out[n] = (None, [f"{INVALID}{err.errors()[0]['msg']}"], e)
             continue
         out[n] = (v, check(v, items[n - 1], items, places) if v.relevant else [], e)
     return out
@@ -321,7 +322,8 @@ def parse(raw: str, items: list[dict], places: set[str]) -> dict[int, tuple[Verd
 
 def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict | None, list[str], dict]]:
     """{signal id: (verdict or None, reasons, raw entry)} for the items the LLM answered; a relevant verdict that
-    fails check() is asked again once with the offending numbers named, then kept rejected."""
+    fails check(), or an entry that is not a valid verdict (a summary over MAX_SUMMARY_WORDS, a category outside the
+    list, a relevant entry without its fields), is asked again once with what was wrong named, then kept rejected."""
     def call(its, bad=None):
         t0 = time.monotonic()
         try:
@@ -335,11 +337,13 @@ def judge(p: dict, items: list[dict], stats: Counter) -> dict[int, tuple[Verdict
             stats["llm_ms"] += int(1000 * (time.monotonic() - t0))
 
     out = {items[n - 1]["id"]: r for n, r in call(items).items()}
-    again = [s for s in items if out.get(s["id"], (None, []))[0] is not None and out[s["id"]][1]]
+    again = [s for s in items if out.get(s["id"], (None, []))[1]]
     if again:
         reasons = [x for s in again for x in out[s["id"]][1]]
-        numbers = sorted({x.split("'")[1] for x in reasons if x.count("'") >= 2})
-        bad = ([f"numbers or dates not in their item: {', '.join(numbers)}"] if numbers else []) + (
+        invalid = sorted({x.removeprefix(INVALID) for x in reasons if x.startswith(INVALID)})
+        numbers = sorted({x.split("'")[1] for x in reasons if x.count("'") >= 2 and not x.startswith(INVALID)})
+        bad = ([f"entries broke the reply format ({'; '.join(invalid)})"] if invalid else []) + (
+            [f"numbers or dates not in their item: {', '.join(numbers)}"] if numbers else []) + (
             ["a summary named a private person"] if "names a private person" in reasons else []) + (
             ["a summary described another item"] if "the summary describes another item" in reasons else []) + (
             ["a summary said what its item does not"] if UNGROUNDED in reasons else [])
