@@ -432,14 +432,15 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
         ))}
       </div>
 
-      {lf && lf.slip_rate_with !== null && lf.slip_rate_without !== null && (
+      {/* the slip rates are hidden numbers like the lift they are the ratio of (unit G nulls both without numbers) */}
+      {numbers && lf && lf.slip_rate_with !== null && lf.slip_rate_without !== null && (
         <div className="border-t border-border-subtle px-5 py-4">
           <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg-base">
             Did an open land or forest remark come before a slip?
             <InfoTip label="About this backtest">
               Past reports with no slip yet: the share whose completion was pushed three months or more within four
-              quarters.{numbers && ` Within the same sector and year the lift is ${times(lf.lift_within_sector_year)}.`} It
-              does not hold in every sector, so an early notice is a reason to ask the agency, not a forecast.
+              quarters. Within the same sector and year the lift is {times(lf.lift_within_sector_year)}. It does not
+              hold in every sector, so an early notice is a reason to ask the agency, not a forecast.
             </InfoTip>
           </div>
           {[
@@ -452,7 +453,7 @@ function CoveragePanel({ s }: { s: ExternalSummary }) {
               <span className="text-right tabular-nums text-fg-base">{pct(r.v)}</span>
             </div>
           ))}
-          {numbers && <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>}
+          <div className="mt-1.5 text-xs text-fg-dimmed">lift {times(lf.lift)}</div>
         </div>
       )}
     </Card>
@@ -827,7 +828,9 @@ function AboutData({ s }: { s: ExternalSummary }) {
       : []),
   ]
   if (lf && !numbers) {
-    caveats.push('On history, past reports with an open land or forest remark were followed by a pushed completion date more often than those without, but not in every sector, so an early notice is a reason to ask the agency, not a forecast.')
+    // no direction claimed: the rates behind it are hidden, and on today's data the remark came before a pushed
+    // date more often in some sectors and less often in others (portfolio-wide less often)
+    caveats.push('On history, an open land or forest remark on a report with no slip yet was not a reliable sign of a pushed completion date on its own: it came before one more often in some sectors and less often in others, so an early notice is a reason to ask the agency, not a forecast.')
   }
   if (lf && numbers) {
     caveats.push(
