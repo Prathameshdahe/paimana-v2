@@ -1,11 +1,14 @@
 """Plain labels for what the model and the checklist call things: gold feature names (the SHAP drivers), the 13 risk
-dimensions of ml/risk_profile.py and the six external factors, in the words an officer reads.
+dimensions of ml/risk_profile.py, the six external factors and the checklist rows' sources, in the words an officer
+reads.
 
 FEATURE_LABELS mirrors frontend/src/lib/featureLabels.ts and feature_label() its featureLabel(): the same map and the
 same fallback for ext_open_<category> / ext_ever_<category> and for any other name (underscores to spaces, first
 letter up). DIMENSION_LABELS and FACTOR_LABELS mirror RISK_DIMENSION and EXTERNAL_FACTORS in
-frontend/src/lib/riskPalette.ts. The maps are kept by hand on both sides; tests/test_labels.py checks the keys match.
-The chat (llm/tools.py) uses them so a driver or a flagged check reads the same in an answer as on the page.
+frontend/src/lib/riskPalette.ts; SOURCE_LABELS mirrors SOURCE_LABEL in views/project-studio/RiskChecklist.tsx (every
+`source` ml/risk_profile.py writes: the frontend map must hold the same keys and words, so a row never shows its raw
+token). The maps are kept by hand on both sides; tests/test_labels.py checks the keys match. The chat (llm/tools.py)
+uses them so a driver or a flagged check reads the same in an answer as on the page.
 """
 import re
 
@@ -90,6 +93,20 @@ FACTOR_LABELS = {
     "inter_agency": "Inter-agency",
 }
 
+# the `source` of a risk-profile row (ml/risk_profile.py: what flagged or cleared it), as the checklist names it
+SOURCE_LABELS = {
+    "model": "model",
+    "silver": "reports",
+    "report": "report remarks",
+    "sector_context": "sector output data",
+    "agency_stats": "agency history",
+    "bhoomi_rashi": "Bhoomi Rashi land records",
+    "parivesh_rules": "Parivesh FC rules",
+    "parivesh_portal": "PARIVESH portal",
+    "external_composite": "land + forest composite",
+    "news_research": "web research",
+}
+
 
 def feature_label(feature: str) -> str:
     """The plain label of a gold feature name (featureLabel() in featureLabels.ts)."""
@@ -105,6 +122,13 @@ def feature_label(feature: str) -> str:
 def dimension_label(dimension: str) -> str:
     """The checklist label of a risk dimension; an unknown one in words."""
     return DIMENSION_LABELS.get(dimension) or dimension.replace("_", " ").capitalize()
+
+
+def source_label(source: str | None) -> str:
+    """The checklist's words for a risk-profile row's source; an unknown one in words, None 'source unknown'."""
+    if not source:
+        return "source unknown"
+    return SOURCE_LABELS.get(source) or source.replace("_", " ")
 
 
 def direction(contribution: float | None) -> str:
