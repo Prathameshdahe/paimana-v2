@@ -20,7 +20,7 @@ Code: `llm/second_opinion.py` (evidence pack, prompt, checks, cache), `backend/l
 | `gaps` | Up to 3 short notes on what the evidence does not show. |
 | `vsModel` | `agrees`, `higher` or `lower`: the concern against the tier's level. Critical and High count as `concern`, Medium and the Watch tier as `watch`, Low as `none` (`modelLevel`). Computed, not asked of the LLM. |
 | `cited` | The ids the narrative cites. |
-| `evidence` | Every item of the pack, with its id, kind, date, direction, severity, stale flag, source and text. The UI lists the cited ones. |
+| `evidence` | Every item of the pack, with its id, kind, date, direction, severity, stale flag, source and text. The LLM read the items whose direction is not `context` (all of them when the pack is nothing but context). The UI lists the cited ones. |
 | `tier`, `modelVersion`, `asof` | The rating it was set against. |
 | `evidenceHash`, `model`, `promptVersion`, `generatedAt`, `cached` | Which evidence, LLM and prompt produced it, when, and whether it came from the store. |
 | `attempts`, `nNumbersChecked`, `llmMs` | 1 or 2 asks, how many numbers and dates were checked, LLM time. |
@@ -41,8 +41,10 @@ Code: `llm/second_opinion.py` (evidence pack, prompt, checks, cache), `backend/l
 
 `pack(key)` builds items `E1..En`, sorted into five groups:
 
-1. **Current hold-ups**: negative, recent, severity 2 or 3.
-2. **Minor current issues**: negative, severity 1.
+1. **Current hold-ups**: negative, recent, severity 2 or 3. Only observed items: a report or checklist finding, an
+   overdue PARIVESH proposal, a web research fact, a headline the research agent judged about the project.
+2. **Minor current issues**: negative, severity 1, including the risk ratings (a land complexity rating, the forest
+   rulebook's estimate) and headlines nobody has judged.
 3. **Progress and neutral items** (recent).
 4. **Old items**: dated over a year before the reports, or marked resolved; not known to be solved either.
 5. **Context**: the latest report (status line), the model's rating and the web research summary. Never grounds for a
@@ -52,12 +54,12 @@ Code: `llm/second_opinion.py` (evidence pack, prompt, checks, cache), `backend/l
 |---|---|---|
 | `status` | The latest CUF row | Progress, cost against the original, spend, completion against the schedule, slip so far, share of the planned time elapsed. Context. |
 | `model` | Scores | Tier and probabilities (ranking scores, not frequencies). Context. |
-| `check` | Flagged checklist rows (`ml/risk_profile.py`) | Leaves out the model's own two rows, the composite, rows another item already states (PARIVESH, land register, web research), and sector headwind and agency optimism (the sector's and the agency's record, not the project's). At most 6. |
+| `check` | Flagged checklist rows (`ml/risk_profile.py`) | Leaves out the model's own two rows, the composite, rows another item already states (PARIVESH, land register, web research), and sector headwind and agency optimism (the sector's and the agency's record, not the project's). At most 6. The forest rulebook's estimate ("high clearance complexity expected", source `parivesh_rules`) is severity 1, and is left out when PARIVESH lists the project's proposals. |
 | `parivesh` | PARIVESH proposals at asof | Stage, months in it, the rule limit, overdue. |
-| `land` | Bhoomi Rashi rating | Flagged, possible or clear. An unknown rating is left out. |
+| `land` | Bhoomi Rashi rating | Flagged, possible or clear. An unknown rating is left out. Flagged means acquisition complexity 4 or more of 5 over the notifications: a rating, not a reported hold-up, so severity 1. |
 | `event` | Open report-remark events | At most 4. Remarks are free text only up to 2023, so an event not mentioned in the last 4 quarters is old. |
 | `research` | Web research (sweep and research agent) | The latest status line (context), then at most 6 facts, live blockers first. A negative fact that is not live is old, and so is progress older than 4 quarters. |
-| `news` | Scout headlines of severity 2 or more | At most 3. Keyword-classified and unverified. Leaves out items the research agent judged not about the project, items already turned into a fact, and headlines that name a private person. |
+| `news` | Scout headlines of severity 2 or more | At most 3. Keyword-classified and unverified. Leaves out items the research agent judged not about the project, items already turned into a fact, and headlines that name a private person. Severity 1 unless the research agent judged the item about the project: the scout's severity is a negative word in a headline. |
 
 All outside text is cut to one clean line at a word boundary (at most 240 characters), `|` and the prompt's quote
 markers are blanked out of it, and it goes into the prompt between `<<<EVIDENCE` and `EVIDENCE>>>` as quoted data,
@@ -77,8 +79,9 @@ in the pack depends on the clock.
   nothing but context is shown the context with ids, so its narrative can cite something.
 - The user message names the levels the evidence allows (see the checks) and, when there are current hold-ups, their
   ids: "Current hold-ups: E1, E2. The concern is 'concern' unless the items say every one of them has been solved or
-  is being solved." With the rule alone, the LLM answered `watch` on High and Critical projects whose hold-ups no item
-  said were being solved, reading progress elsewhere as an offset.
+  is being solved; a 'watch' cites each of them and the item that says so." With the rule alone, the LLM answered
+  `watch` on High and Critical projects whose hold-ups no item said were being solved, reading progress elsewhere as
+  an offset.
 - The rules: the narrative first, then the concern decided from it; each claim says only what its cited items say (no
   joining items, no forecast dates); no description of the overall progress, cost or rating (the officer sees them);
   only numbers and dates written in the items, in digits; no advice; no names of people, officials by office.
@@ -90,28 +93,35 @@ A reply is rejected unless all of these hold:
 
 - **Citations:** every cited id (narrative, headline, key evidence, gaps) is one the prompt showed, the narrative
   cites at least one, and it cites only as `[E4]` or `[E4, E7]` (not `[status]` or `[none]`; a bracket that is part of
-  the project's name is allowed).
-- **Numbers and dates:** every number and date in the headline, narrative and gaps is in the pack
-  (`backend.brief.validate` against the project name and the items, citations taken out first). A number in words
-  ("three") is rejected unless an item uses the same word.
-- **Numbers where they are cited:** each number and date in a narrative claim (the text before a citation, from the
-  start of its sentence) must be in the items that claim cites. "The stretch is 83% done [E7]" is rejected when only E2
-  says 83%.
+  the project's name is allowed). An id outside a citation ("E42 says", "(E7)") is rejected unless the project name or
+  a shown item writes it.
+- **Numbers and dates:** every number and date in the headline, narrative and gaps is in the items the prompt showed
+  (`backend.brief.validate` against the project name and those items, citations taken out first). A figure from the
+  context the LLM never saw is rejected: the status line's progress or months late, or a model probability, as is or
+  as a percent (0.91 as "91%"). A number in words ("three") is rejected unless an item uses the same word.
+- **Numbers where they are cited:** each number and date in a narrative claim must be in the items that claim cites.
+  The claim is the text before a citation, from the start of its sentence, plus the rest of the sentence after its
+  last citation. "The stretch is 83% done [E7]" is rejected when only E2 says 83%, and so is "overdue [E7], with 83%
+  done".
 - **Privacy:** no honorific plus a person's name (`pipeline.research.private_names`).
 - **Concern fits the evidence** (`allowed()`):
   - a current hold-up allows `watch` or `concern`, never `none`;
   - only minor or old issues allow `none` or `watch`;
   - nothing negative allows only `none`;
   - `concern` must cite a current negative item of severity 2 or 3;
-  - `watch` must cite a negative item.
+  - `watch` must cite a negative item and, when there are current hold-ups, each of them (it says each is being
+    solved; a `watch` citing a minor item and some progress, without a word on the hold-ups, is rejected).
 - **Lengths:** headline, narrative and each gap within their limits. More than 3 gaps are cut to 3, and an empty key
   evidence list is filled with the narrative's citations. Neither adds content.
 
 A rejected reply is asked again once: the same prompt with the reasons appended, at temperature 0.3. (Given the
-rejected reply as the assistant's turn, at 0.1, the model sent it back unchanged.) A second rejection is stored as
-rejected and returned with its reasons; the nightly job does not ask again until the evidence or the prompt version
-changes. A rejection never replaces an accepted opinion. A stored opinion is checked again when it is read, so an
-opinion that a tightened check would reject is asked again.
+rejected reply as the assistant's turn, at 0.1, the model sent it back unchanged.) A person asking holds the LLM
+through the retry; the nightly job lets it go between the two asks, so a chat answer waiting for the LLM goes first.
+A second rejection is stored as rejected and returned with its reasons. A rejection never replaces an accepted
+opinion: when a newer prompt's reply is rejected for evidence that already has an accepted opinion, the rejection is
+noted on that row (`last_rejected`: prompt version, time, reasons). Either way the nightly job does not ask again
+until the evidence or the prompt version changes. A stored opinion is checked again when it is read, and by the
+nightly job, so an opinion that a tightened check would reject is asked again.
 
 What the checks cannot catch: a claim that misreads its cited item without a wrong number ("the utility hold-up
 remains unresolved" when the item says work on it is in progress; "overdue by 75.7 months" when the item says 75.7
@@ -147,8 +157,9 @@ project or the next batch. It returns `JobStarted {started, detail, pending}`; `
 recently asked first, then by tier and risk:
 
 - it skips a project with nothing but context (no evidence about the project itself);
-- it skips a project that already has an opinion (accepted or rejected) under the current prompt version for its
-  current evidence and LLM;
+- it skips a project already asked under the current prompt version for its current evidence and LLM: an accepted
+  opinion that still passes the checks, a rejection, or a rejection noted on an older prompt's accepted opinion;
+- a project it asked moves to the back of the rotation, whether the reply was accepted or rejected;
 - it waits while a chat request uses the LLM (at most 10 minutes) and stops early when LM Studio is down;
 - it records `job_runs` with counts per status and concern level; `LiveStatus.secondOpinion` shows the last run.
 
@@ -212,16 +223,51 @@ How the prompt got there (the same five projects each time):
 | v4 | Told not to restate the context | Still restated in 3 of 5; "on track for March 2027" against an item saying at risk |
 | v5 | Context shown without ids | Restated and cited as `[status, model]` |
 | v6 | Context left out when there is other evidence; `[status]`-style citations rejected; numbers checked against the items each claim cites | 5 of 5 accepted first time, no restatement; the extra project accepted on the retry |
+| v7 (after review) | The hold-ups line adds "a 'watch' cites each of them and the item that says so"; with it, the pack and check fixes below | 8 of 8 accepted (below), 7 first time |
 
 The per-claim number check, replayed on the earlier replies, catches one that the pack-wide check let through: "the
 stretch is 83% done [E7]" (83% is in E2; E7, the status line, said 89.97%).
+
+### Review fixes and the v7 run
+
+A review of v6 found checks that let wrong replies through and items graded too high:
+
+- numbers were checked against the whole pack, so a figure from the status line or the model, which the LLM never
+  saw, passed ("97.94% built, 122 months late", "91%" for p = 0.91);
+- the text after a sentence's last citation, and ids outside brackets ("E42 (E77) says"), were not checked;
+- a `watch` citing only a minor item and progress passed on a project with three current hold-ups;
+- a land complexity rating, the forest rulebook's estimate and an unjudged headline counted as current hold-ups: the
+  land rating was the only one on 29 Critical, High or Watch projects and a headline on 11, and on a Low project the
+  rulebook row stood as the hold-up while PARIVESH showed the proposal with final approval;
+- after a prompt change, a rejected reply left the project due, so the nightly job asked it first every night.
+
+All six v6 opinions pass the new checks against the packs they were made from. Re-run under v7 (28 September 2026,
+the job's path `generate(fresh=True)`), with two projects whose only hold-up the fixes reclassified:
+
+| Project | Tier | Hold-ups | Concern | vs model | Attempts | Time |
+|---|---|---|---|---|---|---|
+| PRJ-002112 | High | E1 to E3 | concern | agrees | 1 | 29 s |
+| PRJ-000698 | Medium | E1, E2 | concern | higher | 1 | 25 s |
+| PRJ-004326 | Critical | E1, E2 | concern | agrees | 1 | 24 s |
+| PRJ-001354 | Medium | E1 to E3 | concern | higher | 1 | 24 s |
+| PRJ-005236 | Watch | E1 to E3 | concern | higher | 1 | 32 s |
+| PRJ-005544 | Critical | none | watch | lower | 2 | 30 s |
+| PRJ-004601 NH-80 km 132.9 to 190.2 widening (MoRTH) | Critical | none (the land rating is now minor) | watch | lower | 1 | 17 s |
+| PRJ-004880 Ambala-Chandigarh greenfield section (NHAI) | Critical | none (the border closure headline is now minor) | watch | lower | 1 | 18 s |
+
+The six v6 projects kept their levels. The two reclassified projects, whose packs used to rule out `none` and name a
+hold-up the prompt called 'concern' unless solved, got `watch`: the `lower` disagreement that step 3 of the
+evaluation tracks. They also show what the checks still cannot catch: on
+PRJ-004880 the LLM wrote "border closure temporarily affects progress [E3]" from a traffic headline, and on PRJ-005544
+"no current hold-ups reported [E1]" cites the expenditure lag row for an absence.
 
 ## How to evaluate it prospectively
 
 Every stored row (`second_opinions`) keeps the asof, the tier and model version it was set against, the concern, the
 narrative, the cited ids and the full evidence it read. The log is prospective by construction: an opinion is made
 before the outcome report exists, and an old row is never regenerated for an older asof. A row is replaced only for the
-same evidence and LLM under a newer prompt (the nightly job) or after a rejection.
+same evidence and LLM by a newer prompt's accepted opinion (the nightly job), or when the stored one is a rejection or
+fails a tightened check; a newer prompt's rejection is only noted on an accepted row (`last_rejected`).
 
 1. **Label.** Once the report 2 quarters after the asof is in silver, join each accepted row to its outcome, the same
    `y_any` that `/api/models` live accuracy uses (`dataset/gold/labels_h2.parquet`, `period = asof`). Use only rows
@@ -258,8 +304,9 @@ Until steps 2 to 4 have data, present it as what it is: a checked summary of the
   hold-up being worked on), mislabel a minor item as a hold-up, or add an uncited closing remark. The checks bound the
   ids, numbers and level, not the reasoning.
 - **Severity comes from upstream.** Which items are hold-ups (severity 2 or 3, recent) is decided by the checklist,
-  the research sweep and the scout's keyword classifier, not by the LLM. A misclassified news headline can make a
-  hold-up.
+  the research sweep, the research agent and the PARIVESH rule limits, not by the LLM. A headline makes a hold-up only
+  when the research agent judged it about the project; the scout's keyword severity still picks which headlines are
+  shown.
 - **News is headline only.** A news item is a headline classified by keywords. Web research facts are summaries from
   a checked sweep, but coverage favours large, much-reported projects. No news is not no problem.
 - **Remarks end in 2023.** Report remarks stop being free text in 2023, so every open remark event is old today.
