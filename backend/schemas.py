@@ -1204,6 +1204,32 @@ class StrictBody(CamelModel):
     model_config = ConfigDict(alias_generator=_to_camel, populate_by_name=True, extra="forbid")
 
 
+DemoRole = Literal["agency", "ministry", "ipmd", "admin"]
+
+
+class DemoLogin(StrictBody):
+    """POST /api/auth/demo: the role whose demo account to sign in as (DEMO_LOGIN=1 only); a ministry or an agency
+    official may name the ministry or agency (as /api/scopes spells it; default: the one with the most projects)."""
+    role: DemoRole
+    ministry: str | None = Field(None, max_length=SCOPE_MAX)
+    agency: str | None = Field(None, max_length=SCOPE_MAX)
+
+
+class DemoOption(CamelModel):
+    """One role the demo sign-in offers: its key, its name in words and its default scope (the ministry or agency
+    with the most current projects; any other from /api/scopes can be asked for)."""
+    role: DemoRole
+    label: str
+    scope: str | None
+
+
+class DemoInfo(CamelModel):
+    """GET /api/auth/demo: whether the one-click demo sign-in is on (DEMO_LOGIN, a prototype setting) and the roles
+    it offers (the four official views; never the developer)."""
+    enabled: bool
+    roles: list[DemoOption]
+
+
 class LoginRequest(StrictBody):
     email: str = Field(max_length=EMAIL_MAX)
     password: str = Field(max_length=PASSWORD_MAX)

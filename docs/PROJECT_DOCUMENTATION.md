@@ -1,661 +1,788 @@
-# PAIMANA Radar — Master Project Document
+# PAIMANA Radar: the master document
 
-**Smart India Hackathon 2026 · Problem Statement 26103 · MoSPI / IPMD**
+Smart India Hackathon 2026, problem statement 26103, Ministry of Statistics and Programme Implementation (MoSPI), Infrastructure and Project Monitoring Division (IPMD).
 
-Single source of truth. Supersedes the separate presentation-script and
-tech-stack-context files — everything from both is folded in here.
+Branch `v2-early-warning` at commit `8530bde`, written 2026-09-28. This file replaces the 2026-09-22 plan-era document of the same name. Everything in it was read from the code, the data files and the other documents in `docs/`; where an older document and the code disagree, the code is stated here and the older claim is listed in section 10.4. No screenshots: every page, section, card, chart, table, filter and button is described by its label as it appears in the code.
 
-Last updated: 2026-09-22.
+Contents
 
----
-
-## 0. Where we actually stand, in one paragraph
-
-The data pipeline and the frontend dashboard are real and working: 300 real
-MoSPI projects, cleaned with a verified before/after fix (sector
-contradiction 70–100% → 0–26%), a live map, risk triage, an early-warning
-inbox, a rule-based chat assistant. What is **not** built yet is the thing
-that actually answers the problem statement: a trained model that predicts
-a **future** slip, not a heuristic score built from numbers the agency
-already reported. That is the next and most important build task —
-everything else on top (workers, RBAC, Scout) is secondary to getting that
-one thing right and honestly evaluated.
+1. What PAIMANA is
+2. The system at a glance
+3. The data
+4. The model and the logic
+5. The backend
+6. The dashboard, page by page
+7. The AI assistant and the other LLM features
+8. Sign-in, roles and security
+9. Running and deploying
+10. Team credit, glossary, the other documents
 
 ---
 
-## 1. The pitch, updated
+## 1. What PAIMANA is
 
-> **"Prediction is our foundation. Our differentiation is what happens
-> after prediction: we find causes the CUF doesn't capture, we honestly
-> benchmark AI against conventional statistics as the problem statement
-> asks, and every AI-drafted action is routed through role-based human
-> approval before it reaches a real official."**
+### 1.1 The problem statement
 
-### The three pillars (in this order — order matters for the pitch)
+MoSPI's IPMD monitors central-sector infrastructure projects of Rs 150 crore and above. It publishes quarterly Project Implementation Status Reports (QPISR) and monthly flash reports in which each implementing agency reports its projects' sanctioned and anticipated cost, cumulative expenditure, original and anticipated completion date and physical progress. By the time a delay or a cost overrun appears in one of those reports the project has usually been in trouble for months. Problem statement 26103 asks for an AI-based early-warning system that predicts schedule and cost slips before they are reported, explains them, and (clause b) benchmarks the machine-learning approach honestly against conventional statistics.
 
-1. **Causes beyond the CUF, plus a CUF-gap finder** (answers PS clause c).
-   Scout extracts source-backed cause tags (land, clearance, litigation,
-   contractor, funds) from text the CUF doesn't structure, and a three-tier
-   ablation measures whether that evidence actually improves prediction —
-   producing a ranked list of fields MoSPI should consider adding to the
-   form, with measured lift, not a guess.
-2. **ML vs conventional statistics, honestly benchmarked** (answers PS
-   clause b). LightGBM is compared against four baselines — trusting the
-   reported date, earned-schedule extrapolation, reference-class
-   forecasting, and logistic/Cox regression — on the same temporal split.
-   If a simple baseline ties LightGBM somewhere, we say so.
-3. **An AI monitoring cell with role-based human approval.** Five workers
-   run the monthly monitoring cycle end to end; RBAC is not a login demo,
-   it is the accountability chain that decides who may approve what the
-   workers drafted.
+### 1.2 The idea in one paragraph
 
-Prediction of the next slip (§3) sits underneath all three as the
-foundation they're built on — necessary, not sufficient, and not the part
-we lead with.
+PAIMANA Radar reads every MoSPI monitoring report published since 2005 (262 PDFs and the portal export, 167,280 typed rows), links the reports of each project into one history under a stable `PRJ-xxxxxx` key, builds point-in-time features on a panel of 73,167 project-quarters, and trains gradient-boosted models (LightGBM) to estimate, for each of the 1,763 projects in the July 2026 flash report, how likely it is that its next reports will push the anticipated completion date by three months or more, or raise the anticipated cost by five per cent or more, within two quarters and within four. Projects are ranked by that estimate into Critical, High, Medium and Low tiers (a Watch tier holds the projects with no completion date). Next to the ranking the dashboard shows why: the model's top drivers in plain words, a 13-row risk checklist with its evidence, the issues named in the report remarks, land-acquisition records from Bhoomi Rashi, forest-clearance proposals from PARIVESH, news and web research with their sources, nearest past projects and what happened to them, and three progress scenarios. A local language model (LM Studio, `qwen/qwen2.5-coder-14b`) writes briefs, second opinions and chat answers, but every number it writes is checked against the record, it never sets a score, and every memo it drafts waits for a human decision in an approval inbox. The rule for the stage and the code alike: the model predicts; the LLM explains.
 
----
+### 1.3 What it predicts and for whom
 
-## 2. The five AI workers
+Targets (section 4.1): `y_date_push` (anticipated completion moved by 3 months or more), `y_cost_rev` (anticipated cost up by 5 per cent or more), `y_any` (either), at horizons of 2 and 4 quarters, plus the months moved and the cost change as regressions served as 5th to 95th percentile bands.
 
-| Worker | Job | Output | Uses an LLM? |
-|---|---|---|---|
-| **Auditor** | Checks every monthly upload: stale repeated figures, progress moving backwards, spend exceeding cost, past-due dates, sector/state mismatches. This is where our existing PDF re-parse and provenance tiers (§5) already live. | Data-confidence score + a query list back to the agency. Staleness itself becomes a model feature. | Only to word the query in plain language |
-| **Forecaster** | Runs the trained models — nothing else | Slip probability (6-month horizon), delay/cost as P50/P80 ranges, ₹ exposure | **Never** — every number here is model output |
-| **Scout** | Reads what the CUF doesn't capture: report remarks, news, clearance/court items, for the top-priority projects only | Structured cause tags (land, clearance, litigation, contractor, funds, utility shifting) with a source link on every tag | Extraction/classification only, into a fixed schema |
-| **Analyst** | Combines the Forecaster's numbers, SHAP, Scout's tags, and similar historical projects; clusters shared causes across projects | Project brief, a bottleneck list ("fixing one clearance unlocks N projects, ₹X Cr"), a ranked review-meeting agenda | Writes from computed facts, invents nothing |
-| **Dispatcher** | Drafts the memo to the nodal officer, tracks the response, re-checks next month, scores past alerts against what actually happened | A draft awaiting human approval, follow-up status, a running model report card | Drafting only — never sends anything itself |
+Readers, by role (section 8): the public (no sign-in; tiers, progress, cost, dates, top risks in plain words, research facts, the assistant), agency officials (their agency's projects), ministry officials (their ministry's projects), IPMD analysts (every project; an analyst with the administrator flag runs the accounts), and the hidden developer account (everything, including the model's raw numbers, the Models page, the worker console, the jobs and the audit log; credentials only in the gitignored `.env.db`).
 
-A dedicated **Worker Console** page (not built yet) should log what each
-worker did this cycle, with evidence attached — this is what makes "five
-AI workers" demonstrable instead of sounding like marketing copy over a
-chatbot. Example of what it should show per worker: model/version used,
-dataset, number of projects processed, number crossing the alert
-threshold, timestamp.
+### 1.4 The honest scorecard
 
-**Boundary that must never blur:** trained models produce every number;
-the LLM explains, classifies, and drafts language from those numbers — it
-never invents a probability, a delay estimate, a cost figure, or a cause
-without a source link, and it never sends anything without a human
-approving it first. This is the answer to "aren't LLMs hallucination-prone"
-— yes, which is why the LLM isn't the numerical engine.
+- The served champion for "any slip within 2 quarters" (`y_any_h2`) reaches a pooled PR-AUC of 0.7015 on the six validation cutoffs (within-cutoff mean 0.6970), 0.7753 on the flash-report block (within-cutoff 0.7794), and 0.7777 on the held-out test cutoff; precision among the 50 highest-ranked projects is 0.827 (validation) and 0.913 (flash); the mean lead time from a project's first top-100 flag to its slip is 2.78 quarters. On the same folds a logistic regression scores 0.489 (validation) and 0.700 (flash); the naive "slipped last period, slips next" floor scores 0.428 and 0.546; the old dashboard rule score 0.444 and 0.446. Every logistic challenger is recorded as rejected against the LightGBM champion in `model/registry.json`.
+- The 4-quarter target (`y_any_h4`) scores 0.8690 pooled validation PR-AUC (base rate 0.607, precision@50 0.937). The date-push target alone scores 0.6287 validation and 0.7712 flash. The cost-revision target is hard (base rate 0.043): 0.1470 validation, 0.1263 flash, 0.2303 test, against a naive 0.044.
+- Ablation on `y_any_h2` (validation): the 13 state features alone 0.675; adding dynamics 0.668; adding context 0.700; adding freshness 0.698; adding the 27 external features 0.7015. The external group adds +0.003, inside noise; for the cost target it subtracts 0.011.
+- Nineteen model upgrades were measured in September 2026 (`docs/MODEL_UPGRADES_2026-09.md`); one shipped (regularised parameters for the cost-revision target, flash +0.0365 [+0.0059, +0.0631]).
+- The chat assistant's evaluation of 28 September 2026: 36 questions, routing 36/36, tools 36/36, checks 36/36 with the writer off; with the model on 15 questions, 14 of 14 written answers accepted at the first check, median time to `done` 23.1 s, p90 35.7 s. The second-opinion tuning run: 8 of 8 projects accepted under prompt v7 (7 at the first attempt).
+
+### 1.5 Limitations, stated plainly
+
+- The probabilities rank projects against each other; they are not calibrated frequencies (only the cost-revision target is Platt-calibrated). "Likely" means "more likely to slip than most", not a promise. Tiers are rank shares of the current portfolio.
+- No logged prediction has a realised outcome yet: the earliest scores are as of 2026-07-01, so the first realised 2-quarter outcomes arrive with the January 2027 report. The Models page says so.
+- The report remarks are free text only up to 2023-Q2; later reports print templates. Every remark-derived flag describes the situation up to 2023 and is shown as stale.
+- Land records cover national-highway stretches only; a road project is rated only on a kilometre-range match (84 per cent precision on a hand-checked sample); 1,351 current projects have no rated land record. The PARIVESH 1.0 list is not a census and ends in mid-2022; PARIVESH 2.0 history exists only from 28 September 2026. Bhoomi Rashi's publish date is the gazette notification, not possession.
+- News is headline-only, linked by place names, and coverage follows fame, not risk; 1,035 current projects have no research fact.
+- The external factors add no measurable predictive lift in the backtest (section 4.9); they are shown as evidence, not used as model inputs beyond the remark and land features already in the feature set.
+- The interval bands miss on the upper side in the flash era (9.9 per cent of flash projects slipped past p95); they are "a modelled 5-95 per cent range", not a validated confidence interval.
+- The agency matrix controls for sector only; a hard portfolio still reads as a slow agency.
+- The checker catches numbers and dates, not wrong words; the 14B model can overstate an item; routing is keyword-based.
+- Operations: no e-mail of any kind, no MFA, per-address limits shared behind a NAT, no WAF; Docker Desktop on Windows is a demonstration host.
+- PAIMANA does not replace the official reports, decide anything about a project, or change any figure an agency reported.
 
 ---
 
-## 3. How the real prediction is supposed to work
+## 2. The system at a glance
 
-This is the part that doesn't exist yet and matters most.
+### 2.1 Architecture
 
-### 3.1 The problem with what we had
+The flow, left to right:
 
-The current composite risk score is a weighted sum of **already-reported**
-cost overrun and delay. If a project's completion date was already revised
-from June 2026 to December 2026, scoring it "high risk" is detection, not
-prediction — the delay already happened and is sitting in the row we read
-it from. Feeding `cost_overrun_pct` / `delay_months` *at the same period*
-into a model as a feature is leakage; the model would just be reading the
-answer off the row it's trying to score.
+1. Extraction: 12 extractor scripts under `pipeline/extract/` read the PDFs with PyMuPDF word boxes and cell borders into `dataset/clean/` CSVs. `dataset/raw/` is never edited.
+2. Identity: `pipeline/build_identity.py` and `pipeline/identity/` resolve every clean entity to a stable `PRJ-` key (accept at similarity 0.92 and above, review between 0.75 and 0.92, else a new key). Keys are minted once and never renumbered.
+3. Silver: `pipeline/silver.py` types, quarantines and collapses the rows to one observation per project and quarter (`dataset/silver/observations.parquet`, 73,167 rows) with a project master and sector context.
+4. External: `pipeline/external.py` tags the report remarks with a taxonomy of delay causes, links road projects to Bhoomi Rashi land stretches and every project to a PARIVESH forest-clearance profile; `pipeline/parivesh.py`, `pipeline/bhoomi_rashi.py`, `pipeline/research.py` hold the portal and web-research parsers.
+5. Gold: `pipeline/gold.py` builds 62 point-in-time features and the horizon labels (`features.parquet`, `labels_h2.parquet`, `labels_h4.parquet`), with a truncation check that proves nothing after a cutoff leaks into a row at it.
+6. Train: `python -m pipeline.run train` runs `ml/registry.py`, which runs the rolling-origin backtest in `ml/backtest.py` and promotes a challenger only when it beats the champion on the promotion rule; model files are sealed with sha256.
+7. Score: `ml/score.py` scores the current portfolio (tiers, quantiles, SHAP drivers) and `ml/analogues.py` finds nearest past projects and builds the scenarios.
+8. Profile: `pipeline/agency.py`, `pipeline/bottlenecks.py`, `pipeline/hidden_delay.py` and `ml/risk_profile.py` build the agency matrix, the bottleneck clusters, the measured hidden-delay priors and the 13-row checklist, writing `dataset/gold/external_summary.json` last.
+9. Serve: `backend/serving.py` reads silver and gold into an in-memory DuckDB, verifies the champion checksums, and answers the API; `pipeline/serve.py` also loads PostgreSQL serving tables that the API does not read.
+10. API: FastAPI (`backend/main.py`, `backend/routes.py`, `backend/auth/`) with cookie sessions, CSRF, a numbers policy that turns model numbers into words for everyone but the developer, and an SSE alert stream.
+11. Live jobs (`backend/live/`): a report watcher, a news scout, a PARIVESH snapshot, a Bhoomi Rashi pull, a research agent and a second-opinion job, all in the one API process.
+12. LLM (`llm/`): the chat agent, the search index (pgvector), the brief, the second opinion, the research agent's judge and the worker cell, all through one client to LM Studio with a single-holder gate and a circuit breaker.
+13. Dashboard: a React single-page application under `frontend/` served by Vite in development and by nginx in the compose stack.
 
-### 3.2 The fix: predict the *next* revision, not the current one
+### 2.2 The tech stack
 
-- **Grain:** one row = one project at one reporting period. The same
-  project appears multiple times (Q1, Q2, Q3...), each row asking "given
-  what was known at this point, what happened next?"
-- **Label:** compare **consecutive** snapshots. Positive if, within the
-  next 6 months, the completion date is pushed by **3+ months** or the
-  anticipated cost rises by **5%+**. This needs no final project outcome —
-  only two reports in sequence — so it's buildable today from the 2024-25
-  quarterly panel (stable N-code project IDs), and extends naturally once
-  more periods are linked (§8).
-- **Leakage rule, enforced in code, not just documented:** a row predicting
-  from the March report may use March progress, March expenditure, March
-  dates, and anything calculated from *earlier* periods (past revisions,
-  agency history). It may never use June's numbers, June's revision, or
-  final completion data.
+Backend (Python 3.10 or later; the team runs 3.13.5; the container is `python:3.13-slim`). `requirements.txt` pins minimums: fastapi>=0.115, uvicorn>=0.30, pydantic>=2.7, httpx>=0.27, python-dotenv>=1.0, python-multipart>=0.0.9, pyyaml>=6.0, sqlalchemy>=2.0, psycopg[binary]>=3.2, alembic>=1.13, argon2-cffi>=23.1, pandas>=2.2, numpy>=1.26, scikit-learn>=1.5, lightgbm>=4.3, shap>=0.45, pdfplumber>=0.11, shapely>=2.0, duckdb>=1.1, pyarrow>=17, rapidfuzz>=3.9, pymupdf>=1.24 (22 packages). Installed on the development machine: fastapi 0.128.0, starlette 0.50.0, uvicorn 0.40.0, pydantic 2.12.5, httpx 0.28.1, sqlalchemy 2.0.46, psycopg 3.3.2, alembic 1.18.4, argon2-cffi 25.1.0, pandas 3.0.0, numpy 2.4.3, scikit-learn 1.9.1, lightgbm 4.6.0, shap 0.52.0, duckdb 1.5.5, pyarrow 25.0.1, pytest 9.0.2. Not used, although an earlier plan named them: Polars, Pandera, statsmodels, lifelines, MAPIE, Optuna, MLflow, Ollama, LangGraph, GDELT, JWT/OAuth2.
 
-### 3.3 Features (all point-in-time safe)
+Data stores. PostgreSQL 16 with pgvector (`pgvector/pgvector:pg16`) is the application truth (accounts, sessions, alerts, signals, research facts, briefs, second opinions, the search index, the audit log). Parquet files read through an in-memory DuckDB (2 GB, 4 threads by default) are the analytical truth. Alembic runs eleven migrations to head at every start.
 
-- **Schedule physics:** % time elapsed vs. % physical progress, progress
-  velocity across periods, the "optimism gap" (elapsed-time % minus
-  physical-progress %), and the finish date implied by current pace vs. the
-  reported date.
-- **Money:** our existing Δ(P-F) disparity index, spending velocity.
-- **History:** count of prior revisions, months since the last one.
-- **Reporting behaviour:** from the Auditor (staleness, repeated figures).
-- **Context:** sector, project type, size band, state, and the
-  implementing agency's own past slip rate — computed only from periods
-  *before* the one being scored.
-- **Scout tags**, once Scout exists.
+LLM. LM Studio serving an OpenAI-compatible API at `http://localhost:1234/v1`; `LLM_MODEL=qwen/qwen2.5-coder-14b` for the brief, the worker cell and the second opinion; an optional `LLM_CHAT_MODEL` for the chat's planner and writer (and, as the code stands, the research agent's judge); `LLM_EMBED_MODEL=text-embedding-nomic-embed-text-v1.5` (768 dimensions) for the search index.
 
-### 3.4 Models
+Frontend (`frontend/package.json`, name `paimana` 0.1.0; exact versions from the lock file): React 19.3.0, react-dom 19.3.0, Vite 6.4.3, TypeScript 5.9.3, Tailwind CSS 3.4.19 with `@tailwindcss/typography`, TanStack Query 5.102.8, Recharts 2.15.4, react-router-dom 6.30.6, motion 11.18.2, lenis 1.3.26, react-simple-maps 5.0.5 with d3-geo 3.1.1, lucide-react 0.460.0, Radix UI primitives (dialog, popover, tabs, tooltip, navigation-menu, icons are imported; select, slider, progress, label, separator and slot are declared but not imported), class-variance-authority, clsx, tailwind-merge; dev tools eslint 9.39.5, typescript-eslint 8.70.0, prettier 3.9.6. Node 18.18 or later (the team runs 20; the image builds with `node:22-alpine`).
 
-- **LightGBM classifier** — slip probability. Chosen because the dataset
-  is tabular (~9K rows scale), has missing values and categorical mixes,
-  and gradient boosting handles that natively; a deep net here would be a
-  buzzword, not a benefit.
-- **LightGBM quantile regressors** — delay/cost as a P50/P80 range instead
-  of false single-number precision.
-- **Survival model** (Cox proportional hazards or Random Survival Forest)
-  — time-to-completion, because most projects are still ongoing
-  (censored — we don't know their eventual finish date yet, and pretending
-  otherwise biases a plain regression).
-- **Risk exposure = slip probability × remaining unspent cost** (the money
-  still at stake, not the whole project value), shown as a separate number
-  from **data confidence** (the Auditor's score) — never blended into one
-  opaque figure.
+Deployment. Docker Compose with five containers (postgres, migrate, api, web, backup), nginx 1.27-alpine with TLS 1.2/1.3 in front, GitHub Actions on `ubuntu-24.04` running the tests and the frontend checks.
 
-### 3.5 Baselines (PS clause b — do not skip this)
+### 2.3 The repository layout
 
-Compare LightGBM against, on the *same* temporal split:
+- `pipeline/`: extraction (`extract/`), identity (`identity/`, `build_identity.py`), `silver.py`, `external.py`, `parivesh.py`, `bhoomi_rashi.py`, `research.py`, `gold.py`, `agency.py`, `bottlenecks.py`, `hidden_delay.py`, `serve.py`, and `run.py` (the command).
+- `ml/`: `backtest.py`, `registry.py`, `score.py`, `analogues.py`, `risk_profile.py`, `experiment.py`; `train.py` is a v1 leftover no backend module reads.
+- `model/`: `registry.json` (80 entries, 81 decisions), `runs/` (10 runs with their backtest, ablation, calibration, intervals and SHAP CSVs), `experiments/`.
+- `dataset/`: `raw/` (PDF archive, the inbox, external portal files, the research sweep), `clean/` (CSVs and `reference/source_manifest.csv`), `silver/`, `gold/`, `rag/` (the search index, gitignored).
+- `backend/`: `main.py`, `settings.py`, `routes.py`, `schemas.py`, `serving.py`, `access.py`, `labels.py`, `brief.py`, `ratelimit.py`, `store.py`, `auth/` (routes, sessions, passwords, limits, middleware, accounts, bootstrap), `db/` (engine, migrate, app, accounts, serve, migrate_sqlite), `live/` (scheduler, watcher, scout, portals, research, opinions).
+- `llm/`: `client.py`, `agent.py`, `router.py`, `tools.py`, `rag.py`, `second_opinion.py`, `worker.py`, `eval.py`.
+- `database/`: `postgres/` (Manamrit's README and the migrations under `postgres/migrations/versions/`), `worker_runs.json` and `dispatch_drafts.json` (the worker cell's JSON stores).
+- `frontend/`: `src/App.tsx`, `views/` (14 view components), `components/` (`layout/`, `common/`, `ui/`), `lib/` (api, queries, auth, outlook, headline, formatters, riskPalette, and others), `contracts/` (TypeScript shapes of the API), `styles/globals.css`, `public/india-states-simplified.geojson`.
+- `deploy/`: `nginx.conf`, `nginx.conf.template`, `api-entrypoint.sh`, `backup.sh`, `postgres/init.sh`, `certs/`.
+- `scripts/`: `first-run.sh|ps1`, `gen-dev-cert.sh|ps1`, `backup.*`, `restore.*`, `check.*`.
+- `tests/`: 46 `test_*.py` files with 530 test functions, `conftest.py`, `viewers.py`, `chat_eval.jsonl`, `stress_synthetic.py`.
+- `docs/`: the 16 Markdown documents listed in section 10.3; `docs/screenshots/` holds 11 PNGs for the teammate tour.
+- Root: `README.md`, `requirements.txt`, `pytest.ini`, `alembic.ini`, `docker-compose.yml`, `docker-compose.dev.yml`, `Dockerfile.api`, `Dockerfile.web`, `.env.example`, `.env.production.example`, `.github/workflows/check.yml`.
 
-1. Trusting the agency's reported completion date as-is.
-2. Earned-schedule extrapolation from observed progress.
-3. Reference-class forecasting — the overrun distribution of similar past
-   projects grouped by sector × type × size band (the method UK Treasury
-   guidance uses for optimism bias in appraisal).
-4. Logistic regression / Cox regression.
-
-Report **PR-AUC**, **Recall@50** (of projects that truly slipped later, how
-many were in our top-50 attention-budget list), and **lead time** (months
-between our first alert and the agency's own eventual revision — the
-single most important operational metric, and the one that makes the "early
-warning" claim real). If logistic regression ties LightGBM anywhere, report
-that plainly — the PS explicitly asks whether AI/ML gives *significant*
-gains over conventional statistics, and an honest "not everywhere" answer
-is a stronger research result than a rigged comparison.
-
-### 3.6 Validation — chronological, not random
-
-Random splitting leaks future project behaviour into training. Train on
-older reporting periods, validate on a later period, test on the newest
-held-out period — train on the past, test on the future, matching real
-deployment. A gap/buffer between train and test at least as long as the
-prediction horizon (6 months) avoids near-boundary leakage.
-
-### 3.7 Three-tier ablation (PS clause c — this is what actually answers it)
-
-Our earlier plan's "engineered extras" (velocity, Δ(P-F), agency history)
-are still arithmetic *on CUF columns* — that doesn't answer clause (c) on
-its own. The real three-tier test is:
-
-1. **Tier 1:** raw CUF/QPISR fields only.
-2. **Tier 2:** Tier 1 + engineered features (optimism gap, velocities,
-   revision history, agency track record).
-3. **Tier 3:** Tier 2 + Scout's external evidence (genuinely outside the
-   CUF).
-
-Measure the lift at each tier. That produces a real, defensible answer to
-"which additional fields should MoSPI consider collecting" — a ranked list
-with measured improvement, not an opinion.
-
-### 3.8 Explainability
-
-Once LightGBM is trained, run `shap.TreeExplainer` per project and replace
-the current heuristic driver-picker (§5) with real per-feature
-contribution weights. The frontend's SHAP waterfall UI does not need to
-change shape — only where the numbers come from.
-
-### 3.9 One data check to run before claiming it on a slide
-
-Physical progress is often sparsely populated in project monitoring data,
-which makes the "optimism gap" signal hard to use. Our QPISR-derived
-2024-25 panel looks much better (early indication: see §6, 100% physical
-progress in the 2024-25 Silver slice). Re-confirm this against the actual
-training panel, not just the display dataset, before putting it on a slide.
+The branch holds 335 commits.
 
 ---
 
-## 4. RBAC — repurposed as governance, not a login demo
+## 3. The data
 
-The problem statement already says PAIMANA has role-based access. Four
-logins will not differentiate anyone tomorrow. What differentiates is what
-the roles are *for*:
+### 3.1 Sources
 
-```
-Worker drafts an action (query / memo / brief)
-        ↓
-RBAC determines who has authority to approve it
-        ↓
-IPMD Analyst · Ministry Official · Agency Official
-        ↓
-Approve / Edit / Reject
-        ↓
-Action executes (or doesn't)
-        ↓
-Next reporting cycle grades the old alert
-```
+The raw corpus lives outside the repository in `Dataset drive folder/Dataset/` and is catalogued in `dataset/clean/reference/source_manifest.csv` (262 rows: 247 `ok`, 9 `partial`, 6 `skipped_duplicate`), plus three PAIMANA portal CSV exports (`Projects_Report.csv`, `Sector-Wise-Report.csv`, `State-Wise-Report.csv`). By report family:
 
-| Role | Approves / sees |
-|---|---|
-| IPMD Analyst | Auditor queries, Dispatcher drafts, the model report card |
-| Ministry Official | Sector brief, bottleneck list, review-meeting agenda |
-| Implementing Agency | Its own project forecasts, responds to data queries, runs what-if |
-| Public | A plain-language summary card — no drafts, no internal workflow |
+- `monthly_flash`, 130 PDFs: IPMD monthly flash reports, May 2005 to March 2016 (extractors `proj_monthly_2005_10.py`, `proj_monthly_2010_13.py`, `proj_monthly_2013_16.py`).
+- `quarterly_qpisr`, 38 PDFs: quarterly project implementation status reports, 2014-06 to 2018-03 and 2021-06 to 2025-06 (`proj_quarterly_2014_18.py`, `proj_qpsir_2021_24.py`, `proj_qpisr_2024_26.py`). Nothing exists between 2018-06 and 2021-03.
+- `paimana_flash`, 18 PDFs: monthly PAIMANA flash reports 2025-04 to 2026-07 in two layouts (`proj_flash_2025_27.py`); September and October 2025 are missing; July, August and November 2025 exclude the MoRTH road projects.
+- `performance_review`, 76 PDFs: the monthly "Review of Infrastructure Sector Performance", FY2015-16 to FY2020-21 and June 2025 to January 2026, eleven sectors (`perf_2015_18.py`, `perf_2018_21.py`, `perf_2025_26.py`).
+- The portal export: 1,775 projects (`portal_projects.csv`).
+- External: PARIVESH forest-clearance proposals (10,025 pulled from the PARIVESH 1.0 list, 377 kept as linked), the Bhoomi Rashi highway land register (29 states, 3,026 NH stretches, 1.58 million parcels; area 93 per cent of what Parliament reports, correlation 0.977), and a web research sweep (section 4.10).
 
-Technical explanation for Q&A: JWT answers *who are you*; RBAC answers
-*what are you allowed to do*. Authorization must be enforced again at the
-FastAPI backend on every request — hiding a button in the frontend is not
-the security model.
+Every extractor parses PyMuPDF word boxes or drawn cell borders, never `pdftotext -layout`; `pipeline/extract/common.py` fixes the column order (`PROJECT_COLS`: report period and type, list type, project codes, name, sector, ministry, agency, state, dates of approval, original, revised and anticipated cost, cumulative expenditure, original, revised and anticipated completion dates, delay months, physical progress, actual completion, remarks, a data-quality note). Blank means "not printed", never zero. `pipeline/build_clean_projects.py` and `build_clean_performance.py` merge the parts into `dataset/clean/`: `projects_monthly.csv` 113,412 rows, `projects_quarterly.csv` 52,093, `project_master.csv` 8,429 entities, `performance_sector_monthly.csv` 2,879, `performance_detail.csv` 242,960. Clean keys are system-prefixed (`OCMS:N16000018`, `PAIMANA:706718`, `NAME:<hash>` for code-less rows).
+
+### 3.2 Layers
+
+`raw/` is never edited; `clean/` holds the parsed CSVs; `silver/` holds typed, entity-resolved, quarantined Parquet; `gold/` holds features, labels, predictions and profiles. Only silver and gold are read by training and the application.
+
+### 3.3 Identity resolution
+
+Every clean entity (8,429) is resolved to a `PRJ-xxxxxx` key by `pipeline/identity/`. The score weights name similarity at 0.50 (0.4 character-level plus 0.6 fuzzy token Jaccard, capped at 0.6 when package or phase numbers differ), project code 0.25, original cost 0.10, state 0.05, sector 0.05, agency 0.03 and sanction year 0.02; a score of 0.92 or more is accepted, 0.75 to 0.92 goes to review, below that a new key is minted. A code match with a contradicting name is a `code_conflict`; `manual_links.csv` overrides. Keys are minted once in sorted order from a persisted map that is only appended; a wrong split is repaired by `merge(loser, winner)`; every mint is logged in `audit.jsonl`. `dataset/silver/identity/identity_manifest.json`: 167,280 rows, 6,253 keys, 7,887 entities accepted and 542 in review (7.41 per cent of rows), 1,569 keys holding several clean keys, 0 clean keys split, 1,767 of 1,775 portal rows accepted; a rerun minted 0 and changed 0 keys.
+
+### 3.4 Silver
+
+`pipeline/silver.py` types the rows (dates to month start, money to float, `parse_fail:<col>` tokens, placeholder 01/1999 dates and placeholder zeros blanked), quarantines by rule (`silver_manifest.json`: expenditure above three times cost 217, completion before sanction 150, placeholder dates 71, negative money 6, duplicate key-period 407, progress out of range 0; 851 in all), deduplicates to one row per key and report preferring the `ongoing` list, then collapses to one row per project and quarter: each value is the last non-null observation in the quarter; `anticipated_cost_cr` is anticipated, else revised, else original (`cost_basis` records which); `anticipated_completion` is anticipated, else revised (`completion_basis`); plus `obs_count_in_quarter`, `months_since_last_obs`, `dq_score` (1 minus distinct dq tokens over 5) and `is_completed`. Only accepted identity rows enter the panel; review rows go to `observations_review.parquet` (4,454 rows). Result: `observations.parquet` 73,167 rows, 6,250 keys, 74 quarters from 2005-04 to 2026-07 (44,990 quarterly, 18,532 monthly, 9,645 flash rows), 24 sectors, 38 states; `project_master.parquet` 6,251 rows; `sector_context.parquet` 276 rows (actual-to-target ratio, year-on-year growth and 4-quarter trend per sector-quarter from the performance reviews); `coverage.parquet` (field completeness per quarter). The latest period is 2026-07-01, the latest PAIMANA flash report 2026-07 with 1,800 current projects. Silver version `0d8abdcfc7cf`, built 2026-09-27.
+
+### 3.5 Gold
+
+`pipeline/gold.py` writes `features.parquet` (73,167 rows, 68 columns), `labels_h2.parquet` (58,069), `labels_h4.parquet` (46,757), `sector_scurve.parquet` (1,105), `agency_stats.parquet` (5,371 rows, 458 agencies) and `manifest.json` (gold version `2676494d0207`, run `RUN-20260928-051851`). The point-in-time rule: the row at (key, t) reads only rows with period at or before t. A truncation check rebuilds the features from the panel cut at four cutoffs (2009-10, 2014-07, 2022-01, 2026-04) and asserts byte-identical output; the manifest records `identical: true` for each, `agency_outcomes_realised: true`, and the label checks `exact_horizon`, `no_completed_rows` and `unique`. Parameters: cost step 1.05, date step 3 months, stagnant 0.5 percentage points per quarter, cost bands 0/500/1,000/5,000 crore, external open window 2 quarters, maximum open-remark age 4 quarters.
+
+### 3.6 The portfolio as served
+
+Predictions parquet, as of 2026-07-01: 1,763 current projects; anticipated cost Rs 36,50,465 crore (Rs 36.50 lakh crore); expenditure Rs 18,38,951 crore; mean physical progress 59.0 per cent; 15 sectors, 37 states, 17 ministries, 185 agencies. Tiers: Critical 70, High 213, Medium 425, Low 708, Watch 347 (1,416 scored by date, 347 without a completion date). Capital by tier in crore: Critical 65,656, High 238,059, Medium 641,437, Low 1,731,316, Watch 973,998. 282 projects carry the Stalled badge.
+
+### 3.7 Key numbers with their source
+
+262 PDFs and 3 portal CSVs (source manifest); 167,280 typed rows, 8,429 entities to 6,253 keys, 73,167 panel rows, 851 quarantined (silver and identity manifests); 62 features in five groups, 58,069 2-quarter label rows, 43,130 `y_any_h2` label rows at 38.3 per cent positive (gold manifest and registry); 1,763 current projects, Rs 36.50 lakh crore, tiers 70/213/425/708/347 (predictions parquet); 29 land states, 3,026 stretches, 412 current road projects rated, 135 flagged by the register; 470 PARIVESH links, 173 current projects linked, 36 with an open proposal, 19 past the rule limit (`external_summary.json`); 1,848 research facts on 728 projects, 226 live blockers on 150 (`research_summary.json`); 122 early-notice projects worth Rs 2,07,143 crore; 7 bottlenecks and 5 state rollups over 39 projects and Rs 50,818 crore (`bottlenecks_summary.json`).
 
 ---
 
-## 5. What is actually implemented today (verified, working)
+## 4. The model and the logic
 
-### 5.1 Data cleaning pipeline
+### 4.1 Targets and labels
 
-The raw MoSPI CSV extraction had `sector`/`state`/`agency` values from the
-**wrong row entirely** — a PDF table-extraction bug upstream, not typos.
-Verified against project-name keywords: 70–100% of rows contradicted their
-own project name depending on fiscal year. Root cause, confirmed by reading
-the actual PDF layout: the "Ongoing Projects" table prints State/Sector as
-columns that only show text **when the value changes from the row above**,
-sharing vertical space with wrapped project-name text — a naive line scan
-can't tell a sector-column word from a project-name word that happens to
-say "POWER".
+For each non-completed panel row at quarter t with an observation at t + h (h = 2 or 4 quarters): `y_date_push` = anticipated completion moved by 3 months or more (`DATE_STEP`); `y_cost_rev` = anticipated cost up by 5 per cent or more (`COST_STEP` 1.05); `y_any` = either, labelled only when both are known; `y_months` = months moved; `y_cost_pct` = cost change in per cent. A comparison across a basis change (an anticipated value at t against a revised value at t + h, which happens from 2025-07 when the flash reports print no anticipated date or cost) is not a label. A label for t exists only once the report at t + h is in silver, so at any cutoff the training set is "label rows with target period at or before the cutoff". Labelled rows and positive rates: h2 date push 44,452 rows at 35.3 per cent, cost revision 54,311 at 5.2 per cent, any 43,130 at 38.3 per cent; h4 date push 33,042 at 55.0 per cent, cost revision 40,767 at 10.5 per cent, any 31,778 at 58.6 per cent. Served probabilities: `p_date_push_2q`, `p_cost_rev_2q`, `p_any_2q` (the primary target) and `p_any_4q`.
 
-**Fix, in order of trust** (`pipeline/clean_sector_state.py`):
+### 4.2 The 62 features, with their plain labels
 
-1. **PDF word-position re-parse** (`pipeline/extract_pdf_context.py`) —
-   reads words by x-coordinate (state column x0 < 70, sector 70–140,
-   project ≥ 150), clusters wrapped labels by vertical proximity,
-   forward-fills between changes, joins back by project code. Real ground
-   truth, but only 5 source PDFs exist locally (2024-25's four quarters +
-   one 2025-26 QR file) — ~9% of rows directly, propagated further via
-   project_id reuse across periods.
-2. **Cross-period majority vote** — mode of the raw value across a
-   project's other periods in the same fiscal year.
-3. **Name-keyword regex tagging** — 14 rules (`NH-`/`LANING`→Road
-   Transport, `AIIMS`/`HOSPITAL`→Health, etc.), also derives `project_type`.
-4. **Raw column value** — last resort.
+`backend/labels.py` holds `FEATURE_LABELS` (for the developer's charts) and `DRIVER_LABELS` (digit-free words the numbers policy sends to officers; shown in brackets).
 
-Same bug independently found and fixed in `agency` (a project showed
-agency `GUJARAT`, a state name, instead of `NPCIL`).
+State (13): `physical_progress_pct` "Physical progress %" [Work done so far]; `elapsed_ratio` "Schedule elapsed (share of sanctioned span)" [Share of the planned time used up], (now minus sanction) over (scheduled completion minus sanction), clipped to 0-3; `cost_variation_pct` [Cost change so far]; `expenditure_ratio` "Spent / anticipated cost" [Share of the cost already spent]; `burn_gap` "Spend vs build gap (pp)" [Spending compared with work done]; `spi` "Schedule performance index" [Work done against the schedule], progress over elapsed, capped at 5; `months_to_scheduled_completion` [Time left to the original deadline]; `months_to_anticipated_completion` [Time left to the expected completion]; `slip_to_date_months` [Delay so far]; `revisions_so_far` [Earlier revisions of cost or date], the cumulative count of cost rises of 5 per cent or more or date pushes of 3 months or more against the previous printed value; `months_since_last_revision`; `log_cost` "Project size (log cost)"; `cost_band`.
 
-**Verified result** (sector, vs. project-name keyword check):
+Dynamics (6): `progress_velocity_2q` and `progress_velocity_4q` [Pace of work in the last half year / year]; `spend_velocity_2q`; `acceleration` = 2 x (v2q minus v4q); `stagnation_quarters` "Quarters without progress" (velocity under 0.5 points a quarter); `velocity_vs_sector_median`.
 
-| Fiscal year | Before | After |
+Context (12): `expected_progress_scurve` "Expected progress on the sector S-curve" (median progress per elapsed-ratio bin, fitted for year Y only on projects completed before Y-01-01, monotone by running maximum; a sector bin with fewer than 20 rows falls back to the all-sector curve); `scurve_deviation` "Progress vs sector S-curve (pp)"; `sector_actual_target_ratio`, `sector_yoy_growth`, `sector_trend_4q` from the performance reviews; `agency_slip_rate` "Agency 2-quarter slip rate" [The agency's record of delays] and `agency_cost_optimism`, from 2-quarter labels realised by t, shrunk toward the sector rate with 10 pseudo-counts; `agency_n`; `agency_slip_4q`, `sector_slip_4q`; categoricals `sector` and `state`.
+
+Freshness (4): `obs_count_in_quarter`, `months_since_last_obs`, `dq_score` "Data quality score", categorical `period_type` (monthly, quarterly, flash, portal).
+
+External (27): `ext_open_<c>` "Open <issue> in the report remarks" and `ext_ever_<c>` "A <issue> reported before" for nine remark categories (land, forest_env, litigation, contractor, funding, utility_shifting, inter_agency, law_order, weather); `ext_open_total`; `ext_months_since_first_land`, `ext_months_since_first_forest_env`; `ext_remark_quarters`; `fc_expected_complexity` "Forest clearance: expected complexity" (the PARIVESH rulebook prior from sector and name, constant over t); `la_linked`, `la_complexity_max_by_t` "Land acquisition complexity", `la_parcels_by_t` "Land parcels notified", `la_notif_span_by_t` (Bhoomi Rashi stretches first notified by t). An open remark flag expires four calendar quarters after its last mention.
+
+`ministry` is not a feature (null before 2025-Q3). Two baseline columns ride along: `slipped_last_period` and `rule_score` (the old dashboard composite: 0.30 x overrun/81.4 + 0.30 x delay/75 + 0.25 x (100 minus progress) + 0.15 x spend ratio/1.5).
+
+### 4.3 The algorithm
+
+Each served target is one binary `lgb.LGBMClassifier` (`ml/backtest.py` `fit_lgbm`) with `LGB_PARAMS`: objective binary, 300 trees, learning rate 0.05, 15 leaves, `min_child_samples` 50, subsample 0.8, `colsample_bytree` 0.8, `reg_lambda` 1.0, seed 0. `y_cost_rev_h2` has its own parameters (`TARGET_PARAMS`): learning rate 0.02, 63 leaves, `min_child_samples` 20, `reg_lambda` 20, `min_split_gain` 0.02, 150 trees. Categoricals go in as pandas categories. Baselines fitted on the same rows: `naive` (positive rate by `slipped_last_period`), `rule` (the old composite through a one-feature logistic), `logreg` (median impute, missing flags, standardised numerics, one-hot with minimum frequency 20, C = 1.0). The final served fit uses every label row realised by the as-of date, completed projects excluded (43,130 rows for `y_any_h2`). Cross-target ensembles were measured and lost (`f1_any_or` minus 0.0097 validation; `f2_any_avg` minus 0.0025); five-seed bagging stayed inside noise; there is no ensemble.
+
+### 4.4 Training and evaluation
+
+Windows (`backtest.windows`, `model/runs/ML-20260927-222602/windows.json`): a quarter is reliable for a target when the fields its label compares are at least 80 per cent complete in `coverage.parquet`; a cutoff is usable when it and cutoff + h are reliable and it holds at least 100 labelled rows. Reliable blocks for the date targets: 2006-04 to 2013-04, 2022-04 to 2025-04, 2026-01 to 2026-07. At each cutoff every model trains on the label rows realised by it and scores the rows at it (rolling origin). Three blocks: validation = the last six usable cutoffs before 2025-07 (2-quarter targets 2023-07 to 2024-10, 1,430 to 1,716 rows each; `y_any_h4` 2022-10 to 2024-01), the QPISR era where dates compare anticipated against anticipated; flash = every cutoff from 2025-07 with at least 100 rows (2025-07, 2025-10, 2026-01 with 461, 785 and 1,318 rows; `y_any_h4` only 2025-07, 335 rows), the serving era with a higher slip rate; test = the newest usable cutoff (2026-01 for the 2-quarter targets, which is also a flash cutoff so not independent; 2024-04 for `y_any_h4`, independent). The two blocks share no cutoff. Every row also reports a not-yet-due slice (rows whose anticipated completion lies after t + h: the projects an early warning is for).
+
+Metrics (`backtest.score`): PR-AUC, ROC-AUC, Brier, ECE (10 equal-width bins), hits and recall at 50 and 100 per fold, precision@50, the within-cutoff mean PR-AUC (`pr_auc_fold_mean`, the promotion metric) and `lead_time_q`. The served champions (`model/registry.json`):
+
+| Target | Validation PR-AUC pooled (within-cutoff) | Validation ECE | Validation P@50 | Flash PR-AUC pooled (within-cutoff) | Flash P@50 | Test PR-AUC | Validation base rate | Lead time (quarters) |
+|---|---|---|---|---|---|---|---|---|
+| `y_any_h2` | 0.7015 (0.6970) | 0.0815 | 0.827 | 0.7753 (0.7794) | 0.913 | 0.7777 | 0.367 | 2.78 |
+| `y_date_push_h2` | 0.6287 (0.6350) | 0.0512 | 0.743 | 0.7712 (0.7780) | 0.920 | 0.7643 | 0.347 | 2.74 |
+| `y_cost_rev_h2` (Platt) | 0.1470 (0.1841) | 0.0091 | 0.270 | 0.1263 (0.1644) | 0.193 | 0.2303 | 0.043 | 3.35 |
+| `y_any_h4` | 0.8690 (0.8843) | 0.0954 | 0.937 | 0.8719 | 0.940 | 0.7531 | 0.607 | 4.65 |
+
+The honest comparison with conventional statistics (`backtest_summary.csv`, same run): `y_any_h2` validation naive 0.428, rule 0.444, logistic 0.489, LightGBM 0.702; flash naive 0.546, rule 0.446, logistic 0.700, LightGBM 0.775; `y_cost_rev_h2` validation naive 0.044, rule 0.065, logistic 0.083, LightGBM 0.108 (raw); `y_any_h4` validation naive 0.670, logistic 0.806, LightGBM 0.869. The Models page shows this as the benchmark matrix.
+
+### 4.5 Calibration
+
+Only `y_cost_rev_h2` is Platt-scaled, fitted per cutoff on the model's own predictions at the four previous realised cutoffs; the served calibrator (`platt.json`: a 0.784, b minus 0.821, n 3,617, fitted on 2025-07, 2025-10 and 2026-01) halves ECE without changing ranks. Platt on the date targets halved validation ECE but doubled flash ECE (0.061 to 0.135), so their scores are raw. The serving caveat reads: "Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies." `calibration.csv` shows the `y_any_h2` model over-predicting in the middle bins (bin 0.35: mean prediction 0.347 against 0.237 observed).
+
+### 4.6 Quantile intervals
+
+Three `LGBMRegressor(objective="quantile")` at alpha 0.05, 0.50 and 0.95 per regression target (`y_months`, `y_cost_pct`, h = 2), on the same 62 features, sorted so they never cross. Coverage (`model/runs/ML-20260928-072744/intervals.csv`): months p05-p95 0.915 on validation (n 10,063, mean width 12.5 months) and 0.883 on flash (9.9 per cent above p95); cost per cent 0.956 and 0.955 (over-cover, mean width 9.6 to 11.0 points). Conformal widening was tried and left out (it moved nothing). Today `months_p50` has a median of 2.4 months and `months_p95` of 10.5; `cost_pct_p95` has a median of 4.0 per cent. The completion band on the project page is the anticipated completion plus the p05, p50 and p95 months (`serving.BAND_METHOD`).
+
+### 4.7 Promotion, the registry and checksums
+
+`ml/registry.py`: a challenger replaces the champion of its (target, horizon) only on the same gold version and folds, when its within-cutoff PR-AUC is not lower on either block and higher on at least one by twice that block's seed standard deviation (`SEED_SD` from `model/experiments/seed_sd.csv`: `y_any_h2` validation 0.0012, flash 0.0067; `y_date_push_h2` 0.0028 / 0.0067; `y_cost_rev_h2` 0.0034 / 0.0053; `y_any_h4` 0.0002 / 0.0047), and its validation ECE is at most the champion's plus 0.02. A run on new gold or new folds first re-scores the champion's own configuration as `<type>_incumbent`; `python -m ml.registry revert` undoes a promotion. The registry holds 80 entries and 81 decisions across 10 runs under `model/runs/`; every entry carries an `artifact_sha256`, and `serving.state()` verifies the champion files at every load through `ml/registry.verify` (a mismatch refuses the data version and raises a severity-3 `pipeline_error` alert). Champions today: `ML-20260927-222602/lightgbm/y_any_h2`, `.../y_date_push_h2`, `.../y_any_h4`, and `ML-20260928-072744/lightgbm/y_cost_rev_h2`; served `model_version` `lgbm-any2q-20260927-222602+20260928-072744`. Run times per `docs/MODEL_UPGRADES_2026-09.md`: train 245 s, score 19 s, profile 3 s.
+
+The September 2026 experiment round (`ml/experiment.py`): 19 candidates measured over three seeds with a 2,000-resample paired project bootstrap: deadline feasibility, basis-fix and slip-history features, name keywords, age weights, flash rows weighted three times, tuned parameters (20 random trials), early stopping, five-seed bagging, cross-target ensembles, conformal intervals, plus a null check. One shipped (the cost-revision parameters, marked provisional with a pre-registered check at the 2026-04 fold). An 8-quarter half-life on `y_any_h4` shipped and was reverted when a review showed its pooled gain (+0.0124) came from calibration across folds while ranking worsened on four of six folds. Nothing passed for `y_any_h2` or `y_date_push_h2`; the largest lever remains `months_to_anticipated_completion` at 1.09 mean absolute SHAP against 0.23 for the next feature.
+
+### 4.8 Scoring: tiers, Stalled, SHAP drivers, the outlook in words
+
+`ml/score.py` scores the projects in the latest flash report with a feature row and not completed (1,763). Tiers by rank of `p_any_2q` (`TIER_TOP = [0.05, 0.20, 0.50, 1.0]`): Critical the top 5 per cent, High the next 15, Medium to 50 per cent, Low the rest. A project with no anticipated completion date has no date-based score (its feature row has a null the training never saw) and goes to the Watch tier, outside the rank shares; the API orders Watch by flagged checklist rows and then `p_cost_rev_2q`, an order the help page says no backtest has validated. The Stalled badge (`stagnation_quarters >= 2`, `elapsed_ratio >= 0.3`, progress under 95 per cent) never changes the tier because flagged projects slipped at or below the base rate in the backtest. `p_any_2q` has 1,416 values (mean 0.615, median 0.669, 5th to 95th percentile 0.101 to 0.944); `p_cost_rev_2q` 1,763 (median 0.021, maximum 0.408); `p_any_4q` 1,416 (median 0.871).
+
+SHAP: the five largest absolute contributions of the `p_any_2q` model (`booster.predict(pred_contrib=True)`, log-odds) are stored as `shap_top5_json`; `months_to_anticipated_completion` is the first driver on 1,253 of 1,416 scored projects, then `sector_slip_4q` (43), `sector` (35), `physical_progress_pct` (30). `backend/serving.py` turns them into `drivers_plain` (a `DRIVER_LABELS` label, direction raises or lowers, strength strong, moderate or slight by tercile among the project's own five) and an `outlook` in words: `chance_word` at 0.75 and above "very likely", 0.5 "likely", 0.25 "possible", else "unlikely" (`CHANCES`); `slip_word` under 6 "under 6 months", under 12 "6 to 12 months", up to 24 "1 to 2 years", else "over 2 years"; `horizon` "next two quarters". Every prediction is appended to `dataset/gold/prediction_log.parquet` (15,867 rows across 9 model versions); the report watcher fills realised outcomes once the report two quarters later arrives (0 realised yet).
+
+### 4.9 Analogues, scenarios, the checklist, early notice, priors, agencies, bottlenecks, the finding about external factors
+
+Analogues (`ml/analogues.py`): candidates are historical rows whose 4-quarter outcome is known by the as-of date; each current project's ten nearest other projects by RMS distance over standardised `elapsed_ratio`, `physical_progress_pct`, `progress_velocity_4q`, `cost_variation_pct` and `log_cost`, same sector when it has 30 or more candidates, else all sectors; served with their outcomes (17,630 rows; 1,607 projects on a sector basis, 156 on all). The plain summary reads "N of the 10 most similar past projects at this stage slipped".
+
+Scenarios (`analogues.scenario_table`): three progress curves for the next eight quarters, capped at 100: continue (own velocity), recover (the median velocity of the sector's open projects over the last four quarters) and agency (the median velocity of the agency's projects at the same elapsed-ratio bin, 10 rows or more, else the sector's, else all); 14,104 rows; the agency curve came from the agency itself for 68 per cent. The page's band is the minimum and maximum of the three, "a scenario range, not a statistical interval".
+
+The risk checklist (`ml/risk_profile.py`, `risk_profile_2026-07.parquet`, 22,919 rows = 1,763 x 13): twelve checks plus the informational `external_composite`, each `flagged`, `clear` or `unknown` (unknown is a real state; no evidence is never clear), with an evidence line, a source (`model`, `silver` = reports, `report` = report remarks, `sector_context`, `agency_stats`, `bhoomi_rashi`, `parivesh_rules`, `parivesh_portal`, `external_composite`, `news_research`) and an as-of date. Rules and today's flagged counts: `schedule_slip`, `p_date_push_2q` in its top 20 per cent, 284; `cost_escalation`, `p_cost_rev_2q` top 20 per cent, 353; `execution_stagnation`, the stagnation rule or SPI under 0.1 at 30 per cent elapsed or more, 374; `expenditure_lag`, `burn_gap` under minus 15 or over 25 points, 780; `repeated_revisions`, two or more revisions, 699; `sector_headwind`, a negative 4-quarter trend or output under 95 per cent of target, 1,241; `agency_optimism`, the agency's median schedule bias over +25 per cent on five or more dated projects, 1,314; `land_acquisition`, an open land remark, a km-matched Bhoomi Rashi complexity of 4 or more, or a live negative web fact, 142 (277 clear, 1,344 unknown); `forest_clearance`, an open forest remark, a PARIVESH proposal past its rule limit, the rulebook (linear, hectares known, worst complexity 6 or more) or web research, 23 (19 from the portal); `litigation` 4; `contractor_stress` 13; `data_staleness`, a gap over three months before the latest report or `dq_score` under 0.7, 1; `external_composite`, score 0.6 or more with land linked, 135. Web research flagged rows nothing else did: land 7, forest 3, litigation 4, contractor 13. The public reads flagged rows as `PLAIN_RISK` sentences such as "Land for the project is not fully acquired yet."
+
+Early notice: a flagged outside factor (land, forest clearance, litigation, contractor, utility shifting, inter-agency) while the numbers show no slip yet (`slip_to_date_months <= 0`) or the tier is Low or Medium: 122 projects worth Rs 2,07,143 crore (land 103, forest 16, litigation 4, contractor 4), 26 of them with no slip to date at all. Factor totals: land 142 projects and Rs 1,93,563 crore, forest 23 and Rs 60,162 crore, contractor 13 and Rs 13,770 crore, litigation 4 and Rs 5,582 crore, utility shifting and inter-agency 0 (every such remark is stale).
+
+The finding about external factors: among historical rows with no slip to date, a 4-quarter date label and at least one remark quarter, the raw push rate was 0.244 with an open land-or-forest remark against 0.431 without (lift 0.565 on 776 against 2,894 rows), but 1.038 within sector and year (Mantel-Haenszel); land alone 1.009, forest alone 1.235 (Railways 2.65 on 32 rows, Coal 0.99). In the backtest 14 remark-derived features changed validation PR-AUC by minus 0.003 to plus 0.001; the all-state land table moved the `y_any_h2` flash block by minus 0.0057 [minus 0.0096, minus 0.0021]; a PARIVESH state prior minus 0.0059 validation. The reasons: land notifications are recent (13.2 per cent of pre-2023 road training rows have a linked stretch), remarks stop in 2023-Q2, and projects with open remarks already carry far-out dates. The model's land features therefore still read the Maharashtra-only pairs table (`external_land_pairs.parquet`, 580 rows, 106 keys); the all-state register, the PARIVESH portal, the composite and the web research are evidence: checklist rows, the External Factors page, early notice, bottlenecks and the assistant, never a score.
+
+Hidden-delay priors (`pipeline/hidden_delay.py`, `hidden_delay_priors.parquet`, 16 rows): for key-quarters from 2014 with a 4-quarter date label, the extra months and the extra date-push probability over the next four quarters against matched projects without the factor (sector-by-year strata for remark groups, months-to-deadline bands for land complexity), a 10,000-replicate project-cluster bootstrap, groups under 15 projects "too few to measure", Holm-adjusted p-values, exploratory. Measured: Stage-I granted and awaiting Stage-II +2.5 months [+0.5, +4.4] and +19 points of push risk [+7, +30] on 38 projects; "FC awaited, no stage" +12 points [+4, +20] on 105; the land-share bands and km-matched land complexity show no measurable effect (complexity 4-5: minus 1.2 months, +3 points [minus 6, +11], 69 projects). Garvit's guessed bands (Pending Clearances 15 to 32 months; 0.59 months per land point) are shown beside them as "not a measurement". Officers read the priors as `extraMonthsWord`: "no measurable extra delay" unless the interval lies above zero, else under 4.5 months "a few months", under 9 "about half a year", under 18 "about a year", else "over a year".
+
+The agency matrix (`pipeline/agency.py`, `agency_matrix.parquet`, 195 canonical agencies, 116 hidden for fewer than five past projects): printed names are canonicalised through `gold/agency_map.csv`; schedule bias = (end minus sanction) over (first scheduled completion minus sanction) minus 1 and cost bias = latest anticipated over first original minus 1 per project; median with IQR and a 1,000-resample 90 per cent CI, shrunk toward the sector median with weight n/(n+10) when n is under 10; a trend of recent against earlier sanctions. Today: NHAI 1,328 projects, schedule bias +0.61, 520 open, Rs 6,99,223 crore; MoRTH 874, +0.61; NHIDCL 353, +0.86; POWERGRID 307, +0.38; NTPC 77, +0.71. Officers read "usually later than planned" beyond +/-0.10 (`SCHEDULE_OFF`) and "usually costs more than planned" beyond +/-0.05 (`COST_OFF`); "too few past projects to say" under five (`AGENCY_MIN_N`).
+
+Bottlenecks (`pipeline/bottlenecks.py`): open report events of current projects plus linked news signals of severity 2 or more (35 used), grouped by category, authority and state; a group of three or more projects is a bottleneck, with a state-level rollup; 12 clusters (7 bottlenecks, 5 rollups) over 39 projects and Rs 50,818 crore, the largest "Land, Maharashtra: Blocking 13 projects worth Rs 14,535 Cr". The summary calls it a grouping, not a causal claim.
+
+### 4.10 The external-factor sources in detail
+
+PARIVESH (MoEFCC forest clearance): every project gets a rulebook profile (`external_fc.parquet`, 6,251 rows: 4,509 linear, 1,742 non-linear; hectares known for 63) matched to 28 scenarios in `dataset/raw/external/parivesh_fc_scenarios.csv` (complexity 1 to 7). From the PARIVESH 1.0 list (2014 to mid-2022; 42 per cent of Parliament's Stage-II approvals, so not a census) 1,312 automatic matches were hand-reviewed and 470 links kept (396 projects, 376 proposals; 394 specific at about 95 per cent precision, 76 softer at 70 to 80). `fc_norms.csv` holds the prescribed days under the FC Rules 2004 and 2022 and the Van Rules 2023 (255 days to Stage-I for up to 40 hectares, 300 days otherwise; a Stage-I older than five years with Stage-II awaited is overdue). `external_fc_portal.parquet` (397 rows) gives each linked project its stage at the as-of date, months in stage and an overdue flag: 173 current projects linked, 36 with an open proposal (Stage-II final 132, Stage-I awaiting Stage-II 25, filed with no Stage-I 11, dropped 5; open capital Rs 60,987 crore), 19 past the rule limit, none of the 36 mentioned as open in the report remarks. Demonstration cases: Muraidih (PRJ-001354, FP/JH/MIN/44804/2020, no Stage-I 76 months after filing), Katni-Singrauli (PRJ-002234, FP/MP/RAIL/41734/2019, 72.8 hectares in the Sanjay Tiger Reserve, withdrawn), the Goa/Karnataka border to Kundapur road (PRJ-002112). In a 150-proposal sample the median from submission to Stage-I was 16.6 months, 69 per cent of it in the state machinery; the Ministry reports 150 days for 2023-24 under the new rules.
+
+Bhoomi Rashi (MoRTH NH land register): the `.xls` export is an HTML table read with `pd.read_html` by `pipeline/bhoomi_rashi.py` (group cells forward-filled; publish date = the Section 3 gazette notification). Each NH stretch gets the 0-5 `acquisition_complexity_score` (+1 each for more than one district, a span of 365 days or more, a span of three years or more, 200 parcels or more, 20 hectares or more). `land_acquisition_maharashtra.csv` has 347 stretches and `land_acquisition_india.csv` 2,679 across 28 more states. `external.link_land` links road projects to stretches of their own state and NH: by the km range in the project name (`nh_chainage`), then by NH and district (`nh_district`), then NH alone (`nh_only`); only `nh_chainage` rates a project (flagged at complexity 4 or more, else clear); the others are "possible" and never flagged, because a hand check of 100 links (`gold/land_link_check.csv`) found 21 of 25 `nh_chainage` links correct (84 per cent, Wilson 65-94), 16 of 25 `nh_district` (64) and 16 of 50 `nh_only` (32). Coverage of the current portfolio: 412 rated (135 flagged, 277 clear), 133 possible, 771 not road, 210 no NH in the name, 88 NH not in the state table, 67 no stretch at the km, 56 no land data for the state, 26 NH only as end points.
+
+The composite (`external_composite.parquet`): 0.5 x forest complexity/7 + 0.5 x land complexity/5 with coverage `fc+la` (412 projects, rated) or `fc_only` (1,351, not rated); flagged at 0.6 or more with both parts; the 13th, informational checklist row; not a model feature.
+
+The web research sweep (28 September 2026, `pipeline/research.py`, `dataset/raw/external/research/research_sweep_2026-09.jsonl`): every one of the 1,763 current projects searched in two passes, an article pass (67 projects, 2 to 10 web queries each, result pages read; 252 facts, 72 live negative) and a headline pass (1,696 projects through the scout's Google News queries, judged from headline and feed summary; 1,596 facts, 154 live negative); a second adversarial agent checked every fact (1,730 kept, 118 corrected). Result: 1,848 checked facts on 728 projects, 226 live blockers on 150 projects, match high 1,379 and medium 469; also 112 contractor names, 108 new completion targets, 21 court cases, 11 forest-clearance stages, 8 revised costs and 7 land-acquired shares. Each fact stores category, direction, severity 1-3, event and published dates at their precision, status, a paraphrased summary of at most 40 words, the headline as a citation label, the publisher, the URL, the match and its reason; never article text. Privacy floor (`pipeline.research.private_names`): no landowners, villagers, petitioners, accused, contractor staff or journalists; 120 public officials rewritten by office. A fact is live when negative, not resolved and dated within four quarters of the as-of date. It flags land, forest, litigation and contractor rows from a live negative fact of severity 2 or more with a high match and never clears a row: land 135 to 142, forest 20 to 23, litigation 0 to 4, contractor 0 to 13, early notice 109 to 122.
+
+Garvit's mock CSVs (`dataset/raw/external/mock/`) are synthetic and refused: their outcomes were built from the composite (r 0.87), their ids are not real projects, and `tests/test_external_crosscheck.py::test_mock_data_never_reaches_the_pipeline` greps every source under `pipeline/`, `ml/` and `backend/` for a reference to them and asserts every gold key starts with `PRJ-`.
+
+---
+
+## 5. The backend
+
+### 5.1 Process and startup
+
+The FastAPI application `PAIMANA Radar backend` (`backend/main.py`) runs under uvicorn with one worker, on purpose: the scheduler, the caches and the LLM gate live in the process. Development: `python -m uvicorn backend.main:app --reload --port 8000 --timeout-graceful-shutdown 3`; the container: `uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-graceful-shutdown 10 --no-proxy-headers --no-access-log`. There is no port setting; 8000 is the uvicorn argument.
+
+Lifespan: `serving.state()` loads the data version before the first request; `db.init()` runs Alembic to head and seeds the alert feed once (one `early_notice` alert of severity 2 per early-notice project and one `tier_up` of severity 3 per Critical project, source `seed:<asof>`); `scheduler.start()` starts the background loops (none when `LIVE_JOBS=0`); a daemon thread `chat-warmup` loads the chat router's vocabulary and, with live jobs on, builds the search index in the background. Shutdown sets the LLM jobs' stop flags, cancels the loops and waits up to 30 s.
+
+Two probes outside `/api`: `GET /healthz` returns `{"status":"ok"}` (the container health check every 30 s); `GET /readyz` returns `{ready, data, database, llm}`, 200 when a data version is loaded and the database answers, else 503; `llm` is `reachable` or `unreachable` from a 1.5 s probe of LM Studio's `/models`, remembered for 30 s and reported but not required.
+
+### 5.2 Settings
+
+`backend/settings.py` reads `.env`, then `.env.db`, then the process environment (later wins) into a frozen dataclass: `database_url`; `secure_cookies` (False); `allowed_origins` (default `http://localhost:3000`, `5173`, `5174`); `allowed_hosts` (`*`); `trusted_proxies` (CIDRs, validated at start; a bad entry stops the API); `session_idle_h` 12; `session_max_d` 7; `duckdb_memory_limit` `2GB`; `duckdb_threads` 4; `live_jobs` True; `llm_base_url` `http://localhost:1234/v1`; `llm_model` `qwen/qwen2.5-coder-14b`; `llm_chat_model` (empty = the same); `llm_embed_model` `text-embedding-nomic-embed-text-v1.5`; `admin_email`; `allowed_email_domains`; `api_docs` True (`/docs`, `/redoc`, `/openapi.json`; production sets `API_DOCS=0`). `database_url` precedence: inside compose it is built from `POSTGRES_*` when `POSTGRES_HOST` is set; else `DATABASE_URL`; else Manamrit's `DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME`; else `postgresql+psycopg://paimana@localhost:5432/paimana`. The job switches (`LIVE_JOBS`, the intervals, `RESEARCH_AGENT`, `SECOND_OPINION_JOB`, `PARIVESH_SNAPSHOT`, `BHOOMI_PULL`, `CHAT_WRITER`, `RAG_EMBED`) are read straight from the environment by `backend/live/scheduler.py` and `llm/`.
+
+### 5.3 How a request is answered
+
+Middleware (`backend/auth/middleware.py`, outermost first): `ProxyHeaders` (believes `X-Forwarded-For` and `X-Forwarded-Proto` only from a peer in `TRUSTED_PROXIES`); `Front` (request id echoed or minted, security headers `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, a `Permissions-Policy`, HSTS with secure cookies, `Cache-Control: no-store` on `/api/auth` and `/api/admin`, one JSON access-log line per request without the query string on the private prefixes, a last-resort 500); CORS from `allowed_origins` with credentials, methods GET/POST/DELETE/OPTIONS, headers `Content-Type, X-CSRF-Token, Last-Event-ID, X-Request-ID`; `HostCheck` (400 `invalid host header`); `BodyLimit` (1 MiB; 110 MiB only on `POST /api/jobs/ingest` and only with a session cookie; 413); `Timeout` (30 s then 504, exempt: `/api/chat`, `/api/stream`, `/api/jobs/ingest`, `/api/jobs/scout`, `/api/worker-runs/trigger`, the brief and the second opinion); `Errors` (any exception becomes 500 `{"detail":"internal error","requestId"}`; 422s list `loc`, `msg`, `type` and never echo the input).
+
+Then the app-wide dependency `sessions.guard`: on every non-GET request an `Origin` header, when present, must be in the allow-list (403), and a request with a live session must carry its CSRF token in `X-CSRF-Token` (403, constant-time compare). Then the route's `access.viewer` builds a `Viewer(role, ministry, agency, user_id, is_admin, email, ip)` from the session cookie (the public is no cookie; a cookie naming no live session gets 401 with the cookie cleared), `need(feature)` checks the role's policy (403 "<feature>: not available to this account"), and `in_scope` answers 404 for a project outside the viewer's scope (it does not exist for that viewer). The serving function runs parameterised SQL on the DuckDB cursor with the scope applied, `with_words` adds the outlook words, `public_*` redacts for a viewer without `insights`, `plain_*` nulls the numbers for a viewer without `numbers`, and a pydantic `CamelModel` turns snake_case into camelCase JSON.
+
+Input bounds: a project key must match `PRJ-\d{6}` (400 "a project key looks like PRJ-000123"), is canonicalised through the identity map (404 when unknown), then scope-checked; free text `q` at most 100 characters, ministry and agency 100, sector and state 60, a bottleneck id 64; paging `page >= 1`, `size` 1 to 100 (default 50).
+
+### 5.4 Serving: DuckDB over Parquet
+
+`backend/serving.py` `_load()` first verifies the champion checksums, then reads `dataset/gold/predictions_latest.json` (the pointer: `path`, `asof`, `model_version`, `gold_version`, `models`) and `dataset/silver/silver_manifest.json`, opens `duckdb.connect()` with the memory and thread limits, and creates tables ordered by `project_key` so a one-project filter skips row groups: `obs` (observations), `master`, `rp` (the risk profile), `events` (report-remark events), `fc`, `land`, `land_pairs`, `composite`, `scen` (scenarios), `ana` (analogues), `scurve`, `portal` (PARIVESH), `fcprop`, `rstat` (remark status), `agencies`, `bottlenecks`, `bmembers`, `priors`, `register` (the Bhoomi Rashi register per state), `rfacts` and `rprojects` (the research sweep), `amap` (the agency map), `review` (identity rows under review), and `cur`: one row per scored project = the predictions parquet joined to the latest observation at or before the as-of date, the feature row (`slip_to_date_months`, `months_since_last_obs`, `dq_score`, `cost_variation_pct`, the open utility-shifting and inter-agency remarks), the flagged checklist dimensions as a `flags` list (land, forest, litigation, contractor), `early_notice`, and a `watch_score` for the Watch tier.
+
+The version key is the modification time of `gold/external_summary.json` (written last by the `profile` step) plus that of `gold/research_summary.json`; `state()` reloads when it changes unless the watcher has pinned it during a pipeline run. A failed reload keeps the loaded version, raises one deduplicated `pipeline_error` alert ("New data failed to load; the previous version is still served") and retries after 30 s. `@cached` memoises serving functions per arguments in the state (cleared on reload, or past 5,000 entries); alerts, the watchlist, signals, jobs and the research agent's facts are read from PostgreSQL per request.
+
+### 5.5 Every endpoint, grouped by page (prefix `/api`)
+
+Everywhere: `GET /meta` (as-of date, model, gold and silver versions, current and Watch counts, the latest report period and document, the served models per target, and five caveat sentences), `GET /scopes` (ministries and canonical agencies of the current portfolio with counts; the sign-up picker).
+
+Home and Command Center: `GET /portfolio?ministry&sector&state&tier` (KPIs: projects, original and anticipated cost, expenditure, overrun in crore and per cent, average progress; tier counts with capital; by state, sector and ministry; the top 20 by `p_any_2q`); `GET /projects?q&ministry&sector&state&tier&flag&sort&order&page&size&near_complete` (sorts risk, cost, slip, name, progress; secondary order Watch score then key; `near_complete` = 80 to 99 per cent done and not past the expected date); `GET /projects/map` (unpaged, at most 5,000 rows, display columns only, never ordered by probability because a row's position would leak its rank); `GET /alerts?since&kind&acked&page&size` (feature `alerts`; project-less pipeline errors reach only unscoped viewers); `POST /alerts/{id}/ack` (`ack`; the first acknowledgement stands; a hidden role leaves `acked_by` empty); `GET /stream?after` (`alerts`; SSE `event: alert`, resumes from `Last-Event-ID`, comment every 15 s, session re-checked before every send); `GET /live/status` (`live`; a scoped viewer sees a failure only as "the last run failed"); `GET /jobs` (`live`; the latest run per job, summaries scrubbed of per-project keys for scoped viewers); `GET/POST/DELETE /watchlist` (`watchlist`; one list per role, limit 100; no page calls it yet).
+
+Project page and side panel: `GET /projects/{key}` (master, latest observation, scores with `shap_top5`, `outlook` and `drivers_plain`, flags, the 13-row risk profile, `top_risks_plain`, the external block (fc, land, land pairs, composite, events, portal, proposals, remark status, hidden delay), provenance, identity review rows, and a research brief of counts and the top three facts); `GET /projects/{key}/timeline` (observations at or before the as-of date; the public gets no source document); `GET /projects/{key}/research` (every sweep fact plus the agent's, deduplicated by URL and headline, newest first, with `live`); `GET /projects/{key}/forecast` (`insights`; scenario curves, the band, analogues, the analogue summary, the sector S-curve, the completion band; 404 when not in the scored portfolio); `GET /projects/{key}/brief` (`insights`; 503 `llm_unavailable`, 422 `rejected`); `GET /projects/{key}/second-opinion?cached` (`insights`; `?cached=1` never generates; 422, 503, 404); `GET /projects/{key}/signals` (`insights`; linked news, at most 100, with the last scout time and the lead time to the next report change).
+
+External Factors: `GET /external/summary` (`gold/external_summary.json` recounted over the scope: factor counts and capital, the top 10 cards per factor, the top 20 early-notice rows, coverage, the PARIVESH portal block with `by_stage`, `open_list` and `cases`, remark flags live against stale, the land register by state, the hidden-delay priors with current counts); `GET /research/summary` (coverage, facts by category and direction, by state, the 20 most recent live blockers, the agent's last run); `GET /signals/feed` and `GET /radar/summary` (feature `radar`; see Radar).
+
+Bottlenecks: `GET /bottlenecks?category&state&min_projects&level&page&size` and `GET /bottlenecks/{id}` (`bottlenecks`; clusters sorted by capital exposed, each cut to the viewer's members with recounted capital, three evidence lines and the headline "Blocking N projects worth Rs X Cr"; the detail pages members riskiest first).
+
+Agencies: `GET /agencies/matrix?sector&ministry&include_hidden` (`agencies`; at most 500 points; hidden below five past projects unless asked; a ministry scope sees the agencies with a current project of that ministry; an agency scope sees every agency with its own flagged `is_self`); `GET /agencies/{agency}/projects` (the canonical agency's current projects in scope, riskiest first).
+
+Radar: `GET /signals/feed?since&category&state&severity&linked&page&size` (`radar`; the unlinked pool only with `unlinked_signals`, the developer; others see signals linked to their keys); `GET /radar/summary` (state heat = severity 2 or more in the last 90 days per state; the rollup by category, severity and source; lead time = the first report change after the signal's date: a completion pushed by 3 months or more, or cost up by 5 per cent or more).
+
+Models (`models`, the developer): `GET /models` (the champions with their sealed sha256, the backtest, ablation and calibration CSVs of the champion run, the top-20 SHAP summary for `y_any_h2`, the last 100 registry rows and decisions, and `live_accuracy` from the prediction log against `labels_h2.parquet`: realised, precision of Critical+High, base rate, PR-AUC only with 30 or more realised rows).
+
+Workers and Approvals: `GET /worker-runs` and `POST /worker-runs/trigger` (`workers`, the developer; the trigger runs `llm/worker.run_worker_cycle`); `GET /dispatch` (`approvals`; an IPMD analyst every memo, a ministry or agency official those addressed to their role on their projects); `POST /approvals {draftId, decision: approved|edited|rejected}` (only the addressed role; audited as `dispatch.<decision>`).
+
+Jobs (`jobs`, the developer; each answers `JobStarted` with `started: false` when busy and writes an audit row): `POST /jobs/ingest` (multipart `file`, `.csv` or `.pdf`, 100 MB, sha256 before reading, a file already ingested under the current pipeline version is not kept), `POST /jobs/watch`, `POST /jobs/scout?project_key` (one project inline, else a batch in the background), `POST /jobs/research?project_key`, `POST /jobs/second-opinion?project_key`, `POST /jobs/parivesh-snapshot`, `POST /jobs/bhoomi-pull?state` (only with `BHOOMI_PULL=1`).
+
+Assistant: `POST /chat` (`chat`, every role; section 7).
+
+Accounts (`backend/auth/routes.py`): `POST /auth/signup` (202 `{id}`), `POST /auth/login` (the `Me` object and the session cookie), `POST /auth/logout` (204), `GET /auth/me` (401 when not signed in), `POST /auth/password` (204), `POST /auth/reset` (204); administration (`admin`): `GET /admin/signups?status`, `POST /admin/signups/{id}/approve`, `POST /admin/signups/{id}/reject`, `GET /admin/users?q&page&size`, `POST /admin/users/{id}`, `POST /admin/users/{id}/reset-password`; `GET /admin/audit?since&user&action&page&size` (`audit`, the developer). In all: 41 route decorators in `backend/routes.py`, 13 in `backend/auth/routes.py`, plus `/healthz` and `/readyz` = 56 routes.
+
+### 5.6 The numbers policy
+
+Every serving function returns the full result with words added; the route passes it through `plain_*` for any viewer without the `numbers` feature, which sets the numbers to null and keeps the keys and shapes. The four roles (public, agency, ministry, IPMD) therefore never see a probability, a SHAP value, a quantile, a rank percentile, an agency bias statistic, a confidence interval, a lift, an analogue distance, a composite score or a scenario value. What they read instead:
+
+- The tier, and `outlook {delay, cost, slip, horizon}`: a completion-date push and a cost revision are each "very likely" (0.75 and above), "likely" (0.5), "possible" (0.25) or "unlikely"; the likely further slip is "under 6 months", "6 to 12 months", "1 to 2 years" or "over 2 years"; the horizon is "next two quarters". A Watch project has null delay and slip words.
+- `driversPlain` (officials only; the public receives an empty list by policy): up to five `{label, direction: raises|lowers, strength: strong|moderate|slight}`; `topReason` is the first driver that raises the risk, else the first flagged check.
+- `scheduleWord` and `costWord` for agencies ("Usually later than planned", "About on time", "Usually earlier than planned", "Too few past projects to say"; "Usually costs more than planned", "About as planned", "Usually costs less than planned").
+- `extraMonthsWord` for the hidden-delay priors.
+- Analogues as name, sector, outcome (slipped, held, unknown) and years ago; `analogueSummary` "N of the M most similar past projects at this stage slipped".
+- Evidence strings rewritten by `plain_text`: "P = 0.87 (High-tier cut 0.85)" becomes "a completion-date push is very likely within the next two quarters"; "(P = 0.7)" becomes "(rated likely)"; agency statistics become "this agency's projects usually finish later than planned (N projects)"; composite scores are removed; hidden-delay months become the band and the project count.
+- Alert titles and details, job summaries (`realised` nulled), live status, and old worker memos (`plain_memo`: "slip probability of 0.7636" becomes "slip probability (rated very likely)", risk exposure figures are dropped, the word SHAP is removed).
+
+The hidden columns are named in `HIDDEN_SCORES`, `HIDDEN_ROW`, `HIDDEN_ANALOGUE`, `HIDDEN_COMPLETION`, `HIDDEN_AGENCY` (16 statistics), `HIDDEN_PRIOR`, `HIDDEN_COMPOSITE`, `COMPOSITE_STATS`, `LIFTS`, `BACKTEST_RATES`, `LINK_CI`, `HIDDEN_JOB`. `tests/test_numbers_policy.py` scans every endpoint recursively for a hidden key holding a value, per viewer. The public redaction (`public_*`) goes further: no drivers, no rank percentile, no p05/p95, no provenance versions or source documents, no identity review, no checklist evidence, no PARIVESH details, no remark status, no hidden delay, research facts without match reasons or agent headlines, external evidence lines emptied. The frontend mirrors the policy in `src/lib/outlook.ts` (`plainText`, `plainMemo`, `scrubModelNumbers`) and `src/lib/headline.ts`; the developer's project page is the only place with the raw numbers.
+
+### 5.7 Alerts and the live stream
+
+`app.alerts` rows carry `created_at, project_key, kind, severity 1-3, title, detail, asof, model_version, source, acked_by, acked_at`. Kinds: `tier_up`, `tier_down`, `new_project`, `slip_realised`, `signal`, `early_notice`, `pipeline_error`. The watcher raises `tier_up` into High or Critical (severity 3 for Critical, else 2), `tier_down` out of them (1), `new_project` (2 if High or Critical, else 1), `slip_realised` (2) for High or Critical rows that slipped, and `pipeline_error` (3 on a failed ingest, 2 when the serving tables could not be loaded); moves among Medium, Low and Watch raise nothing. The scout and the research agent raise `signal` at severity 2 or 3. `GET /api/stream` polls `db.alerts_after` every 2 s, sends `event: alert` with the alert's id, heartbeats with a comment every 15 s, and re-checks that the session is still live with the same role and scope at every heartbeat. The top bar opens one `EventSource` on it for every signed-in role.
+
+### 5.8 The scheduled jobs (`backend/live/scheduler.py`)
+
+One asyncio task per loop; blocking work runs in a thread; each job takes its own module lock so an API-started run and a scheduled run never overlap; each has a `MAX_RUNTIME_S` after which the loop records `last_error`, sets the LLM jobs' stop flags and moves on. `LIVE_JOBS=0` starts none of them (jobs still start from the API).
+
+| Job | Interval (env, default) | First run after start | Limit | Off switch |
+|---|---|---|---|---|
+| `watch` (report watcher) | `WATCH_INTERVAL_S` 60 s | at once | 4 h | `LIVE_JOBS=0` |
+| `scout` (news scout) | `SCOUT_INTERVAL_H` 24 h | 600 s | 2 h | `LIVE_JOBS=0` |
+| `parivesh_snapshot` | `PARIVESH_SNAPSHOT_INTERVAL_H` 6 h (one fetch a day) | 120 s | 1 h | `PARIVESH_SNAPSHOT=0` |
+| `bhoomi_rashi_pull` | daily check, pulls when the newest pull is `BHOOMI_PULL_EVERY_D` 91 days old | daily | 4 h | on only with `BHOOMI_PULL=1` |
+| `research` (research agent) | `RESEARCH_INTERVAL_H` 24 h, `RESEARCH_PER_RUN` 20 | 1,800 s | 3 h | `RESEARCH_AGENT=0` |
+| `second_opinion` | `SECOND_OPINION_INTERVAL_H` 24 h, `SECOND_OPINION_PER_RUN` 15 | 2,700 s | 2 h | `SECOND_OPINION_JOB=0` |
+
+The report watcher (`backend/live/watcher.py`): `pending()` lists files in `dataset/raw/inbox/` older than 5 s whose sha256 has not been ingested under this `pipeline_version` (a 12-character sha256 of `pipeline/**/*.py` and `ml/*.py`). `classify()` recognises a portal `Projects_Report.csv` export or a PAIMANA flash PDF (PyMuPDF text with "PAIMANA portal" or `_FR_`, not QPISR; the period from the file name). `ingest()` pins serving, backs up the pointer, the predictions file, the prediction log and the clean inputs, runs the extractor, `pipeline/build_clean_projects.py` and then `python -m pipeline.run` for silver, external, research, gold, score, profile as subprocesses (an hour each at most; `train` is by hand, monthly), and on success archives the file, diffs the old and new scores into alerts, fills realised outcomes in the prediction log, records the source and the job, and loads the serving tables best-effort. On failure it restores the files when no step completed, keeps the old scores, and raises a severity-3 `pipeline_error`. An ingest takes about two minutes for a portal file. Uploads through `POST /api/jobs/ingest` land in the same inbox.
+
+The news scout (`backend/live/scout.py`): Google News RSS (`hl=en-IN`, `gl=IN`) with three to five aliases per project (place words = name words of four or more letters appearing in at most eight current project names, minus state words, plus an anchor such as an object word, the NH number, the agency's short name or the state) and the PIB feed once; ten-second timeout, one request a second, at most 50 projects per batch (watchlisted first, then Critical and High least recently scouted). Items with more than 30 per cent non-Latin letters are skipped; duplicates by URL and by title-plus-summary hash are dropped; `link()` scores 0.5 x min(1, place words found / 2) + 0.5 x context anchor and links at 0.5 or more unless a second project is within 0.1 (stored unlinked as ambiguous). `classify()` picks the first taxonomy category; severity 3 on court orders, terminations, NGT, blacklisting or a cancelled contract; 2 on stalled, halted, protest, stay or ban; else 1. A linked item of severity 2 or more raises a `signal` alert.
+
+The portal jobs (`backend/live/portals.py`): the PARIVESH snapshot archives the PARIVESH 2.0 dashboard's state-wise FC table to `raw/external/parivesh2_snapshots/<date>.csv` once per date (first snapshot 28 September 2026, 31,477 proposals); the Bhoomi Rashi pull posts to the highway register per state with a three-second gap and a 900-second timeout, detects truncation, retries once, parses with `pipeline/bhoomi_rashi.py` and writes `raw/external/bhoomi_rashi_pulls/<date>.csv`. Access rules: public pages only, a project User-Agent, at most one request a second, no captcha bypass.
+
+The research agent and the second-opinion job are described in section 7.
+
+### 5.9 The PostgreSQL schema
+
+Eleven Alembic migrations in one chain (`database/postgres/migrations/versions/`), run by the compose `migrate` service and by `db.init()` under an advisory lock. Manamrit's five create `ingest.source_documents`, `ingest.load_runs`, `core.projects`, `core.project_keys`, `core.project_timeline`, `ml.model_registry`, `ml.predictions`, `ml.risk_flags`, `ml.forecasts`, `ml.agency_stats`, the view `ml.current_predictions`, the artifact checksum column and `ingest.staging_project_observations`. PAIMANA's six (`1f3a9c2d7b40` to `6c8e0a2b4d91`) create schema `app`: `sources`, `job_runs`, `alerts`, `watchlist`, `signals`, `signal_projects`, `scouted`, `audit_log`, `briefs`, `research_facts`, `researched`, `signal_judgements`, `second_opinions`; then `users` (citext email, argon2 hash, role, ministry, agency, `is_admin`, status, failed logins, lock, password change time), `sessions` (the sha256 of the cookie token, a CSRF token, expiry, last seen, revoked, ip, user agent), `signup_requests` (one pending per email), `login_attempts`, `password_resets`; `rag_chunks` with a `vector(768)` column and an HNSW cosine index, and `rag_meta`; the PAIMANA prediction columns on `ml.predictions`; the developer role and password resets; the `view` column on `briefs`. `pipeline/serve.py` loads `core.*` and `ml.*` for other consumers; the API reads DuckDB. The worker cell's runs and memo drafts are the one exception to "app state in PostgreSQL": they stay in `database/worker_runs.json` and `database/dispatch_drafts.json` through `backend/store.py`.
+
+Engine: one SQLAlchemy engine over psycopg 3, pool 5 with overflow 10, pre-ping, 5 s connect timeout, 15 s statement timeout. Every write by a person writes an `audit_log` row in the same transaction.
+
+### 5.10 Caching and limits
+
+In-memory: the serving cache per data version; the chat and reset rate limiters (`backend/ratelimit.py`, sliding windows, at most 10,000 keys, reset on restart); the LLM breaker and gate. Persistent: sign-in failure counters in `app.login_attempts`, briefs in `app.briefs`, second opinions in `app.second_opinions`. Request limits: 1 MiB bodies, 110 MiB uploads, 30 s per request, 15 s per statement, 5,000 map rows, 100 rows per page, 500 sign-up requests per listing, 100 linked news items per project.
+
+---
+
+## 6. The dashboard, page by page
+
+### 6.1 The shell
+
+The application (`frontend/src/App.tsx`) has 15 routes: `/` (Home), `/login`, `/signup`, `/reset`, `/command` (Command Center), `/projects/:key` (the project page), `/external` (External Factors; `/sandbox` redirects there), `/bottlenecks`, `/agencies`, `/radar`, `/approvals`, `/models` (`/audit` redirects there), `/workers`, `/admin`; unknown paths go home. Routes are lazy chunks inside a `RouteErrorBoundary` whose fallback reads "This page could not be shown" with "Reload" and "Go to Home". `/login`, `/signup` and `/reset` render bare, without the top bar, the side panel or the chat. On load `SessionContext` calls `GET /api/auth/me` and shows a loading skeleton until it answers, so an official never sees the public page first.
+
+The top bar (`components/layout/TopBar.tsx`, sticky): the wordmark "PAIMANA" and "RADAR"; the navigation (`components/ui/navigation-menu-05.tsx`) with the items Home, Command, External factors, Bottlenecks, Agencies, Radar, Models, Workers, Approvals in that order, filtered by what the role may open, the first five inline and the rest under a "More" popover (the public sees Home, Command and External factors; officials five inline plus Radar and Approvals under More; the developer's More holds Radar, Models, Workers and Approvals; Administration is never in the nav, only in the account menu); a data pill from `/api/meta` and `/api/portfolio` reading "as of {Mon YYYY} · {n} projects" with the latest report document as its title; a scope chip showing the ministry or agency ("viewing as {scope}"); the alert bell for signed-in roles; and the account button (initials and a chevron) whose popover shows the display name, a small "Developer" tag for that role, the e-mail, "{IPMD Analyst | Ministry Official | Implementing Agency} · {scope} · administrator", then "Change password", "Administration" (administrators) and "Sign out". The public sees a "Sign in" button. Two banners can appear under the bar: "Your session expired. Sign in again" and, when `/api/meta` is unreachable, "The data service is not answering at {address}" with the uvicorn command to start it.
+
+The alert bell (`AlertBell.tsx`): a badge with the number of open alerts newer than the last time the bell was opened (`localStorage 'paimana.alertsSeenAt'`, 99+ cap); a popover "Open alerts · {total}" with "All alerts →" (to Home), the eight latest open alerts (kind icon tinted by severity, title, "{projectKey} →" opening the side panel, time) and "Acknowledge" for ministry and above. The kinds are labelled Tier up, Tier down, New project, Slip realised, News signal, Early notice, Pipeline error. `useAlertStream()` in the top bar keeps one `EventSource('/api/stream')` open; each alert event invalidates the alerts, live and signals queries.
+
+The change-password dialog: "Change password", "Your other sessions will be signed out; this one stays.", fields Current password, New password, Confirm new password with the policy line and a four-segment strength meter, "Cancel" and "Change password"; a wrong current password reads "The current password is wrong."
+
+Every page opens with one plain sentence; a `Page` is at most 1,440 px wide (1,100 for narrow pages) with 32 px between sections; a `Card` is a rounded panel with a title row and an optional (i) tooltip.
+
+### 6.2 Home `/`
+
+One route, four layouts by role (`views/Home.tsx`, `views/home/*`).
+
+Public: the hero "Where India's central infrastructure projects stand", "Cost, progress and the risk of delay for every open central-sector project, as of {date}.", buttons "Browse all projects" (to `/command`) and "What holds projects up" (to `/external`); the `WeekBrief` card titled "Where the projects stand"; the India map; two lists from `GET /api/projects`: "Closest to completion" (`sort=progress&size=5&near_complete=true`, a green meter and the floored percentage; empty "No open project is 80–99% done and still on its expected date.") and "Longest delays so far" (`sort=slip&size=5`, a red badge "{n} months late" or "{x.y} years late" from 24 months; empty "No open project is behind its original schedule.").
+
+Ministry official: the title is the ministry's name, with "Open Command Center"; `WeekBrief`; `LiveStatus`; "Most at risk" (the top seven of the portfolio with an `OutlookChip`, and an "All projects" link); "How its agencies usually finish" (from `GET /api/agencies/matrix`, grouped by schedule word with "{n} past · {m} open", rows linking to `/agencies?agency=`; empty "No agency has 5 or more past projects to compare."); an "Early notice" card (a large red count, "projects · Rs", a bar per external factor, and the note that it is "a reason to ask the agency, not a forecast"); then the India map and the early-warning inbox.
+
+Agency official: the title is the agency's name with "{ministry} · {sector}" and a "Your projects" button; `WeekBrief`; "How your agency's projects usually finish" (asks the matrix with `include_hidden=true` so a small agency finds itself; two sentences of the form "Schedule: usually later than planned, on N past projects; most agencies in {sector} are about on time." and "Cost: …, on N past projects with costs.", plus "{n} open projects now · Rs"; empty "No past projects with a known planned duration yet, so there is nothing to compare."); "Approvals waiting" (from `GET /api/dispatch`: the pending count, up to three links to `/approvals`, or "Nothing is waiting for you."); `LiveStatus`; "Most at risk" (eight) and the inbox.
+
+IPMD analyst and developer: "Portfolio overview" with "Open Command Center"; `WeekBrief`; `LiveStatus`; a "Look closer:" line linking "External factors · land, forest, courts", "Bottlenecks · shared blockers", "Radar · linked news" and, for the developer, "Models · accuracy checks"; the India map and the inbox.
+
+`WeekBrief` (`views/command-center/WeekBrief.tsx`): "What needs attention this week" (officials) or "Where the projects stand" (public); up to three sentences built by `lib/headline.ts weekBrief` from `GET /api/projects/map` and four one-row alert counts since last Monday: "N projects are due within six months and likely to slip.", "K of them show no slip in the reports yet but have a land, forest, court or contractor issue on record.", "Since last Monday: N projects moved up a tier, N realised a slip, N new early notices, N news items were linked."; the public reads "{Sector} carries {fraction} of the N projects rated Critical or High for a delay or a cost rise." and "{State} has more of them than any other state: N." (fractions in words: all, nearly all, most, about half, about a third, about a quarter, a few, none); then the `PortfolioLine` "{n} open projects · Rs X · +Y% over sanction · Z% built on average", the five tier counts and a segmented tier bar.
+
+`IndiaMap` "Projects by state": a react-simple-maps Mercator map of `public/india-states-simplified.geojson` shaded by each state's share of the largest state's Critical-plus-High count; "+" and "−" zoom buttons only; a hover card with "{n} open projects · Rs" and "{c} critical · {h} high"; a click opens `/command?state=`; a gradient legend; "not on the map" chips for multi-state, pan-India, offshore, Telangana and Ladakh projects (the boundary file predates the last two); and "Top states by projects at risk (critical + high)", six rows with a stacked bar and "{k} at risk of {n} · Rs".
+
+`EarlyWarningInbox` "Early warnings": "{total} open", a kind select ("All kinds" plus the kinds; "Pipeline error" only for IPMD and the developer), rows from `GET /api/alerts?acked=false` with the kind icon, the title, "{Kind} · {projectKey} · {time} · {detail}" (the detail scrubbed of model numbers for the four roles) and "Acknowledge" for ministry and above; "No open alerts — every alert has been acknowledged."; a pager "page x of y".
+
+`LiveStatus` (signed-in roles): a strip from `GET /api/live/status` refreshed every 5 s while a job runs, else every 30 s: a state pill "Live" / "Live jobs off" (with the note "The background loops are off (LIVE_JOBS=0); jobs still start from the API.") / "Offline"; items "Report check" (hint "the watcher looks for new reports in dataset/raw/inbox/"), "Last ingest" ("{status} {time}" or "none yet"), "News scout", "Inbox {n} pending"; the button "Check inbox now" (the developer only; `POST /api/jobs/watch`).
+
+### 6.3 Command Center `/command`
+
+Header "Command Center" with a green or red dot and "as of {date} · data up to date" or "the data service is not answering". `?state=` (from the map) and `?flag=` (from External Factors) seed the filters once. Twenty-five rows a page. Escape clears the map selection.
+
+`FilterBar`: a search box "Search a name or PRJ key" (300 ms debounce, 100 characters); a tier chip group All / Critical / High / Medium / Low / Watch with counts from `/api/portfolio` (arrow keys move, Home and End jump, clicking the active chip returns to All; Watch's title "No completion date in the reports, so the delay risk is not ranked"); selects "All sectors", "All states", "All ministries" (only when the viewer sees more than one), "Any flag" (Land, Forest, Litigation, Contractor, Early notice); "Clear filters".
+
+`RiskMap` (two thirds of the width) reads `GET /api/projects/map` with the list's filters, unpaged (the backend caps it at 5,000 rows; if the endpoint is missing it falls back to the 100 riskiest and says so). Title "Due soon and likely to slip" when the rows carry outlook words, else "Due soon, by risk tier"; zoom presets "Next 12 mo", "3 yr" (default), "All"; "View as list". A one-line takeaway: "{k} of the {n} Critical projects here are already past their due date." or "None of the n Critical projects here is past its due date yet." or "{k} of the {n} dated projects here are due within a year." or "No project here has a completion date to place." Geometry (`riskMapLayout.ts`): x is the months from the as-of date to the anticipated completion on a piecewise scale (an overdue strip of 15 per cent on a square-root scale to 36 months, then segments labelled "due now", "6 mo", "1 yr", "2 yr", "3 yr" or "later"); y is a lane per delay word (very likely, likely, possible, unlikely, plus a thin "not ranked" lane) or per tier when no words are available; a month's projects fill 12 px columns round-robin, most severe tier first, stacking alternately up and down from the lane centre; a column too tall folds its least severe rows into a "+n" mark ("n more due then than fit here: click to list them"). Dot radius by anticipated cost: 3 px under Rs 500 crore, 4.5 px to Rs 5,000 crore, 5.5 px above; fill by tier colour; a red outer ring marks early notice, a dashed ring a stalled project, an accent ring the project open in the side panel. The hover card shows the name, "key · sector · state", the tier badge and Stalled, "Delay {word}" and "Cost rise {word}" with tone dots, "Likely slip {band}", a progress meter, the due text and date and the cost, and `topReason`; a Watch project reads "Not ranked: no completion date in the reports". A click opens the side panel; dragging on empty canvas draws a brush that selects projects for the list (Shift adds; on touch after a 150 ms hold); a click on "+n" selects its folded rows. Keyboard: one tab stop per lane ("Delay likely: n projects. Left and right move between them, up and down change lane, Enter opens, Space selects."), Left and Right walk in due-date order, Up and Down change lane, Home and End, Enter opens, Space toggles selection, a polite live region reads "{key}, {Tier}, due in 4 months, delay likely"; a "Skip to the project list" link. Notes under the plot: "{n} more are due after the next 12 months/three years (counted at the right edge of each lane). Show all"; a dashed strip "{n} projects have no completion date, so they are not placed · list them" (sets the Watch filter). The legend explains the four tier dots, early notice, stalled, the "+n" mark, the three sizes, and "Each dot is a project: further left is due sooner, a higher lane is more likely to be delayed, a bigger dot costs more. Drag across empty space to pick projects for the list." No wheel zoom.
+
+`SectorRisk` "Where the risk sits" (from `/api/portfolio` with the state and ministry filters): a takeaway "{Sector} carries about half of the Critical projects here." or "No project here is rated Critical."; up to eight sectors as bars segmented Critical (red), High (amber) and the rest (grey), width by project count; a click filters the page by sector; the note "The search, tier and flag filters above do not apply to these bars."
+
+`DelaySources` "Where the delays come from" (from `/api/external/summary`): the six outside factors ranked by projects flagged, a grey bar with a charcoal inner bar for early notice; the tooltip "{n} projects on record · Rs" and "{k} with no slip in the reports yet (early notice)"; a click sets the flag filter (Utility shifting and Inter-agency have no list filter); the note "Across every project in your view: the filters above do not apply here."
+
+`TriageTable` "Projects {total}" (`id="project-list"`): server-paged and sorted from `GET /api/projects`, or the map selection ("{n} selected on the map" with a clear button; sorting disabled). "Columns +n" toggles "Top reason" (on from 1,280 px), "Agency & state" and "Slip so far", remembered in `localStorage 'paimana.triageColumns'`. Columns: Project (name; "key · sector · state"), Tier (badge and Stalled), Outlook ("Delay likely" and "Cost rise unlikely" with tone dots; Watch "not ranked"), Progress (a thin bar and "34%"; "not reported"), Due ("Mar 2027" and "in 4 mo", "3 mo overdue" in red, or "this month"; "no date"), Cost ("Rs 12,482 Cr" and "spent Rs …"), Top reason (`topReason` or the first flag's sentence: "Land acquisition flagged", "A court case flagged", "An outside issue, no slip yet"; "none on record"), Agency and state, Slip so far ("{n} mo", red and bold above 12), Flags (icon chips: Land, Forest, Litigation, Contractor, Early notice in red). Sortable headers: Project, Tier, Progress, Cost, Slip so far. Rows are focusable; Enter or a click opens the side panel; the open row shows an accent inset bar. Empty states "No project matches these filters. Clear a filter to see more." and "Nothing is selected on the map."; a pager "Page x of y".
+
+### 6.4 The project side panel
+
+`views/command-center/ProjectDetailDrawer.tsx` is mounted once and opened by `?project=KEY` from any list (closing returns focus to the opener). A Radix dialog sliding from the right (no motion under reduced motion), at most 680 px wide, with a blurred backdrop. Header: the key in monospace, the tier badge, the Stalled badge with its quarters, the name, chips for sector, state and agency, the buttons "Open full page" and, for the developer, "Model detail", and a close button. Body, in order: the headline sentence; the three outlook tiles; the "Why it is happening" block (compact); a "Read the AI brief" fold (officials; writes on open); the second-opinion card; "Time used" against "Work done" and the money bar; the progress trend; the timeline strip; the external chips (with linked-news counts for officials); the 13-check grid (plain mode for the public); "Research & news" (three facts per group with "Show all n facts"). A missing or out-of-scope project reads "This project was not found, or it is not in your view."
+
+### 6.5 The project page `/projects/:key`
+
+`views/ProjectStudio.tsx` and `views/project-studio/*`. The identity strip: "← All projects"; the key, tier badge and Stalled; the name as the heading; "{ministry} · {agency} · {state} · sanctioned {Mon YYYY}"; "From the {Mon YYYY} report · {document}, p.{n}" (not for the public); a definition list "Anticipated cost" (with "sanctioned Rs"), "Built" (with "spent Rs"), "Expected completion" (with "first planned {date}"); and a warning strip "Identity under review: {note}" when the identity match is under review. The developer alone sees two tabs, "Briefing" and "Model detail" (`?tab=model`); everyone else sees the briefing.
+
+Briefing, "Where it stands": the headline sentence (`lib/headline.ts`: an opener per tier, Critical "Needs attention now", High "Watch closely", Medium "On the radar", Low "Steady", Watch "No completion date on record", then a sentence such as "60% done, 4 months from its expected date, the schedule already used up; delay very likely, cost rise unlikely, likely slip 6 to 12 months; no progress for 3 quarters; a land issue on record with no slip in the numbers yet."); a `TierRing` in the tier colour with the word inside (or "Not scored"); the tier sentence (Critical "Among the few open projects most likely to be delayed or cost more over the next two quarters.", High "Among the open projects more likely than most…", Medium "In the riskier half of open projects…", Low "In the less risky half…", Watch "No completion date on record, so the delay risk is not ranked."); the three `OutlookTiles` "Delay", "Cost rise", "Likely slip" showing the word in its tone (or "not ranked: no completion date in the reports", "not available yet") and the line "Over the next two quarters, from the risk model; the reports themselves say what has happened so far." Then `WhyBlock` "Why it is happening": up to five numbered drivers, each a label with an up arrow (red, "raises the risk") or a down arrow (green, "lowers the risk") and one to three strength dots; the public gets no drivers and the block opens with the checks. "What the checks found": each flagged check as "{Label}: flagged — {evidence} ({source}, {date})", a fold "{n} checks clear", "No data for: … — not the same as clear.", or "No check is flagged on the latest reports." The right column holds the AI brief and the second opinion for officials, and the external chips for the public.
+
+"What the reports show": `TimeVsWork` ("Time used" grey bar against "Work done" green bar with the gap shaded red, a chip "{n} pts behind/ahead", "Past its scheduled completion"); `MoneyBar` ("Money": the anticipated cost, Spent, Remaining, "Overrun +x%" with a red hatch past the original cost, or "Within the original cost of Rs …"); `TimelineStrip` ("Timeline": Sanctioned, Scheduled and Expected dots on one line with a "Today" marker and "+{n} mo vs schedule"; the developer also sees a "Predicted" red dot and the p05-p95 band); `ProgressTrend` ("Progress over time": a grey "Work done" line and a dashed "Spent" line as a share of the anticipated cost, an amber dot on the report that last moved the completion date with "Completion date pushed from {Mon YYYY} to {Mon YYYY} in the {Mon YYYY} report.", "{n} reports"; "Only one report so far").
+
+Officials also get `TrajectoryChart` "Where it could go from here" (from `GET /api/projects/{key}/forecast`; a Recharts composed chart with "Work done (reported)" in green on a percentage axis, "Spent (reported)" in blue on a crore axis, the dashed scenarios "If it keeps its own pace", "If it recovers to the sector's pace", "If it follows its agency's pattern", the dotted "A typical project in the sector", the shaded "Range of the three paths", and reference lines "reported completion" and "today"; the tooltip shows values only for the two reported series; a caption of the form "Likely completion: {slip band} past {date}, the date the latest report gives."; 404 "No paths ahead: the project is not in the current scored portfolio, so the history is shown alone.") and beside it `AnaloguesLine` "What happened to projects like it": a sentence of the form "Of 10 similar past projects at this stage, 7 slipped within a year, 2 held and 1 cannot be told." with chips "{name} · {sector} · 3 years ago · slipped/held/not known" linking to each analogue's page.
+
+"What is happening around it": `ExternalEvents` "Issues in the report remarks · n" ("remarks read up to {date}"; each event with its category, a status chip open-live (red), "stale · last known 2023-Q2" (dashed) or closed, "{subtype} · {first} → {last} · {n}q · {authority} · {ha} ha", the quoted remark and "{document} p.{n}"; empty "no land, clearance, litigation or contractor issue found in the report remarks (free text only through 2023)"); `ExternalChips` "External issues" (officials): a "Forest clearance" fact (a PARIVESH stage such as "{stage} for {m} mo (limit {n})", the proposal "FP/…: filed … · Stage-I … · Stage-II …", or "Report remarks: Stage-II pending (last known 2023-Q2)") and a "Land acquisition" fact (of the form "Bhoomi Rashi: NH-{n} at its km range, complexity {k}/5", "{n} parcels · notified {from} to {to}", "possible link on NH-… or its district only, not rated", "Report remarks: 62% acquired (last known …)"), each followed by a `DelayLine` "Expected hidden delay (status as of 2023-Q2): a few months more" with an (i), remark chips such as "Land open ×2" or the dashed "Litigation · last known 2023-Q1", and "{n} live blockers in web research" and "{n} research facts · {m} linked news"; `LinkedSignals` "Linked news · n" (officials; "scouted {date}" or "never scouted"; each item with the title link, "source · date · category · severity n", and "report of {Mon YYYY} then pushed the date or revised the cost ({d} days after the article)" or "no later report has changed the date or cost yet"; empty "no linked news yet — not the same as clear"); `ResearchNews` "Research & news" (every fact from `GET /api/projects/{key}/research`: "Latest from the sources: …", chips such as "Land 62% acquired · as of Aug 2026", "Forest clearance: Stage-I", "New target: …", "Cost revised to Rs …"; groups "Live blockers", "Resolved", "Progress", "Older and other reports"; each fact with its category dot, date at source precision, tags "ongoing", "resolved", "severe", the summary, the source link and an origin note "news, judged by the local AI", "from the headline, checked", "source re-checked" or "web research"; the states "Not researched yet: no web search has been run for this project, which is not the same as no problem." and "Researched on {date}: nothing found. Not the same as no problem.").
+
+`RiskGrid` "All checks at a glance" (public title "What could hold it up"): the 13 dimensions as icon tiles (Schedule slip, Cost escalation, Execution stagnation, Expenditure lag, Repeated revisions, Sector headwind, Agency optimism, Land acquisition, Environment / forest clearance, Litigation, Contractor stress, Data staleness, External factor score), red flagged, green clear, dashed grey no data; the tooltip "{Label} · Flagged/Clear/No data — not the same as clear" with the evidence and the as-of date for officials; "{f} flagged · {c} clear · {u} no data"; the public also reads the `topRisksPlain` bullets.
+
+`BriefCard` "AI brief · local model" (officials): "Write the brief" / "Writing…" / "Try again"; while writing "The local model is writing; every figure it uses is checked against the record."; the two paragraphs with the chip "Checked against the project's record" and "Written {date}" or "Written from the latest report" (the developer also reads "{n} numbers checked · {a} attempt(s) · {model version} · cached"); idle "Two paragraphs on where this project stands and why, written by the local AI model from the project's record. Anything it says that the record does not support sets the brief aside."; 503 "The local AI model is not running, so no brief can be written now"; 422 "The brief was set aside: it said something the project's record does not support ({n} attempts)" with the reasons.
+
+`SecondOpinionCard` "AI second opinion · local model" (officials): a stored opinion shows at once; otherwise "Get a second opinion" / "Writing…" / "Try again"; while writing "The local model is reading the evidence · m:ss" and "This usually takes one to two minutes on this machine; every citation and number is checked before it shows. You can close the panel and come back: it keeps going."; the result shows the concern badge ("No added concern", "Worth watching", "Concern"), the headline, the narrative whose `[E#]` markers are chips that scroll to and focus the evidence item, the line "Agrees with the model's High tier" or "Reads the risk higher/lower than …", "Evidence cited" (kinds Status, Model, Risk check, Report remark, PARIVESH, Land register, Web research, News; an "Old" tag "An old item: it may have been resolved since, so it is not today's state"; the date and the source link), "What the evidence does not show" (up to three gaps), the footer "{model} · written {date} · {n} evidence items read · cached", and the note "AI second opinion — it does not change the tier, which stays the model's ranking."; 503 headlines "The local model is busy; try again in a minute", "The local model did not answer in time; try again", "The local AI model is not running, so no opinion can be written now"; 422 "Second opinion rejected: it did not hold up against the evidence (n attempts)".
+
+Model detail (the developer's tab): a provenance line "asof 2026-09 · model {v} · gold {v} · silver {v} · source: {document} p.{n}"; `PredictionPanel` "AI prediction · next 2 quarters" with the note "Probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies. Intervals are the 5th–95th percentile of LightGBM quantile models.", the tier word with "top {n}% by P(slip, 2q)", the rows "P(date push, 2q)", "P(date push or cost revision) {2q} (2q) · {4q} (4q)", "P(cost revision, 2q)", "Expected slip, next 2 quarters (p50)" with "90%: a mo – b mo", "Expected cost revision, next 2 quarters (p50)"; the trajectory chart with every value and the "completion p05–p95" area; `GaugeRow` "Probabilities · next 2 quarters" with four half-circle gauges "Any slip · 2q", "Date push · 2q", "Cost revision · 2q", "Any slip · 4q"; the timeline strip with the prediction and its band; `RiskChecklist` "Risk profile · 13 dimensions" (label, chip Flagged / Clear / "Unknown ?", the evidence as stored, the source label, the date); `ShapWaterfall` "Why this score" ("primary: {feature}", five rows "{label} = {value}" with a red or green bar and the contribution); `AnaloguesTable` "Analogue projects · n" (columns #, Project with "key · {basis} pool", At stage, Distance, Within 4q, Slip "{n}mo", Cost "{n}%"); linked signals with "link {score} (match)"; the external chips with the measured months and intervals.
+
+Not found: "Project {key} was not found, or it is not in your view." with "Back to all projects".
+
+### 6.6 External Factors `/external`
+
+Title "External Factors", subtitle "What holds projects up on the ground before the cost and schedule figures move", right "as of {date} · {n} projects" (the developer also sees the model version). Data: `GET /api/external/summary`, `GET /api/research/summary`, `GET /api/signals/feed`, `GET /api/live/status`. The opening takeaway is a sentence of the form "Land acquisition is on record for N projects worth Rs X; K of them show no slip in the reports yet.", filled from the summary.
+
+- `FactorBoard`: six tiles (Land acquisition, Forest clearance, Litigation, Contractor stress, Utility shifting, Inter-agency), each "{n} flagged", a capital bar scaled to the largest, the rupee figure and a red siren count for early notice; "not in the summary — unknown, not clear"; the picked tile lists "{Factor} · top N of M by capital" with "All in Command Center →", rows with the name, cost, tier badge, Stalled, "key · state · slip so far {n}mo" and the factor's evidence lines (officials).
+- `EarlyNoticePanel` "Early notice": the stats "Broad: no slip or tier Low/Medium", "Strict: no slip to date", "Any external factor flagged", each with its capital; "Early notice by factor" bars; "All {n} in Command Center →"; tabs "Broad · n" / "Strict · n" over a table Project, Factor, Evidence (not for the public), Tier with an `OutlookChip`, Slip so far, Cost.
+- `PortalPanel` "Open on PARIVESH, not in the report" ("{n} current projects linked"): the stats "Proposal still open", "Past the rule limit" ("flags the forest row"), "Open, silent in the report" ("no forest issue in the remarks"), "Linked projects by stage"; case cards headed "The portal shows the blocker; the report numbers did not" with the proposal number, category and hectares, the milestones Filed / Stage-I / Stage-II as dots, a verdict such as "No Stage-II after 31 mo; rule limit about 12 mo", "Final approval 14 months after filing" or "Dropped without approval after a {who} query of {date} went unanswered", and "portal on {date}: {status}"; an open-proposal table Project, PARIVESH stage, In stage ("{m} mo" in red when overdue, "limit {n} mo"), Filed, Tier, Cost, with "Show all n".
+- `ResearchPanel` "Web research" (right "searched {first} to {last} · news agent {date}"): tiles "Projects researched" ("{s} of {n}", "{k} with cited facts"), "Cited facts", "Live blockers" ("on {n} projects, within 4 quarters"), "Live blockers by category"; "Newest blockers" (six, then "Show all n"; each with category, date, "severe", the summary for officials, the headline link, the source, the tier badge, a project button and the state) and "Where they are" (per state); empty "No live blocker in the research for your projects. Not the same as no problem: news coverage favours large, much-reported projects."
+- `HiddenDelayPanel` "How much longer each issue usually adds" ("measured on real projects"): the groups "Forest-clearance stage in the report remarks", "Land acquired, share in the report remarks", "Land complexity on the km-matched NH stretch (the links the checklist rates)", "Land complexity on an NH or district link only (not rated)"; each tile a label, an (i) ("Measured against matched projects over the next four quarters, on N real projects with this status. Exploratory, not a forecast."), the verdict ("a few months more", "none measurable", "too few to measure", "not available yet"; the developer reads "+2.5 mo", "+8 pts push risk", the 95 per cent interval, the Holm-adjusted p and Garvit's guessed band) and "{n} open now · {m} past projects".
+- `LandMap` "Land records by state" ("{n} states · {m} stretches"): the register shaded by hectares; hover "{n} NH stretches · {p} parcels · {ha} ha", "latest notification {date}", "{r} current road projects: {k} rated ({f} flagged), {p} possible link" or "no Bhoomi Rashi data for this state"; a legend and off-map chips.
+- `RemarkFlagsPanel` "Report flags: live or stale" ("{live} live · {stale} stale"): four rows Land, Forest / environment, Litigation, Contractor with a live (amber) and stale (grey) bar and "last known 2023-Q2".
+- `CoveragePanel` "Coverage": bars "Land rated · km range on a Bhoomi Rashi NH stretch, 29 states", "Land: possible link · NH or district only, not rated", "PARIVESH proposal linked · n still open", "Forest area known", "Composite: forest + land", "Composite: forest only · land missing", each "{k} of {n}"; the developer also reads "Did an open land or forest remark come before a slip?" with the rates and "lift ×{x}".
+- `CompositePanel` "Land and forest together": the rows "Forest + land" (rated: flagged at 0.6 or above) and "Forest only" (not rated); the four roles read "{k} of {n} rated projects flagged" with a bar; the developer a box plot with the 0.6 line.
+- `AboutData` "About this data" (a fold): the caveats on remark free text ending in 2023, Bhoomi Rashi ("84% right on a hand-checked sample"), the PARIVESH rulebook and list, and the backtest sentence in words for the four roles ("…was not a reliable sign of a pushed completion date on its own…"); "Composite score: {rule}".
+- `EvidenceFeed` "News evidence {n}" (officials; "The news scout last ran …"; "Filter and map on the Radar →"): three-column signal cards with a pager; empty "no news evidence stored yet — not the same as no external trouble".
+- Footer: "External-factor datasets and rulebook: Garvit".
+
+### 6.7 Bottlenecks `/bottlenecks` (officials)
+
+Title "Bottlenecks", subtitle "Open issues shared by several current projects in one place", an (i) "Each cluster lists the projects that would be affected — not a claim that resolving it speeds them up." with the remark cut-off and "A cluster needs 3 or more current projects."; right "as of · n clusters + m state rollups · projects · Rs · latest evidence {date}". A takeaway of the form "{Category} in {state} blocks the most capital: N projects, Rs …". Filters: "By authority" / "State rollups"; "All issues" and a chip per category with its colour; "All states"; "Sort by capital" / "Sort by projects". A treemap "Where shared issues hold up the most capital · n" (area = capital of the member projects, colour = category; cells "{state} · {authority}" and "{n} projects · Rs"; the tooltip adds "{k} of n rated Critical or High · s linked news items" and "open in remarks or news {from} → {to}"). The list "Each shared issue, the largest first": "Blocking n projects worth Rs …", "{Category} · {state} · {authority | all authorities | authority not named}", stats with icons and the first evidence line. The right card "Projects that would be affected": pick a cluster to see its members (tier badge, key button opening the side panel, name, `OutlookChip`, "Rs · agency"), evidence boxes tagged "news" or "report remark" with dates and "source ↗" or "{document} p.n", and a pager; idle "Pick a block or a cluster to list its projects and the remarks or news behind each."; empty "No shared issue matches these filters. That is not the same as no open issues: the report remarks stop in 2023." Data: `GET /api/bottlenecks?size=100` (filtered client-side) and `GET /api/bottlenecks/{id}`.
+
+### 6.8 Agencies `/agencies` (officials)
+
+Title "Agencies", subtitle "How each agency's projects usually finish against the first plan"; right "as of · n agencies · m with fewer than 5 past projects shown/hidden"; a takeaway of the form "{k} of the {n} agencies in {sector} usually finish later than planned." The card "Which agencies usually finish late {n}" ("A pattern from history, not a verdict on a project. Pick an agency for its open projects.") with the checkbox "include agencies with fewer than 5 past projects" and, for the developer, a toggle "In words" / "Matrix" / "Leaderboard". The words view: `RankedAgencies` grouped under "Usually later than planned · n" ("Their past projects mostly finished later than first planned."), "About on time", "Usually earlier than planned", "Too few past projects to say" ("Fewer than five past projects: too few to see a pattern."), rows with the agency (and "your agency"), "ministry · sector", "{n} past · {m} open", the capital and a cost-word badge; beside it `AgencyDotPlot`, one row per sector (up to eight) with the columns "earlier than planned", "about on time", "later than planned", grey dots sized by capital, the viewer's own agency ringed, and the footnote "One dot per agency with five or more past projects; a bigger dot runs more capital. A dot's spot inside its column means nothing." The developer's matrix is a scatter of schedule bias against cost bias with the quadrants "late & over budget", "over budget", "late", "on time & on budget", colour by ministry, size by capital, tooltips with medians, raw values, 90 per cent intervals, shrink weights and trends; the leaderboard lists Agency (an asterisk for shrunk), n, Open, Capital, Schedule bias, 90% CI, Cost bias, 90% CI, Trend. `AgencyPanel` for the picked agency (`?agency=`): "{ministry} · {sector} · n past projects · m open", the two sentences of the form "Schedule: usually later than planned, on N past projects; most agencies in {sector} are about on time." and "Cost: …", the developer's bias bars against the sector, "printed as: {names}", and "{total} open projects · the riskiest first" with an `OutlookChip`, the tier badge, Stalled, "key · Rs · state"; "No open projects: its record is all completed work."
+
+### 6.9 Radar `/radar` (officials)
+
+Title "Evidence Radar", subtitle "News matched to current projects, often ahead of the next report revision", an (i) "From Google News and PIB. A news item is linked to a project only on a strong match; the rest stay unlinked."; right "scout running now…" / "scout last ran {time} ({status})" / "scout has not run on this server" and the button "Run scout now" (the developer; `POST /api/jobs/scout`). Summary tiles: "Last {n} days" ("{n} signals of {t} stored"), "Linked · unlinked" ("Unlinked: an ambiguous or weak match to a project."), "Severity ≥ 2", "Top categories" (four bars), "Projects scouted", "Lead time" ("{d} d", "median · x of y linked saw a later change", with the note "Search results can be years old, so a long gap is weak evidence of an early warning."). Filters: "All categories" (the nine event categories), "All states", "Any severity" / "severity ≥ 2" / "severity 3", "Linked and unlinked" / "linked to a project" / "unlinked", "clear filters". The "Signals · n" card of signal cards (source, date, category chip, "severity n", the title link, the summary, and per linked project the tier badge, the key opening the side panel, the name and state, "report change {d} days later" or "no later report change yet"; "not linked: ambiguous or weak match to a project"); a pager; empty "no stored signal matches these filters — not the same as no external trouble". `HeatMap` "Severe signals by state" ("Severity 2 or more, last 90 days, by the state of the linked project. Click a state to filter the feed."). Data: `GET /api/signals/feed`, `GET /api/radar/summary`, `GET /api/live/status`.
+
+### 6.10 Approvals `/approvals` (officials)
+
+A narrow page, title "Approvals", subtitle "Memos from the worker cell, addressed to your role". Cards from `GET /api/dispatch`, pending first then newest: the project name, "recommended for {ipmd analyst | ministry official | agency official}", a status badge (pending, approved, edited, rejected), the memo (rewritten in words for the four roles), evidence tags (links when a source URL exists), and "Approve" / "Reject" only when the memo is pending and addressed to the viewer's role (`POST /api/approvals`); the developer reads every memo and decides none. Empty "No memos for you yet."; offline "Backend not running — start the FastAPI server to see dispatch drafts."
+
+### 6.11 Models `/models` (the developer)
+
+Title "Models", subtitle "How the forecasts score on past data, and how the live predictions are holding up"; right "run {runId} · scores {modelVersion} · as of {date} · gold {v}"; a warning "The served scores come from {x}, not from run {runId} shown here: re-run python -m pipeline.run score." when they differ; empty "no champion run in model/registry.json yet: run python -m pipeline.run train". `LiveAccuracyCard` "Live accuracy": logged, realised, "precision, critical + high", base rate, PR-AUC, or "No prediction has reached its horizon yet: the earliest is logged at {date}, so the first realised outcomes arrive with the {date + 6 months} report." Target tabs "Any slip · 2q", "Date push · 2q", "Cost revision · 2q", "Any slip · 4q". `BenchmarkMatrix`: a stat strip (Champion, PR-AUC with "naive … · base rate …", Precision@50 with "naive … · +x pp", Rows / positive) and the table "ML against statistical baselines" with the split rows "Validation" and "Test (held out)" ("n cutoffs · rows · positives (base rate)"), the models Naive ("floor": "slipped last period, slips next: the floor everything must beat"), Old rule score, Logistic regression, LightGBM ("champion"), and the columns PR-AUC, ROC-AUC, Brier, ECE, Precision@50, Recall@100, Lead time; its (i) explains the rolling origin and that "Probabilities rank projects (tiers go by rank); Brier and ECE show they are not calibrated frequencies." `CalibrationChart` "Calibration" (predicted against observed per bin with the diagonal). `ShapSummary` "What the model leans on" (the top-20 mean absolute SHAP bars with officer labels). `AblationTable` "What each feature group adds" (state, +dynamics, +context, +freshness, +external; columns Features, PR-AUC, delta, Precision@50, delta, Recall@100, delta). `RegistryHistory` "Registry history · n decisions" (When, Challenger, Champion before, Decision, Reason) and the entries table (Registered entry, Registered, Val PR-AUC, Val ECE, Test PR-AUC, champion). Data: `GET /api/models` and `GET /api/meta`.
+
+### 6.12 Workers `/workers` (the developer)
+
+Title "Workers", subtitle "Runs of the monitoring workers and the alerts they raised"; the button "Run Monitoring Cycle Now" ("Running… (1–3 min)"; `POST /api/worker-runs/trigger`); the table "Worker Runs · n" with Worker (auditor, forecaster, scout, analyst, dispatcher), Model / Version, Dataset, Processed, Alerts, Timestamp, Summary; empty "No worker runs yet."
+
+### 6.13 Administration `/admin` (IPMD analysts with the administrator flag, the developer)
+
+Title "Administration", subtitle "Sign-up requests and accounts" (the developer: "…and the audit log"), the note "Every action here is written to the audit log with your account and address. An administrator cannot disable or demote their own account." Tabs Requests, Users, Audit (the developer).
+
+- Requests (`GET /api/admin/signups?status=`): a select pending / approved / rejected, "{n} pending requests"; the table Requested, Email, Name, Role and scope, Why, From (address), Review / Close; the review row shows the justification, a role-and-scope editor (Ministry official / Agency official / IPMD analyst and a scope picker "Search {n} ministries/agencies" over `/api/scopes`), "Note · kept with the decision; required to reject" (500 characters), "Approve" ("Account created for {email} with the corrected role and scope."), "Reject" ("Request rejected."), Cancel; decided rows show "{status} · {time}" and the note.
+- Users (`GET /api/admin/users`): a search "Email or name"; the table Email ("(you)"), Name, Role and scope ("admin" tag), Status (active, disabled, "locked" until a time), Last sign-in ("never"), and the actions Edit, Disable / Enable, Reset password (the viewer's own row is disabled: "You cannot change your own account"); the edit row has the role and scope editor and an "Administrator (IPMD analysts only)" checkbox; a reset shows a `TokenPanel` "One-time reset token for {email}. It is shown once and not stored here: give it to the user, who sets a new password at /reset. Valid until {time}." with the token, "Copy" and "Dismiss"; developer accounts are never listed; a pager "1–25 of {n} · page x of y".
+- Audit (`GET /api/admin/audit`): filters Since (a date), User ("Email or id"), Action ("login, ack, approve…"), "Apply"; the table At, User (e-mail, "user {id}" or "public"), Role, Action, Target, From, Detail; "No audit rows match."
+
+### 6.14 Login, request access, reset
+
+The account pages share `AccountLayout`: a dark left panel "PAIMANA RADAR", "Early Warning Radar for Central Sector Projects", "Ministry of Statistics and Programme Implementation · IPMD", three bullets ("Ranks every central sector project by its risk of a delay or a cost revision in the next two quarters", "Explains each ranking with the evidence behind it…", "Alerts the responsible officials when a project's outlook changes") and the footer "Authorised use only. Activity is logged."; nothing animates.
+
+- `/login`: "Sign in", "Officials sign in with their account. The public needs none."; the notice "Your session expired. Sign in again." when sent by a 401; fields Email and Password (with "Show the password" / "Hide the password"); "Sign in" / "Signing in…"; it returns to the page that sent the viewer, else Home; "No account yet? Request access"; "Continue as public". Errors: "Email or password is wrong, or the account is locked or disabled.", "This account is locked. Try again in …", "Too many attempts. Try again in …", "The service is not reachable. Try again in a moment, or tell your administrator."
+- `/signup`: "Request access", "For officials of a ministry, an implementing agency or IPMD. An administrator approves each request."; fields Official email ("Not an email address"), Full name, Role radios ("Ministry official · the projects of one ministry", "Agency official · the projects of one implementing agency", "IPMD analyst · every project"), "Your ministry" / "Your agency" (a searchable picker; "Pick the ministry your account is for"), "Why you need access" (placeholder "Your post, and what you will use the radar for", counter "n / 500"), Password with the policy hint and the meter, "Confirm password" ("The two passwords differ"); "Request access" / "Submitting…"; success "Request submitted" with "An IPMD administrator will review it; you will be told by your administrator. Sign in with the password you chose once the request is approved.", "Request {id}", "Back to sign in"; 409 "A request for this email is already waiting for review."
+- `/reset`: "Set a new password", "With the one-time token your administrator gave you."; "Reset token" (prefilled from `?token=`), the new password pair; "Set the password" / "Saving…"; success "Your password is set. Sign in with it." with "Go to sign in" (it does not sign the viewer in); a bad token reads "This reset token is not valid: it may have been used or expired. Ask your administrator for a new one."
+
+### 6.15 The chat drawer
+
+Available to every role. A round accent launcher at the bottom right ("Open the project assistant", with a green or red dot for the backend's reachability) opens a right-hand drawer, 440 px by default, resizable by its left edge between 320 px and three quarters of the window (pointer drag or arrow keys on the handle), Escape closes. Header "Project Intelligence" with "Answers from public project data" / "Answers from {scope}" / "Answers from every open project", "Clear the conversation" and Close. Welcome text: public "Ask about public infrastructure projects: their risk, progress, cost and the latest news, or what a term means."; officials "Ask about {scope}'s projects: why one is at risk, what changed, how two compare, or where the blockers are." Under "Try asking", four starters from the viewer's own portfolio (public: "latest news on this project", "projects near completion in {state}", "what does High risk mean", "where does the data come from"; officials: "why is {name} Critical", "what changed for {name}", "compare {a} and {b}", "top 5 land blockers in {state}"). When a project is open in the side panel or on its page a chip reads "Asking about {name}" with "Stop asking about this project", and the key goes with the question. The input ("Ask about this project or any other…" / "Ask about projects…", 1,000 characters) has one button that is Send or Stop; the footer reads "Answers come from PAIMANA data; the AI can make mistakes." The conversation resets when the role or scope changes.
+
+Each answer shows the steps ("Reading the question", "Choosing what to look up", "Looking up the data", "Writing the answer", "Checking the numbers against the data"; each tool with a spinner, a green check or a red cross and its summary; retry lines "The first draft did not pass the check against the data, so it is being written again", "The second draft did not pass either, so the answer is built from the data instead", "The local AI stopped answering, so the answer is built from the data instead"), then the cards, then the narrative with `[n]` chips that scroll to the numbered "Sources" list (kinds Project data, Portfolio figures, Risk model, Risk checks, Agency figures, Bottlenecks, Web research, News, Report remark, External data, Help page, Documentation, Glossary, AI second opinion), then a verdict: "Checked against the data" (a shield chip, "Every number in this answer was traced to the data the assistant looked up"), "AI summary unavailable, showing the data", "Assistant busy, showing the data" or "Not checked against the data", and the elapsed seconds. Cards: `projects` ("{n} of {total}, riskiest first": tier dot, name, "state · Rs · x% done", flag icons, an `OutlookChip`); `stats` (a table State / Sector / Ministry / Agency / Tier / Outside factor / Bottleneck, Projects, Capital, Critical, High); `project` (name, key, a whole tier ring, the badge, "Delay likely · cost rise unlikely over the next two quarters" or "No completion date, so the delay risk is not ranked", figures Work done, Anticipated cost, Expected completion, Likely further slip, and the plain top risks); `compare` (rows Tier, Outlook, Work done, Anticipated cost, Expected completion, Top risk); `explain` ("Why {name} is High": "What weighs most, strongest first" with arrows and dots, then "Flagged checks"); `history` ("What changed · {name}": "Work done over n reports", a sparkline and the change bullets); `opinion` ("AI second opinion" with the concern badge, the headline and "An AI reading of the evidence; it does not change the tier."). The developer's cards show the raw chance instead of the words. Problems: "The backend is not reachable. Start it with: …", "Too many questions in a short time", "The assistant could not answer: …", "Stopped.", "The connection broke off mid-answer; ask again."
+
+### 6.16 The design language
+
+`styles/globals.css` defines HSL tokens on `:root`: a sand canvas (`--color-surface-base 30 16% 93%`), warm chalk panels (`30 25% 98.5%`), input and elevated surfaces, three border strengths, four "auditor inks" that mean a tier or an outlook word and nothing else (critical `354 74% 42%`, warning `30 95% 31%`, stable `158 82% 25%`, watch `258 16% 44%`), a slate accent (`215 25% 45%`) for focus rings and the viewer's own action, and three foreground levels. IBM Plex Sans at 16 px with a 1.55 line height; IBM Plex Mono with tabular numerals for figures. `tailwind.config.ts` maps the tokens, sets the radii (controls 8 px, cards 14 px), the card and popover shadows and two entrance animations (280 ms page, 220 ms card); `@media (prefers-reduced-motion: reduce)` shortens every animation and transition to 0.01 ms. There is one light theme (no dark tokens). Chart and map colours (`lib/riskPalette.ts`): Critical `#ff4d5e`, High `#ffb020`, Medium `#8ea3c4`, Low `#22c55e`, Watch `#9d93bd`; grey is the default chart mark; event categories have fixed colours (land blue, forest green, litigation orange, contractor amber, funding pink, utility shifting green, inter-agency violet, law and order red, weather taupe). Keyboard: the tier chips, the risk map lanes, the table rows and the chat handle are all operable without a pointer; every icon button has an `aria-label`; the risk map announces the focused project in a live region. Print: A4 portrait, the header, nav and anything marked `data-no-print` hidden.
+
+---
+
+## 7. The AI assistant and the other LLM features
+
+### 7.1 The client and the shared limits (`llm/client.py`)
+
+LM Studio serves an OpenAI-compatible `/chat/completions` and `/embeddings` at `LLM_BASE_URL` with no key. Timeouts: 3 s to connect, 120 s to read (for a stream, the longest gap between chunks), 60 s for embeddings. One generation at a time: `LLM_GATE` is a single-holder lock in which chat requests go first; a background job waits while any chat holds or waits for the gate (up to 300 s), and its stop flag can end the wait at once. A circuit breaker: a refused connection marks LM Studio down for 30 s and every LLM feature skips the call; an HTTP error, a malformed reply or a timeout never trips it ("LM Studio is up, and marking it down would switch the model off for everyone"). Calls: `complete` and `call_llm` (single turn, temperature 0.2, a pydantic schema appended, one retry), `chat`, `chat_stream` (raises if the stream ends without `[DONE]` and a finish reason, so a truncated answer never passes as whole), `embed` (L2-normalised float32 rows); `extract_json` pulls the first JSON object out of prose or a fence and refuses a bracket that never closes. Which model: the brief, the worker cell and the second opinion use `LLM_MODEL`; the chat's planner and writer use `LLM_CHAT_MODEL` when set; as the code stands the research agent's judge also follows `LLM_CHAT_MODEL` (the `.env.example` comment says it stays on `LLM_MODEL`; the code wins).
+
+### 7.2 The chat assistant
+
+`POST /api/chat` (every role) takes `{messages: 1–12 turns, projectKey?}`; a user turn is 1 to 1,000 characters; the last message must be the user's; 404 for an unknown or out-of-scope key; 429 with `Retry-After` on the limit (public 6 a minute and 40 an hour per address; signed-in 20 a minute per account). The answer is a `text/event-stream` (fetch plus an SSE parser, since `EventSource` cannot POST) with a keep-alive comment every 15 s; the agent runs in a thread and stops at its next step when the client disconnects. Events: `status {stage: routing|planning|tools|writing|checking}`, `tool {id, name, label, args, status, summary}`, `card` (`projects`, `stats`, `project`, `explain`, `history`, `compare`, `opinion`, then one `sources`), `token {text}`, `retry {reasons}` (the client clears the streamed text; a replacement follows), `done {text, validated, reasons, llm: ok|unavailable|busy|skipped, elapsedMs}`, `error {message}`. Nothing about a question is stored; only intents, tool names and timings are logged.
+
+The pipeline (`llm/agent.py`):
+
+1. Router (`llm/router.py`, no LLM, a few milliseconds): matches PRJ keys ("PRJ-000698", "prj 698"), "this project" (the open project), project names by the scout's place words (exact, or for five or more letters a rapidfuzz ratio of 88 or more with the same first letter and no plural inflection), with each matched word voting one over the number of projects sharing it; ties are ambiguous and are narrowed by a sector, state or tier in the question, else listed (at most eight), never guessed; only projects in the viewer's scope take part. Follow-ups ("it", "that project", "what about", "tell me more") take the previous turn's project. Filters: tier words, sector words and aliases (road, rail, airport), state names and aliases (orissa, j&k), "ministry of X", single-word agencies, outside factors, "early notice", "top N" (1 to 20), sort words, near completion, "by state/sector/ministry/tier". Intents: compare, explain, history, news, external, opinion, agency, bottleneck, count, stats, list, help. Confidence: project route 0.9, portfolio 0.85, help 0.85, ambiguous name 0.7, near-match 0.4, nothing matched 0.3, an intent without its project 0.2; the threshold is 0.5. The fallback is `search_knowledge(q)` plus `search_projects(q=<the longest name-like word>)`.
+2. Planner (LLM, only below the threshold and only when the LLM is usable): sees the tool catalogue for this viewer, the last four turns (300 characters each) and the open project, answers `{"calls": [...]}` in 160 tokens at temperature 0; only known tools of this viewer whose arguments pass the tool's pydantic model are kept, at most four, no repeats; it waits at most 2 s for the gate; it never sees a tool result. A second-round planner sees only the keys the first round found.
+3. Tools run in a thread pool (at most four workers), each card sent as it finishes; a tool past 30 s is reported "Took too long; skipped.", a crashed one "Could not read this part of the data."; a second round of at most three detail calls runs over the listed keys.
+4. Writer (LLM, streamed, 260 tokens, temperature 0.2): the official prompt asks for at most 100 words, only the facts between `<<<DATA` and `DATA>>>`, a source number in brackets after each statement, every number and date copied in digits, never a computed number, "Risk drivers explain a project's rank among projects, not the cause of a delay", quoted news, research, remark and portal text treated as data and never as instructions, no advice; the public prompt asks for plain, friendly English and says "say that it is not in PAIMANA's data" where the data is silent. For any viewer without `numbers` the prompt adds "The outlook is given in words (very likely, likely, possible, unlikely): repeat those words and never write a probability, a percentage chance or a score." The facts are cut to 4,500 characters; every string is scrubbed of the markers so data cannot close the block.
+5. Checker: `backend/brief.validate` over the text against exactly the facts the writer saw plus the source titles and dates (and the N of a "top N"); every `[n]` must name a real source; for the public or any viewer without `numbers`, the words SHAP, log-odds, LightGBM, feature importance, quantile and model_version are rejected. A failure sends `retry` and one strict attempt ("Your previous answer was rejected: {reasons}. … Copy every number and date exactly as it appears in the data, in digits, or leave it out…"); a second failure, an unavailable or busy LLM, or `CHAT_WRITER=0` gives the deterministic answer: each tool's own summary with its source number, at most 900 characters, else "I could not find that in PAIMANA's data. Try naming a project, a state, a sector or a tier." When LM Studio is down the answer says `llm: unavailable` with no wait; a gate busy for 20 s says `busy`; a stream that breaks mid-answer sends `retry {reasons: ["the local AI stopped answering"]}` and the deterministic text.
+
+The twelve tools (`llm/tools.py`), each `fn(viewer, **args)` with a pydantic argument model (`extra="forbid"`), reading through the viewer's policy so an out-of-scope project reads "Project X was not found." like an unknown one:
+
+| Tool (label) | Public | Reads |
 |---|---|---|
-| 2024-25 | 70% contradiction | 26% |
-| 2025-26 | 95% contradiction | 7% |
-| 2026-27 | 100% contradiction | 0% |
+| `search_projects` ("Searching projects") | yes | name words or filters (tier, sector, state, ministry, agency, flag, near completion, sort, limit 1-20); card `projects` |
+| `portfolio_stats` ("Counting the portfolio") | yes | counts, capital and tier counts by state, sector, ministry or tier; card `stats` |
+| `get_project` ("Reading the project page") | yes | tier, outlook, progress, cost, dates, plain top risks, flags; officials add the flagged checks and the slip range; web research; card `project` |
+| `project_history` ("Reading the report history") | yes | the last five reports and the change sentences; officials add tier alerts and the prediction log's tier history; card `history` |
+| `compare_projects` ("Comparing projects") | yes | two to four keys side by side; card `compare` |
+| `project_research` ("Reading web research and news") | yes | up to six facts per key, live blockers first; officials add up to four linked headlines; without a key, the research summary |
+| `external_factors` ("Checking outside factors") | yes | checks, the land register, forest, the composite, open report issues; officials add the PARIVESH proposal details; without a key, counts per factor and early notice |
+| `search_knowledge` ("Searching help and data") | yes | the search index (section 7.3), at most eight passages |
+| `explain_prediction` ("Reading the risk drivers") | no (`insights`) | the five drivers (words; the developer's values and contributions), the flagged checks; card `explain` |
+| `second_opinion` ("Reading the AI second opinion") | no (`insights`) | the cached opinion only, never generates; card `opinion` |
+| `agency_scorecard` ("Reading the agency matrix") | no (`agencies`) | schedule and cost words (percentages only with `numbers`); an agency official's own agency by default |
+| `bottlenecks` ("Reading bottlenecks") | no (`bottlenecks`) | clusters by category and state, two evidence quotes each |
 
-Every row carries `sector_source`/`state_source` (`pdf_reparse` /
-`cross_period_vote` / `name_keyword_rule` / `original_extraction`) — feeds
-the frontend's data-confidence badge. Output:
-`dataset/silver/project_monitoring_{FY}_clean.csv`. **Bronze CSVs never
-modified.**
+Outside text (remarks, headlines, research notes, portal lines) passes `quote()` (one line, markers removed, capped).
 
-### 5.2 Frontend dataset generation
+### 7.3 The search index (`llm/rag.py`)
 
-`pipeline/build_real_projects.py` reads the cleaned 2024-25 Silver file
-(the best-quality slice — 100% cost data, 100% physical-progress, 91%
-dates), takes the top 300 projects by anticipated cost, computes:
+Chunks of kinds `help` (docs/HELP.md by section, public), `doc` (README and ten documents; official, with README, IMPLEMENTATION_GUIDE_v2, EXTERNAL_RESEARCH_2026-09, EXTERNAL_DATA_CROSSCHECK and MODEL_UPGRADES_2026-09 at visibility `numbers`, the developer only; the 2026-09-22 PROJECT_DOCUMENTATION was excluded as stale), `project` (one public card per current project from public facts), `event` (one per report-remark event), `research` (the sweep facts and the agent's, one per project and URL), `news` (the newest 30 scout headlines per project; official), `external` (land and forest evidence, public; PARIVESH proposals, official), `glossary` (tiers, checks, categories, feature labels, caveats). Markdown is cut at headings into 180 to 350 words. A chunk that names other projects is readable by a scoped official only when every named project is in scope. Ranking fuses TF-IDF over title and text, TF-IDF over titles, and nomic embeddings (768 dimensions) by reciprocal rank; dense ranking is used only once 90 per cent of chunks have vectors; a query embedding waits 5 s and any embedder failure falls back to keywords for 30 s. Artifacts in `dataset/rag/` (`chunks.parquet`, `embeddings.npz`, `meta.json` with a fingerprint of the chunker, the embedding model, the served data version and the document times); `ensure_index()` checks the fingerprint at most once a minute and rebuilds in the background, pausing while a chat is active. The last saved index (version 2, 2026-09-28) held 8,224 chunks, all embedded; the code's schema is now version 3, so it is rebuilt at first use with the vectors reused by content hash. CLI: `python -m llm.rag build|search|stats`. `RAG_EMBED=0` keeps the search on keywords only.
 
-- **Composite risk score** (heuristic, not a trained model — see §3):
-  percentile-anchored weighted blend, anchors are this dataset's real P95
-  values (cost-overrun P95 = 81.4%, delay P95 = 75 months), not guesses.
-- **Risk tier:** CRITICAL ≥ 60, WARNING ≥ 30, NORMAL below.
-- **SHAP-style drivers** — heuristic, picked from a fixed cause list based
-  on that project's real delay/overrun/disparity/sector values, **not
-  random and not real SHAP** — explicitly a placeholder for §3.8.
-- **Sector** canonicalized to a clean 16-value set (garbage like `"COAL
-  1378NLCIL"` fixed, `"ROAD TRANSPORT"` / `"ROAD TRANSPORT AND HIGHWAYS"`
-  merged).
+### 7.4 The evaluation
 
-Output: `frontend/src/mocks/real_projects.json` (300 real projects). The frontend
-has zero fake/random project data left in it.
+`tests/chat_eval.jsonl` holds 36 questions: 12 for the public (for example "How many Critical projects are in Odisha?", "What does the Watch tier mean?", "latest news on Pipalkoti", "compare Pipalkoti and Tapovan", "Is there a court case on the Darbhanga airport?", "top 5 riskiest projects in Odisha"), 12 for a ministry official of the Ministry of Road Transport & Highways and 12 for an IPMD analyst (for example "Why is PRJ-004941 Critical?", "Which agencies have the worst track record?", "What is the second opinion on PRJ-002112?", and a follow-up "and what changed lately?" with two earlier turns); 12 are marked for the LLM. Checks read from the API as the same viewer: `count`, `top_group`, `first_project`, `last_completion`, `worst_agency`, `mentions`, `not_mentions`, `card`. `python -m llm.eval` (writer off), `--llm subset`, `--llm all`, `--only`, `--json`. Results of 28 September 2026 (`docs/AI_ASSISTANT.md`): writer off, 36/36 routing, tools and checks, first card median 0.0 s; with the model on 15 questions, 15/15 routing and tools, 14/15 text checks, 14/14 written answers accepted at the first check, `done` median 23.1 s and p90 35.7 s at about four tokens a second. `tests/test_chat_eval.py` keeps the set valid and checks the router's tool choice without an LLM.
 
-`pipeline/build_state_dots.py` places one scatter point per project inside
-its real state polygon (shapely, seeded) for the map. Known limitation:
-the boundary file predates Telangana's split from Andhra Pradesh and
-Ladakh's split from J&K, so those dots land in the pre-split parent
-polygon.
+### 7.5 The AI brief (`backend/brief.py`)
 
-### 5.3 Frontend features
+`GET /api/projects/{key}/brief` (officials). The payload holds the identity, the as-of date, the model version, the view, the status (progress, anticipated cost, expenditure, anticipated completion, slip to date), the flagged checklist rows (evidence in words unless `numbers`), the open report events, up to five linked news items of severity 2 or more, and either the prediction in words with `drivers_plain` (the plain view) or the probabilities, quantiles and SHAP drivers (the developer's view). The prompt asks for exactly two paragraphs of at most 110 words each from the payload alone; the plain prompt adds "never write a probability, a percentage chance or a score". `validate()` extracts every number (Indian and western commas, decimals, `.99`, percents, "per cent"), every date (ISO, "March 2026", "1 Mar 2026", "Dec-2026", "DD.MM.YYYY", "MM/YYYY") and every number word ("seventy-one", "twice") and rejects any not in the payload (a fraction written as a percent is allowed); one strict retry names the offending numbers; then `rejected`. Accepted briefs are cached in `app.briefs` per (project, as-of, model version, view) and re-validated when read; the request waits up to 120 s for the gate; 503 `llm_unavailable` when LM Studio is down or slow. The same `validate` is the checker of the chat, the second opinion and the research agent.
 
-| Feature | Status |
-|---|---|
-| Home / landing page | Real — KPI ribbon, map, alert inbox |
-| India choropleth map | Real — dot-density (one dot/project), hover-fills state by avg risk, click drills into Command Center pre-filtered, zoom locked to +/− buttons only |
-| Top states by critical count | Real, fills the layout gap beside the map |
-| Early Warning Inbox | Real data · Acknowledge is local state only, no backend yet |
-| Command Center (`/command`) | Real — KPI ribbon, Urgency Matrix, Triage Register |
-| Portfolio Urgency Matrix | Real — Recharts gradient-area chart, colored by risk tier, 300 points sorted by runway |
-| Triage Register | Real — sector/state/project-type filters, all from real data |
-| Project Studio | Real financial/date data, real S-Curve. **SHAP waterfall is heuristic, not real SHAP** |
-| Data-confidence badge | Real — shows sector/state provenance tier with tooltip |
-| Prescriptive What-If Sandbox | **Not wired** — mock surrogate coefficients |
-| Audit Suite (benchmark + CUF) | **Not wired** — mock rows, waiting on §3.5/§3.7 real results |
-| Chat assistant widget | Real but rule-based — keyword/filter engine over real data, not an LLM yet |
-| Role-based login | **Not built** |
-| AI workers (Auditor/Forecaster/Scout/Analyst/Dispatcher) | **Not built** |
-| Worker Console | **Not built** |
+### 7.6 The second opinion (`llm/second_opinion.py`, `backend/live/opinions.py`)
 
-`riskPalette.ts` is the single source of truth for risk-tier colors,
-shared by the map and the Urgency Matrix.
+The local model's cited reading of one project's evidence pack next to the model's tier. It never changes the tier, the probabilities, the checklist, the early notice or the alerts; it sends nothing; the public never sees it; the chat reads only the cache. Prompt `second-opinion-v7`, 300 tokens, temperature 0.1 (0.3 on the one retry).
+
+The evidence pack (`pack(key, numbers)`) lists items E1…En with kind, date, direction, severity, staleness, source, text and URL: `status` (the latest report row; context), `model` (the tier and, in the plain view, the outlook in words; context, never evidence), `check` (up to six flagged checklist rows, minus the two model checks, the composite, the two context checks and rows other items cover; severity 2 for the strong dimensions), `parivesh` (proposals, the oldest open stage, months in stage against the rule limit; severity 2 when overdue), `land` (Bhoomi Rashi flagged, possible or clear), `event` (up to four open remark events, stale when last seen before the as-of date minus four quarters), `research` (up to six facts, live blockers first, marked "(web research)" or "(news item judged by the research agent)"), `news` (up to three scout headlines of severity 2 or more, excluding those the agent judged irrelevant or that name a private person). Texts are cut to 240 characters and the markers blanked; items are grouped into current hold-ups (negative, recent, severity 2-3), minor current issues, progress, old items and context; `evidence_hash` is the sha256 of the canonical pack. Two views: plain (officials and the nightly job) and numbers (the developer, on demand), each with its own cache.
+
+The prompt asks for one JSON object `{narrative, key_evidence, concern, headline, gaps}`: concern `concern` when work is held up now, `watch` when the issues are minor or old or every current hold-up is being solved, `none` when no current issue is listed; a headline of at most 12 words; a narrative of two or three sentences citing items as `[E4]` after each claim; no description of overall progress, cost or the model's rating; only numbers and dates that appear in the items; no advice; no names of people (officials by office). The user message lists the current hold-ups and says the concern is `concern` unless the items say every one of them is being solved. Context items are left out whenever other evidence exists so the opinion is not anchored to the tier. `vs_model` (agrees, higher, lower) is computed against the model level (Critical and High mean concern, Medium and Watch watch, Low none), never asked.
+
+The validator rejects unless: the concern is one of the three; the headline is 1 to 15 words, the narrative 10 to 90, each gap at most 20 words and at most three gaps; the narrative cites at least one item, only in the bracket form, and every cited id is in the pack; every number and date in the headline, narrative and gaps is in the shown items, and each number in a claim is in the items that claim cites; no private names; `concern` cites a current negative item of severity 2 or more; `watch` cites a negative item and every current hold-up; `none` is not allowed while a current hold-up exists. One retry with the reasons; a second rejection is stored as `rejected` and never replaces an accepted opinion. Stored in `app.second_opinions` keyed by (project, evidence hash, model) with the prompt version, as-of, tier, model version, view, attempts, numbers checked, milliseconds and the full pack; re-checked when read.
+
+API: `GET /api/projects/{key}/second-opinion` returns 200 (`concern, headline, narrative, keyEvidence, vsModel, gaps, cited, evidence, nEvidenceRead, tier, modelLevel, evidenceHash, model, promptVersion, generatedAt, cached, view, attempts, nNumbersChecked, llmMs`), 422 rejected, 503 unavailable (busy or down), 404 not scored or out of scope; `?cached=1` returns the store or `{status: 'none'}`. The nightly job takes Critical, High and Watch projects least recently asked first, skips projects with only context, waits for chats, and asks 15 a run, 20 to 60 s a project. The tuning run of 28 September 2026 (`docs/SECOND_OPINION.md`, v1 to v7) ended with 8 of 8 projects accepted under v7, 7 at the first attempt, 17 to 32 s each, on PRJ-002112, PRJ-000698, PRJ-004326, PRJ-001354, PRJ-005236, PRJ-005544, PRJ-004601 and PRJ-004880.
+
+### 7.7 The research agent (`backend/live/research.py`)
+
+The daily job turns the news scout's items into cited research facts between web sweeps (prompt `research-agent-v1`, four items a call, at most 16 candidates per project, 25-word summaries, temperature 0.1). Per project: refresh its news with the scout; take its linked unjudged items plus unlinked-pool items naming one of its local place words, newest first; reject without an LLM call any headline naming a private person; ask the model to judge from the headline and feed summary only ("the article is never fetched") with the rule that an item is relevant only when it is about this project itself, not the district's weather, politics, crime or other projects, answering compact JSON per item (`relevant`, `category` among land, forest_env, litigation, contractor, funds, utility_shifting, inter_agency, law_order, design_scope, natural_event, approvals_other, progress, other; `direction`; `severity` 1 a mention, 2 a hold-up, 3 severe; `event_month`; a summary "only numbers written in the item, no names of people"); validate each verdict with pydantic and `brief.validate` against the item's own text, the privacy floor, at least two shared four-letter words with its item and no better match to a neighbour; one retry, and a reply cut off at the token cap is re-asked in halves; store a relevant item as a `research_facts` row with origin `agent` (match `high` only for a scout link with a context anchor, else `medium`), every verdict as a `signal_judgements` row, and a `signal_projects` link; raise a `signal` alert "Research ({category}): {project}" for a new live negative fact of severity 2 or more. Batch order: watchlisted projects first (at most half the run), then Critical, High and Watch least recently researched. Agent facts show on the project page, the research summary and the alert feed; the risk profile reads the checked sweep only. Measured: 16 items on two projects took six calls and 162 s; a 20-project run takes about an hour at most.
+
+### 7.8 The worker cell and approvals (`llm/worker.py`)
+
+Five plain functions in order, no agent framework: the auditor (Python rules: more than three months since the last figures, `dq_score` under 0.7, zero progress with a cost overrun; the LLM only phrases the detected issues into one query), the forecaster (a lookup of the scores, no LLM), the scout (the LLM tags one to three delay causes from the project's report events and linked news; no evidence means no call), the analyst (the LLM writes a summary, the bottlenecks and a recommended action from the outlook and drivers in words, told never to write a probability), and the dispatcher (the LLM drafts a memo and picks a recipient role among IPMD analyst, ministry official and agency official). `run_worker_cycle()` covers the ten projects with the highest `p_any_2q`; each generation takes the gate on its own; runs and drafts go to `database/worker_runs.json` and `database/dispatch_drafts.json`. Every draft is `pending` and is never sent: an IPMD analyst sees every memo, a ministry or agency official those addressed to their role on their projects, only the addressed role may approve, edit or reject, and each decision is audited. Trigger: "Run Monitoring Cycle Now" on `/workers` or `POST /api/worker-runs/trigger` (the developer); 500 without LM Studio.
+
+### 7.9 The LLM boundary
+
+No module under `llm/` writes a score, a tier, a checklist row, a user or a permission; the tools are read-only with pydantic argument models; quoted outside text goes between markers with the marker characters blanked; the only LLM writes are research facts, second opinions, briefs and memo drafts, every one checked and, for memos, waiting for a person. All LLM users (chat, brief, worker, research agent, second opinion, index embedding) share one gate and one breaker, and chat goes first everywhere.
 
 ---
 
-## 6. Data reality — know this before training anything
+## 8. Sign-in, roles and security
 
-- **2005-06 to 2009-10** (Monthly): sector 85–96% populated; state **0%**.
-  Twenty years stale, only useful as long-run base rate.
-- **2021-22 to 2023-24** (Quarterly, hex-hash IDs): extraction mostly
-  failed — sector/state 0%, most financials under 15% filled.
-- **2024-25** (Quarterly, N-code IDs): best slice — 100% cost, 100%
-  physical progress, 91% dates. Current modelling backbone.
-- **2025-26** (mostly Flash Reports): financials sparser (33–36%); only
-  one PDF available locally to re-parse.
-- **2026-27** (Flash Reports): sector 0% populated.
-- **No stable project ID across fiscal years** — format changes per era
-  (hex hash → `N########` → bare numeric). Multi-year history needs
-  fuzzy name-matching (§8), not built yet.
-- Real percentiles used for the current heuristic formula (2024-25,
-  cleaned): `cost_overrun_pct` P95 = 81.4%, `delay_months` P95 = 75.
+### 8.1 The flow
 
----
+1. Request access at `/signup` (section 6.14): `POST /api/auth/signup` allows three requests an hour per address, normalises the e-mail (at most 254 characters; the domain must be in `ALLOWED_EMAIL_DOMAINS` when set), checks the scope against `/api/scopes`, checks the password policy, answers 409 when a request is pending or an account exists, stores only the argon2 hash, answers 202 `{id}`, and audits `signup.request`.
+2. Approval at `/admin` › Requests: `POST /api/admin/signups/{id}/approve` may correct the role and scope, locks the row, creates the account with the stored hash in the same transaction (409 if no longer pending), and audits `signup.approve` and `user.create`; `.../reject` requires a note and audits `signup.reject`. Nothing is e-mailed; the administrator tells the person out of band.
+3. Sign in at `/login`: `POST /api/auth/login` first checks the per-address limit (20 failures a minute, 429, checked before the password so a spray cannot learn a right guess), then the e-mail lock (423), then verifies with argon2id (an unknown e-mail runs a dummy verify of the same cost); a wrong password, an unknown e-mail and a disabled account all get the one generic 401 "email or password is wrong, or the account is locked or disabled", with the failure counted in `app.login_attempts` in a background task. On success the hash is upgraded if the parameters changed, the counters clear, the previous session on that browser ends, and the answer is the `Me` object.
+4. Sessions: the cookie `paimana_session` is 256 random bits (`secrets.token_urlsafe(32)`), `HttpOnly; SameSite=Lax; Path=/`, `Secure` with `SECURE_COOKIES=1`, `Max-Age` seven days; only its sha256 is stored, with a separate random CSRF token. A session is live while not revoked, before its seven-day expiry, seen within the last twelve hours and the account is active; `last_seen_at` is written at most once a minute; the role, scope and administrator flag are re-read from `app.users` on every request; the alert stream re-checks all of that at every heartbeat. Sessions end at sign-out (`POST /api/auth/logout`), when an account is disabled, when an administrator issues a reset token, on a password change (all but the changing session) and when a new sign-in replaces the old one.
+5. CSRF: `GET /api/auth/me` returns the token; the frontend sends it as `X-CSRF-Token` on every non-GET while signed in; the guard compares it in constant time and also requires any `Origin` header to be in `ALLOWED_ORIGINS`.
+6. Lockout: five failures on one e-mail within fifteen minutes lock it for fifteen minutes (423 with `Retry-After`, the right password included; unknown e-mails lock identically); only failures after the last success and the last password change count, so a reset lifts a lock. At most four argon2 computations run at once; a caller waiting more than 2 s gets 503 with `Retry-After: 5`.
+7. Password change: `POST /api/auth/password {current, new}` (a wrong current password counts toward the lock; the new one must pass the policy and differ from the current); every other session ends; audit `auth.password`.
+8. Reset: an administrator's "Reset password" (`POST /api/admin/users/{id}/reset-password`) returns a one-time token valid 24 hours, stored only as a sha256, voiding earlier tokens and every session of the account; the person sets a new password at `/reset` (`POST /api/auth/reset`, ten a minute per address, 400 for a used or expired token); audit `user.reset_password` and `auth.reset`.
 
-## 7. The presentation (6 slides, SIH 2026 fixed template)
+The password policy (`backend/auth/passwords.py`, mirrored in `frontend/src/lib/auth/password.ts` since commit `4b59654`): at least 12 characters not counting whitespace at either end, at most 256, at least five different characters, not in the common list (about 100 entries such as `paimana@123`, `mospi@123`, compared lower-cased with and without punctuation), and not containing the e-mail's local part when it is three characters or longer. Hashes are argon2id with the argon2-cffi defaults (64 MiB, three passes, four lanes, about 50 ms). The UI shows "At least 12 characters and 5 different ones; not a common password and not the name part of your email. Longer and mixed (letters, digits, symbols) is stronger." and a meter labelled Too short / Weak / Fair / Good / Strong.
 
-### 7.1 The one line to memorize
+### 8.2 Bootstrap and the hidden developer
 
-> "PAIMANA shows which projects are already in trouble. Radar finds why —
-> including causes the CUF can't see — tells MoSPI which fields to add,
-> honestly benchmarks AI against conventional statistics, and routes every
-> AI-drafted action through the right official for approval."
+`python -m backend.auth.bootstrap --email <e> --name <n> [--force-reset]` creates the first administrator, an IPMD analyst with `is_admin`, with the password from `PAIMANA_ADMIN_PASSWORD` or a hidden prompt asked twice (never the command line); it refuses when an active administrator exists unless `--force-reset`. `--developer-only` (also run at every API container start by `deploy/api-entrypoint.sh`) creates or updates the hidden developer account from `PAIMANA_DEVELOPER_EMAIL` and `PAIMANA_DEVELOPER_PASSWORD` in the gitignored `.env.db`: role `developer`, administrator, no scope; the password is reset only when it changed; every other developer account is disabled; an official's e-mail is never promoted; the e-mail is never printed. "Hidden" means: the developer is never a sign-up or approval choice; `GET /api/admin/users` leaves developer rows out for anyone else and the per-user routes answer 404; a review by the developer shows no reviewer; audit rows recorded under `developer` are hidden from others; an alert it acknowledges shows the time but no name; the top bar shows no role label for it, only a small "Developer" tag inside the account menu.
 
-### 7.2 Slide-by-slide
+### 8.2a One-click demo sign-in (for recording the prototype)
 
-1. **Title** — SIH26103, Smart Automation, Software, team.
-2. **Proposed Solution** — the pitch line + the three pillars (§1) + a short
-   "what already exists elsewhere vs. what Radar adds" strip. Do **not**
-   put "predicts before it's reported" as a uniqueness card — lead with the
-   three pillars instead.
-3. **Technical Approach** — see §7.3, the redesigned flow diagram is the
-   hero element.
-4. **Feasibility & Viability** — what's already built (§5): sector fix
-   70–100%→0–26%, 300 real projects live. Then risks + mitigations: no
-   final outcomes → next-slip labels need only consecutive reports;
-   hallucination → LLM never produces numbers, every tag sourced, human
-   approves; noisy news → Scout runs on top-50 only, cached.
-5. **Impact** — 1,981 projects, 17 ministries, 22 sectors, ₹37.13L Cr →
-   ₹42.78L Cr (≈₹5.65L Cr, ~15%, escalation). Plus: the CUF-gap
-   recommendation MoSPI can act on directly.
-6. **References** — PS + PAIMANA reports; Flyvbjerg on reference-class
-   forecasting; LightGBM; SHAP; conformal prediction; earned schedule.
+With `DEMO_LOGIN=1` (off by default; `0` in
+`.env.production.example`) the sign-in page lists the roles as buttons, Public, IPMD analyst, Ministry official,
+Implementing agency and Administrator (never the developer), the ministry and agency rows each with a list of every
+ministry or agency (agencies under their ministry; choosing one opens it), and the account menu gets the same list
+as "Switch role (demo)". `GET /api/auth/demo` says whether it is on; `POST /api/auth/demo {role, ministry?, agency?}`
+signs in to that role's demo account without a password (`ipmd.demo@`, `ministry.demo@`, `agency.demo@`,
+`admin.demo@paimana.local` for the default scope, the ministry or agency with the most current projects; another
+ministry or agency gets its own account, the email tagged with the scope's hash; created on first use with a random
+password nobody knows; an unknown ministry or agency is 400). It is a real session (cookie, CSRF on the next switch, the scope and the numbers policy exactly
+as for a real account) with an `auth.demo_login` audit row, and the api logs a warning at start. Off, both routes
+answer as if absent (404; the GET says `enabled: false`). Anyone who can reach the server with it on can open any
+official role and any ministry or agency: use it on the recording laptop only.
 
-### 7.3 Slide 3 — the flow diagram to build
+### 8.3 Roles, features and scopes
 
-Replace the current four-paragraph-box layout with one operating pipeline,
-technology pills attached to each stage, and the RBAC gate given the most
-visual weight (this is the single biggest visual upgrade to make):
+`backend/access.py` `POLICY`:
 
-```
-        MoSPI / PAIMANA (CSV · QPISR · Flash)
-                     │
-                     ▼
-              ┌─────────────┐
-              │   AUDITOR   │  Python · pdfplumber · Pandera
-              │ Validate ·  │
-              │ Data conf.  │
-              └──────┬──────┘
-                     ▼
-         Bronze → Silver → Gold          DuckDB · Parquet · RapidFuzz
-         (point-in-time-safe panel)
-                     │
-                     ▼
-              ┌─────────────┐
-              │ FORECASTER  │  LightGBM · scikit-learn · lifelines
-              │ Slip % ·    │
-              │ P50/P80     │
-              └──┬───────┬──┘
-                 ▼       ▼
-           ┌─────────┐ ┌─────────┐
-           │  SHAP   │ │  SCOUT  │  SHAP · MLflow  |  GDELT/RSS · Ollama
-           │ model   │ │ external│
-           │  WHY    │ │  WHY    │
-           └────┬────┘ └────┬────┘
-                 └────┬─────┘
-                       ▼
-              ┌─────────────┐
-              │   ANALYST   │  LangGraph · Ollama · Pydantic
-              │ Brief ·     │
-              │ Bottlenecks │
-              └──────┬──────┘
-                     ▼
-              ┌─────────────┐
-              │ DISPATCHER  │
-              │ Draft memo  │
-              └──────┬──────┘
-                     ▼
-        ╔═══════════════════════╗
-        ║  🔐 RBAC + HUMAN      ║   FastAPI · PostgreSQL · JWT/OAuth2
-        ║     APPROVAL          ║
-        ╚═══════════╤═══════════╝
-                     ▼
-       ┌─────────────┼─────────────┐
-       ▼             ▼             ▼
-    IPMD          Ministry       Agency
-   Analyst        Official       Official
-       └─────────────┼─────────────┘
-                     ▼
-           ACTION + FOLLOW-UP + DASHBOARD      React · Recharts
-                     │
-             next reporting cycle
-                     │
-                     └──────────────► back to AUDITOR
-```
+| Role | Scope | Features |
+|---|---|---|
+| `public` | none | `chat` |
+| `agency_official` | one canonical agency (`gold/agency_map.csv`) | `insights, alerts, watchlist, bottlenecks, agencies, radar, approvals, live, chat` |
+| `ministry_official` | one ministry | the same plus `ack` |
+| `ipmd_analyst` | every project | the same plus `ack`, `admin` (needs the `is_admin` flag) |
+| `developer` | every project | the same plus `ack, admin, numbers, models, workers, jobs, unlinked_signals, audit` |
 
-Design notes carried over from the review of this slide:
+Scope: a ministry official sees the current and past projects of the ministry; an agency official every project whose printed agency name maps to the canonical one; an out-of-scope project is 404. `acting_as` refuses a body or query `role` that differs from the signed-in one. The frontend mirror (`frontend/src/lib/auth/access.ts`): `FEATURE_ROLES` `canSeeDrivers`, `canSeeAlerts`, `canSeeLive`, `canSeeNews`, `canSeeSecondOpinion` (signed-in roles), `canAck` (ministry and up), `canChat` (everyone), `canSeePipelineErrors` and `canAdmin` (IPMD and the developer; admin also needs the flag), `canRunJobs`, `canSeeModels`, `canSeeWorkers`, `canSeeAudit`, `canSeeNumbers` (the developer); `ROUTE_ROLES` gives `/`, `/command`, `/projects`, `/external` to everyone, `/bottlenecks`, `/agencies`, `/radar`, `/approvals` to signed-in roles, `/models` and `/workers` to the developer, `/admin` to administrators; `RequireRole` sends a signed-out viewer to `/login` (remembering where from) and a signed-in viewer without access to `/`.
 
-- Color by responsibility, not one flat blue: data=blue, prediction=purple,
-  intelligence/Scout=orange, action=coral, human-approval=green,
-  backend=navy.
-- Give SHAP and Scout equal visual weight as a branch that **converges** at
-  Analyst — one answers "why did the model say so", the other "what does
-  the CUF not capture" — don't collapse them into one box.
-- Small badge somewhere on the slide: **"LLM never generates a prediction
-  number."**
-- Small badge cluster: 🕒 6-month target · 🔒 leakage-safe · ⏳ temporal
-  split · 🎯 PR-AUC/Recall@50/lead-time · 🧪 3-tier ablation.
-- One small screenshot of the real, working dashboard in a browser frame,
-  labeled "working prototype," with a badge "300 real projects · real
-  MoSPI data" — diagrams alone can look purely hypothetical next to a
-  team with a live demo.
-- Left rail: 6 compact tech groups (Data / ML / AI Cell / Backend /
-  Security / UI+Deploy), not a 20-library laundry list — keep the full
-  list in this document, not on the slide.
+Role by page (from `docs/ACCESS_CONTROL.md`, checked against the code):
 
-### 7.4 Rules — do not say these tomorrow
+| Page or feature | Public | Agency official | Ministry official | IPMD analyst | Developer |
+|---|---|---|---|---|---|
+| Home: map, KPIs, tier counts | yes | scoped | scoped | yes | yes |
+| Home: early warning inbox | – | scoped | scoped | yes | yes |
+| Project list and search (`/command`) | yes | scoped | scoped | yes | yes |
+| Project page | simple: tier, progress, cost, completion, top 3 risks in plain words, progress history | full, scoped | full, scoped | full | full |
+| Drivers, analogues, intervals, provenance, forecast, brief, project news, second opinion | – | yes | yes | yes | yes |
+| Raw model numbers | – | – | – | – | yes |
+| Web research (project page, External Factors) | facts without match reasons or agent headlines | scoped | scoped | yes | yes |
+| External Factors summary | counts, factors, map and measured delays; no evidence lines or PARIVESH lists | scoped | scoped | yes | yes |
+| Bottlenecks, Agencies | – | scoped | scoped | yes | yes |
+| Radar | – | linked, scoped | linked, scoped | linked | with the unlinked pool |
+| Alert bell and live stream | – | scoped | scoped | with pipeline errors | with pipeline errors |
+| Acknowledge an alert | – | – | scoped | yes | yes |
+| AI assistant | public tools and outputs only | scoped, every tool | scoped, every tool | every tool | every tool |
+| Approvals | – | memos to agency officials, own projects | memos to ministry officials, own projects | every memo | every memo, decides none |
+| Live job status | – | counts | counts | yes | yes |
+| Check inbox, run scout, upload a report, research, second-opinion job, portal pulls | – | – | – | – | yes |
+| Models page, worker console and trigger | – | – | – | – | yes |
+| Administration | – | – | – | with the flag | yes |
+| Audit log | – | – | – | – | yes |
 
-1. No fake numbers — never invent an accuracy/PR-AUC before the backtest
-   exists. State the *metric* you'll report, not a value.
-2. Never say "the LLM predicts risk." Correct sentence: "the model
-   predicts; the LLM explains."
-3. Don't name or attack any competing team/repo on a slide.
-4. Don't say "other teams' data is wrong." Say "we validate every field
-   against the source PDF with provenance" — the sector/state bug was in
-   *our own* CSV extraction step, not a claim about anyone else's data.
-5. Don't promise satellite monitoring or live clearance-portal
-   integration as anything but future scope.
-6. Don't call it "just a dashboard" — the dashboard is the surface, the
-   monitoring cycle is the product.
+Role by endpoint:
 
-### 7.5 Judge Q&A — the ones that matter most
+| Endpoint | Public | Agency | Ministry | IPMD | Developer |
+|---|---|---|---|---|---|
+| `/api/meta`, `/api/scopes`, `/healthz`, `/readyz` | yes | yes | yes | yes | yes |
+| `/api/portfolio`, `/api/projects`, `/api/projects/{key}`, `.../timeline`, `/api/external/summary` | redacted | scoped | scoped | yes | yes |
+| `.../research`, `/api/research/summary` | redacted | scoped | scoped | yes | yes |
+| `.../forecast`, `.../brief`, `.../signals`, `.../second-opinion` | 403 | scoped | scoped | yes | yes |
+| `/api/alerts`, `/api/stream` | 403 | scoped | scoped | yes | yes |
+| `POST /api/alerts/{id}/ack` | 403 | 403 | scoped | yes | yes |
+| `/api/watchlist` | 403 | scoped | scoped | yes | yes |
+| `/api/bottlenecks`, `/api/agencies/matrix`, `/api/agencies/{a}/projects` | 403 | scoped | scoped | yes | yes |
+| `/api/signals/feed`, `/api/radar/summary` | 403 | linked, scoped | linked, scoped | linked | yes |
+| `/api/dispatch`, `POST /api/approvals` | 403 | addressed, scoped | addressed, scoped | yes | reads every memo; decides none |
+| `/api/live/status`, `/api/jobs` | 403 | counts only | counts only | yes | yes |
+| `POST /api/jobs/*` | 403 | 403 | 403 | 403 | yes |
+| `/api/models`, `/api/worker-runs`, `POST /api/worker-runs/trigger` | 403 | 403 | 403 | 403 | yes |
+| `POST /api/chat` | public tools, 6 a minute and 40 an hour per address | scoped, 20 a minute | scoped, 20 a minute | 20 a minute | 20 a minute |
+| `POST /api/auth/signup`, `/login`, `/reset`, `/logout`; `GET /api/auth/me` | yes (me: 401) | yes | yes | yes | yes |
+| `POST /api/auth/password` | 401 | yes | yes | yes | yes |
+| `/api/admin/signups`, `/api/admin/users` | 403 | 403 | 403 | with the flag | yes |
+| `/api/admin/audit` | 403 | 403 | 403 | 403 | yes |
 
-**"PAIMANA already shows delayed projects. What's new?"** → PAIMANA shows
-delays already reported; we predict the *next* slip before the agency
-reports it, explain the cause, and route follow-up through the right
-official — detection vs. prediction plus action.
+### 8.4 The audit log
 
-**"What's your model accuracy?"** → Be honest: not trained yet this round.
-State exactly how it will be measured — PR-AUC, Recall@50, lead time, on a
-strict time-based split — and that the pipeline and real data already
-exist.
+`app.audit_log` (time, role, action, target, detail, user id, e-mail, address). Actions written by the code: `auth.login`, `auth.logout`, `auth.password`, `auth.reset`, `signup.request`, `signup.approve`, `signup.reject`, `user.create`, `user.update`, `user.reset_password`, `bootstrap.admin`, `bootstrap.developer`, `bootstrap.password`, `alert.ack`, `watchlist.add`, `watchlist.remove`, `jobs.watch`, `jobs.scout`, `jobs.research`, `jobs.second_opinion`, `jobs.parivesh_snapshot`, `jobs.bhoomi_pull`, `dispatch.approved|edited|rejected`, `worker.trigger`. A test asserts that no detail ever holds a password or a token.
 
-**"Why LightGBM, not deep learning?"** → Tabular data at ~9K-row scale;
-gradient boosting handles missing values and mixed types natively, trains
-in seconds, explains itself via SHAP. Deep learning here would be a
-buzzword, not a benefit.
+### 8.5 Hardening, claimed and not
 
-**"Only five quarters of data — enough?"** → Thin, which is why the label
-combines date-slip OR cost-rise for more positive examples; 2024-25 is
-very complete (100% cost, 100% physical progress, ~91% dates) so training
-starts there, and the archive can extend backward once cross-year linkage
-(§8) is built.
+Claimed and backed by code and tests: argon2id hashes; the cookie and CSRF scheme above; generic 401 with an equal-cost dummy verify; the lockouts and per-address limits; one pending sign-up per e-mail enforced by a partial unique index; reset tokens hashed at rest; the argon2 concurrency cap; an audit row for every write; `X-Forwarded-For` believed only from `TRUSTED_PROXIES`; the security headers, HSTS and a CSP in nginx (`default-src 'self'`, fonts from Google, `frame-ancestors 'none'`); `no-store` on the account routes; the Host allow-list; body caps and the 30 s timeout; no tracebacks or echoed inputs; `extra="forbid"` on every body; docs off in production; nginx per-address limits (auth 10 a minute, chat 10 a minute, API 60 a minute); TLS 1.2 and 1.3 only with session tickets off; only ports 80 and 443 published; read-only containers with dropped capabilities and a non-root API; secrets only in the gitignored `.env` and `.env.db`, never in images; daily dumps kept 14 days with mode 600; migrations before the API starts; a read-only CI. Model artifacts are checksummed and a mismatch refuses the data version. The LLM boundary of section 7.9.
 
-**"Why should I trust an LLM's prediction?"** → You shouldn't, and it
-doesn't — LightGBM produces every number; the LLM only explains, classifies
-with a source link, and drafts. Delete the LLM and the predictions don't
-change.
-
-**"Which LLM, does it need the cloud?"** → A small open-weight instruct
-model (Qwen or Gemma class, ~4B, quantized) run locally through Ollama.
-No API keys, no data leaving the network — the PS asks for open source
-tools; this is open source end to end. (Pick the current best small
-Qwen/Gemma instruct model at build time — don't hard-code an old name.)
-
-**"What's built vs. left?"** → Built: data pipeline with field-level
-provenance, dashboard, Command Center, early-warning inbox — 300 real
-projects. Next, in order (§9): label set + temporal split, baselines,
-LightGBM + real SHAP, then the five workers, then Scout, login last.
-
-**"What are your limitations?"** → Three, said plainly: five quarters of
-history is thin (mitigated by the label design and archive extension);
-causes like land disputes aren't in the form, which is exactly why Scout
-exists but depends on public reporting quality; past revisions predict
-future revisions but don't *explain* them — every alert pairs SHAP with
-sourced Scout evidence, and a human decides.
+Not done (from `docs/SECURITY.md`, confirmed in the code): no e-mail verification or e-mail sending of any kind; no MFA, no SSO, no password expiry, no breached-password lookup; sessions are not bound to an address or browser; no "sign out everywhere" (disable the account or issue a reset instead); the sign-up 409 reveals that a request or account exists; the in-memory chat and reset limits reset on restart (the sign-in limits do not); the 30 s timeout cannot kill a synchronous thread (the 15 s statement timeout bounds it); the watchlist is one list per role; no WAF or intrusion detection; no automatic certificate renewal; per-address limits are shared behind a NAT; no egress filtering (the API needs the news sources, PIB, PARIVESH, Bhoomi Rashi and LM Studio); the postgres and backup containers keep default capabilities; the raw report archive has no signed manifest; the registry holds no git commit; the JSON stores of the worker cell have no locking. Backups hold user rows (e-mails and hashes), sessions and the audit log, so `backups/` needs the same protection as the database and an off-machine copy; `dataset/`, `model/`, `database/*.json`, `.env`, `.env.db` and the certificate are not in the dumps.
 
 ---
 
-## 8. What's planned but not yet built
+## 9. Running and deploying
 
-- **Real trained models** (§3) — the single highest-priority item.
-- **Gold feature layer** as its own file (`dataset/gold/features_2024-25.parquet`)
-  — currently these are computed inline in `build_real_projects.py`, not
-  persisted separately; training and the frontend generator should read
-  one shared feature definition, not two.
-- **Real SHAP** (§3.8), replacing the heuristic driver picker.
-- **Scout, Analyst, Dispatcher, Worker Console** — not started.
-- **FastAPI backend** — frontend is offline-first today; contracts
-  (`frontend/src/contracts/*.ts`) already define the response shape a real API must
-  match, so hooks swap in without frontend changes. Planned endpoints:
-  `GET /api/projects`, `GET /api/projects/{id}`, `GET /api/states`,
-  `GET /api/alerts`, `GET /api/projects/{id}/forecast`,
-  `GET /api/projects/{id}/explanations`, `GET /api/projects/{id}/evidence`,
-  `POST /api/sandbox`, `POST /api/chat`, `POST /api/auth/login`,
-  `POST /api/worker-runs`, `POST /api/approvals`, `POST /api/dispatch`.
-- **PostgreSQL** for application data (predictions, alerts, worker runs,
-  approvals, evidence, users) — DuckDB/Parquet stays for the analytical
-  Bronze/Silver/Gold side; they serve different jobs.
-- **Cross-year project linkage** (§8.1) — needed for real multi-year
-  trend/history features.
-- **Role-based login** — deferred, not forgotten.
-- **Ollama** — not installed in this environment yet; installing and
-  pulling a model is a concrete next step, not a research question.
+### 9.1 Development setup
 
-### 8.1 Cross-year linkage method (when built)
+- Python 3.10 or later (3.13 in use): `pip install -r requirements.txt`. Node 18.18 or later: `cd frontend && npm ci`.
+- One `.env` at the repository root serves both sides (Vite's `envDir` is the root). Copy `.env.example`; leave `VITE_API_BASE` empty so the Vite proxy carries the session cookie same-origin (the example file sets it to `http://localhost:8000`, which works cross-origin through `ALLOWED_ORIGINS` but is not the documented setting). `.env.db` (gitignored) holds the PostgreSQL credentials and, optionally, `PAIMANA_DEVELOPER_EMAIL`, `PAIMANA_DEVELOPER_PASSWORD` and `PAIMANA_ADMIN_PASSWORD`.
+- PostgreSQL: a standalone dev container `paimana-postgres-dev` on port 5433 (`docs/DATABASE.md`, `.env.example`: `DATABASE_URL=postgresql+psycopg://paimana:<password>@localhost:5433/paimana`), because a native PostgreSQL holds 5432 on the team laptop; or the compose dev override, which publishes the stack's database on `127.0.0.1:5434` and creates `paimana_test`. Both need the `vector` and `citext` extensions.
+- LM Studio on port 1234 with `qwen/qwen2.5-coder-14b` loaded and `text-embedding-nomic-embed-text-v1.5` for the index; on Linux it must listen on `0.0.0.0` for the compose stack to reach it as `host.docker.internal:1234`.
+- Backend: `python -m uvicorn backend.main:app --reload --port 8000 --timeout-graceful-shutdown 3` (migrations run at start; `LIVE_JOBS=0` to keep the loops off). Frontend: `npm run dev` on port 3000 (`strictPort`), proxying `/api` to `http://localhost:8000` (or `VITE_PROXY_TARGET`); `npm run build` (`tsc -b && vite build` into `dist/`), `npm run lint` (`--max-warnings 0`), `npm run typecheck`, `npm run preview`.
+- First administrator: `python -m backend.auth.bootstrap --email <e> --name <n>` (the password is prompted). The developer account is created from `.env.db` by `--developer-only`.
+- Ingest by hand: drop a portal `Projects_Report.csv` or a PAIMANA flash PDF into `dataset/raw/inbox/` and the watcher picks it up within a minute, or upload it through `POST /api/jobs/ingest` as the developer.
 
-`project_name_norm` exact match first, then token-Jaccard ≥ 0.8, within
-matching sector/state, for candidate lineage across the hex-ID / N-code /
-numeric-ID eras. Don't auto-merge ambiguous matches.
+### 9.2 The pipeline commands
+
+`python -m pipeline.run <step>`: `identity` (build the identity map), `silver` (identity, then silver), `external` (delay events from the remarks, land and forest links), `research` (the web research facts), `gold` (features and labels), `train` (`ml.registry.main`: backtest, refit, register), `score` (`ml.score` and `ml.analogues`), `profile` (agency matrix, bottlenecks, hidden-delay priors, the risk checklist and the early-notice summary; writes `external_summary.json` last), `serve` (the PostgreSQL serving tables), and `all` = silver, external, research, gold, train, score, profile, serve. A failed step stops the run; the backend switches versions atomically on the summary file's modification time. The monthly routine after a new report: the watcher runs everything but `train`; `train` is run by hand. Other commands: `python -m ml.registry revert`, `python -m llm.rag build|search|stats`, `python -m llm.eval [--llm subset|all]`, `python -m backend.auth.bootstrap`, `python -m backend.db.migrate_sqlite` (the one-time copy from the old SQLite file).
+
+### 9.3 Tests and what they cover
+
+`pytest.ini` sets `testpaths = tests`. 46 `tests/test_*.py` files with 530 `test_` functions at `8530bde`, run against a `paimana_test` database on the same PostgreSQL (`conftest.py` sets `LIVE_JOBS=0`, points `DATABASE_URL` at the test database or `TEST_DATABASE_URL`, asserts the name contains "test", upgrades to head once per session, truncates every table before each module); `viewers.py` creates real accounts and signs in through the API, so no test forges a cookie; no test calls LM Studio (`test_llm_client.py` uses a fake transport). The suites: `test_auth` (28: the whole sign-in flow, forged cookie, Origin check, expiry, lockouts, limits, resets, policy, audit), `test_access` (19: scope per role, out-of-scope 404, public redaction, the 403 matrix, hidden roles, stream scope), `test_http` (12: headers, request ids, no traceback, body limit, timeout, Host check, trusted proxies, health, docs), `test_numbers_policy` (25: every endpoint scanned for hidden keys per viewer), `test_bootstrap`, `test_ops` (15: reads the compose files, Dockerfiles, nginx template, scripts and the workflow as text), `test_migrations` (upgrade, downgrade, upgrade), `test_db`, `test_input_validation`, `test_chat_api`, `test_chat_agent` (injection), `test_chat_tools`, `test_chat_router`, `test_chat_eval`, `test_rag` (26), `test_llm_client` (22), `test_second_opinion*`, `test_research_*`, `test_watcher` (a file is ingested once per sha256), `test_scout`, `test_portals`, `test_live`, `test_identity`, `test_build_identity`, `test_silver`, `test_gold`, `test_external`, `test_external_crosscheck` (the mock data never reaches the pipeline), `test_parivesh`, `test_hidden_delay`, `test_agency`, `test_bottlenecks`, `test_analogues`, `test_backtest`, `test_experiment`, `test_registry`, `test_score`, `test_risk_profile`, `test_labels`, `test_serve`, `test_api`, `test_insights_api`, `test_research_api`. `scripts/check.*` runs `python -m pytest -q`, then `npm run lint`, `typecheck` and `build`. CI (`.github/workflows/check.yml`, `permissions: contents: read`) runs the backend job on `ubuntu-24.04` with a `pgvector/pgvector:pg16` service and Python 3.13, and the frontend job with Node 22; no deploy, no images, no secrets. The frontend has no test runner; its render checks live outside the repository.
+
+### 9.4 The production stack
+
+`docker-compose.yml` (project `paimana`, network `10.201.0.0/24`): `postgres` (`pgvector/pgvector:pg16`, volume `pgdata`, `deploy/postgres/init.sh` creating the extensions, `shm_size` 256m, 2g memory, no published port); `migrate` (the API image running `alembic upgrade head` first, read-only, no capabilities); `api` (`Dockerfile.api`: a two-stage build on `python:3.13-slim`, user `app` uid 1000, one uvicorn worker, a health check on `/healthz`, `deploy/api-entrypoint.sh` running the developer bootstrap before uvicorn; mounts `dataset/` read-write, `model/` read-only, `database/` and `temp/`; a read-only root with tmpfs `/tmp` and `/app/.tmp` for DuckDB spill; 4g memory; `no-new-privileges`, all capabilities dropped; no published port); `web` (`Dockerfile.web`: `node:22-alpine` builds `frontend/dist` with an empty `VITE_API_BASE`, then `nginx:1.27-alpine` renders `deploy/nginx.conf.template`; ports 80 and 443, the only ones published; certificates from `deploy/certs/`; read-only with tmpfs; 256m; the five capabilities nginx needs); `backup` (`deploy/backup.sh`: `pg_dump -Fc --no-owner` daily at `BACKUP_HOUR` 02 UTC to `backups/paimana-<timestamp>.dump`, keeping `BACKUP_KEEP_DAYS` 14, `umask 077`). nginx: `server_tokens off`; rate zones auth 10 a minute (burst 5), API 60 a minute (burst 100), chat 10 a minute (burst 3); TLS 1.2 and 1.3 with six ECDHE ciphers; the CSP and security headers; port 80 redirects to https except `/healthz`; `/api/chat` and `/api/stream` unbuffered with a 600 s read timeout, `/api/jobs/ingest` with a 110m body and no request buffering, the brief, second opinion, scout and worker trigger at 300 s; `/assets/` cached a year; everything else falls back to `index.html`; a `map` on `$request_uri` redacts `?token=` in the access log; 502/503/504 become `{"detail":"api unavailable"}`.
+
+First run: `sh scripts/first-run.sh` on Linux, or `scripts\first-run.ps1 -Dev` on a laptop (the dev override: `https://localhost:8443`, `http://localhost:8080` redirecting there, PostgreSQL on 5434). It checks Docker, copies `.env.production.example` to `.env`, writes `.env.db` with a 32-character password from the OS random generator (mode 600), makes `backups/`, `dataset/raw/inbox/`, `dataset/rag/` and `temp/`, generates a self-signed certificate with `scripts/gen-dev-cert.*` (RSA 2048, 825 days), builds the images, starts postgres, runs `migrate`, starts everything, prompts for the administrator's e-mail and name and runs the bootstrap (the password prompted inside the container), and loads the serving tables with `python -m pipeline.run serve`. Options `--dev`, `--skip-admin`, `--skip-serve`; idempotent. `scripts/backup.*` runs `docker compose run --rm backup once`; `scripts/restore.*` asks "Type yes to continue", stops the API and backup, runs `pg_restore --clean --if-exists --no-owner`, and starts them again. Health: `pg_isready`, `GET /healthz`, `GET /readyz`.
+
+`.env.production.example` sets `SERVER_NAME`, `WEB_HTTP_PORT` 80, `WEB_HTTPS_PORT` 443, `PAIMANA_SUBNET`, `LM_STUDIO_URL=http://host.docker.internal:1234/v1`, `BACKUP_HOUR`, `BACKUP_KEEP_DAYS`, `PARIVESH_SNAPSHOT=1`, `PARIVESH_SNAPSHOT_INTERVAL_H=6`, `BHOOMI_PULL=0`, `BHOOMI_PULL_EVERY_D=91`, `SECURE_COOKIES=1`, `ALLOWED_ORIGINS=https://localhost`, `ALLOWED_HOSTS=localhost,127.0.0.1`, `TRUSTED_PROXIES=10.201.0.0/24`, `API_DOCS=0`. A real server changes `SERVER_NAME`, `ALLOWED_ORIGINS` and `ALLOWED_HOSTS`, puts a CA certificate (`fullchain.pem`, `privkey.pem`) in `deploy/certs/` (certbot standalone or DNS challenge, `docker compose restart web` after renewal), opens only 80 and 443, keeps port 1234 closed to the outside, and on Linux runs `chown -R 1000:1000 dataset database temp`. Updates: `git pull && docker compose build && docker compose up -d` (migrate runs first); rebuild monthly for base-image fixes. Password rotation: `ALTER USER paimana PASSWORD`, edit `.env.db`, `docker compose up -d`. Prerequisites: Docker Engine 24 or later with Compose v2, or Docker Desktop; about 8 GB of RAM for the stack; LM Studio on the host.
 
 ---
 
-## 9. Build order
+## 10. Team credit, glossary, the other documents
 
-Prediction foundation first — everything else depends on it existing and
-being honestly evaluated before it's wrapped in a worker/UI layer.
+### 10.1 Team credit
 
-**Phase 1 — Prediction foundation:** project-period panel → cross-year
-linkage where feasible → future-slip labels → leakage-safe Gold features →
-temporal train/test split → simple baselines → LightGBM → evaluate → SHAP.
+- Manamrit: the PostgreSQL handoff: the two-truths principle (Parquet through DuckDB for analytics, PostgreSQL for application state), `database/postgres/README.md`, the first five Alembic migrations (`ingest`, `core` and `ml` schemas, the model artifact checksum, the staging layer), the `DB_*` connection variables that `backend/settings.py` still honours.
+- Garvit: the external-factors guide (`docs/EXTERNAL_FACTORS_GUIDE.md`), the two portals (PARIVESH and Bhoomi Rashi), the HTML-as-.xls trick for the highway register, the forest-clearance rulebook and scenarios, the 0-5 land complexity rule, the composite, and the mock fixtures that were used as priors and cross-checked but never trained on. The External Factors page credits "External-factor datasets and rulebook: Garvit".
+- Pranjal: the chat panel (the full-height, resizable, scoped drawer) and the role-based frontend of the earlier rounds; eight commits on the `frontend-dev` line.
+- The rest of the branch (extraction, identity, silver and gold, the models, the backend, sign-in, the live jobs, the LLM features, the redesign, the deployment) is the repository owner's work (the git log shows 335 commits on the branch).
 
-**Phase 2 — Monitoring workers:** Auditor → Forecaster → Worker Console →
-Analyst → Dispatcher.
+### 10.2 Glossary
 
-**Phase 3 — External intelligence:** Scout → evidence storage → cause
-tagging → the Tier-3 ablation.
+- PRJ key: the stable project identifier minted by identity resolution; `PRJ-` plus six digits.
+- Silver, gold: the cleaned panel (one row per project and quarter) and the features, labels, predictions and profiles built on it.
+- Quarantine: a silver row set aside by a rule (negative money, expenditure above three times cost, completion before sanction, a placeholder date, a duplicate).
+- Point-in-time: a feature or label at quarter t built only from reports at or before t; proved by the truncation check.
+- Rolling-origin backtest: train on everything realised by a cutoff, score the rows at that cutoff, repeat for each cutoff.
+- Validation block, flash block, test cutoff: the six QPISR-era cutoffs before 2025-07, the flash-report cutoffs from 2025-07, and the newest usable cutoff.
+- Within-cutoff PR-AUC: the mean PR-AUC over cutoffs, the promotion metric (pooled PR-AUC concatenates the folds).
+- Champion, challenger, incumbent: the served model per target, a candidate, and the champion's configuration re-scored on new folds.
+- Platt calibration, ECE: a logistic rescaling of a model's scores; the expected calibration error over ten bins.
+- Tier: Critical, High, Medium, Low by rank share (5, 15, 30, 50 per cent of scored projects); Watch for projects with no completion date.
+- Stalled: a badge for two or more quarters without progress after 30 per cent of the planned time; it never changes the tier.
+- Outlook words: very likely, likely, possible, unlikely for a date push and a cost revision; the slip bands under 6 months, 6 to 12 months, 1 to 2 years, over 2 years.
+- Drivers in words: the five SHAP drivers as a label, a direction (raises, lowers) and a strength (strong, moderate, slight).
+- SHAP: per-feature contributions to the model's log-odds for one project.
+- Analogue: one of the ten nearest past projects at the same stage, with its outcome.
+- S-curve: the sector's median progress by share of planned time elapsed, fitted on completed projects only.
+- Scenario: continue, recover, agency: three progress paths for the next eight quarters.
+- Risk checklist: twelve checks plus the external composite: schedule_slip, cost_escalation, execution_stagnation, expenditure_lag, repeated_revisions, sector_headwind, agency_optimism, land_acquisition, forest_clearance, litigation, contractor_stress, data_staleness, external_composite; each flagged, clear or unknown.
+- Unknown is not clear: no evidence is never a clean bill.
+- Stale flag: a remark-derived issue older than four quarters (all of them today, since free text ends in 2023-Q2).
+- Early notice: a flagged outside factor while the numbers show no slip yet or the tier is Low or Medium.
+- PARIVESH Stage-I, Stage-II: the in-principle and final forest-clearance approvals.
+- Bhoomi Rashi Section 3 notification: the gazette notice that starts land acquisition for a national highway.
+- nh_chainage, nh_district, nh_only: the three land-link methods; only the first rates a project.
+- Composite coverage fc+la, fc_only: whether both parts of the land-and-forest score exist.
+- Hidden-delay prior: the measured extra months and push risk of a factor against matched projects.
+- Signal: a news item from the scout; research fact: a checked, cited fact from the sweep (article or headline basis) or the agent.
+- Second opinion: the LLM's cited reading of the evidence with a concern level and `vsModel`.
+- Memo draft: the worker cell's dispatcher output, pending in the approval inbox.
+- SSE: server-sent events, used by the alert stream and the chat.
+- LLM gate, breaker: the one-holder lock and the 30 s down marker shared by every LLM feature.
+- Numbers feature: the developer's right to see raw model numbers; scope: the ministry or agency a role is limited to; administrator: an IPMD analyst with the flag; developer: the hidden account.
 
-**Phase 4 — Backend:** PostgreSQL → FastAPI → model serving → worker
-orchestration → approval workflow.
+### 10.3 The other documents and what each adds
 
-**Phase 5 — Frontend integration:** real APIs → forecast views → SHAP
-views → Worker Console UI → Approval Inbox → model report card.
+- `README.md`: layout, setup, running, the LLM worker cell, live tracking, access by role, the production pointer. Its "Model", "Data cleaning" and "Known limitations" sections describe the v1 of September 22 and are stale (section 10.4).
+- `frontend/README.md`: commands, the proxy and API base, sessions and CSRF, the numbers policy, the developer role, the account pages, the routes, the design tokens, the command centre, the Models page. Authoritative for the frontend.
+- `docs/ACCESS_CONTROL.md`: sign-in, sessions, passwords, lockouts, sign-up, resets, bootstrap, the role matrices, request shapes, the assistant's per-tool matrix, the numbers feature. Authoritative for roles.
+- `docs/AI_ASSISTANT.md`: the chat pipeline, the SSE events, the tool matrix, guardrails, speed, the 36-question evaluation, limitations.
+- `docs/DATABASE.md`: the two truths, the schemas, migrations, the one-time SQLite copy, serving tables, model integrity, backups, tests.
+- `docs/DEPLOYMENT.md`: the compose stack, prerequisites, first run, daily operations, updates, backups and restore, password rotation, a real server, troubleshooting.
+- `docs/EXTERNAL_DATA_CROSSCHECK.md`: Garvit's guide and mock files checked against the real data; what was implemented; link precision; the measured priors against the guessed bands (counts before the research sweep).
+- `docs/EXTERNAL_FACTORS_GUIDE.md`: Garvit's imported guide (Maharashtra only, mock outcomes); historical, the origin of the method.
+- `docs/EXTERNAL_RESEARCH_2026-09.md`: the September research on the external sources, access rules, linking precision, what did not help prediction and why, the measured priors, the two portal jobs, open gaps.
+- `docs/HELP.md`: the in-app help the assistant indexes (tiers, outlook words, Watch, Stalled, the checks, sources, data age, what the assistant can and cannot do, limitations). Its last bullet still calls the sign-in a role picker; the sign-in is real.
+- `docs/IMPLEMENTATION_GUIDE_v2.md`: the v2 build decisions and the team guide to layers, silver, gold, models, backtest, registry, serving and pages. Its SQLite line is superseded by PostgreSQL.
+- `docs/MODEL_UPGRADES_2026-09.md`: the upgrade round, the harness, results per target, intervals, tuning, rejections, caveats, runtime, how to reproduce.
+- `docs/PROJECT_OVERVIEW.md`: a plain-English narrative of the whole system; its SQLite, "35 endpoints", "four jobs", checklist list, worker steps and metric figures are stale.
+- `docs/RESEARCH_SWEEP_2026-09.md`: the web research sweep, its method, results, what it changed in the checklist, limits, refreshing.
+- `docs/SECOND_OPINION.md`: the second opinion's fields, evidence pack, prompt, checks, API and job, the tuning run, the prospective evaluation, limits.
+- `docs/SECURITY.md`: the 24-point plan mapped to code (data, model, AI, API, deployment), each with what is not done.
+- `docs/TEAMMATE_GUIDE.md`: a page-by-page tour with screenshots, the backend jobs, the pipeline, key files, who built what; several role and number claims predate Segment 9.
 
-**Phase 6 — Governance:** JWT → role scopes → audit logs → public/private
-views.
+### 10.4 Claims in older documents that the code has overtaken
 
-**Phase 7 — Deployment:** Docker Compose → local Ollama → scheduled
-monthly pipeline → end-to-end demo rehearsal.
-
----
-
-## 10. Full tech stack (all open source)
-
-| Layer | Tools |
-|---|---|
-| Data engineering | Python, pandas/Polars, pdfplumber, DuckDB, Parquet, RapidFuzz, Pandera |
-| ML | LightGBM, scikit-learn, statsmodels, lifelines/scikit-survival, SHAP, MAPIE, Optuna, MLflow |
-| AI workers | Ollama, current best small Qwen/Gemma instruct model, LangGraph (fixed state machine, not free-roaming agents), Pydantic-constrained JSON, GDELT/RSS |
-| Backend | FastAPI, PostgreSQL, SQLAlchemy, JWT/OAuth2 + RBAC |
-| Frontend | React 19, Vite, TypeScript, Tailwind, Recharts, TanStack Query (already in place) |
-| Deploy | Docker Compose, fully on-prem — no project data leaves the network |
-
-Model-size rule of thumb: ~0.6GB per billion parameters at Q4_K_M plus
-20–30% headroom. A 4B instruct model is comfortable on a 6GB laptop GPU;
-7–8B is tight. Keep a CPU fallback path for demo-critical steps.
-
----
-
-## 11. Suggested repository structure (once backend/ML phases start)
-
-This was the original plan. The layout in use today is described in the root `README.md`.
-
-```
-radar/
-├── data/{bronze,silver,gold,external}/
-├── pipeline/{ingestion,extraction,cleaning,validation,linkage,feature_engineering}/
-├── ml/{labels,features,baselines,lightgbm,survival,calibration,explainability,evaluation,registry}/
-├── workers/{auditor,forecaster,scout,analyst,dispatcher}/
-├── backend/{api,models,schemas,services,auth,db}/
-├── frontend/  (existing dashboard, extended with Worker Console + Approval Inbox)
-├── tests/
-├── docker/
-└── configs/
-```
-
----
-
-## 12. Honest scorecard against the PS's expected outcomes
-
-| PS outcome | Status |
-|---|---|
-| (a) Cost Overrun Prediction Model | Heuristic today — real model is Phase 1, §9 |
-| (b) Time Overrun Prediction Model | Same — heuristic, not yet trained |
-| (c) Project Risk Scoring Framework | **Real**, formula in §5.2 |
-| (d) Early Warning Alert System | **Real** — Inbox + map, real thresholds |
-| (e) Benchmarking & Comparative Analytics | Mocked — needs the real §3.5 baseline run |
-| (f) Cost Escalation Driver Analysis | Heuristic — needs real SHAP, §3.8 |
-| (g) AI-Powered Monitoring Dashboard | **Real** |
-| (h) LLM-Enabled Project Intelligence Assistant | Rule-based today, Ollama planned |
-| (i) Documentation & Deployment Framework | This document; Docker deployment not yet built |
-
----
-
-## 13. Known limitations — disclosed, not hidden
-
-- Sector/state cleaning residual error: 26% (2024-25) / 7% (2025-26) rows
-  still contradict the keyword check — partly real remaining error, partly
-  an imprecise checker.
-- `overrunForecastCr` reads ₹0 for many projects because `cost_revised` is
-  often missing and falls back to `cost_anticipated` — genuine source
-  sparsity, why the Urgency Matrix plots risk score instead.
-- One project (`N02000010`, KAKRAPAR) shows a `+174 month` predicted delay
-  — a real but extreme outlier from date-field parsing, not manually
-  corrected.
-- 2025-26/2026-27 Flash Report PDFs were never supplied locally, so the
-  PDF re-parse fix only reaches 2024-25 directly and a fraction of 2025-26.
-- There may be a public project monitoring archive with QPISR PDFs going
-  back to 2001. Worth checking manually (this environment couldn't fetch
-  it) before claiming our archive is limited to five quarters on a slide.
+- "It's only a role picker, there's no auth"; "the role and its scope come from request headers" (README, HELP.md, AI_ASSISTANT guardrails): the sign-in is real (argon2id, HttpOnly cookie, CSRF, lockouts); the viewer is built from the session cookie.
+- "Worker Console for IPMD Analyst and Ministry Official"; "IPMD runs jobs"; "Check inbox now (IPMD)"; portal jobs "started by an IPMD analyst" (README, TEAMMATE_GUIDE, EXTERNAL_RESEARCH, SECOND_OPINION): `/workers`, `/models`, every `POST /api/jobs/*`, the worker trigger and the audit log belong to the developer alone; IPMD analysts see counts and approve memos.
+- "The top bar shows the first four" (README): five inline, the rest under More.
+- `python -m backend.test_smoke` (README): no such file; the tests are pytest under `tests/`.
+- The README's v1 model (Tier 1/Tier 2, PR-AUC 0.079, 4,429 projects, `ml/train.py`, `model/metrics.json`): a leftover; the served model is the registry's champions on the 2005-2026 panel.
+- SQLite as the application store (PROJECT_OVERVIEW, IMPLEMENTATION_GUIDE, SECOND_OPINION, comments in `serving.py`, `second_opinion.py`, `worker.py`, `research.py`, `bottlenecks_summary.json`): PostgreSQL 16 with pgvector; `database/paimana.db` is read by nothing but the one-time copy.
+- "35 REST endpoints", "four background jobs", "10 pages", "Tier Ring + 3 probability gauges" for officials, "Top 3 SHAP reasons", the old 13-row checklist list, the worker steps with a "Drafter", "Trigger worker cycle", "PR-AUC 0.698 / 0.771", "264 tests", "Three roles" (PROJECT_OVERVIEW, TEAMMATE_GUIDE): 56 routes, six loops, 14 views on 15 routes, words for the four roles and gauges for the developer, five drivers, the `DIMENSIONS` list of section 4.9, five worker steps without a drafter, "Run Monitoring Cycle Now", the metrics of section 4.4, 530 test functions, five roles.
+- "The distinct-character rule is the backend's alone" (ACCESS_CONTROL): the frontend enforces it too. ACCESS_CONTROL's `canSeeModelVersion` key does not exist in `access.ts`.
+- The research agent "stays on `LLM_MODEL`" (`.env.example`, AI_ASSISTANT): with `LLM_CHAT_MODEL` set it follows the chat model.
+- The CROSSCHECK counts (forest 20, early notice 109, Rs 1,71,650 crore): after the sweep forest 23, land 142, litigation 4, contractor 13, early notice 122 and Rs 2,07,143 crore; 135 remains the land-register count.
+- The EXTERNAL_FACTORS_GUIDE's 27 scenarios and Maharashtra-only land: 28 scenarios, 29 states; its fragmentation factors, mock outcomes and hidden-delay bands are not used.
+- The previous version of this file (22 September 2026): "300 real MoSPI projects", "a rule-based chat assistant", "a trained model is not built yet", six-month horizons with P50/P80, a survival model, JWT, four logins, a heuristic composite with thresholds 60/30, a bundled `real_projects.json`, "Sandbox not wired", Ollama, LangGraph, MLflow, MAPIE, Optuna, "1,981 projects, 22 sectors, Rs 37.13L Cr" and the endpoints `/api/states`, `/api/projects/{id}/explanations`, `/api/projects/{id}/evidence`, `POST /api/sandbox`, `POST /api/worker-runs`, `POST /api/dispatch`: none of it describes the branch at `8530bde`; the search index excluded that file as stale, and this document replaces it.
+- Two dev database ports are both documented and both right: the standalone dev container on 5433, the compose dev override on 5434.
+- `docs/SECURITY.md` says the backup container drops capabilities; the compose file gives it `read_only` and `no-new-privileges` but no `cap_drop`. `docs/DEPLOYMENT.md` omits the postgres container's 2g memory limit and 256m `shm_size`.
+- `App.tsx` comments ("Models: ministry + IPMD", "Worker Console: IPMD only") and the `LiveStatus` and `Radar` docstrings ("IPMD analysts can run…") disagree with the code they sit in; `globals.css` opens with a "Deep Carbon / Obsidian" comment but defines the sand-and-chalk light palette, and `darkMode: 'class'` has no dark tokens behind it.

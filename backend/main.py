@@ -44,6 +44,9 @@ def _warm_chat() -> None:
 async def lifespan(app: FastAPI):
     serving.state()  # load the current data version before the first request
     db.init()
+    if cfg.settings.demo_login:
+        log.warning("DEMO_LOGIN is on: POST /api/auth/demo signs anyone in to a role without a password; "
+                    "a prototype setting, never for a real deployment")
     # the six loops: report watcher, news scout, PARIVESH snapshot, Bhoomi Rashi pull, research agent, second
     # opinion (each with its own switch); LIVE_JOBS=0 starts none of them
     tasks = scheduler.start()

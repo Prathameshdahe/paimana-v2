@@ -6,9 +6,17 @@ Sign-in answers one generic 401 (GENERIC) for an unknown email, a wrong password
 spends the same argon2 time and runs the same statements on each before answering (_fail); 423 and 429 carry
 Retry-After (backend/auth/limits.py). The developer (backend/access.py) is invisible here to anyone else: not listed,
 404 to fetch, change or reset, never a sign-up or approval role (the models allow the three official roles only).
+
+With DEMO_LOGIN=1 (a prototype setting, off by default and in production) GET /api/auth/demo lists the roles and
+POST /api/auth/demo signs in to that role's demo account in one click (a ministry or agency official for any ministry
+or agency): a real session, so the pages, the scopes and the numbers policy behave exactly as for a real account; the
+switch only skips typing a password. The developer is never offered. Off, the POST is 404 (the GET answers enabled
+false).
 """
 from __future__ import annotations
 
+import hashlib
+import secrets
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
@@ -16,7 +24,8 @@ from fastapi.responses import JSONResponse
 from psycopg.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 
-from backend import ratelimit
+from backend import ratelimit, serving
+from backend import settings as cfg
 from backend.access import HIDDEN_ROLES, OFFICIAL_ROLES, Viewer, known_scope, need
 from backend.db import accounts
 from backend.db import app as appdb
@@ -24,6 +33,8 @@ from backend.db.engine import now
 from backend.schemas import (
     ApproveSignup,
     AuditPage,
+    DemoInfo,
+    DemoLogin,
     LoginRequest,
     Me,
     PasswordChange,
@@ -93,6 +104,84 @@ def _fail(email: str, ip: str | None, background: BackgroundTasks | None = None)
         background.add_task(accounts.count_failure, email, lock)
     else:
         accounts.count_failure(email, lock)
+
+
+# ---------------------------------------------------------------- /api/auth/demo (DEMO_LOGIN=1 only)
+
+# demo role -> (email, display name, account role, administrator flag, label); never the developer. A ministry or an
+# agency official of another scope than the default gets an account of its own (the email tagged with the scope's
+# hash), so a switch never moves another session's account to a new scope.
+DEMO = {
+    "ipmd": ("ipmd.demo@paimana.local", "IPMD Analyst Demo", "ipmd_analyst", False, "IPMD analyst"),
+    "ministry": ("ministry.demo@paimana.local", "Ministry Demo", "ministry_official", False, "Ministry official"),
+    "agency": ("agency.demo@paimana.local", "Agency Demo", "agency_official", False, "Implementing agency"),
+    "admin": ("admin.demo@paimana.local", "Administrator Demo", "ipmd_analyst", True, "Administrator"),
+}
+
+
+def _demo_scope(role: str) -> tuple[str | None, str | None]:
+    """(ministry, agency) of a demo account by default: the ministry or the agency with the most current projects."""
+    sc = serving.scopes()
+    if role == "ministry_official" and sc["ministries"]:
+        return sc["ministries"][0]["name"], None
+    if role == "agency_official" and sc["agencies"]:
+        return None, sc["agencies"][0]["name"]
+    return None, None
+
+
+def _demo_account(key: str, ministry: str | None = None, agency: str | None = None) -> dict:
+    """The active account a demo role signs in to, for the scope asked (known_scope: 400 when unknown) or the default
+    one: created on first use with a random password nobody knows (an existing one keeps its own), and set back to its
+    role, scope and flag when it drifted."""
+    email, name, role, admin, _ = DEMO[key]
+    default = _demo_scope(role)
+    if role in ("ministry_official", "agency_official") and (ministry or agency):
+        ministry, agency = known_scope(role, ministry, agency)
+    else:
+        ministry, agency = default
+    if (ministry, agency) != default:
+        local, domain = email.split("@")
+        tag = hashlib.sha1((ministry or agency).encode()).hexdigest()[:8]
+        email, name = f"{local}-{tag}@{domain}", f"{name} · {ministry or agency}"
+    u = accounts.user(email=email)
+    if u is None:
+        return accounts.create_user(email, passwords.hash_password(secrets.token_urlsafe(32)), name, role, ministry,
+                                    agency, admin, actor={"user_id": None, "email": None, "ip": None},
+                                    actor_role="demo", action="user.create_demo")
+    want = {"role": role, "ministry": ministry, "agency": agency, "is_admin": admin, "status": "active"}
+    if any(u[k] != v for k, v in want.items()):
+        u = accounts.update_user(u["id"], want)
+    return u
+
+
+@router.get("/auth/demo", response_model=DemoInfo)
+def get_demo():
+    """Whether the one-click demo sign-in is on and the roles it offers, in the order the sign-in page shows them."""
+    if not cfg.settings.demo_login:
+        return {"enabled": False, "roles": []}
+    roles = []
+    for key, (_, _, role, _, label) in DEMO.items():
+        ministry, agency = _demo_scope(role)
+        roles.append({"role": key, "label": label, "scope": ministry or agency})
+    return {"enabled": True, "roles": roles}
+
+
+@router.post("/auth/demo", response_model=Me,
+             responses={400: {"description": "an unknown ministry or agency"},
+                        404: {"description": "demo sign-in is off"}})
+def post_demo(body: DemoLogin, request: Request, response: Response):
+    """Sign in to the role's demo account without a password (DEMO_LOGIN=1), for the ministry or agency asked: the
+    session, the cookie and the answer are those of POST /api/auth/login, and it ends the session it replaces, so one
+    click switches roles or scopes."""
+    if not cfg.settings.demo_login:
+        raise HTTPException(status_code=404, detail="Not Found")
+    user = _demo_account(body.role, body.ministry, body.agency)
+    ip = sessions.client_ip(request)
+    scope = user["ministry"] or user["agency"]
+    appdb.audit(user["role"], "auth.demo_login", str(user["id"]),
+                f"one-click demo sign-in as {body.role}" + (f" ({scope})" if scope else ""),
+                actor={"user_id": user["id"], "email": user["email"], "ip": ip})
+    return _me(sessions.start(user, request, response))
 
 
 # ---------------------------------------------------------------- /api/auth

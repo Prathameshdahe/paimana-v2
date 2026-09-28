@@ -63,6 +63,14 @@ which feature (`ROUTE_ROLES`, `FEATURE_ROLES`, `canOpen`, `can`, `canAdmin`);
 (`backend/access.py`, `docs/ACCESS_CONTROL.md`); the map only decides what is
 shown.
 
+Prototype mode: when the backend runs with `DEMO_LOGIN=1`, `/login` shows the roles
+as one-click buttons (the ministry and agency rows with a list of every ministry or
+agency) and the account menu the same list as "Switch role (demo)"
+(`src/components/common/DemoRoleList.tsx`, `src/lib/auth/demo.ts`; never the developer;
+the email form is one link away).
+Each click is a real session from `POST /api/auth/demo`, so every page behaves as
+for a real account of that role.
+
 ## Numbers policy and the developer
 
 The four roles (public, agency, ministry, IPMD) never see a raw model number:
