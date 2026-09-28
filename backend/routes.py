@@ -6,8 +6,10 @@ import threading
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.datastructures import UploadFile as StarletteUpload
 
 from llm import agent, second_opinion, worker
 
@@ -316,14 +318,26 @@ def get_jobs(v: Viewer = Depends(need("live"))):
     return [_scrubbed_run(r, v) for r in db.latest_jobs()]
 
 
-@router.post("/jobs/ingest", response_model=Ingested)
-def post_ingest(file: UploadFile, v: Viewer = Depends(need("jobs"))):
-    """Save a report into dataset/raw/inbox/; the watcher ingests it on its next run (or POST /api/jobs/watch)."""
-    try:
-        out = watcher.save_upload(file.filename, file.file)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    db.audit(v.role, "jobs.ingest", out["saved_as"] or file.filename, out["sha256"], v.actor)
+# the upload's body as OpenAPI shows it: post_ingest reads the form itself (below), so FastAPI does not describe it
+UPLOAD_BODY = {"requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {
+    "type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}}}
+
+
+@router.post("/jobs/ingest", response_model=Ingested, openapi_extra=UPLOAD_BODY)
+async def post_ingest(request: Request, v: Viewer = Depends(need("jobs"))):
+    """Save a report (the multipart field `file`) into dataset/raw/inbox/; the watcher ingests it on its next run (or
+    POST /api/jobs/watch). The form is read here, after the access check: FastAPI parses a form parameter before it
+    runs the dependencies, which would spool a caller's whole upload before telling them 403."""
+    async with request.form(max_files=1, max_fields=5) as form:
+        file = form.get("file")
+        if not isinstance(file, StarletteUpload):
+            raise HTTPException(status_code=422, detail="send the report as the multipart form field 'file'")
+        try:
+            out = await run_in_threadpool(watcher.save_upload, file.filename, file.file)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        await run_in_threadpool(db.audit, v.role, "jobs.ingest", out["saved_as"] or file.filename, out["sha256"],
+                                v.actor)
     return out
 
 

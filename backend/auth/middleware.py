@@ -14,7 +14,9 @@ order, outermost first:
 4. HostCheck: the Host header must match settings.allowed_hosts ('*' any, '*.example.org' a suffix); /healthz and
    /readyz answer for any host (the container's own probe calls http://127.0.0.1:8000/healthz).
 5. BodyLimit: a request body may be BODY_MAX (1 MiB); the report upload (UPLOAD_PATH) UPLOAD_MAX, 110 MiB, above the
-   watcher's own 100 MB check. A declared length over it is refused before reading, a streamed body as it passes.
+   watcher's own 100 MB check, but only for a request that carries a session cookie (the route itself checks the
+   session and the `jobs` feature before it reads a byte; the public never gets the allowance). A declared length
+   over the limit is refused before reading, a streamed body as it passes.
 6. Timeout: TIMEOUT_S (30 s) until a request is answered, else 504; the streams, the upload and the routes that wait on
    the local LLM or the web (EXEMPT) are exempt, and a background task after the answer (a job started from the API)
    is not timed. A synchronous route keeps running in its thread after the 504 (Python cannot stop a thread); the
@@ -42,9 +44,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.requests import cookie_parser
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend import settings as cfg
+
+from .sessions import COOKIE
 
 log = logging.getLogger("paimana.http")
 access_log = logging.getLogger("paimana.access")
@@ -230,8 +235,10 @@ class BodyLimit:
         if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
             await self.app(scope, receive, send)
             return
-        limit = UPLOAD_MAX if scope["path"] == UPLOAD_PATH else BODY_MAX
-        declared = Headers(scope=scope).get("content-length") or ""
+        h = Headers(scope=scope)
+        signed_in = COOKIE in cookie_parser(h.get("cookie") or "")
+        limit = UPLOAD_MAX if scope["path"] == UPLOAD_PATH and signed_in else BODY_MAX
+        declared = h.get("content-length") or ""
         if declared.isdigit() and int(declared) > limit:
             e = TooLarge(limit)
             await JSONResponse({"detail": e.detail}, status_code=413)(scope, receive, send)

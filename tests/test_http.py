@@ -4,6 +4,7 @@ the Host check, client addresses behind a trusted proxy, /healthz and /readyz. T
 small app of their own, so a slow or failing route can be staged."""
 import asyncio
 import dataclasses
+import io
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ from backend import main  # noqa: E402
 from backend import settings as cfg  # noqa: E402
 from backend.auth import middleware  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 
 @pytest.fixture(scope="module")
@@ -119,6 +121,35 @@ def test_body_limit(client, small):
     with TestClient(small) as c:
         assert c.post("/echo", content=chunks()).status_code == 413
         assert c.post("/echo", content=b"x" * 1000).json() == {"n": 1000}
+
+
+def test_an_upload_is_not_read_before_its_access_check(client, monkeypatch):
+    """Review finding (unit B, round 1): the report upload's access check runs before its body is read, and only a
+    request with a session cookie gets the upload allowance, so an anonymous caller or an official without `jobs`
+    never has an upload parsed and spooled."""
+    from starlette.formparsers import MultiPartParser
+    parsed, real = [], MultiPartParser.parse
+
+    async def counted(self):
+        parsed.append(1)
+        return await real(self)
+    monkeypatch.setattr(MultiPartParser, "parse", counted)
+
+    def upload(size, headers=None, name="r.csv"):
+        return client.post("/api/jobs/ingest", files={"file": (name, io.BytesIO(b"x" * size))}, headers=headers)
+    as_role(client, "public")
+    r = upload(5 << 20)
+    assert r.status_code == 413 and "1 MiB" in r.json()["detail"] and not parsed        # no cookie: the JSON limit
+    assert upload(1000).status_code == 403 and not parsed                               # small, still not read
+    h = as_role(client, "ministry", ministry="Ministry of Coal")
+    assert upload(2 << 20, h).status_code == 403 and not parsed                         # signed in, no `jobs`
+    h = as_role(client, "developer")
+    r = upload(1000, h, name="a.exe")
+    assert r.status_code == 422 and "only .csv and .pdf" in r.json()["detail"] and parsed   # read, then refused
+    assert client.post("/api/jobs/ingest", data={"x": "1"}, headers=h).status_code == 422   # no file field
+    as_role(client, "public")
+    ingest = main.app.openapi()["paths"]["/api/jobs/ingest"]["post"]["requestBody"]["content"]
+    assert ingest["multipart/form-data"]["schema"]["properties"]["file"]["format"] == "binary"   # still documented
 
 
 def test_time_limit(small):

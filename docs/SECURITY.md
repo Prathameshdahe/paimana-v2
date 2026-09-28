@@ -229,7 +229,9 @@ keys on the account when signed in and on that address for the public.
 `Permissions-Policy`, HSTS when `SECURE_COOKIES=1`, and `Cache-Control: no-store` on `/api/auth` and `/api/admin`.
 CORS allows only `ALLOWED_ORIGINS`, with credentials. The Host header must match `ALLOWED_HOSTS`; `/healthz` and
 `/readyz` answer for any host so the container probe works. JSON bodies are capped at 1 MiB and the report upload
-at 110 MiB (413). Requests time out after 30 s (504); the streams, the upload and the routes that wait on the local
+at 110 MiB (413); the upload's allowance goes only to a request with a session cookie, and the upload route checks
+the session and the developer's `jobs` feature before it reads the body, so nobody else can make the api spool a
+file. Requests time out after 30 s (504); the streams, the upload and the routes that wait on the local
 LLM or the web are exempt. A route's exception becomes `{"detail": "internal error", "requestId"}`, with the
 traceback in the log under that request id and never in the response. A 422 names the field, never the value sent,
 so an oversized password is not echoed back. Request bodies refuse unknown fields. Each request gets a request id
