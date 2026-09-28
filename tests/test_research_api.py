@@ -20,6 +20,7 @@ from pipeline.research import EXT_COLS  # noqa: E402
 
 IPMD = {"X-Paimana-Role": "ipmd_analyst"}
 AGENT_URL, AGENT_OLD_URL = "https://news.google.com/rss/articles/x1", "https://news.google.com/rss/articles/x0"
+AGENT_SAME_URL = "https://news.google.com/rss/articles/x2"
 
 
 def camel(name):
@@ -60,6 +61,7 @@ def sweep():
     key = facts.groupby("project_key").size().sort_values(ascending=False, kind="stable").index[0]
     mine = facts[facts["project_key"].eq(key)]
     return SimpleNamespace(cur=cur, facts=facts, projects=projects, key=key, mine=mine, url=mine["url"].iloc[0],
+                           headline=mine["headline"].iloc[0], source=mine["source"].iloc[0],
                            row=projects.set_index("project_key").loc[key])
 
 
@@ -69,9 +71,16 @@ def client(tmp_path_factory, sweep):
         mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
         with TestClient(app) as c:
             add_agent_fact(sweep.key, AGENT_URL, "agentfact001")
-            add_agent_fact(sweep.key, sweep.url, "agentfact002")                 # the sweep cites this page already
+            # the sweep cites this story already: the agent has it as a Google News link, its headline with the
+            # feed's ' - Source' tail, other case and punctuation
+            add_agent_fact(sweep.key, AGENT_SAME_URL, "agentfact002", source=sweep.source,
+                           headline=f"{sweep.headline.upper().replace(':', ' -')}!  - {sweep.source}")
             add_agent_fact(sweep.key, AGENT_OLD_URL, "agentfact003", direction="positive", event_date=None,
-                           published_date="2020-01-10", severity=1, live=0)
+                           published_date="2020-01-10", severity=1, live=0, headline="Approach road work resumes")
+            # the same story as agentfact001 from a second feed: one fact
+            add_agent_fact(sweep.key, AGENT_URL + "b", "agentfact004", source="The Tribune",
+                           headline="Work on approach road stopped | The Tribune",
+                           judged_at="2026-09-29T10:00:00+00:00")
             with closing(db.connect()) as con, con:
                 con.execute("INSERT INTO researched VALUES (?, '2026-09-30T10:00:00+00:00', 5, 2)", [sweep.key])
             yield c
@@ -86,7 +95,7 @@ def test_project_research_merges_sweep_and_agent_facts(client, sweep):
     assert d["nFacts"] == len(facts) == len(sweep.mine) + 2
     assert d["nNegativeLive"] == int(sweep.mine["live"].sum()) + 1
     assert [f["factId"] for f in facts if f["origin"] == "agent"] == ["agentfact001", "agentfact003"]
-    assert sum(f["url"] == sweep.url for f in facts) == sweep.mine["url"].eq(sweep.url).sum()   # agent copy dropped
+    assert AGENT_SAME_URL not in {f["url"] for f in facts}                   # the agent's copy of a sweep story
     dates = [f["eventDate"] or f["publishedDate"] for f in facts]
     assert dates == sorted(dates, reverse=True) and facts[0]["factId"] == "agentfact001"    # newest first
     assert facts[0]["live"] and facts[0]["verified"] is None and facts[0]["matchReason"]

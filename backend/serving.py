@@ -20,6 +20,7 @@ import functools
 import json
 import logging
 import math
+import re
 import threading
 import time
 from collections import Counter
@@ -573,6 +574,17 @@ def _agent_fact(r: dict, asof) -> dict:
             "live": is_live(r["direction"], r["status"], ev, pub, asof)}
 
 
+def _cites(f: dict) -> set[tuple[str, str]]:
+    """What a fact cites, for deduplication: its URL and its story, the headline without a trailing ' - Source' or
+    ' | Source' tail, casefolded, punctuation out. The research agent's URLs are Google News redirect links, never the
+    publisher URL the sweep cites, so the same story found by both matches on the headline only."""
+    h = f.get("headline") or ""
+    if f.get("source"):
+        h = re.sub(rf"\s*[-|:\u2013\u2014]\s*{re.escape(f['source'])}\s*$", "", h, flags=re.I)
+    story = " ".join(re.sub(r"[\W_]+", " ", h.casefold()).split())
+    return {("url", f["url"])} | ({("story", story)} if story else set())
+
+
 def _newest(f: dict) -> date:
     return f["event_date"] or f["published_date"] or date.min
 
@@ -597,17 +609,19 @@ def _research_sweep(s, key):
 
 def research(key: str) -> dict:
     """One project's web research: the sweep's line (researched_on, latest status, the external block) and its facts
-    merged with the research agent's (origin 'agent', SQLite), newest first; an agent fact whose URL the sweep or an
-    earlier agent fact already cites is dropped (two sweep facts from one page stay: they differ in category).
+    merged with the research agent's (origin 'agent', SQLite), newest first; an agent fact whose URL or story
+    (_cites: the normalised headline) the sweep or an earlier agent fact already cites is dropped (two sweep facts
+    from one page stay: they differ in category).
     searched: the sweep searched it or the agent researched it; with no facts that reads 'searched, nothing found'."""
     from . import db  # db imports this module
     asof = state()["asof"]
     proj, sweep = _research_sweep(key)
-    urls = {f["url"] for f in sweep}
+    seen = set().union(*map(_cites, sweep))
     agent = []
     for r in db.research_facts(key):
-        if r["url"] not in urls:
-            urls.add(r["url"])
+        cites = _cites(r)
+        if not cites & seen:
+            seen |= cites
             agent.append(_agent_fact(r, asof))
     facts = sorted([{**f, "signal_id": None, "judged_at": None} for f in sweep] + agent, key=_newest, reverse=True)
     agent_at = db.researched(key).get(key)
@@ -643,17 +657,18 @@ def _research_scope(s, scope):
 
 
 def research_summary(scope=None) -> dict:
-    """Web research over the current projects in scope, sweep and agent facts together (deduplicated by project and
-    URL as research()): coverage, facts by category x direction with the live ones, by state, and the newest live
+    """Web research over the current projects in scope, sweep and agent facts together (deduplicated per project by
+    URL and story as research()): coverage, facts by category x direction with the live ones, by state, and the newest live
     blockers (severity >= 2) with their project."""
     from . import db
     s = state()
     cur, projects, sweep = _research_scope(scope)
-    seen = {(f["project_key"], f["url"]) for f in sweep}
+    seen = {(f["project_key"], c) for f in sweep for c in _cites(f)}
     agent = []
     for r in db.research_facts(keys=frozenset(cur)):
-        if (r["project_key"], r["url"]) not in seen:
-            seen.add((r["project_key"], r["url"]))
+        cites = {(r["project_key"], c) for c in _cites(r)}
+        if not cites & seen:
+            seen |= cites
             agent.append(_agent_fact(r, s["asof"]))
     facts = sweep + agent
     agent_at = {k: t for k, t in db.researched().items() if k in cur}
