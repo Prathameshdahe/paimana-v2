@@ -315,7 +315,7 @@ def test_stop_flag_ends_the_run_between_projects_and_before_an_llm_call(agent_db
         assert research.stopping() and len(seen) == 1 and out["stopped"] == research.STOPPED
         # the batch's first verdicts are kept; the retry was the call the stop cancelled, so its item comes back
         assert out["projects"] == 0 and out["judged"] == 3 and job()["status"] == "partial"
-        assert rows("SELECT * FROM researched") == []                    # not finished: first in the rotation
+        assert db.researched() == {}                                     # not finished: first in the rotation
         assert research.run([KEY], refresh=False)["stopped"] == research.STOPPED and len(seen) == 1
         with pytest.raises(research.StopRun):                            # before an LLM call: no call
             research._ask_llm([], 10)

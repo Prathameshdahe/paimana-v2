@@ -326,7 +326,8 @@ def state() -> dict:
                     _failed_at = time.monotonic()
                     log.exception("data reload failed; still serving asof %s (%s)", _state["asof"],
                                   _state["model_version"])
-                    _reload_failed(v, e)
+                    if not isinstance(e, ModelIntegrityError):   # verify_models raised its own alert
+                        _reload_failed(v, e)
     return _state
 
 
