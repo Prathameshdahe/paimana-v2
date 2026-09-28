@@ -40,7 +40,7 @@ const TAXONOMY_OF: Record<string, string> = { funds: 'funding', natural_event: '
 const RESEARCH_ONLY: Record<string, { label: string; color: string }> = {
   approvals_other: { label: 'Other approvals', color: '#1f9bb5' },
   design_scope: { label: 'Design or scope', color: '#9b6a3c' },
-  progress: { label: 'Progress', color: '#6f9a2e' },
+  progress: { label: 'Schedule & progress', color: '#6f9a2e' },
   other: { label: 'Other', color: GREY },
 }
 
