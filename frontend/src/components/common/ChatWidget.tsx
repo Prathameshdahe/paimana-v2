@@ -174,6 +174,8 @@ function Chat() {
   const openTier = openDetail?.scores ? TIER_LABEL[tierKey(openDetail.scores.tier)] : null
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const actionRef = useRef<HTMLButtonElement>(null)
   const stick = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
   const nextId = useRef(1)
@@ -233,6 +235,8 @@ function Chat() {
       if (!ctrl.signal.aborted) setAnnounce(problem.message)
     } finally {
       if (abortRef.current === ctrl) abortRef.current = null
+      // Stop (or Send) is about to become a disabled Send: keep a keyboard viewer's focus in the drawer
+      if (document.activeElement === actionRef.current) inputRef.current?.focus()
       setBusy(false)
     }
   }
@@ -244,6 +248,8 @@ function Chat() {
     setTurns([])
     setAnnounce('Conversation cleared')
     stick.current = true
+    // the clear button turns disabled under the focus: the input takes it
+    inputRef.current?.focus()
   }
 
   const showSource = (turnId: number, n: number) => {
@@ -433,6 +439,7 @@ function Chat() {
                 className="relative flex items-center"
               >
                 <input
+                  ref={inputRef}
                   autoFocus
                   value={input}
                   maxLength={MAX_CHARS}
@@ -441,26 +448,22 @@ function Chat() {
                   aria-label="Question"
                   className="w-full rounded-xl border border-border-default bg-surface-base py-3 pl-4 pr-12 text-sm text-fg-base shadow-sm outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent"
                 />
-                {busy ? (
-                  <button
-                    type="button"
-                    onClick={stop}
-                    aria-label="Stop the answer"
-                    title="Stop the answer"
-                    className="absolute right-2 flex size-8 items-center justify-center rounded-lg bg-fg-base text-fg-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  >
-                    <Square className="size-3.5 fill-current" strokeWidth={2} />
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!input.trim()}
-                    aria-label="Send"
-                    className="absolute right-2 flex size-8 items-center justify-center rounded-lg bg-accent text-fg-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40"
-                  >
-                    <Send className="size-4" strokeWidth={2} />
-                  </button>
-                )}
+                {/* one button, Send or Stop: when the answer ends it turns into a disabled Send (the input is empty),
+                    so ask() moves the focus to the input first rather than let it drop to the page */}
+                <button
+                  ref={actionRef}
+                  type={busy ? 'button' : 'submit'}
+                  onClick={busy ? stop : undefined}
+                  disabled={!busy && !input.trim()}
+                  aria-label={busy ? 'Stop the answer' : 'Send'}
+                  title={busy ? 'Stop the answer' : undefined}
+                  className={cn(
+                    'absolute right-2 flex size-8 items-center justify-center rounded-lg text-fg-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40',
+                    busy ? 'bg-fg-base' : 'bg-accent'
+                  )}
+                >
+                  {busy ? <Square className="size-3.5 fill-current" strokeWidth={2} /> : <Send className="size-4" strokeWidth={2} />}
+                </button>
               </form>
               <p className="text-xs text-fg-dimmed">Answers come from PAIMANA data; the AI can make mistakes.</p>
             </div>
