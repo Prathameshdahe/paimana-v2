@@ -129,8 +129,8 @@ function starters(role: Role | null, portfolio: Portfolio | undefined, open: { t
  * The project assistant, open to every role: the backend decides per tool what the viewer may read (the public gets
  * public facts only; a ministry or agency official only their own projects). Questions stream back over
  * POST /api/chat (lib/chatStream): the tool steps as a compact progress list, the data as cards, then a narrative
- * whose [n] markers are chips that scroll to the numbered sources. The project open in the side panel or on its
- * page goes along as projectKey ("this project"). A full-height right drawer resized by its left edge (320px to
+ * whose [n] markers are chips that scroll to the numbered sources. The project open in the side panel (or last open
+ * there, on this page) or on its page goes along as projectKey ("this project"). A full-height right drawer resized by its left edge (320px to
  * 75% of the window), a round launcher; the conversation resets when the viewer's role or scope changes.
  */
 export function ChatWidget() {
@@ -151,8 +151,18 @@ function Chat() {
   const [busy, setBusy] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
   const [announce, setAnnounce] = useState('')
-  // the open project: the side panel's, else the project page's; the viewer can stop asking about it
-  const openKey = panel.key ?? matchPath('/projects/:key', pathname)?.params.key ?? null
+  // The side panel is a modal dialog above this drawer, so its project is remembered after it closes (until the
+  // viewer goes to another page): the viewer closes the panel, then asks. Updated during render, not in an effect,
+  // so the chip never flickers between the panel closing and the effect running.
+  const [lastPanel, setLastPanel] = useState<{ key: string; path: string } | null>(null)
+  if (panel.key) {
+    if (lastPanel?.key !== panel.key || lastPanel.path !== pathname) setLastPanel({ key: panel.key, path: pathname })
+  } else if (lastPanel && lastPanel.path !== pathname) {
+    setLastPanel(null)
+  }
+  const remembered = lastPanel?.path === pathname ? lastPanel.key : null
+  // the open project: the side panel's, else the project page's, else the panel's last; the viewer can stop asking
+  const openKey = panel.key ?? matchPath('/projects/:key', pathname)?.params.key ?? remembered
   const [dropped, setDropped] = useState<string | null>(null)
   const askKey = openKey && openKey !== dropped ? openKey : null
   const { data: openDetail } = useProject(askKey)
