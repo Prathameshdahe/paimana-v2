@@ -9,9 +9,13 @@ pack(key) collects the evidence as items E1..En, each {id, kind, date, direction
   check     flagged checklist rows (ml/risk_profile.py) with their evidence line, except the model's own two, the
             composite, rows another item states (PARIVESH, land register, web research) and sector headwind and agency
             optimism (the sector's and the agency's record, not the project's: the LLM read them as evidence either
-            way, and the model has them as features);
+            way, and the model has them as features); the forest rulebook's estimate (source parivesh_rules: high
+            clearance complexity expected) is severity 1, a risk rating and not an observed hold-up, and is left out
+            when PARIVESH lists the project's proposals (the parivesh item says what happened);
   parivesh  the PARIVESH forest proposals at asof: stage, months in it, the rule limit, overdue;
-  land      the Bhoomi Rashi land rating (flagged, possible or clear; unknown says nothing and is left out);
+  land      the Bhoomi Rashi land rating (flagged, possible or clear; unknown says nothing and is left out); flagged
+            is acquisition complexity 4 or more of 5 over the notifications (pipeline/external.LA_FLAG), a risk
+            rating and not an observed hold-up: severity 1, a minor current issue;
   event     open report-remark events, newest first, at most N_EVENTS; remarks are free text only up to 2023, so an
             event last mentioned more than LIVE_Q quarters before asof is marked stale (it may be resolved);
   research  the web research's latest status line (context) and its facts (sweep and research agent,
@@ -100,6 +104,7 @@ MODEL_LEVEL = {"Critical": "concern", "High": "concern", "Medium": "watch", "Wat
 SKIP_DIMS = {"schedule_slip", "cost_escalation", "external_composite"}
 CONTEXT_DIMS = {"sector_headwind", "agency_optimism"}   # the sector's and the agency's record, not this project's
 CHECK_SOURCE = {"silver": "CUF progress reports", "report": "CUF report remarks", "parivesh_rules": "forest rulebook"}
+ESTIMATE_SOURCES = {"parivesh_rules"}   # a rulebook's expected value, not something observed: never a hold-up
 STRONG_DIMS = {"execution_stagnation", "land_acquisition", "forest_clearance", "litigation", "contractor_stress"}
 COVERED_SOURCES = {"parivesh_portal", "bhoomi_rashi", "news_research"}   # stated by the parivesh, land, research items
 REPORT_SOURCES = {"report"}   # remark free text: up to 2023
@@ -242,15 +247,18 @@ def _model_item(sc: dict, asof) -> dict:
     return _item("model", _month(asof), "context", "PAIMANA model", text)
 
 
-def _checks(risk: list[dict], asof) -> list[dict]:
+def _checks(risk: list[dict], asof, portal: dict | None = None) -> list[dict]:
+    """The flagged checklist rows (module docstring); portal: the PARIVESH summary, whose proposals replace the
+    rulebook's estimate."""
     order = list(serving.PLAIN_RISK)
+    on_portal = bool((portal or {}).get("n_proposals"))
     rows = sorted((r for r in risk if r["state"] == "flagged" and r["dimension"] not in SKIP_DIMS | CONTEXT_DIMS
-                   and r["source"] not in COVERED_SOURCES),
+                   and r["source"] not in COVERED_SOURCES and not (on_portal and r["source"] in ESTIMATE_SOURCES)),
                   key=lambda r: order.index(r["dimension"]) if r["dimension"] in order else len(order))
     out = []
     for r in rows[:N_CHECKS]:
         stale = r["source"] in REPORT_SOURCES
-        sev = 2 if r["dimension"] in STRONG_DIMS and not stale else 1
+        sev = 2 if r["dimension"] in STRONG_DIMS and not stale and r["source"] not in ESTIMATE_SOURCES else 1
         text = f"Checklist row {r['dimension'].replace('_', ' ')} flagged: {_quote(r['evidence'])}"
         out.append(_item("check", _month(r["as_of_date"] or asof), "negative", CHECK_SOURCE.get(r["source"],
                          r["source"]), text, sev, stale))
@@ -279,9 +287,10 @@ def _land(la: dict | None) -> list[dict]:
     if state not in ("flagged", "possible", "clear"):
         return []
     direction = {"flagged": "negative", "possible": "neutral", "clear": "positive"}[state]
-    text = f"Land register rating {state}: {_quote(la.get('la_evidence') or 'no detail')}"
+    what = " (a complexity rating from the notifications, not a reported hold-up)" if state == "flagged" else ""
+    text = f"Land register rating {state}{what}: {_quote(la.get('la_evidence') or 'no detail')}"
     return [_item("land", _month(la.get("la_last_notif")), direction, "Bhoomi Rashi land register", text,
-                  2 if state == "flagged" else None)]
+                  1 if state == "flagged" else None)]
 
 
 def _events(events: list[dict], asof) -> list[dict]:
@@ -365,7 +374,8 @@ def pack(key: str) -> dict | None:
         return None
     row, asof = rows[0], d["provenance"]["asof"]
     res = serving.research(key)
-    items = ([_status(row, d["latest"], sc), _model_item(sc, asof)] + _checks(d["risk_profile"], asof)
+    items = ([_status(row, d["latest"], sc), _model_item(sc, asof)]
+             + _checks(d["risk_profile"], asof, d["external"]["portal"])
              + _parivesh(d["external"]["portal"], asof) + _land(d["external"]["land"])
              + _events(d["external"]["events"], asof) + _research(res, asof) + _news(key, res, asof))
     tier = sc["tier"]

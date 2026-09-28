@@ -134,6 +134,23 @@ def test_old_news_is_stale_and_allows_no_concern_alone(opinion_db, monkeypatch):
     assert "Current hold-ups" not in so.messages(old)[1]["content"]      # named only when there are some
 
 
+def test_risk_ratings_are_minor_issues_not_hold_ups():
+    land = so._land({"la_state": "flagged", "la_evidence": "NH-80: complexity 4/5", "la_last_notif": "2023-10-02"})[0]
+    assert land["direction"] == "negative" and land["severity"] == 1 and so.group(land) == 1   # minor current
+    assert "not a reported hold-up" in land["text"]
+    row = {"state": "flagged", "dimension": "forest_clearance", "source": "parivesh_rules", "as_of_date": None,
+           "evidence": "high clearance complexity expected: linear, 71.7 ha forest (expected 3.0)"}
+    seen = {"state": "flagged", "dimension": "execution_stagnation", "source": "silver", "as_of_date": None,
+            "evidence": "no progress in 3 reports"}
+    rulebook, stagnation = so._checks([row, seen], "2026-07-31")
+    assert (rulebook["severity"], stagnation["severity"]) == (1, 2) and "forest rulebook" == rulebook["source"]
+    on_portal = so._checks([row, seen], "2026-07-31", {"n_proposals": 1, "n_final": 1})
+    assert [it["text"] for it in on_portal] == [stagnation["text"]]           # PARIVESH says what happened
+    only = {"key": "X", "items": [{**land, "id": "E1"}, {**rulebook, "id": "E2"}]}
+    assert so.allowed(only) == ("none", "watch") and "Current hold-ups" not in so.messages(
+        {**only, "name": "X", "sector": "s", "state": "st", "agency": "a", "asof": "2026-07-31"})[1]["content"]
+
+
 # ------------------------------------------------------------------ checks
 
 def test_check_accepts_a_grounded_reply_and_rejects_each_fault(opinion_db):
