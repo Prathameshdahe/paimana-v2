@@ -16,7 +16,8 @@ export function setViewer(v: { role: string | null; ministry?: string; agency?: 
   viewer = { role: v.role, ministry: v.ministry, agency: v.agency }
 }
 
-function viewerHeaders(): Record<string, string> {
+/** The viewer as request headers; exported for the chat stream (lib/chatStream.ts), which cannot use request(). */
+export function viewerHeaders(): Record<string, string> {
   const h: Record<string, string> = {}
   if (viewer.role) h['X-Paimana-Role'] = viewer.role
   if (viewer.ministry) h['X-Paimana-Ministry'] = encodeURIComponent(viewer.ministry)
