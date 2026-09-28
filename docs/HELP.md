@@ -78,11 +78,11 @@ is still in the Low or Medium tier.
 
 ## How old the data is
 
-Scores are recalculated when a new report arrives, and every score carries the date it is "as of". At the time of
-writing (September 2026) the scores are as of July 2026, from the July 2026 flash report; the assistant can tell you
-the current as-of date. Every current project is in the latest report, but a report can leave a field blank, and then
-that figure is unknown. Remark issues end in 2023. The land register and the PARIVESH lists were read
-in September 2026, and news is searched daily for a rotating set of projects.
+Scores are recalculated when a new report arrives, and every score carries the date it is "as of": the date of the
+latest report the scores are based on. Each page shows the current as-of date, and the assistant can tell you it.
+Every current project is in the latest report, but a report can leave a field blank, and then that figure is
+unknown. Remark issues end in 2023. The land register and the PARIVESH lists are read from their portals from time to
+time, not live, and news is searched daily for a rotating set of projects.
 
 ## What the assistant can do
 
