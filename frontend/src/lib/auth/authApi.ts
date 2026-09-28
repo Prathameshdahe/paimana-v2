@@ -58,3 +58,24 @@ export function loginError(e: unknown): string {
   if (e.status === 404) return 'Sign-in is not available on this server yet.'
   return e.message
 }
+
+/** a failed access request in one sentence */
+export function signupError(e: unknown): string {
+  if (isOffline(e)) return 'The service is not reachable. Try again in a moment.'
+  if (!(e instanceof ApiError)) return String(e)
+  if (e.status === 409) return 'A request for this email is already waiting for review.'
+  if (e.status === 429) return e.retryAfter ? `Too many requests from this network. Try again in ${waitText(e.retryAfter)}.` : e.message
+  if (e.status === 404) return 'Requesting access is not available on this server yet.'
+  return e.message
+}
+
+/** a failed password reset in one sentence */
+export function resetError(e: unknown): string {
+  if (isOffline(e)) return 'The service is not reachable. Try again in a moment.'
+  if (!(e instanceof ApiError)) return String(e)
+  if (e.status === 400 || e.status === 404) {
+    return 'This reset token is not valid: it may have been used or expired. Ask your administrator for a new one.'
+  }
+  if (e.status === 429) return e.retryAfter ? `Too many attempts. Try again in ${waitText(e.retryAfter)}.` : e.message
+  return e.message
+}

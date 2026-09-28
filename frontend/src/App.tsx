@@ -12,6 +12,8 @@ const ProjectStudio = lazy(() => import('@/views/ProjectStudio').then(m => ({ de
 const ExternalFactors = lazy(() => import('@/views/ExternalFactors').then(m => ({ default: m.ExternalFactors })))
 const Models = lazy(() => import('@/views/Models').then(m => ({ default: m.Models })))
 const Login = lazy(() => import('@/views/Login').then(m => ({ default: m.Login })))
+const Signup = lazy(() => import('@/views/Signup').then(m => ({ default: m.Signup })))
+const Reset = lazy(() => import('@/views/Reset').then(m => ({ default: m.Reset })))
 const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ default: m.WorkerConsole })))
 const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ default: m.ApprovalInbox })))
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
@@ -21,7 +23,7 @@ const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar }
 const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDetailDrawer').then(m => ({ default: m.ProjectDetailDrawer })))
 
 /** the account pages stand alone: no top bar, no side panel, no assistant */
-const BARE = new Set(['/login'])
+const BARE = new Set(['/login', '/signup', '/reset'])
 
 const Loading = () => (
   <div className="flex h-48 items-center justify-center text-xs text-fg-dimmed">loading…</div>
@@ -54,6 +56,8 @@ function Shell() {
               {/* Who opens which page: lib/auth/access.ts (ROUTE_ROLES); the public browses without signing in */}
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/reset" element={<Reset />} />
 
               {/* Project list + search (DETECT); read-only for the public */}
               <Route path="/command" element={<RequireRole><CommandCenter /></RequireRole>} />
