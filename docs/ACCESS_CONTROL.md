@@ -116,11 +116,11 @@ tool by the same viewer (`llm/tools.py`, full matrix in `docs/AI_ASSISTANT.md`):
 |---|---|---|---|---|
 | Project list, portfolio counts, project page, compare, search of help and records | ✓ public outputs | scoped | scoped | ✓ |
 | Report history | timeline | + tier alerts, prediction log, scoped | + tier alerts, prediction log, scoped | ✓ full |
-| Web research | facts without match reasons or agent headlines | + linked news, scoped | + linked news, scoped | ✓ + linked news |
+| Web research | facts without match reasons or agent headlines (the search index has none either) | + linked news, scoped | + linked news, scoped | ✓ + linked news |
 | Outside factors | factor names and public evidence strings | + check evidence and PARIVESH detail, scoped | + check evidence and PARIVESH detail, scoped | ✓ full |
 | Risk drivers (SHAP) and flagged checks with evidence | – | scoped | scoped | ✓ |
 | Cached AI second opinion | – | scoped | scoped | ✓ |
-| Agency scorecard | – | every agency, own by default | their ministry's agencies | ✓ |
+| Agency scorecard | – | every agency, own by default; Critical / High counts only where every open project is in scope | their ministry's agencies, same rule | ✓ |
 | Bottlenecks | – | scoped | scoped | ✓ |
 
 The tools take the viewer from the request, never a scope from the model, and answer a project outside the scope

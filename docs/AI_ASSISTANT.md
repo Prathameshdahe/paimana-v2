@@ -105,7 +105,7 @@ characters; only its first 1000 are read.
 | `compare_projects` | 2-4 projects side by side | ✓ | scoped | scoped | ✓ |
 | `project_research` | web research facts; portfolio blockers without a key | no match reasons, no agent headlines | + linked news | + linked news | + linked news |
 | `external_factors` | land, forest, court, contractor, utility, inter-agency; per project or across the portfolio | factor names, public evidence strings | + check evidence, PARIVESH detail | + check evidence, PARIVESH detail | full |
-| `search_knowledge` | help, glossary, docs and record text (`llm/rag.py`) | public chunks | scoped | scoped | ✓ |
+| `search_knowledge` | help, glossary, docs and record text (`llm/rag.py`) | public chunks (no research-agent headlines) | scoped | scoped | ✓ |
 | `explain_prediction` | the five SHAP drivers in plain labels with direction words, flagged checks with evidence | – | scoped | scoped | ✓ |
 | `second_opinion` | the cached AI second opinion (`llm.second_opinion.cached`), never generated in chat | – | scoped | scoped | ✓ |
 | `agency_scorecard` | agency matrix: schedule and cost overrun, open projects, Critical / High counts (null when some of the agency's open projects are outside the scope) | – | all agencies, own by default | their ministry's agencies | ✓ |
