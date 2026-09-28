@@ -210,7 +210,8 @@ class ResearchFact(CamelModel):
     """A cited web fact (backend/serving.py research). origin 'sweep': found by a research agent and checked by a
     second one that re-opened the source (verified keep | fix); 'agent': a news item the in-app research agent judged
     relevant with the local LLM (signal_id, judged_at). live: negative, not resolved, within 4 quarters of asof.
-    match_reason is None on the public page."""
+    headline is the citation label; the public gets no match_reason, and no headline on agent facts (a raw news feed
+    title): label those by summary and source."""
     fact_id: str
     category: str
     taxonomy: str
@@ -221,7 +222,7 @@ class ResearchFact(CamelModel):
     published_date: date | None
     status: str
     summary: str
-    headline: str
+    headline: str | None
     source: str | None
     url: str
     domain: str | None
@@ -453,7 +454,8 @@ class ResearchState(CamelModel):
 
 
 class ResearchBlocker(CamelModel):
-    """A live negative fact of severity >= 2 with its project; the public gets headline, url and date only."""
+    """A live negative fact of severity >= 2 with its project; the public gets the sweep's blockers only, as
+    headline, url and date."""
     headline: str
     url: str
     event_date: date | None

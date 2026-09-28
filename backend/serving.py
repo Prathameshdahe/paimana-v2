@@ -517,15 +517,16 @@ def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, a
 def public_project(d: dict) -> dict:
     """The project page for the public: no SHAP drivers, quantile intervals, identity review, risk evidence lines
     (model probabilities, tier cuts), PARIVESH proposal details, remark status or measured hidden delay, or
-    provenance internals (model, data versions, source documents), and no match reasons on the research facts;
-    tier, progress, cost, completion, risk states, top risks and the cited research facts stay."""
+    provenance internals (model, data versions, source documents), and no match reasons on the research facts nor
+    the research agent's headlines (public_facts); tier, progress, cost, completion, risk states, top risks and the
+    cited research facts stay."""
     no_src = {"source_doc_id": None, "source_page": None}
     scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
                               **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
     prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None, **no_src}
     research = d.get("research")
     return {**d, "scores": scores, "provenance": prov, "review": None,
-            "research": research and {**research, "top": _no_reason(research["top"])},
+            "research": research and {**research, "top": public_facts(research["top"])},
             "latest": d["latest"] and {**d["latest"], **no_src},
             "risk_profile": [{**r, "evidence": None} for r in d["risk_profile"]],
             "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]],
@@ -589,8 +590,12 @@ def _newest(f: dict) -> date:
     return f["event_date"] or f["published_date"] or date.min
 
 
-def _no_reason(facts: list[dict]) -> list[dict]:
-    return [{**f, "match_reason": None} for f in facts]
+def public_facts(facts: list[dict]) -> list[dict]:
+    """Research facts for the public: no match reason, and no headline on the research agent's facts. An agent
+    headline is the raw news feed title (it can name a victim, a farmer or a protester; the privacy floor catches an
+    honorific + name only), and the public cannot read the scout's feed either (signals need insights); its own
+    summary, source, URL and dates stay."""
+    return [{**f, "match_reason": None, **({"headline": None} if f["origin"] == "agent" else {})} for f in facts]
 
 
 def _nest(p: dict | None) -> dict:
@@ -641,8 +646,8 @@ def research_brief(key: str) -> dict:
 
 
 def public_research(d: dict) -> dict:
-    """research() for the public: the same facts without match_reason."""
-    return {**d, "facts": _no_reason(d["facts"])}
+    """research() for the public: the same facts, redacted by public_facts."""
+    return {**d, "facts": public_facts(d["facts"])}
 
 
 @cached
@@ -716,9 +721,11 @@ def research_summary(scope=None) -> dict:
 
 
 def public_research_summary(d: dict) -> dict:
-    """research_summary() for the public: the counts, and of the blockers only headline, URL and date."""
+    """research_summary() for the public: the counts, and of the sweep's blockers only headline, URL and date (a
+    headline is all a public blocker says, and the research agent's are raw feed titles: see public_facts)."""
     keep = ("headline", "url", "event_date", "date_precision")
-    return {**d, "top_recent_blockers": [{k: f[k] for k in keep} for f in d["top_recent_blockers"]]}
+    return {**d, "top_recent_blockers": [{k: f[k] for k in keep} for f in d["top_recent_blockers"]
+                                         if f["origin"] == "sweep"]}
 
 
 @cached

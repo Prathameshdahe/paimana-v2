@@ -139,6 +139,21 @@ def test_summary_copied_from_a_neighbour_is_rejected(agent_db, monkeypatch):
     assert got["rejected"] == ["the summary describes another item"]
 
 
+def test_private_headline_is_rejected_unjudged(agent_db, monkeypatch):
+    """A headline naming a private person is never sent to the LLM nor stored as a fact: it is the citation label."""
+    sid = add_signal("https://n/private", "Shri Ramesh Kumar of Vishnugad village ends protest", link=KEY,
+                     published="2026-08-05T06:00:00+00:00")
+    fake = FakeJudge({**VERDICTS, "Shri": {"relevant": True, "category": "land", "direction": "negative",
+                                           "severity": 2, "event_month": None, "summary": "A protest ended."}})
+    monkeypatch.setattr(research, "_judge_llm", fake)
+    out = research.run([KEY], refresh=False)
+    assert out["private_headlines"] == 1 and out["candidates"] == 5
+    assert all("Ramesh" not in c["user"] for c in fake.calls)
+    j = rows("SELECT relevant, verdict_json FROM signal_judgements WHERE signal_id = ?", [sid])
+    assert j == [{"relevant": None, "verdict_json": json.dumps({"rejected": [research.PRIVATE_HEADLINE]})}]
+    assert rows("SELECT * FROM research_facts WHERE signal_id = ?", [sid]) == []
+
+
 def test_local_place_words():
     idx = scout.index()
     assert research.local_places(KEY, idx) == {"vishnugad", "pipalkoti"}   # not hydro / electric

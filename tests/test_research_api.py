@@ -109,12 +109,17 @@ def test_project_research_merges_sweep_and_agent_facts(client, sweep):
     pub = client.get(f"/api/projects/{key}/research").json()
     assert [f["factId"] for f in pub["facts"]] == [f["factId"] for f in facts]
     assert all(f["matchReason"] is None for f in pub["facts"])
+    # the research agent's headline is a raw feed title: not for the public; the sweep's (checked) headline stays
+    assert all((f["headline"] is None) == (f["origin"] == "agent") for f in pub["facts"])
+    assert all(f["summary"] and f["url"] for f in pub["facts"])
 
     brief = client.get(f"/api/projects/{key}", headers=IPMD).json()["research"]
     top = brief["top"]
     assert brief["nFacts"] == d["nFacts"] and len(top) == min(3, d["nFacts"]) and top[0]["live"]
     assert [f["live"] for f in top] == sorted((f["live"] for f in top), reverse=True)   # live blockers first
-    assert all(f["matchReason"] is None for f in client.get(f"/api/projects/{key}").json()["research"]["top"])
+    pub_top = client.get(f"/api/projects/{key}").json()["research"]["top"]
+    assert [f["factId"] for f in pub_top] == [f["factId"] for f in top]
+    assert all(f["matchReason"] is None and (f["headline"] is None) == (f["origin"] == "agent") for f in pub_top)
 
 
 def test_not_researched_is_not_searched(client, sweep):
@@ -165,7 +170,10 @@ def test_public_summary_is_counts_and_citations(client):
     full = client.get("/api/research/summary", headers=IPMD).json()
     pub = client.get("/api/research/summary").json()
     assert pub["coverage"] == full["coverage"] and pub["byCategory"] == full["byCategory"]
-    assert [b["url"] for b in pub["topRecentBlockers"]] == [b["url"] for b in full["topRecentBlockers"]]
+    # the sweep's blockers only: a public blocker is its headline, and an agent headline is a raw feed title
+    assert [b["url"] for b in pub["topRecentBlockers"]] == [b["url"] for b in full["topRecentBlockers"]
+                                                            if b["origin"] == "sweep"]
+    assert AGENT_URL in {b["url"] for b in full["topRecentBlockers"]}
     for b in pub["topRecentBlockers"]:
         assert b["headline"] and b["url"] and b["eventDate"]
         assert all(b[k] is None for k in ("factId", "projectKey", "projectName", "summary", "source", "tier"))

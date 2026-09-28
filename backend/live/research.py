@@ -6,7 +6,9 @@ recently researched first, per the `researched` table):
   1. refreshes its news with the scout (scout.run([key], pib=False)), outside any LLM call;
   2. candidates: its linked items not judged for it yet, then unlinked-pool items (the scout's ambiguous matches,
      linked to no project) that name one of its local place words (a name word only projects of its state have:
-     Darbhanga, not 'civil enclave'), newest first, at most MAX_CANDIDATES;
+     Darbhanga, not 'civil enclave'), newest first, at most MAX_CANDIDATES; an item whose headline names a private
+     person (pipeline/research.private_names) is rejected without an LLM call, since the headline is stored and
+     shown as the fact's citation;
   3. the LLM judges them in batches of up to BATCH from the headline and the feed summary alone (the article is
      never fetched): per item {i, relevant, category, direction, severity, event_month, summary}, the reply's JSON
      checked item by item with a pydantic model. The items go into the prompt between markers as quotes, never as
@@ -68,6 +70,7 @@ TOKENS_PER_ITEM, TOKENS_BASE = 60, 20       # max_tokens of a batch: TOKENS_BASE
 GATE_WAIT_S, PAUSE_MAX_S, PAUSE_POLL_S = 30.0, 600.0, 2.0
 HEADLINE_CHARS, SUMMARY_CHARS = 220, 300
 RISKY_TIERS = ("Critical", "High", "Watch")
+PRIVATE_HEADLINE = "the headline names a private person"
 SYSTEM = (
     "You check news items for one Indian government infrastructure project. An item is relevant only when it is "
     "about this project itself: its works, site, contractor, land, clearances, funds, deadlines or progress. News "
@@ -362,7 +365,14 @@ def research_project(key: str, idx: dict, stats: Counter, get=None, refresh: boo
     items = candidates(key, idx)
     s0 = serving.state()
     asof, mv, model = s0["asof"], s0["model_version"], _model()
-    n_relevant = 0
+    n_relevant, judged_at = 0, _now()
+    private = [s for s in items if web_research.private_names(s["title"])]
+    if private:
+        db.save_research(key, [{"signal_id": s["id"], "project_key": key, "relevant": None, "model": None,
+                                "prompt_version": PROMPT_VERSION, "judged_at": judged_at,
+                                "verdict_json": json.dumps({"rejected": [PRIVATE_HEADLINE]})} for s in private], [], [])
+        stats["private_headlines"] += len(private)
+        items = [s for s in items if s not in private]
     for b in range(0, len(items), BATCH):
         batch = items[b:b + BATCH]
         if not _wait_idle():
@@ -391,8 +401,8 @@ def research_project(key: str, idx: dict, stats: Counter, get=None, refresh: boo
              "detail": f"{f['summary']} ({f['source']}, {f['event_date'] or f['published_date'] or 'undated'})",
              "asof": str(asof), "model_version": mv, "source": f["url"]}
             for f in facts if f["fact_id"] in new and f["live"] and f["severity"] >= 2])
-    db.mark_researched(key, len(items), n_relevant)
-    return {"candidates": len(items), "relevant": n_relevant}
+    db.mark_researched(key, len(items) + len(private), n_relevant)
+    return {"candidates": len(items) + len(private), "relevant": n_relevant}
 
 
 def run(keys: list[str], get=None, refresh: bool = True) -> dict:
