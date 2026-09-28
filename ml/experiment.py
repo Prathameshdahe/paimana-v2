@@ -112,13 +112,16 @@ def ci(deltas, level=0.95):
 
 class Ctx:
     """What a candidate may read: gold features and labels, the silver observations and gold.base() of them. With
-    a cutoff everything is cut at it (the point-in-time check)."""
+    a cutoff everything is cut at it (the point-in-time check): features and observations at periods <= cutoff,
+    labels whose outcome quarter target_period is <= cutoff (known by then)."""
     _obs = None
 
     def __init__(self, feats, labels, manifest, cutoff=None):
         self.cutoff = None if cutoff is None else pd.Timestamp(cutoff)
         self.feats = feats if cutoff is None else feats[feats.period <= self.cutoff]
-        self.labels, self.manifest = labels, manifest
+        self.labels = labels if cutoff is None else {h: lab[lab.target_period <= self.cutoff]
+                                                     for h, lab in labels.items()}
+        self.manifest = manifest
 
     @cached_property
     def obs(self):

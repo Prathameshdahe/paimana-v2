@@ -156,3 +156,12 @@ def test_champion_cache_key_follows_the_backtest_code(harness, monkeypatch):
     monkeypatch.setattr(experiment, "code_version", lambda: "edited")
     experiment.cached("tag", make)
     assert len(calls) == 2                                                  # backtest.py changed: made again
+
+
+def test_harness_refuses_a_column_that_reads_unrealised_labels(harness):
+    """A column from ctx.labels at t: the outcome at t + 2q is not known at t, so the cut context must differ."""
+    _, tmp = harness
+    leak = experiment.Candidate("the row's own label", extra=lambda ctx: ctx.feats[backtest.PK].merge(
+        ctx.labels[2][backtest.PK + ["y_any"]].rename(columns={"y_any": "own_y"}), on=backtest.PK, how="left"))
+    with pytest.raises(AssertionError, match="change when the data are cut"):
+        experiment.run("leak_y", leak, seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
