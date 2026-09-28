@@ -12,7 +12,7 @@ from llm import agent, second_opinion, worker
 
 from . import brief, db, ratelimit, serving, store
 from .access import Viewer, in_scope, need, stream_viewer, viewer
-from .live import portals, research, scheduler, scout, watcher
+from .live import opinions, portals, research, scheduler, scout, watcher
 from .schemas import (
     AgencyMatrix,
     Alert,
@@ -344,6 +344,27 @@ def post_research(background: BackgroundTasks, project_key: str | None = Query(N
     background.add_task(research.run, keys)
     return {"started": True, "detail": f"researching {keys[0] if project_key else f'{len(keys)} projects'} in the "
                                        "background", "pending": len(keys)}
+
+
+@router.post("/jobs/second-opinion", response_model=JobStarted)
+def post_second_opinion(background: BackgroundTasks, project_key: str | None = Query(None, max_length=32),
+                        v: Viewer = Depends(need("jobs"))):
+    """Run the second-opinion job now, in the background (it waits for the local LLM): one current project, or the
+    next batch (Critical / High / Watch with evidence and no opinion for it yet, least recently asked first). A
+    project whose current evidence already has an opinion under the current prompt is skipped."""
+    if opinions.busy():
+        return {"started": False, "detail": "a second-opinion run is already in progress"}
+    if project_key:
+        k = _key(project_key)
+        if not serving.rows_for_keys((k,)):
+            raise HTTPException(status_code=404, detail=f"project {project_key} is not in the current portfolio")
+        db.audit(v.role, "jobs.second_opinion", k)
+        background.add_task(opinions.run, [k])
+        return {"started": True, "detail": f"asking for a second opinion on {k} in the background", "pending": 1}
+    keys, n = opinions.batch_keys(), opinions.per_run()
+    db.audit(v.role, "jobs.second_opinion", "batch", f"up to {n} of {len(keys)} projects")
+    background.add_task(opinions.run, keys, n)
+    return {"started": True, "detail": f"asking for up to {n} second opinions in the background", "pending": n}
 
 
 @router.post("/jobs/parivesh-snapshot", response_model=JobStarted)

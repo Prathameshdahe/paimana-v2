@@ -8,7 +8,11 @@ date already archived is not fetched again, so this is one fetch a day with same
 turns it off) and, only with BHOOMI_PULL=1, a daily check that pulls the Bhoomi Rashi register when the newest pull
 is BHOOMI_PULL_EVERY_D days old (default 91, quarterly), and the research agent (backend/live/research.py) every
 RESEARCH_INTERVAL_H hours (default 24, first run RESEARCH_FIRST_DELAY_S after start; RESEARCH_AGENT=0 turns it off),
-up to RESEARCH_PER_RUN projects a run. LIVE_JOBS=0 starts none of them (the tests). The blocking
+up to RESEARCH_PER_RUN projects a run, and the LLM second opinion (backend/live/opinions.py) every
+SECOND_OPINION_INTERVAL_H hours (default 24, first run SECOND_OPINION_FIRST_DELAY_S after start, 45 minutes: after
+the research agent's first batch has started; SECOND_OPINION_JOB=0 turns it off), up to SECOND_OPINION_PER_RUN
+projects a run. The two LLM jobs share the one local model through its gate (llm/client.py) and let chat requests go
+first. LIVE_JOBS=0 starts none of them (the tests). The blocking
 work runs in a thread (asyncio.to_thread), and every job holds its own lock, so a scheduled run never overlaps one
 started from the API. A run that ingests, scouts or fetches writes its job_runs row; an idle tick (nothing in the
 inbox, today already archived, pull not due) only updates STATUS.
@@ -24,14 +28,15 @@ from datetime import datetime, timedelta, timezone
 from backend import db
 from backend.schemas import Alert
 
-from . import portals, research, scout, watcher
+from . import opinions, portals, research, scout, watcher
 
 SCOUT_FIRST_DELAY_S = 600
 PORTALS_FIRST_DELAY_S = 120
 RESEARCH_FIRST_DELAY_S = 1800
+SECOND_OPINION_FIRST_DELAY_S = 2700
 POLL_S, HEARTBEAT_S = 2.0, 15.0
 STATUS = {job: {"interval_s": None, "running": False, "last_tick": None, "next_due": None, "last_error": None}
-          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull", "research")}
+          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull", "research", "second_opinion")}
 
 
 def _iso(t: datetime) -> str:
@@ -80,6 +85,9 @@ def start() -> list[asyncio.Task]:
     if research.enabled():
         loops.append(("research", research.batch, float(env("RESEARCH_INTERVAL_H", 24)) * 3600,
                       RESEARCH_FIRST_DELAY_S))
+    if opinions.enabled():
+        loops.append(("second_opinion", opinions.batch, float(env("SECOND_OPINION_INTERVAL_H", 24)) * 3600,
+                      SECOND_OPINION_FIRST_DELAY_S))
     return [asyncio.create_task(_every(job, fn, s, first), name=job) for job, fn, s, first in loops]
 
 
@@ -96,7 +104,7 @@ def status() -> dict:
             "watch": {**STATUS["watch"], "last_run": jobs.get("ingest")},
             "scout": {**STATUS["scout"], "last_run": jobs.get("scout")},
             **{job: {**STATUS[job], "last_run": jobs.get(job)}
-               for job in ("parivesh_snapshot", "bhoomi_rashi_pull", "research")},
+               for job in ("parivesh_snapshot", "bhoomi_rashi_pull", "research", "second_opinion")},
             "bhoomi_pull_enabled": bhoomi_enabled()}
 
 

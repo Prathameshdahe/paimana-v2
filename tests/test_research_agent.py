@@ -390,6 +390,7 @@ def test_scheduler_runs_the_research_loop(monkeypatch):
     ran = []
     monkeypatch.setenv("LIVE_JOBS", "1")
     monkeypatch.setenv("PARIVESH_SNAPSHOT", "0")
+    monkeypatch.setenv("SECOND_OPINION_JOB", "0")
     monkeypatch.delenv("BHOOMI_PULL", raising=False)
     monkeypatch.setattr(scheduler, "STATUS", {j: dict(v) for j, v in scheduler.STATUS.items()})
     monkeypatch.setattr(scheduler, "SCOUT_FIRST_DELAY_S", 60)
