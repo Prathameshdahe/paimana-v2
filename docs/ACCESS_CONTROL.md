@@ -26,8 +26,10 @@ live session (expired, revoked, forged) gets 401 and the cookie is cleared, so t
   need no token.
 
 **Passwords.** argon2id (argon2-cffi's defaults: 64 MiB, 3 passes, 4 lanes). A password must have at least 12
-characters, must not be on the common-password list (checked with and without punctuation) and must not contain
-the email's local part. `frontend/src/lib/auth/password.ts` checks the same rules before sending.
+characters not counting whitespace at either end and at least 5 different characters (no blank or one-letter
+password), must not be on the common-password list (checked with and without punctuation) and must not contain the
+email's local part. `frontend/src/lib/auth/password.ts` checks the rules before sending (the distinct-character rule
+is the backend's alone until the frontend adds it; the backend's 422 names it).
 
 **Failed sign-ins.** One generic 401 covers an unknown email, a wrong password and a disabled account alike: "email
 or password is wrong, or the account is locked or disabled". An unknown email costs the same argon2 time. Five

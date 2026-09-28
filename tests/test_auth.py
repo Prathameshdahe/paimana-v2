@@ -215,6 +215,19 @@ def test_password_policy():
     assert passwords.dummy_verify(PASSWORD) is False
 
 
+def test_password_policy_refuses_blank_and_repeated_passwords(client, coal):
+    """Review finding (unit B, round 1): the length counts no whitespace at either end, and a password needs at least
+    MIN_DISTINCT different characters, so twelve spaces, spaces and tabs, or one repeated letter do not pass."""
+    for pw in (" " * 12, " 	" * 8, "a" * 12, "abab" * 4, "   eleven chars 1   "[:3] + "x" * 11):
+        assert passwords.problems(pw), repr(pw)
+    assert passwords.problems(" " * 12) == ["at least 12 characters", f"at least {passwords.MIN_DISTINCT} different "
+                                                                        "characters"]
+    assert passwords.problems("  " + "abcdefghij" + "  ") == ["at least 12 characters"]   # ten, not fourteen
+    assert passwords.problems("aaaa bbbb cccc dd") == [] and passwords.problems(PASSWORD) == []
+    r = client.post("/api/auth/signup", json=signup_body(coal, password=" " * 12))
+    assert r.status_code == 422 and "different characters" in r.json()["detail"]
+
+
 def test_change_password(client, coal):
     u, email = official(ministry=coal)
     with TestClient(app) as elsewhere:

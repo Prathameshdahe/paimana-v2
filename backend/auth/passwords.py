@@ -1,8 +1,9 @@
 """Passwords (and the email check they lean on): argon2id hashes (argon2-cffi's defaults, RFC 9106's low-memory
 profile: 64 MiB, 3 passes, 4 lanes, about 50 ms here) and the policy every new password passes: at least MIN_LENGTH
-characters, at most MAX_LENGTH, not a common password (COMMON, compared lower-cased with and without its
-non-alphanumerics, as frontend/src/lib/auth/password.ts does), and not containing the email's local part when that is
-3 characters or more.
+characters not counting whitespace at either end, at most MAX_LENGTH, at least MIN_DISTINCT different characters (no
+run of one repeated character, no blank password), not a common password (COMMON, compared lower-cased with and
+without its non-alphanumerics, as frontend/src/lib/auth/password.ts does), and not containing the email's local part
+when that is 3 characters or more. The password itself is kept as typed (nothing is trimmed from it).
 
 verify() never raises: a wrong password, a malformed hash or None is False. dummy_verify() spends the same time
 on nothing, so a sign-in with an unknown email takes as long as one with a known email and a wrong password.
@@ -18,7 +19,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 
 from backend import settings as cfg
 
-MIN_LENGTH, MAX_LENGTH = 12, 256
+MIN_LENGTH, MAX_LENGTH, MIN_DISTINCT = 12, 256, 5
 EMAIL_MAX = 254
 EMAIL_RX = re.compile(r"[^@\s]{1,64}@[^@\s]+\.[^@\s.]{2,}")
 _hasher = PasswordHasher()
@@ -72,11 +73,13 @@ def dummy_verify(password: str | None) -> bool:
 def problems(password: str, email: str | None = None) -> list[str]:
     """What the policy rejects in password, in order (empty: it passes)."""
     out = []
-    n, low = len(password), password.lower()
-    if n < MIN_LENGTH:
+    core, low = password.strip(), password.lower()
+    if len(core) < MIN_LENGTH:
         out.append(f"at least {MIN_LENGTH} characters")
-    if n > MAX_LENGTH:
+    if len(password) > MAX_LENGTH:
         out.append(f"at most {MAX_LENGTH} characters")
+    if len(set(core)) < MIN_DISTINCT:
+        out.append(f"at least {MIN_DISTINCT} different characters")
     if low in COMMON or "".join(c for c in low if c.isalnum()) in COMMON:
         out.append("not a common password")
     local = (email or "").split("@")[0].strip().lower()
