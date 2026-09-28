@@ -4,10 +4,13 @@ load_dotenv of .env for the CLI tools). The env name of a field is its upper-cas
 ALLOWED_ORIGINS ...); a list is comma-separated; a bool is 1/0, true/false, yes/no, on/off. `.env.example` documents
 every variable.
 
-database_url comes from DATABASE_URL, else Manamrit's DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME, else the compose
-POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_PORT/POSTGRES_DB on localhost, else a password-less local default that fails
-clearly. reload() rebuilds `settings` after the environment changed (the tests point DATABASE_URL at paimana_test);
-modules read `settings` through this module (`from backend import settings as cfg; cfg.settings.x`), not a copy.
+database_url: inside the compose stack, where POSTGRES_HOST is set, it is built from POSTGRES_USER / POSTGRES_PASSWORD /
+POSTGRES_HOST / POSTGRES_HOST_PORT (5432) / POSTGRES_DB, whatever DATABASE_URL says (that one is for tools on the host,
+against the published port); otherwise DATABASE_URL, else Manamrit's DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME,
+else POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_PORT/POSTGRES_DB on localhost, else a password-less local default that
+fails clearly. reload() rebuilds `settings` after the environment changed (the tests point DATABASE_URL at
+paimana_test); modules read `settings` through this module (`from backend import settings as cfg; cfg.settings.x`),
+not a copy.
 """
 from __future__ import annotations
 
@@ -74,15 +77,24 @@ def _list(v: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
     return default if v is None else tuple(x.strip() for x in v.split(",") if x.strip())
 
 
+def _url(user: str, password: str | None, host: str, port: str | int, name: str) -> str:
+    auth = quote(user, safe="") + (f":{quote(password, safe='')}" if password else "")
+    return f"postgresql+psycopg://{auth}@{host}:{port}/{name}"
+
+
 def _database_url(env: Mapping[str, str]) -> str:
+    # inside the compose stack (POSTGRES_HOST=postgres) the URL is built from the .env.db credentials and the
+    # service's own port, whatever DATABASE_URL says: that one points at the port published on the host
+    if env.get("POSTGRES_HOST") and env.get("POSTGRES_USER") and env.get("POSTGRES_DB"):
+        return _url(env["POSTGRES_USER"], env.get("POSTGRES_PASSWORD"), env["POSTGRES_HOST"],
+                    env.get("POSTGRES_HOST_PORT") or 5432, env["POSTGRES_DB"])
     if env.get("DATABASE_URL"):
         return env["DATABASE_URL"]
     for user, password, host, port, name in (("DB_USER", "DB_PASSWORD", "DB_HOST", "DB_PORT", "DB_NAME"),
                                              ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT",
                                               "POSTGRES_DB")):
         if env.get(user) and env.get(name):
-            auth = quote(env[user], safe="") + (f":{quote(env[password], safe='')}" if env.get(password) else "")
-            return f"postgresql+psycopg://{auth}@{env.get(host) or 'localhost'}:{env.get(port) or 5432}/{env[name]}"
+            return _url(env[user], env.get(password), env.get(host) or "localhost", env.get(port) or 5432, env[name])
     return "postgresql+psycopg://paimana@localhost:5432/paimana"
 
 
