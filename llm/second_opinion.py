@@ -680,11 +680,12 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
         kept = _accepted(row, p)
         return row, kept, kept and not (fresh and row.get("prompt_version") != PROMPT_VERSION)
 
+    down = {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
     row, kept, serve = stored()
     if serve:
         return _out(row, p, True)
     if client.down_recently():
-        return {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {client.DOWN_S} s"}
+        return down
     wait = INTERACTIVE_WAIT_S if interactive else JOB_WAIT_S
     with client.gate(wait, chat=interactive) as ok:
         if not ok:
@@ -693,6 +694,8 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
         row, kept, serve = stored()   # a request that held the gate before this one may have just made it
         if serve:
             return _out(row, p, True)
+        if client.down_recently():    # or found LM Studio down: the ones waiting behind it do not try it in turn
+            return down
         try:
             op, reasons, attempts, n, ms = _ask(p)
         except client.LLMConnectionError as e:

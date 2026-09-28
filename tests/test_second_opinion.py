@@ -321,6 +321,20 @@ def test_llm_down_is_quick_and_remembered(opinion_db, monkeypatch):
     assert stored() == []
 
 
+def test_a_request_waiting_for_the_gate_sees_lm_studio_went_down(opinion_db, monkeypatch):
+    fake = FakeLLM("never asked")
+    monkeypatch.setattr(client, "chat", fake)
+    seen = []
+    with client.gate(1) as ok:                        # the request ahead holds the LLM ...
+        assert ok
+        t = threading.Thread(target=lambda: seen.append(so.generate(KEY)))
+        t.start()
+        time.sleep(0.2)
+        client.mark_down()                            # ... and finds LM Studio down
+    t.join(5)
+    assert seen[0]["status"] == "llm_unavailable" and "unreachable" in seen[0]["detail"] and not fake.calls
+
+
 def test_busy_gate_is_unavailable_not_a_wait(opinion_db, monkeypatch):
     monkeypatch.setattr(so, "INTERACTIVE_WAIT_S", 0.2)
     monkeypatch.setattr(client, "chat", FakeLLM("never asked"))
