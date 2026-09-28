@@ -6,8 +6,8 @@ Run from repo root after score:  python -m pipeline.run profile
 Inputs   gold/predictions_latest.json (and the predictions file it names), gold/features.parquet,
          gold/labels_h4.parquet, gold/project_events.parquet, gold/project_mentions.parquet,
          gold/external_fc.parquet, gold/external_land.parquet (and the composite built from the two, as in
-         gold/external_composite.parquet), gold/agency_stats.parquet,
-         silver/observations.parquet, silver/sector_context.parquet
+         gold/external_composite.parquet), gold/agency_stats.parquet, gold/research_facts.parquet (when the
+         research step has run), silver/observations.parquet, silver/sector_context.parquet
 Outputs  gold/risk_profile_<asof YYYY-MM>.parquet (long: project_key, dimension, state, evidence, source,
          as_of_date), gold/external_summary.json
 
@@ -18,6 +18,14 @@ positive evidence (a model score below the cut, a linked land table with low com
 done). Event rows read the point-in-time ext_open_* features at asof, so a remark after asof never counts.
 The Parivesh rule (linear, worst complexity >= 6) flags only when forest hectares or a violation are known: with
 no hectares every area band counts and every linear project's worst case is 7, which says nothing about it.
+
+Web research (pipeline/research.py) also flags the land, forest-clearance, litigation and contractor rows: a live
+negative fact (not resolved, dated within LIVE_Q quarters of asof, recomputed here) of severity >= 2 whose source
+the checker tied to the project with match high. Its line '{summary} ({source}, {event_date})' leads the evidence
+and the source is news_research where nothing else flagged the row, else it is appended. It never clears a row: a
+project nobody researched, or one where the search found nothing, keeps the state the reports and registers give.
+The research facts are a 2026 snapshot, not point in time, so they apply at the current asof only (an earlier
+asof would read later news).
 
 The composite row (pipeline/external.py external_composite: 0.5 forest/7 + 0.5 land/5) is rated only where land
 is linked (coverage fc+la): flagged at score >= COMPOSITE_HIGH. It is clear only when both halves are known and
@@ -41,6 +49,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ml import backtest, score  # noqa: E402
 from pipeline import external, gold, hidden_delay  # noqa: E402
+from pipeline import research as web_research  # noqa: E402
 
 GOLD, SILVER, ROOT = backtest.GOLD, backtest.SILVER, backtest.ROOT
 DIMENSIONS = ["schedule_slip", "cost_escalation", "execution_stagnation", "expenditure_lag", "repeated_revisions",
@@ -60,6 +69,9 @@ FACTORS = {"land": "land_acquisition", "forest_clearance": "forest_clearance", "
            "contractor": "contractor_stress", "utility_shifting": "utility_shifting", "inter_agency": "inter_agency"}
 EVENT_DIMENSION = {"land": "land_acquisition", "forest_env": "forest_clearance", "litigation": "litigation",
                    "contractor": "contractor_stress"}
+# web research fact taxonomy (pipeline/research.py) -> the checklist dimension a live negative fact flags
+RESEARCH_DIMENSION = dict(EVENT_DIMENSION)
+RESEARCH_MIN_SEVERITY = 2
 LA_REASON = {"no_land_data_for_state": "no land data for this state (no Bhoomi Rashi export for it yet)",
              "not_road": "no land data for non-road projects",
              "no_nh_in_name": "no NH number in the name to link land data",
@@ -187,11 +199,46 @@ def hidden_delay_lines(keys, remark_status, priors, land, portal, asof):
     return pd.Series(land_line, index=keys.index), pd.Series(forest_line, index=keys.index)
 
 
-def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_status=None, priors=None, portal=None):
+def research_lines(keys, research, asof) -> dict[str, pd.Series]:
+    """Per web-research dimension (RESEARCH_DIMENSION): each project's evidence line from its live negative research
+    facts of severity >= RESEARCH_MIN_SEVERITY with match high, '{summary} ({source}, {event_date})' of the most
+    severe then newest one (+ how many more), '' where it has none. research: gold/research_facts or None."""
+    empty = {dim: pd.Series("", index=keys.index) for dim in RESEARCH_DIMENSION.values()}
+    if research is None or research.empty:
+        return empty
+    r = research[research["taxonomy"].isin(list(RESEARCH_DIMENSION)) & research["match"].eq("high")
+                 & research["severity"].ge(RESEARCH_MIN_SEVERITY) & research["project_key"].isin(keys)]
+    r = r[web_research.live(r, asof)].sort_values(["severity", "event_date", "fact_id"],
+                                                  ascending=[False, False, True])
+    out = {}
+    for tax, dim in RESEARCH_DIMENSION.items():
+        lines = {}
+        for key, g in r[r["taxonomy"].eq(tax)].groupby("project_key", sort=False):
+            f, more = g.iloc[0], f" (+{len(g) - 1} more)" if len(g) > 1 else ""
+            when = web_research.show_date(f["event_date"], f["date_precision"])
+            lines[key] = f"{f['summary']} ({f['source']}, {when}){more}"
+        out[dim] = keys.map(lines).fillna("").astype(str)
+    return out
+
+
+def with_research(flag, evidence, source, line):
+    """A checklist row with its web research line: flagged too where there is one; where nothing else flagged it
+    the line leads the evidence and the source is news_research, else the line is appended. Research never clears
+    a row, so a project that was not researched keeps its state."""
+    has = line.ne("")
+    only = has & ~flag
+    ev = pd.Series(np.select([only, has], [line + "; " + evidence, evidence + "; web research: " + line], evidence),
+                   index=flag.index)
+    return flag | has, ev, source.where(~only, "news_research")
+
+
+def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_status=None, priors=None, portal=None,
+               research=None):
     """The thirteen checklist rows (twelve checks and the external composite) for every project in cur, long
     format. remark_status, priors (gold/hidden_delay_priors) and portal (gold/external_fc_portal) add the measured
     hidden delay and the PARIVESH stage to the land and forest rows; a linked PARIVESH proposal still open past its
-    rule limit at asof flags the forest row."""
+    rule limit at asof flags the forest row. research (gold/research_facts) flags the land, forest, litigation and
+    contractor rows too (with_research)."""
     k, out = cur["project_key"], []
 
     def add(dim, flag, clear, evidence, source):
@@ -261,12 +308,13 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_s
     opened, _, line = info["land"]
     la_flag, la_clear = la["la_state"].eq("flagged"), la["la_state"].eq("clear")
     la_line = la["la_evidence"].fillna(la["la_match_method"].map(LA_REASON)).fillna("not in the land linkage")
-    land_flag = opened | la_flag
     land_prior, forest_prior = hidden_delay_lines(k, remark_status, priors, land, portal, asof)
-    add("land_acquisition", land_flag, la_clear,
-        pd.Series(np.where(opened, line + np.where(la["la_evidence"].notna(), "; " + la_line, ""),
-                           la_line + "; " + line), index=cur.index) + land_prior,
-        pd.Series(np.where(opened, "report", "bhoomi_rashi"), index=cur.index))
+    web = research_lines(k, research, asof)
+    land_flag, land_ev, land_src = with_research(
+        opened | la_flag, pd.Series(np.where(opened, line + np.where(la["la_evidence"].notna(), "; " + la_line, ""),
+                                             la_line + "; " + line), index=cur.index) + land_prior,
+        pd.Series(np.where(opened, "report", "bhoomi_rashi"), index=cur.index), web["land_acquisition"])
+    add("land_acquisition", land_flag, la_clear, land_ev, land_src)
 
     f = fc.set_index("project_key").reindex(k).set_axis(cur.index)
     opened, done, line = info["forest_env"]
@@ -280,17 +328,18 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_s
     po = po.set_index("project_key").reindex(k).set_axis(cur.index)
     overdue = po["n_overdue"].fillna(0).gt(0)
     portal_line = ("; PARIVESH: " + po["evidence"]).fillna("")
-    fc_flag = opened | high | overdue
-    # the forest half is measured only with hectares (or a clearance reported done); else it is the rulebook's
-    # expected value over every area band, an estimate
-    fc_known = (f["fc_area_known"].fillna(False).astype(bool) | done) & ~fc_flag
     base = pd.Series(np.select([opened, high], [line + "; " + rules, "high clearance complexity expected: " + rules
                                                  + "; " + line], line + "; " + rules), index=cur.index)
-    add("forest_clearance", fc_flag, done,
+    fc_flag, fc_ev, fc_src = with_research(
+        opened | high | overdue,
         pd.Series(np.where(overdue, "open on PARIVESH past its rule limit; ", ""), index=cur.index) + base
         + portal_line + forest_prior.where(~done, ""),
         pd.Series(np.select([opened | done, overdue], ["report", "parivesh_portal"], "parivesh_rules"),
-                  index=cur.index))
+                  index=cur.index), web["forest_clearance"])
+    # the forest half is measured only with hectares (or a clearance reported done); else it is the rulebook's
+    # expected value over every area band, an estimate
+    fc_known = (f["fc_area_known"].fillna(False).astype(bool) | done) & ~fc_flag
+    add("forest_clearance", fc_flag, done, fc_ev, fc_src)
 
     comp = external.external_composite(fc, land).set_index("project_key").reindex(k).set_axis(cur.index)
     both, ext_score = comp["coverage"].eq("fc+la"), comp["external_factor_score"]
@@ -309,7 +358,8 @@ def build_rows(cur, asof, events, mentions, fc, land, agencies, sector, remark_s
 
     for dim, cat in [("litigation", "litigation"), ("contractor_stress", "contractor")]:
         opened, _, line = info[cat]
-        add(dim, opened, pd.Series(False, index=cur.index), line, "report")
+        flag, ev, src = with_research(opened, line, pd.Series("report", index=cur.index), web[dim])
+        add(dim, flag, pd.Series(False, index=cur.index), ev, src)
 
     gap_m, dq = cur["months_since_last_obs"], cur["dq_score"]
     add("data_staleness", (gap_m > STALE_MONTHS) | (dq < DQ_MIN), gap_m.notna() | dq.notna(),
@@ -486,6 +536,29 @@ def priors_summary(priors):
             "min_projects": hidden_delay.MIN_PROJECTS, "rows": records(priors[keep].round(4))}
 
 
+def research_at(asof, latest):
+    """gold/research_facts at the latest period; None for an earlier asof (the facts are a later snapshot, not
+    point in time) or when the research step has not run."""
+    path = GOLD / "research_facts.parquet"
+    return pd.read_parquet(path) if path.exists() and pd.Timestamp(asof) >= pd.Timestamp(latest) else None
+
+
+def research_flags(rows, research) -> dict:
+    """external_summary.json's web research block: per research dimension, projects flagged only by web research
+    and flagged by it on top of another source."""
+    web = rows[rows["dimension"].isin(list(RESEARCH_DIMENSION.values())) & rows["state"].eq("flagged")]
+    only = web["source"].eq("news_research")
+    also = web["evidence"].str.contains("; web research: ", regex=False)
+    return {"rule": f"a live negative web research fact (severity >= {RESEARCH_MIN_SEVERITY}, match high, within "
+                    f"{web_research.LIVE_Q} quarters of asof) flags the row; source news_research where nothing "
+                    "else did",
+            "n_projects_with_facts": 0 if research is None else int(research["project_key"].nunique()),
+            "flagged_only_by_research": {d: int(only[web["dimension"].eq(d)].sum())
+                                         for d in RESEARCH_DIMENSION.values()},
+            "flagged_also_by_research": {d: int(also[web["dimension"].eq(d)].sum())
+                                         for d in RESEARCH_DIMENSION.values()}}
+
+
 def build_risk_profile(asof=None):
     """Write gold/risk_profile_<asof>.parquet and gold/external_summary.json; returns (rows, summary)."""
     t0 = time.time()
@@ -499,8 +572,9 @@ def build_risk_profile(asof=None):
     remark_status = pd.read_parquet(GOLD / "remark_status.parquet")
     priors = pd.read_parquet(GOLD / "hidden_delay_priors.parquet")
     portal = pd.read_parquet(GOLD / "external_fc_portal.parquet")
+    research = research_at(asof, obs["period"].max())
     rows = build_rows(cur, asof, events, mentions, fc, land, agency_bias(obs, asof), sector_now(sectors, cur, asof),
-                      remark_status, priors, portal)
+                      remark_status, priors, portal, research)
     path = GOLD / f"risk_profile_{asof:%Y-%m}.parquet"
     rows.to_parquet(path, index=False)
 
@@ -550,6 +624,7 @@ def build_risk_profile(asof=None):
         "portal": portal_summary(cur, portal, lines(["forest_clearance"])),
         "land_coverage": land_coverage(cur, land),
         "hidden_delay_priors": priors_summary(priors),
+        "web_research": research_flags(rows, research),
     }
     (GOLD / "external_summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
 
@@ -558,6 +633,9 @@ def build_risk_profile(asof=None):
                       rows["state"]).to_string())
     print("external factors: " + ", ".join(f"{n} {v['n_flagged']} (Rs {v['capital_exposed_cr']:,.0f} cr)"
                                            for n, v in factors.items()))
+    wr = summary["web_research"]
+    print(f"web research: flagged only by it {wr['flagged_only_by_research']}, also by it "
+          f"{wr['flagged_also_by_research']}")
     en = summary["early_notice"]
     print(f"early notice: {en['n_projects']} projects, Rs {en['capital_exposed_cr']:,.0f} cr "
           f"({en['no_slip_to_date']['n_projects']} with no slip to date); by factor {en['by_factor']}")

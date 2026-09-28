@@ -195,3 +195,50 @@ def test_measured_hidden_delay_and_overdue_parivesh_reach_the_checklist():
     assert "measured hidden delay" not in r.loc[("P2", "land_acquisition"), "evidence"]
     # without the new inputs the rows are as before
     assert checklist().loc[("P2", "forest_clearance"), "state"] == "unknown"
+
+
+def web_fact(key, taxonomy, **kw):
+    """A gold research_facts row (pipeline/research.py): live negative, severity 2, match high unless overridden."""
+    return {"fact_id": f"{key}-{taxonomy}-{len(kw)}", "project_key": key, "category": taxonomy, "taxonomy": taxonomy,
+            "direction": "negative", "severity": 2, "event_date": T("2026-05-01"), "date_precision": "month",
+            "published_date": T("2026-05-20"), "status": "ongoing", "summary": "Work held up at 19 locations",
+            "source": "The Hindu", "match": "high", **kw}
+
+
+def test_web_research_flags_but_never_clears():
+    research = pd.DataFrame([
+        web_fact("P2", "land"),
+        web_fact("P2", "land", severity=3, summary="Villagers stopped work", event_date=T("2026-06-01")),
+        web_fact("P2", "litigation", summary="High Court stayed work", event_date=T("2026-08-13"),
+                 date_precision="day"),
+        web_fact("P3", "land", summary="Farmers protest"),                  # already flagged by the report
+        web_fact("P1", "contractor", severity=1),                           # a mention, not a hold-up
+        web_fact("P1", "litigation", match="medium"),                       # not surely this project
+        web_fact("P1", "forest_env", status="resolved"),
+        web_fact("P1", "land", event_date=T("2025-06-01")),                 # older than 4 quarters before asof
+        web_fact("P4", "contractor", direction="positive"),
+        web_fact("P4", "funding", severity=3)])                             # no checklist row for funding
+    base, r = checklist(), checklist(research=research)
+    changed = base["state"].ne(r["state"])
+    assert set(changed[changed].index) == {("P2", "land_acquisition"), ("P2", "litigation")}
+    p2 = r.loc[("P2", "land_acquisition")]
+    assert (p2["state"], p2["source"]) == ("flagged", "news_research")
+    assert p2["evidence"].startswith("Villagers stopped work (The Hindu, 2026-06) (+1 more); no land data for this")
+    assert r.loc[("P2", "litigation"), "evidence"].startswith("High Court stayed work (The Hindu, 2026-08-13); ")
+    p3 = r.loc[("P3", "land_acquisition")]
+    assert p3["source"] == "report" and p3["evidence"].endswith("; web research: Farmers protest (The Hindu, 2026-05)")
+    for k in ("P1", "P4"):   # nothing live, severe and surely theirs: the rows are exactly as before
+        assert r.loc[k].equals(base.loc[k])
+    assert not (base["state"].ne("clear") & r["state"].eq("clear")).any()   # research never clears
+    counts = R.research_flags(r.reset_index(), research)
+    assert counts["flagged_only_by_research"] == {"land_acquisition": 1, "forest_clearance": 0, "litigation": 1,
+                                                  "contractor_stress": 0}
+    assert counts["flagged_also_by_research"]["land_acquisition"] == 1 and counts["n_projects_with_facts"] == 4
+    assert checklist(research=research.iloc[:0]).equals(base)
+
+
+def test_research_applies_at_the_latest_asof_only():
+    latest = T("2026-07-01")
+    assert R.research_at(T("2026-04-01"), latest) is None                 # a later snapshot is not point in time
+    got = R.research_at(latest, latest)
+    assert got is None or {"taxonomy", "match", "severity", "summary", "source"} <= set(got.columns)
