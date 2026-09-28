@@ -12,7 +12,9 @@ import { citedRefs, webUrl } from '@/lib/citations'
 import { CONCERN, TIER_LABEL, tierKey } from '@/lib/riskPalette'
 import { cn, formatDateTime, formatLooseDate } from '@/lib/formatters'
 import { Section } from './ProjectVisuals'
-import type { OpinionEvidence, OpinionVsModel, SecondOpinionOut, SecondOpinionRejected } from '@/contracts/project'
+import type {
+  OpinionEvidence, OpinionVsModel, SecondOpinionOut, SecondOpinionRejected, SecondOpinionUnavailable,
+} from '@/contracts/project'
 
 /** when the viewer asked, per project: the elapsed time survives closing and reopening the panel */
 const askedAt = new Map<string, number>()
@@ -51,9 +53,13 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 function OpinionError({ error }: { error: unknown }) {
   if (isOffline(error) || !(error instanceof ApiError)) return <ApiErrorNote error={error} className="py-3" />
   if (error.status === 503) {
+    // busy: LM Studio is up but answering the chat or writing a brief; the opinion waits its turn
+    const busy = (error.body as Partial<SecondOpinionUnavailable> | undefined)?.busy === true
     return (
       <div className="space-y-1">
-        <div className="text-sm font-semibold text-warning">Local LLM not running — start LM Studio</div>
+        <div className="text-sm font-semibold text-warning">
+          {busy ? 'The local model is busy; try again in a minute' : 'Local LLM not running — start LM Studio'}
+        </div>
         <div className="text-xs text-fg-dimmed">{error.message}</div>
       </div>
     )

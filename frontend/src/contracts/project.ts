@@ -502,8 +502,8 @@ export interface OpinionEvidence {
 /**
  * GET /api/projects/{key}/second-opinion, status 200 (need insights): the LLM's JSON after validation — every [E#]
  * exists, numbers traced to the pack, a 'concern' cites at least one negative item. 422 carries
- * SecondOpinionRejected, 503 LM Studio down, 404 not scored. The fields after `gaps` are the envelope; the evidence
- * list may come as `evidence` or `pack.items`.
+ * SecondOpinionRejected, 503 SecondOpinionUnavailable (LM Studio down or busy), 404 not scored. The fields after
+ * `gaps` are the envelope; the evidence list may come as `evidence` or `pack.items`.
  */
 export interface SecondOpinionOut {
   status: 'ok'
@@ -539,4 +539,11 @@ export interface SecondOpinionRejected {
   status: 'rejected'
   reasons: string[]
   attempts: number
+}
+
+/** the 503 body: LM Studio is not reachable, or (busy) serving the chat or a brief */
+export interface SecondOpinionUnavailable {
+  status: 'llm_unavailable'
+  detail: string
+  busy?: boolean
 }
