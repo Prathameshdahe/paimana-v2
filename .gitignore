@@ -52,9 +52,6 @@ database/*.db
 database/*.db-journal
 
 # production stack (docs/DEPLOYMENT.md): database dumps and TLS certificates stay on the host
-backups/
-deploy/certs/*
-!deploy/certs/README.md
 
 # report inbox: files wait here for the live watcher (backend/live/watcher.py)
 dataset/raw/inbox/*
