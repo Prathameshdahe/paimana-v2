@@ -11,15 +11,21 @@ gitignored). On the other machine, next to a copy of the repository:
 param()
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
-& docker info *> $null
-if ($LASTEXITCODE -ne 0) { throw 'Docker is not running' }
-& docker compose -f docker-compose.demo.yml build
-if ($LASTEXITCODE -ne 0) { throw 'build failed' }
-& docker compose -f docker-compose.demo.yml pull postgres
-if ($LASTEXITCODE -ne 0) { throw 'pull failed' }
+
+# docker writes its progress to stderr; Windows PowerShell 5.1 turns that into an error record, which 'Stop' would make
+# fatal whenever the output is redirected, so native calls run under 'Continue' and are judged by their exit code
+function Invoke-Docker {
+    param([string]$What, [string[]]$Arguments)
+    $ErrorActionPreference = 'Continue'
+    & docker @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "$What failed" }
+}
+
+Invoke-Docker 'docker info' @('info', '--format', '{{.ServerVersion}}')
+Invoke-Docker 'build' @('compose', '-f', 'docker-compose.demo.yml', 'build')
+Invoke-Docker 'pull' @('compose', '-f', 'docker-compose.demo.yml', 'pull', 'postgres')
 $tar = Join-Path (Get-Location) 'paimana-demo-images.tar'
-& docker save -o $tar paimana-demo-api paimana-demo-web pgvector/pgvector:pg16
-if ($LASTEXITCODE -ne 0) { throw 'save failed' }
+Invoke-Docker 'save' @('save', '-o', $tar, 'paimana-demo-api', 'paimana-demo-web', 'pgvector/pgvector:pg16')
 $src = [System.IO.File]::OpenRead($tar)
 $dst = [System.IO.File]::Create("$tar.gz")
 $gz = New-Object System.IO.Compression.GZipStream($dst, [System.IO.Compression.CompressionLevel]::Optimal)
