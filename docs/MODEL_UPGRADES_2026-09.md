@@ -5,7 +5,9 @@ within two quarters (`y_any_h2`), and also `y_date_push_h2`, `y_cost_rev_h2` and
 measured against the registry champion on the same rows and folds. A change was kept only if it ranked projects better
 than the champion inside the cutoffs of both the validation and the flash blocks.
 
-**Outcome.** Nineteen candidates were measured on every target. One change ships:
+**Outcome.** Nineteen candidates were measured, each on the targets it applies to: 14 feature, weighting and tuning
+changes on all four targets, two composites on `y_any_h2` only, one decay variant on `y_any_h4` only, and two
+interval experiments with no ranking target (plus the null check). One change ships:
 
 - `y_cost_rev_h2` trains with regularised LightGBM params: learning rate 0.02, 63 leaves, lambda 20 and 150 trees. It
   is provisional (see [Caveats](#caveats)).

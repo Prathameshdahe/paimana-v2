@@ -73,8 +73,10 @@ not live.
 - **No private individuals.** No names of landowners, villagers, petitioners, accused persons, contractor staff or
   journalists; officials by office only ("the District Magistrate", "the Works Minister"). Companies, PSUs, government
   bodies, courts and places are named. The pipeline enforces a floor: a text with an honorific (Mr, Mrs, Ms, Shri,
-  Smt, Sri, Dr ...) followed by a capitalised word is rejected unless the words after it name an organisation or an
-  office (a hospital, a university, a road, a board ...); a test runs this guard over every committed line.
+  Smt, Sri, Dr ...) followed by a capitalised word is rejected unless the words after it name an organisation or a
+  place (a hospital, a university, a road, a board, "Dr. Ram Manohar Lohia Hospital"); an honorific followed by a
+  job title ("Shri ... Minister", "Dr ... Commissioner") is rejected too, so name an official by the office alone,
+  without an honorific ("the Works Minister"). A test runs this guard over every committed line.
 - Sources are public news sites, agency and ministry pages, PIB and parliamentary answers; nothing behind a login or
   a paywall was read.
 

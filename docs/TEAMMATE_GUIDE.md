@@ -49,31 +49,35 @@ Then open **http://localhost:3000** in your browser.
 **Who sees what:**
 | Role | What changes |
 |------|-------------|
-| Public | Everything above, read-only |
-| Agency | Only their own projects shown |
-| Ministry | Only their ministry's projects |
-| IPMD Analyst | Everything, plus alerts bell and chat |
+| Public | Everything above, read-only; the assistant (chat) answers from the public data only |
+| Agency | Only their own projects shown, plus the alerts bell and the assistant on those projects |
+| Ministry | Only their ministry's projects, plus the alerts bell and the assistant on those projects |
+| IPMD Analyst | Everything, plus jobs, the worker console and the assistant on every project |
 
 **Key stat to know:** The risk bar updates automatically every time a new report is processed.
 
 ---
 
-### 🔐 Login Page (`/login`)
+### 🔐 Sign-in Page (`/login`)
 
-![Login Page — three role cards: IPMD Analyst, Ministry, Agency](screenshots/login_page.png)
+![Sign-in Page](screenshots/login_page.png)
 
-**Three roles to pick from:**
-- **IPMD Analyst** — sees every project, can trigger the AI worker, approve notices
-- **Ministry** — sees all projects under their ministry, can chat with the AI
+**Real sign-in.** An official signs in with their email and password; the session lives in a cookie and the backend
+checks it on every request. New officials use **Request access** (`/signup`): email, name, role, ministry or agency,
+a short justification; an IPMD administrator approves the request in **Administration** (`/admin`) and the person
+is told by their administrator. **Continue as public** needs no account.
+
+**Three roles** (set by the administrator, not by you):
+- **IPMD Analyst** — sees every project, runs jobs, triggers the AI worker, approves notices; an administrator also
+  manages users and access requests
+- **Ministry** — sees all projects under their ministry
 - **Agency** — sees only their own projects
 
-> ⚠️ **This is a prototype.** No password. Role is set by a header. Do not use on a public server.
-
-After picking a role, if you chose Ministry or Agency, a dropdown appears to pick which ministry/agency you belong to.
+Every role can use the assistant (chat); it answers only from what that role may see. Activity is logged.
 
 ---
 
-### 📊 Command Center (`/command-center`)
+### 📊 Command Center (`/command`)
 
 ![Command Center — urgency scatter plot and project list](screenshots/command_center.png)
 
@@ -222,7 +226,7 @@ A "bottleneck" = 3 or more projects stuck on the same type of issue (land, fores
 
 ---
 
-### 🌳 External Factors (`/external-factors`)
+### 🌳 External Factors (`/external`)
 
 **Answers: what is blocking projects outside the official report?**
 
@@ -270,7 +274,7 @@ Each row shows: model name, PR-AUC, ROC-AUC, Brier score, ECE (calibration error
 
 ---
 
-### 💬 AI Worker Console (`/worker-console`) — IPMD only
+### 💬 AI Worker Console (`/workers`) — IPMD only
 
 ![Approvals/Worker inbox — pending notices and AI run history](screenshots/worker_console.png)
 
@@ -293,19 +297,24 @@ Click **"Trigger worker cycle"** to run it manually. Normally scheduled automati
 uvicorn backend.main:app --port 8000
 ```
 
-Four background jobs start automatically:
+Six background jobs start automatically (`LIVE_JOBS=0` turns them all off):
 
 | Job | Runs every | What it does |
 |-----|-----------|--------------|
 | **Inbox watcher** | 60 seconds | Checks `dataset/raw/inbox/` for new PDFs or CSVs |
-| **News scout** | 24 hours | Scrapes Google News + PIB, links articles to projects |
+| **News scout** | 24 hours (first run 10 min after start) | Scrapes Google News + PIB, links articles to projects |
 | **PARIVESH snapshot** | 6 hours | Pulls latest forest-clearance data |
 | **Bhoomi Rashi pull** | Quarterly | Re-pulls land registers (off by default; set `BHOOMI_PULL=1`) |
+| **Research agent** | 24 hours (first run 30 min after start) | The local LLM judges the scout's news items into cited research facts, up to 20 projects a run |
+| **Second opinion** | 24 hours (first run 45 min after start) | The local LLM's cited reading of the evidence next to the model's tier, up to 15 Critical / High / Watch projects a run; it never changes the tier |
+
+Every job has a time limit; past it the run is marked as an error in `/api/live/status` and the loop goes on. The
+two LLM jobs let a chat answer go first and stop cleanly when the backend shuts down.
 
 **When a new report drops in the inbox:**
 1. Auto-classified as portal CSV or PAIMANA flash PDF
-2. Full pipeline runs: extract → clean → identity → silver → external → gold → score
-3. Takes ~111 seconds
+2. Full pipeline runs: extract → clean → identity → silver → external → research → gold → score → profile
+3. Takes ~2 minutes
 4. Diff: which projects changed tier? → alerts pushed to browser bell in real time
 5. If the pipeline fails: rolls back to old predictions, raises a `pipeline_error` alert
 

@@ -15,6 +15,17 @@ Pipeline entry point:  python -m pipeline.run <step>
              risk-profile checklist and the external early-notice summary (ml/risk_profile.py), which writes the
              serving version file last
   all        silver, external, research, gold, train, score and profile in order
+
+A failed step stops the run (its exception propagates; the later steps do not run), and the steps before it are
+complete: each step reads only the outputs of the steps before it and writes only its own. What the serving side
+sees is switched atomically: the backend loads a data version when gold/external_summary.json (written last by
+profile) or gold/research_summary.json (written last by research, after its two tables) changes, and ml/score.py
+writes predictions_latest.json before the scenarios, analogues and risk-profile files it points at, so a run that
+fails halfway is never served (backend/serving.py); the report watcher pins the served version while a run goes and
+keeps the previous scores when a step fails (backend/live/watcher.py). What is not atomic is a step's own files on
+disk: silver, external, research, gold, score and profile write their parquet and JSON files in place (to_parquet,
+write_text), so a crash in the middle of a write can leave that one file truncated. A running backend keeps serving
+the old version, but a restart would fail to load it until the step is rerun; the fix is to run the step again.
 """
 import argparse
 import sys

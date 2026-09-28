@@ -1,0 +1,184 @@
+# Security
+
+What PAIMANA does about the items of the team's security plan (the 24-point checklist: data pipeline integrity,
+identity, quarantine, the model, poisoning, report remarks, the LLM's place, SHAP, intervals, calibration, agency
+names, the agency flag, PARIVESH, early notice, scenarios, the API boundary, roles, the agent, read-mostly AI, tests),
+and what it does not. Each point names the code that holds it and the test that checks it. Nothing here is a
+promise: where a control is missing it says so. The plan's own advice stands: layered and practical, no blockchain,
+no encryption everywhere, no zero trust.
+
+Sections: **Data** (the pipeline, identity, external sources), **Model** (the registry, the scores, what the LLM may
+not touch) and **AI** (the assistant, the second opinion, the jobs). The sign-in unit adds **API** (sessions, roles,
+what a request must carry) and the ops unit adds **Deployment** (TLS, headers, rate limits, backups).
+
+## Data
+
+**Source integrity (plan 1).** Reports enter through `dataset/raw/inbox/` and `POST /api/jobs/ingest`
+(`backend/live/watcher.py`). Every file is hashed (sha256) before anything reads it; the hash and the hash of the
+pipeline and model code (`pipeline_version`) are recorded with the file's name, kind, period, row count, status and
+error in the app database (`sources`; the database unit of this segment moves the record into
+`ingest.source_documents` and the run into `ingest.load_runs`), and the same bytes are never processed twice by the
+same code. A processed file is moved, not edited, into `dataset/raw/csv/<fiscal year>/` or `raw/pdf/<fiscal year>/`;
+the raw layer is the archive and no step writes into it. An upload keeps only the base name of what the browser
+sent, replaces every character outside a small set, accepts `.csv` and `.pdf` only, streams to a temporary file
+under a 100 MB cap and renames it into the inbox (`save_upload`; `tests/test_input_validation.py`,
+`tests/test_watcher.py`). Not done: the archive is not signed, so the hash says which bytes were ingested, not
+whether they are the ministry's; a file tampered with before its first ingest is not detectable from the hash alone.
+The place to add that is a manifest of the archive kept outside the server.
+
+**Validation between layers (plan 1, 3).** `clean -> silver` runs typed parsing and the quarantine rules
+(`pipeline/silver.py` `quarantine_rules`: expenditure anomalies, completion before sanction, placeholder dates,
+negative money, duplicate key-periods). A row failing a rule goes to `silver/quarantine/<rule>.parquet` with the rule
+named, and `summary.csv` counts them; the panel is built from the kept rows only. Quarantined rows never merge back:
+the only way one re-enters is a changed rule or a corrected source and a rebuild, both of them commits. Per-quarter
+coverage (`silver/coverage.parquet`) records the share of key fields present, so a quarter with thin data is visible
+downstream (the backtest uses it to pick reliable cutoffs). `silver -> gold`: every feature is point-in-time and the
+build asserts it (`pipeline/gold.py` `truncation_check` rebuilds the features on a truncated panel at four cutoffs
+and requires identical frames; `tests/test_gold.py::test_features_at_t_same_on_truncated_panel`). Not done: the
+quarantine decisions are not versioned per row with a reviewer; there is no reviewer yet (sign-in arrives in this
+segment), so today a decision is a commit.
+
+**Identity (plan 2, 11).** The PRJ- keys live in the identity map (`pipeline/identity/identity_map.py`): each
+resolution keeps the original name, the source, the generated key, `match_score`, `match_method`, `review_status`
+(`accepted` or `review`), `run_id` and `resolved_at`. Only accepted rows enter `silver/observations.parquet`; the
+uncertain ones are kept apart in `observations_review.parquet` and the app shows them with a badge. Ambiguous pairs
+are never forced into one identity (`tests/test_identity.py`, `tests/test_build_identity.py`). Agency names are
+normalised to one canonical agency each (`gold/agency_map.csv`, `pipeline/agency.py`: NHAI and its long forms are one
+agency), and every agency count, matrix point and scope uses the canonical name. Not done: no record of who approved
+a manual resolution; the field to fill once there are users is the map's `run_id`/`resolved_at` pair.
+
+**External sources (plan 5, 13).** Every external fact keeps its provenance: PARIVESH rows carry the proposal id,
+stage, dates and the retrieval date, and the dashboard snapshots are archived per date (`pipeline/parivesh.py`,
+`backend/live/portals.py`); the Bhoomi Rashi register keeps each pull's date; a web research fact carries source,
+url, published and event date (with its precision), `researched_on`, the basis and, for the sweep, a second agent's
+check (`pipeline/research.py`). Each checklist row shows its `evidence`, `source` and `as_of_date`
+(`ml/risk_profile.py`), so the page says "environmental clearance reported as pending on PARIVESH at <date>", not
+"the model established it". Web research and news are evidence next to the score, never a model input
+(`dataset/raw/external/research/README.md` says why: hindsight, notoriety bias, no point-in-time history). The
+synthetic mock data can never reach the pipeline (`tests/test_external_crosscheck.py::
+test_mock_data_never_reaches_the_pipeline`: no module under `pipeline/`, `ml/` or `backend/` may name it and every
+gold key is a PRJ- key). Not done: the external sources are not signed either; a wrong article gives a wrong fact,
+which is why a fact is shown with its link and its date and flags a checklist row only when live, negative,
+severity 2 or more and a high-confidence match, and never clears one.
+
+**Privacy floor (plan 6, 13).** No private person is named anywhere the app shows or the model reads:
+`pipeline/research.private_names` rejects a text with an honorific followed by a capitalised word unless it names an
+organisation or a place; the sweep file is checked line by line (`tests/test_research_pipeline.py::
+test_committed_sweep_names_no_private_person`), the research agent rejects such a headline before any LLM call and
+its summaries after, the second opinion drops such a headline from its pack and rejects a reply that names a person,
+and the search index never holds a research agent headline. PARIVESH keeps a proposal's name only for a government
+body and stores no e-mail (`tests/test_parivesh.py`).
+
+**Serving under failure (plan 1, 23).** The serving version file is written last by the profile step, so a
+half-written data set is never picked up; the watcher pins the served version while a pipeline runs and a failed
+step keeps the previous scores (`tests/test_watcher.py::test_failed_step_keeps_the_old_predictions`); a reload that
+fails keeps serving the loaded version, raises one `pipeline_error` alert and retries later; DuckDB runs under a
+memory and thread cap; every background job has a time limit and the LLM jobs a stop flag (`backend/serving.py`,
+`backend/live/scheduler.py`; `tests/test_api.py`, `tests/test_live.py`). Not done: a pipeline step writes its own
+output files in place, so a crash mid-step can leave that step's file truncated on disk; the running process keeps
+the old version, but a restart would then fail to load until the step is rerun (`pipeline/run.py` says which files).
+
+## Model
+
+**Registry and versions (plan 4).** `model/registry.json` records every trained entry: `run_id`, `entry_id`, the
+`gold_version` and `silver_version` it was trained on, `params`, `feature_list`, the metrics of every block
+(validation, flash, test), the backtest windows, the artifact paths and `created_at`; `champions` names the served
+entry per target and `decisions` logs every promotion with its reason. A challenger is promoted only when its PR-AUC
+gain is not below zero on both blocks, above the seed noise on one, and its calibration error within a slack
+(`ml/registry.py` `promote`; `tests/test_registry.py`). Served scores are produced by refitting the champion's
+type, params and feature list on the labelled rows at scoring time (`ml/score.py`), so a served score is reproducible
+from the registry entry and the gold version rather than trusted to a binary; `GET /api/models` shows the run, the
+champion and the backtest. The code that turns a report into scores is hashed per ingest (`pipeline_version`). Not
+done in this unit: a checksum of the model artifacts and their verification at load; the database unit of this
+segment records each artifact's sha256 in `ml.model_registry` and `serving.state()` refuses a mismatch. The registry
+holds no git commit; `run_id` and `pipeline_version` are the version marks.
+
+**Poisoning (plan 5).** The model's inputs are the silver panel, the sector context and the report-remark events;
+web research, news and the LLM's output are never features (`pipeline/gold.py` `FEATURE_GROUPS`,
+`docs/EXTERNAL_RESEARCH_2026-09.md`). The point-in-time guard above keeps a later report from leaking into an earlier
+row, and the agency context uses only outcomes realised by the row's date (`tests/test_gold.py::
+test_agency_stats_count_only_realised_labels`).
+
+**The LLM never changes a score (plan 7).** Tiers come from `ml/score.py` (rank by `p_any_2q`) and the checklist
+from `ml/risk_profile.py`; no module under `llm/` writes a score, a tier, a checklist row, a user or a permission.
+The second opinion stores its own `concern` and a computed `vs_model` next to the tier and cannot move it
+(`llm/second_opinion.py`; `docs/SECOND_OPINION.md`); the worker cell's memos are drafts with status `pending` that
+only the role they are addressed to can approve (`backend/store.py`, `tests/test_access.py::
+test_memos_reach_the_official_they_are_addressed_to`).
+
+**SHAP stays SHAP (plan 8).** Drivers are shown as the feature, its value and its contribution, in plain labels
+(`backend/labels.py`, mirrored by the frontend); the chat's `explain_prediction` says "raises the risk" or "lowers
+the risk" per driver and never turns a lag into a cause. Causes come from evidence with a source (events, PARIVESH,
+research), listed separately.
+
+**Intervals and calibration (plan 9, 10).** The served 5-95% bands are backtested on every train run
+(`intervals.csv`: coverage, share below and above, width, pinball loss). The month bands cover about right in the
+quarterly era and miss on the upper side in the flash era (9.9% of flash projects slipped past p95); the cost bands
+over-cover (`docs/MODEL_UPGRADES_2026-09.md`, Interval honesty). The page and the prompts call the band a modelled
+5-95% range with that caveat, not a validated confidence interval, and the public page gets the median only. The
+probabilities are ranking scores: only the cost-revision target is Platt-calibrated (`ml/backtest.py` `CALIBRATED`),
+the second-opinion pack and the chat say "ranking scores, not calibrated frequencies", and the tiers are rank
+shares, not probability cut-offs.
+
+**Agency flag (plan 12).** The matrix shows a historical indicator, not a verdict: the median schedule and cost bias
+per canonical agency with IQR and a bootstrap 90% CI, agencies with fewer than 5 projects hidden, small agencies
+shrunk toward their sector, the method printed with the data (`backend/serving.py` `AGENCY_METHOD`). Not done:
+beyond the sector adjustment there is no control for project complexity, so a hard portfolio still reads as a
+slower agency.
+
+**Early notice (plan 14).** An early notice is a defined rule, not a feeling: a flagged external factor while the
+CUF numbers show no slip yet. Each notice carries the flagged rows with their evidence, source and as-of date, and
+`ml/risk_profile.py` `notice_backtest` measures how often past notices preceded a slip.
+
+**Scenarios (plan 15).** The three curves are computed from analogues and the sector S-curve (`ml/analogues.py`);
+the user supplies no input, so nothing out of range can reach the model, and every curve is labelled a modelled
+scenario next to the forecast band.
+
+## AI
+
+**Read-only by construction (plan 17, 18, 19).** The assistant runs tools from a fixed catalogue (`llm/tools.py`);
+every tool reads through `backend/serving.py` or the app database's read helpers and none writes. The viewer comes
+from the server side of the request, never from the model, and each tool's arguments are validated by its pydantic
+model with unknown fields and out-of-role tools refused; a planner call the role may not make is dropped before it
+runs (`tests/test_chat_agent.py::test_injected_outside_text_cannot_add_a_call_or_change_scope`). The LLM cannot
+delete anything, change a score, a model, a user or a permission: there is no tool for it. The two things an LLM
+job does write are evidence, after checks: the research agent stores judged news items as cited facts and raises a
+`signal` alert for a new live hold-up, and the second-opinion job stores opinions; neither touches a score.
+
+**Untrusted text is data (plan 6).** Report remarks, PARIVESH lines, research summaries, headlines and the user's
+own question go into prompts as quoted material between markers, with the marker characters and tags blanked so a
+text cannot close the quote (`tools.quote`, `MARKERS`; `<<<DATA`, `<<<EVIDENCE`, `<<<ITEMS`), and every prompt says
+quoted material is not instructions. The research judge must summarise its own item (shared words, numbers only from
+the item), the second opinion may cite only listed ids, and a headline naming a person is rejected before any call
+(`tests/test_research_agent.py`, `tests/test_second_opinion.py`).
+
+**Every number is checked (plan 7, 8).** `backend/brief.validate` runs on the brief, on the chat's answer against
+exactly the facts the writer saw, on the second opinion (each number in the items the claim cites, the concern level
+inside what the evidence allows) and on the research agent's summaries; a reply that fails is asked again once with
+the reasons, then replaced by a deterministic answer or stored as rejected (`docs/AI_ASSISTANT.md`,
+`docs/SECOND_OPINION.md`).
+
+**Disclosure (plan 16, 21).** The public gets the public tools and the public outputs only (`serving.public_*`);
+the search index tags every chunk with a visibility and a project and filters both before ranking, so a public
+question never retrieves an official chunk and an official never one outside their scope (`llm/rag.py`;
+`tests/test_rag.py::test_public_never_sees_official_chunks`, `test_agency_scope_filters_project_chunks`). The model
+runs locally in LM Studio; no text leaves the machine and the frontend holds no key. Not done: `GET /api/jobs` and
+`GET /api/live/status` return the job summaries, which list the project keys a research or second-opinion run
+processed, to every official whatever their scope (a Segment 8 review finding left for the sign-in unit's route
+pass).
+
+**One model, fairly shared.** A single gate serialises generations; a chat request goes before any background take,
+including ones already waiting; the worker cell, the brief, the research agent and the second opinion hold it per
+call; a refused connection trips one shared breaker for 30 s; the chat is rate limited per client and role; every
+job has a time limit and the LLM jobs a stop flag (`llm/client.py`, `backend/ratelimit.py`,
+`backend/live/scheduler.py`).
+
+**Tests (plan 22).** The plan's list maps to: unauthorised access `tests/test_access.py` (403 matrix, scoped 404s,
+the public page redacted) and `tests/test_input_validation.py`; modified or duplicate input
+`tests/test_watcher.py::test_ingest_runs_once_per_sha256`; invalid values `tests/test_silver.py` (quarantine) and
+`tests/test_research_pipeline.py`; the LLM cannot change a score `tests/test_second_opinion.py`,
+`tests/test_chat_tools.py`; RAG cannot retrieve an unauthorised document `tests/test_rag.py`; injected text is data
+`tests/test_chat_agent.py`, `tests/test_research_agent.py`, `tests/test_second_opinion.py`; external data source
+recorded `tests/test_parivesh.py`, `tests/test_research_pipeline.py`; quarantined rows stay out
+`tests/test_silver.py`; model version verified before use: added with the checksum (above). Not done: the raw
+archive's own hash manifest.
