@@ -36,8 +36,9 @@ or password is wrong, or the account is locked or disabled". An unknown email co
 counter is written after it). Five
 failures on one email within 15 minutes lock that email for 15 minutes from the last one: 423 with `Retry-After`,
 even with the right password. Unknown emails lock the same way, so a lock tells nothing about an account. Twenty
-failures from one client address within a minute hold back that address's sign-ins (429 with `Retry-After`). A
-successful sign-in is never counted against its address. Both limits live in `app.login_attempts`, so a restart does
+failures from one client address within a minute hold back that address's sign-ins (429 with `Retry-After`), a
+correct password included (the check comes before the password's, or a spray would learn which guesses were right).
+A successful sign-in is never counted against its address. Both limits live in `app.login_attempts`, so a restart does
 not clear them. A password reset lifts an account's lock. Code: `backend/auth/limits.py`.
 
 **Sign-up.** `/signup` sends a request (`POST /api/auth/signup`): an email, a name, one of the three official roles,

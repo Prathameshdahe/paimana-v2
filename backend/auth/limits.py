@@ -5,9 +5,11 @@ an account (an unknown email is counted and locked exactly like a known one):
   them (423 with Retry-After); only failures after the email's last successful sign-in and after its account's
   last password change count, and an attempt refused by the lock is not recorded, so waiting it out always works;
 - per address: IP_FAILURES failed attempts from one client address within IP_WINDOW refuse that address's
-  sign-ins until the oldest leaves the window (429 with Retry-After);
+  sign-ins until the oldest leaves the window (429 with Retry-After), checked before the password is: a correct
+  password waits too, or a spray from one address would still learn which guesses were right. Successes are never
+  counted, and the window is a minute, so an office behind one address that is sprayed from inside waits at most
+  that long between bursts;
 - sign-up: SIGNUPS_PER_HOUR requests from one address an hour (429), from app.signup_requests.
-A successful sign-in is never refused by the address limit (an office behind one address keeps working).
 """
 from __future__ import annotations
 
