@@ -649,9 +649,12 @@ Concern = Literal["none", "watch", "concern"]
 class OpinionEvidence(CamelModel):
     """One item of a second opinion's evidence pack (llm/second_opinion.py), cited as [E#], in the pack's order:
     current hold-ups, minor current issues, progress, old items, context. direction context: the status line, the
-    model and the web research summary, shown to the LLM without an id when there is other evidence (so not cited)
-    and never grounds for a concern; stale: an old report remark, a resolved or old research fact, progress dated
-    before the last 4 quarters, an old headline."""
+    model and the web research summary, for the officer and the evidence hash; left out of the LLM's prompt whenever
+    the pack has any other item (so never cited, and their numbers are not the opinion's), shown with their ids only
+    when the pack is nothing but context; never grounds for a concern. stale: an old report remark, a resolved or old
+    research fact, progress dated before the last 4 quarters, an old headline. severity 2 or 3 (a current hold-up)
+    is an observed item; a land complexity rating, the forest rulebook's estimate and a news headline the research
+    agent has not judged about the project are at most 1."""
     id: str
     kind: Literal["status", "model", "check", "parivesh", "land", "event", "research", "news"]
     date: str | None
@@ -665,8 +668,9 @@ class OpinionEvidence(CamelModel):
 class SecondOpinionOut(CamelModel):
     """An accepted LLM second opinion for the project's current evidence (evidence_hash). It never changes the tier:
     model_level is the tier's concern level (Critical and High 'concern', Medium and Watch 'watch', Low 'none') and
-    vs_model compares the two. cited: the ids the narrative cites; evidence: every item the LLM read. model is the
-    LLM, model_version PAIMANA's scoring model."""
+    vs_model compares the two. cited: the ids the narrative cites; evidence: every item of the pack, the context
+    included, though the LLM read only the items whose direction is not context (all of them when there is nothing
+    else: OpinionEvidence). model is the LLM, model_version PAIMANA's scoring model."""
     status: Literal["ok"]
     key: str
     name: str
