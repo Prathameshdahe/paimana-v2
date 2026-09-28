@@ -4,6 +4,7 @@ import { Info } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { CiteChip, CitedText } from '@/components/common/CitedText'
 import { useCachedSecondOpinion, useSecondOpinion } from '@/lib/queries'
 import { ApiError, isOffline } from '@/lib/api'
@@ -80,7 +81,8 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
   const [active, setActive] = useState<string | null>(null)
   const items = evidenceOf(o)
   const byId = new Map(items.map((e) => [e.id, e]))
-  const cited = [...new Set([...citedRefs(o.narrative, 'evidence'), ...o.keyEvidence])]
+  const gaps = o.gaps ?? []
+  const cited = [...new Set([...citedRefs(o.narrative ?? '', 'evidence'), ...(o.keyEvidence ?? [])])]
   const anchor = (id: string) => `${ids}-${id}`
 
   const pick = (id: string) => {
@@ -94,7 +96,7 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
       <p className="text-base font-semibold leading-snug text-fg-base">{o.headline}</p>
       <p className="text-sm leading-relaxed text-fg-base">
         <CitedText
-          text={o.narrative}
+          text={o.narrative ?? ''}
           style="evidence"
           renderCite={(ref) => (
             <CiteChip label={ref} title={byId.get(ref)?.text ?? `Evidence ${ref}`} active={active === ref} onClick={() => pick(ref)} />
@@ -141,11 +143,11 @@ function Opinion({ o, tier }: { o: SecondOpinionOut; tier?: string | null }) {
         </div>
       )}
 
-      {o.gaps.length > 0 && (
+      {gaps.length > 0 && (
         <div>
           <h4 className="mb-1 text-xs font-semibold text-fg-muted">What the evidence does not show</h4>
           <ul className="list-disc space-y-0.5 pl-5 text-xs leading-snug text-fg-muted marker:text-fg-dimmed">
-            {o.gaps.map((g) => <li key={g}>{g}</li>)}
+            {gaps.map((g) => <li key={g}>{g}</li>)}
           </ul>
         </div>
       )}
@@ -204,7 +206,11 @@ export function SecondOpinionCard({ projectKey, variant, tier, className }: {
 
   let body: ReactNode
   if (opinion) {
-    body = <Opinion o={opinion} tier={tier} />
+    body = (
+      <ErrorBoundary fallback={<p className="text-xs text-fg-dimmed">The opinion came back in a form this page cannot show.</p>}>
+        <Opinion o={opinion} tier={tier} />
+      </ErrorBoundary>
+    )
   } else if (writing) {
     body = (
       <div className="space-y-1.5 text-xs text-fg-muted" role="status">

@@ -6,6 +6,7 @@
 import React, { useId, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ExternalLink, Loader2, RotateCcw, X } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import { webUrl } from '@/lib/citations'
 import { CONCERN, FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, TIER_COLOR, TIER_LABEL, tierKey } from '@/lib/riskPalette'
@@ -392,8 +393,7 @@ function OpinionCardView({ card }: { card: OpinionCard }) {
   )
 }
 
-/** one data card; sources are drawn by SourcesList under the narrative */
-export function ChatCardView({ card }: { card: ChatCard }) {
+function CardBody({ card }: { card: ChatCard }) {
   switch (card.type) {
     case 'projects': return <ProjectsCardView card={card} />
     case 'stats': return <StatsCardView card={card} />
@@ -404,6 +404,15 @@ export function ChatCardView({ card }: { card: ChatCard }) {
     case 'opinion': return <OpinionCardView card={card} />
     default: return null
   }
+}
+
+/** one data card; sources are drawn by SourcesList under the narrative. A card that fails to draw says so alone. */
+export function ChatCardView({ card }: { card: ChatCard }) {
+  return (
+    <ErrorBoundary fallback={<p className="rounded-xl border border-dashed border-border-default px-3 py-2 text-xs text-fg-dimmed">This card could not be shown.</p>}>
+      <CardBody card={card} />
+    </ErrorBoundary>
+  )
 }
 
 // ------------------------------------------------------------------ sources

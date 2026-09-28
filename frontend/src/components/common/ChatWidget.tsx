@@ -11,6 +11,7 @@ import { cn } from '@/lib/formatters'
 import { useRole, useScopeKey, type Role } from '@/lib/auth/RoleContext'
 import { can } from '@/lib/auth/access'
 import { CiteChip, CitedText } from './CitedText'
+import { ErrorBoundary } from './ErrorBoundary'
 import { ChatCardView, SourcesList, ToolSteps } from './ChatCards'
 import type {
   ChatCard, ChatDone, ChatEvent, ChatSource, ChatStage, ChatTool, ChatTurn,
@@ -365,7 +366,9 @@ function Chat() {
                     </div>
                   </div>
                 ) : (
-                  <Answer key={t.id} t={t} flash={flash} onCite={(n) => showSource(t.id, n)} />
+                  <ErrorBoundary key={t.id} fallback={<AssistantRow><p className="text-xs text-fg-dimmed">This answer could not be shown.</p></AssistantRow>}>
+                    <Answer t={t} flash={flash} onCite={(n) => showSource(t.id, n)} />
+                  </ErrorBoundary>
                 )
               )}
             </div>
