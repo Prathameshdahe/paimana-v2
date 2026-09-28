@@ -71,7 +71,8 @@ the prompt version, asof and the pack items, so every opinion can later be compa
 
 generate(key) returns {'status': 'ok' | 'rejected' | 'llm_unavailable' | 'not_scored', ...} like backend/brief.py; it
 takes the LLM gate (llm/client.py): a person asking (interactive) marks the gate as a chat request, so background
-jobs let it go first, and waits at most INTERACTIVE_WAIT_S; the nightly job takes it as a background job. LM Studio
+jobs let it go first, waits at most INTERACTIVE_WAIT_S and holds it through the retry; the nightly job takes it as a
+background job for each ask, so a chat answer waiting for the LLM goes between its first ask and the retry. LM Studio
 refusing the connection is remembered for client.DOWN_S seconds (client.mark_down), so the next ask does not wait
 again; a slow answer (LLMTimeoutError) is llm_unavailable without marking it down. cached(key) is the accepted
 opinion for the current evidence, without an LLM call (the chat reads only this).
@@ -85,6 +86,7 @@ import hashlib
 import json
 import re
 import time
+from contextlib import ExitStack
 from datetime import date, datetime, timezone
 
 import pandas as pd
@@ -611,30 +613,26 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _ask(p: dict) -> tuple[dict | None, list[str], int, int, int]:
-    """(opinion or None, reasons, attempts, numbers checked, LLM ms): one ask and at most one retry, the same prompt
-    with the reasons named and a little more temperature (given its first reply as the assistant's turn, the model
-    sent it back unchanged). Raises client.LLMConnectionError."""
-    first = msgs = messages(p)
-    reasons, n, ms = [], 0, 0
-    for attempt in (1, 2):
-        t0 = time.monotonic()
-        try:
-            raw = client.chat(msgs, max_tokens=MAX_TOKENS, temperature=TEMPERATURE if attempt == 1 else
-                              RETRY_TEMPERATURE)
-        finally:
-            ms += int(1000 * (time.monotonic() - t0))
-        try:
-            op = parse(raw)
-            reasons, n = check(op, p)
-        except ValueError:
-            op, reasons = None, [MALFORMED + (f" (it was cut off: keep the narrative under {NARRATIVE_ASK} words)"
-                                              if raw.count("{") > raw.count("}") else "")]
-        if not reasons:
-            return {**op, "vs_model": vs_model(op["concern"], p["model_level"])}, [], attempt, n, ms
-        msgs = [first[0], {"role": "user", "content": first[1]["content"] + "\n\n" + STRICT.format(
+def _attempt(p: dict, reasons: list[str]) -> tuple[dict | None, list[str], int, int]:
+    """(opinion or None, reasons to reject it, numbers checked, LLM ms) for one ask: the first prompt or, after a
+    rejection (reasons), the same prompt with the reasons named and a little more temperature (given its first reply
+    as the assistant's turn, the model sent it back unchanged). Raises client.LLMConnectionError."""
+    msgs = messages(p)
+    if reasons:
+        msgs = [msgs[0], {"role": "user", "content": msgs[1]["content"] + "\n\n" + STRICT.format(
             reasons="\n".join(f"- {r}" for r in reasons))}]
-    return None, reasons, 2, n, ms
+    t0 = time.monotonic()
+    raw = client.chat(msgs, max_tokens=MAX_TOKENS, temperature=RETRY_TEMPERATURE if reasons else TEMPERATURE)
+    ms, n = int(1000 * (time.monotonic() - t0)), 0
+    try:
+        op = parse(raw)
+        why, n = check(op, p)
+    except ValueError:
+        op, why = None, [MALFORMED + (f" (it was cut off: keep the narrative under {NARRATIVE_ASK} words)"
+                                      if raw.count("{") > raw.count("}") else "")]
+    if why:
+        return None, why, n, ms
+    return {**op, "vs_model": vs_model(op["concern"], p["model_level"])}, [], n, ms
 
 
 def _out(row: dict, p: dict, cached: bool) -> dict:
@@ -687,21 +685,28 @@ def generate(key: str, *, interactive: bool = True, fresh: bool = False) -> dict
     if client.down_recently():
         return down
     wait = INTERACTIVE_WAIT_S if interactive else JOB_WAIT_S
-    with client.gate(wait, chat=interactive) as ok:
-        if not ok:
-            return {"status": "llm_unavailable", "busy": True,
-                    "detail": f"the local LLM stayed busy with other answers for {wait:.0f} s; try again shortly"}
-        row, kept, serve = stored()   # a request that held the gate before this one may have just made it
-        if serve:
-            return _out(row, p, True)
-        if client.down_recently():    # or found LM Studio down: the ones waiting behind it do not try it in turn
-            return down
-        try:
-            op, reasons, attempts, n, ms = _ask(p)
-        except client.LLMConnectionError as e:
-            if e.down:
-                client.mark_down()
-            return {"status": "llm_unavailable", "detail": str(e)[:300]}
+    op, reasons, attempts, n, ms = None, [], 0, 0, 0
+    with ExitStack() as held:
+        while op is None and attempts < 2:   # one ask and at most one retry
+            # a person waiting holds the gate through the retry; the nightly job lets it go between its two asks, so
+            # a chat answer waiting for the LLM goes first instead of timing out as 'busy' behind the retry
+            if attempts == 0 or not interactive:
+                held.close()
+                if not held.enter_context(client.gate(wait, chat=interactive)):
+                    return {"status": "llm_unavailable", "busy": True, "detail": f"the local LLM stayed busy with "
+                            f"other answers for {wait:.0f} s; try again shortly"}
+                row, kept, serve = stored()   # a request that held the gate before this one may have just made it
+                if serve:
+                    return _out(row, p, True)
+                if client.down_recently():    # or found LM Studio down: the ones behind it do not try it in turn
+                    return down
+            try:
+                op, reasons, n, t = _attempt(p, reasons)
+            except client.LLMConnectionError as e:
+                if e.down:
+                    client.mark_down()
+                return {"status": "llm_unavailable", "detail": str(e)[:300]}
+            attempts, ms = attempts + 1, ms + t
         # stored before the gate opens, so the next one in line finds it
         if op is not None or not kept:
             row = {"project_key": key, "evidence_hash": h, "model": model, "prompt_version": PROMPT_VERSION,

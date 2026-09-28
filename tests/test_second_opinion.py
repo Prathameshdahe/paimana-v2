@@ -335,6 +335,29 @@ def test_a_request_waiting_for_the_gate_sees_lm_studio_went_down(opinion_db, mon
     assert seen[0]["status"] == "llm_unavailable" and "unreachable" in seen[0]["detail"] and not fake.calls
 
 
+@pytest.mark.parametrize("interactive, order", [(False, ["ask 1", "chat", "ask 2"]),     # the job lets it go
+                                                (True, ["ask 1", "ask 2", "chat"])])     # a person holds it
+def test_the_job_lets_a_chat_answer_go_between_its_two_asks(opinion_db, monkeypatch, interactive, order):
+    p = so.pack(KEY)
+    seen, threads = [], []
+
+    def chat_answer():
+        with client.gate(5, chat=True) as ok:
+            seen.append("chat" if ok else "chat busy")
+
+    def first(msgs):
+        threads.append(threading.Thread(target=chat_answer))
+        threads[0].start()
+        time.sleep(0.2)                               # a chat answer now waits for the LLM
+        seen.append("ask 1")
+        return reply(p, narrative="Work on the site stopped after a protest [E99] and has not restarted.")
+
+    monkeypatch.setattr(client, "chat", FakeLLM(first, lambda msgs: seen.append("ask 2") or reply(p)))
+    out = so.generate(KEY, interactive=interactive)
+    threads[0].join(5)
+    assert out["status"] == "ok" and out["attempts"] == 2 and seen == order
+
+
 def test_busy_gate_is_unavailable_not_a_wait(opinion_db, monkeypatch):
     monkeypatch.setattr(so, "INTERACTIVE_WAIT_S", 0.2)
     monkeypatch.setattr(client, "chat", FakeLLM("never asked"))
