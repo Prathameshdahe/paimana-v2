@@ -63,6 +63,36 @@ def test_chat_errors_are_connection_errors(monkeypatch):
         client.chat([{"role": "user", "content": "x"}])
 
 
+def test_chat_waits_for_the_whole_reply_and_says_what_is_down(monkeypatch):
+    ok = {"choices": [{"message": {"content": "Hi."}}]}
+    seen = fake(monkeypatch, lambda r: httpx.Response(200, json=ok))
+    client.chat([{"role": "user", "content": "x"}], max_tokens=400)
+    client.chat([{"role": "user", "content": "x"}], max_tokens=50)
+    client.complete("sys", "user")
+    reads = [r.extensions["timeout"]["read"] for r in seen]
+    # 400 tokens at the measured 4.3 tokens/s is 93 s of generation after the prompt: more than the old 120 s cut
+    assert reads[0] >= 30 + 400 / 2 and reads[1] == reads[2] == client.TIMEOUT
+    assert {r.extensions["timeout"]["connect"] for r in seen} == {client.CONNECT_TIMEOUT}
+
+    def raising(exc):
+        def handler(r):
+            raise exc("boom", request=r)
+        return handler
+    for exc, timeout, down in [(httpx.ReadTimeout, True, False), (httpx.ConnectError, False, True),
+                               (httpx.ConnectTimeout, False, True), (httpx.RemoteProtocolError, False, False)]:
+        fake(monkeypatch, raising(exc))
+        for call in (lambda: client.chat([{"role": "user", "content": "x"}]),
+                     lambda: next(client.chat_stream([{"role": "user", "content": "x"}])),
+                     lambda: client.embed(["x"])):
+            with pytest.raises(client.LLMConnectionError) as err:
+                call()
+            assert isinstance(err.value, client.LLMTimeoutError) == timeout and err.value.down == down, exc
+    fake(monkeypatch, lambda r: httpx.Response(500, json={"error": "model not loaded"}))
+    with pytest.raises(client.LLMConnectionError) as err:
+        client.chat([{"role": "user", "content": "x"}])
+    assert not err.value.down  # up, but failing: not a reason to switch the model off for everyone
+
+
 def test_complete_and_call_llm_still_work(monkeypatch):
     replies = iter(["Plain text.", "Sure:\n```json\n{\"n\": 3, \"why\": \"x\"}\n```"])
     seen = fake(monkeypatch, lambda r: httpx.Response(200, json={"choices": [{"message": {"content": next(replies)}}]}))

@@ -19,8 +19,12 @@ background jobs check it between items and pause (wait_chat_idle), so the person
 Embeddings take no gate (short requests to another model).
 
 An unreachable server is remembered the way backend/brief.py does it: the caller calls mark_down() after an
-LLMConnectionError, and down_recently() is True for DOWN_S seconds after, so the next request does not wait again (on
-Windows a refused connection takes about 5 s despite CONNECT_TIMEOUT). The calls never check it themselves.
+LLMConnectionError whose `down` is True (refused, or no connection within CONNECT_TIMEOUT), and down_recently() is True
+for DOWN_S seconds after, so the next request does not wait again (on Windows a refused connection takes about 5 s
+despite CONNECT_TIMEOUT). An HTTP error, a malformed reply or an LLMTimeoutError (connected, but no answer within the
+read timeout) leave `down` False: LM Studio is up, and marking it down would switch the model off for everyone. The
+calls never check or set it themselves. A reply that is not streamed arrives only when it is fully generated, so
+chat() waits longer the more tokens it allows (_read_timeout); a streamed one only needs each chunk within TIMEOUT.
 """
 import json
 import os
@@ -56,7 +60,17 @@ _chat_n = 0  # chat requests holding or waiting for LLM_GATE
 
 class LLMConnectionError(Exception):
     """LM Studio is unreachable (server not running, wrong port, etc.), answered with an HTTP error or sent a reply
-    that is not an OpenAI-shaped completion or embedding."""
+    that is not an OpenAI-shaped completion or embedding. down is True only when no connection could be made: the one
+    case for mark_down()."""
+
+    def __init__(self, message: str = "", *, down: bool = False):
+        super().__init__(message)
+        self.down = down
+
+
+class LLMTimeoutError(LLMConnectionError):
+    """LM Studio took the request but sent nothing within the read timeout: it is up, only slow or busy (down is
+    False)."""
 
 
 class LLMOutputError(Exception):
@@ -102,7 +116,7 @@ def wait_chat_idle(max_s: float = 300.0, poll_s: float = 0.5) -> bool:
 
 
 def mark_down() -> None:
-    """Remember that LM Studio was unreachable just now (after an LLMConnectionError)."""
+    """Remember that LM Studio was unreachable just now (after an LLMConnectionError with down True)."""
     global _down_at
     _down_at = time.monotonic()
 
@@ -125,10 +139,21 @@ def _http(read_timeout: float = TIMEOUT) -> httpx.Client:
 
 
 def _unreachable(e: Exception) -> LLMConnectionError:
+    """The LLMConnectionError for an httpx error: down for a failed connection, LLMTimeoutError for a slow answer."""
+    if isinstance(e, httpx.TimeoutException) and not isinstance(e, httpx.ConnectTimeout):
+        return LLMTimeoutError(f"LM Studio at {LLM_BASE_URL} did not answer in time ({type(e).__name__})")
+    if isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return LLMConnectionError(f"LM Studio unreachable at {LLM_BASE_URL}: {e}", down=True)
     detail = str(e)
     if isinstance(e, httpx.HTTPStatusError):
         detail = f"HTTP {e.response.status_code}: {e.response.text[:300]}"
-    return LLMConnectionError(f"LM Studio unreachable at {LLM_BASE_URL}: {detail}")
+    return LLMConnectionError(f"LM Studio at {LLM_BASE_URL} failed: {detail}")
+
+
+def _read_timeout(max_tokens: int | None) -> float:
+    """Read timeout of a reply that is not streamed: nothing arrives until the whole answer is generated, so it grows
+    with max_tokens (2 tokens/s, half the measured rate, plus 30 s for the prompt), never below TIMEOUT."""
+    return max(TIMEOUT, 30.0 + (max_tokens or 0) / 2)
 
 
 def _body(messages: list[dict], max_tokens: int | None, temperature: float, model: str | None,
@@ -141,9 +166,9 @@ def _body(messages: list[dict], max_tokens: int | None, temperature: float, mode
     return body
 
 
-def _completion(body: dict) -> str:
+def _completion(body: dict, read_timeout: float = TIMEOUT) -> str:
     try:
-        with _http() as c:
+        with _http(read_timeout) as c:
             resp = c.post("/chat/completions", json=body)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"] or ""
@@ -166,8 +191,9 @@ def complete(system_prompt: str, user_prompt: str) -> str:
 
 def chat(messages: list[dict], *, max_tokens: int = 400, temperature: float = 0.2, model: str | None = None) -> str:
     """The reply to an OpenAI message list ({'role': 'system'|'user'|'assistant', 'content'}); LLMConnectionError
-    when LM Studio is unreachable or answers with an error."""
-    return _completion(_body(messages, max_tokens, temperature, model))
+    when LM Studio is unreachable or answers with an error, LLMTimeoutError when the whole reply takes longer than
+    _read_timeout(max_tokens)."""
+    return _completion(_body(messages, max_tokens, temperature, model), _read_timeout(max_tokens))
 
 
 def _sse_data(line: str) -> str | None:
