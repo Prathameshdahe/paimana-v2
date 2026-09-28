@@ -1,0 +1,278 @@
+/* ==========================================================================
+   PARAKH mark: three animation layers on one 64-unit grid, the groups .pk-lens, .pk-net and .pk-beacon
+   (brand/build_brand.py writes the markup).
+     A  lens    .pk-frame .pk-lid .pk-iris, and .pk-glint: one short light that runs round the frame
+     B  network .pk-trace, .pk-pulse: three pulses leave the pads, meet at the hub and rise to the beacon;
+                .pk-node: the pads flash as a pulse leaves, the hub as the pulses meet
+     C  beacon  .pk-lift: the lower chevron lifts, then the upper, each with its .pk-glow; .pk-ping rings out
+   The root <svg class="pk"> takes
+     data-status   stable | watch | critical  the beacon colour and the pace (4.8 s, 3.2 s, 1.6 s a cycle)
+     data-tone     light | dark               the inks for a light or a dark background
+     data-animated true | false               false: the still mark
+     data-intro    true | false               draw the mark in once before the loop starts
+   The same file styles the React component (ParakhMark.tsx), the web component and the animated SVG files in
+   brand/, which embed it. Reduced motion shows the still mark.
+   ========================================================================== */
+
+.pk {
+  --pk-ink: #0e1e3a;
+  --pk-trace: #1597cc;
+  --pk-pulse: #ffffff;
+  --pk-glint: #38c6f4;
+  --pk-stable: #0e9f6e;
+  --pk-watch: #f08a24;
+  --pk-critical: #d92d3a;
+  --pk-beacon: var(--pk-watch);
+  --pk-cycle: 3.2s;
+  --pk-start: 0s;
+  overflow: visible;
+}
+
+.pk[data-tone='dark'] {
+  --pk-ink: #e9eef6;
+  --pk-trace: #38c6f4;
+  --pk-pulse: #e6fbff;
+  --pk-glint: #9eeaff;
+  --pk-glow-peak: 0.8;
+  --pk-stable: #34d399;
+  --pk-watch: #f5952a;
+  --pk-critical: #ff4d5e;
+}
+
+.pk[data-status='stable'] {
+  --pk-beacon: var(--pk-stable);
+  --pk-cycle: 4.8s;
+}
+
+.pk[data-status='critical'] {
+  --pk-beacon: var(--pk-critical);
+  --pk-pulse: var(--pk-critical);
+  --pk-cycle: 1.6s;
+}
+
+.pk[data-intro='true'] {
+  --pk-start: 1.5s;
+}
+
+/* ---- the still mark ------------------------------------------------------------------------------------------ */
+
+.pk-frame,
+.pk-lid,
+.pk-iris,
+.pk-trace,
+.pk-pulse,
+.pk-glint,
+.pk-chev,
+.pk-glow,
+.pk-ping {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pk-frame,
+.pk-lid,
+.pk-iris {
+  stroke: var(--pk-ink);
+  transition: stroke 0.4s ease;
+}
+
+.pk-frame { stroke-width: 2.2; }
+.pk-lid { stroke-width: 2.4; }
+.pk-iris { stroke-width: 1.8; }
+
+.pk-trace {
+  stroke: var(--pk-trace);
+  stroke-width: 1.9;
+}
+
+.pk-node {
+  fill: var(--pk-trace);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pk-chev {
+  stroke: var(--pk-beacon);
+  stroke-width: 3.8;
+  transition: stroke 0.4s ease;
+}
+
+/* the effects exist only while the mark is animated */
+.pk-fx { display: none; }
+.pk[data-animated='true'] .pk-fx { display: inline; }
+
+/* ---- A  lens: one light runs round the frame ----------------------------------------------------------------- */
+
+/* hidden until its loop starts (after the intro): the keyframes carry the opacity */
+.pk[data-animated='true'] .pk-glint {
+  stroke: var(--pk-glint);
+  stroke-width: 2.4;
+  stroke-dasharray: 0.05 0.95;
+  opacity: 0;
+  animation: pk-glint 9s linear var(--pk-start) infinite;
+}
+
+@keyframes pk-glint {
+  from { stroke-dashoffset: 0; opacity: 0.9; }
+  to { stroke-dashoffset: -1; opacity: 0.9; }
+}
+
+/* ---- B  network: pulses from the pads to the beacon ---------------------------------------------------------- */
+
+.pk[data-animated='true'] .pk-pulse {
+  stroke: var(--pk-pulse);
+  stroke-width: 2.3;
+  stroke-dasharray: 0.16 2;
+  stroke-dashoffset: 0.2;
+  animation: pk-pulse var(--pk-cycle) cubic-bezier(0.45, 0.05, 0.55, 0.95) var(--pk-start) infinite;
+}
+
+@keyframes pk-pulse {
+  0% { stroke-dashoffset: 0.2; }
+  34%, 100% { stroke-dashoffset: -1.04; }
+}
+
+.pk[data-animated='true'] .pk-node--pad {
+  animation: pk-node-pad var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+.pk[data-animated='true'] .pk-node--hub {
+  animation: pk-node-hub var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+@keyframes pk-node-pad {
+  0% { transform: scale(1.5); }
+  12%, 100% { transform: scale(1); }
+}
+
+@keyframes pk-node-hub {
+  0%, 23% { transform: scale(1); }
+  28% { transform: scale(1.55); }
+  40%, 100% { transform: scale(1); }
+}
+
+/* ---- C  beacon: the chevrons lift in turn, a glow and a ring go out ----------------------------------------- */
+
+/* each chevron rises with its own halo */
+.pk[data-animated='true'] .pk-lift--lo {
+  animation: pk-lift-lo var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+.pk[data-animated='true'] .pk-lift--up {
+  animation: pk-lift-up var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+@keyframes pk-lift-lo {
+  0%, 31% { transform: translateY(0); }
+  37% { transform: translateY(-1.4px); }
+  60%, 100% { transform: translateY(0); }
+}
+
+@keyframes pk-lift-up {
+  0%, 35% { transform: translateY(0); }
+  42% { transform: translateY(-1.8px); }
+  66%, 100% { transform: translateY(0); }
+}
+
+/* a soft halo round each chevron (the markup blurs it): light on a dark background, a warm tint on a light one */
+.pk-glow {
+  stroke: var(--pk-beacon);
+  stroke-width: 5.6;
+  opacity: 0;
+}
+
+.pk[data-animated='true'] .pk-glow {
+  animation: pk-glow var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+@keyframes pk-glow {
+  0%, 32% { opacity: 0; }
+  42% { opacity: var(--pk-glow-peak, 0.55); }
+  76%, 100% { opacity: 0; }
+}
+
+/* the ring keeps a steady line width while it grows: stroke-width shrinks as the scale rises */
+.pk-ping {
+  stroke: var(--pk-beacon);
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+}
+
+.pk[data-animated='true'] .pk-ping {
+  animation: pk-ping var(--pk-cycle) cubic-bezier(0.2, 0.7, 0.3, 1) var(--pk-start) infinite;
+}
+
+@keyframes pk-ping {
+  0%, 40% { transform: scale(0.35); stroke-width: 4.6; opacity: 0; }
+  43% { opacity: 0.85; }
+  100% { transform: scale(2.6); stroke-width: 0.62; opacity: 0; }
+}
+
+/* a second ring, half a cycle behind, only for critical */
+.pk[data-animated='true'] .pk-ping--2 { display: none; }
+
+.pk[data-animated='true'][data-status='critical'] .pk-ping--2 {
+  display: inline;
+  animation-delay: calc(var(--pk-start) + var(--pk-cycle) * 0.5);
+}
+
+.pk[data-animated='true'][data-status='stable'] .pk-ping { animation-name: pk-ping-soft; }
+
+@keyframes pk-ping-soft {
+  0%, 40% { transform: scale(0.35); stroke-width: 4.6; opacity: 0; }
+  43% { opacity: 0.45; }
+  100% { transform: scale(2.2); stroke-width: 0.72; opacity: 0; }
+}
+
+/* ---- intro: the mark draws itself once --------------------------------------------------------------------- */
+
+.pk[data-intro='true'] .pk-frame,
+.pk[data-intro='true'] .pk-lid,
+.pk[data-intro='true'] .pk-iris,
+.pk[data-intro='true'] .pk-trace {
+  stroke-dasharray: 1 1.1;
+}
+
+.pk[data-intro='true'] .pk-frame { animation: pk-draw 0.9s cubic-bezier(0.6, 0, 0.2, 1) both; }
+.pk[data-intro='true'] .pk-lid { animation: pk-draw 0.8s cubic-bezier(0.6, 0, 0.2, 1) 0.25s both; }
+.pk[data-intro='true'] .pk-iris { animation: pk-draw 0.7s ease 0.45s both; }
+.pk[data-intro='true'] .pk-trace { animation: pk-draw 0.6s ease-out 0.75s both; }
+
+.pk[data-intro='true'] .pk-node { animation: pk-pop 0.35s ease-out 1.05s both; }
+
+.pk[data-intro='true'][data-animated='true'] .pk-node--pad {
+  animation: pk-pop 0.35s ease-out 1.05s both, pk-node-pad var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+.pk[data-intro='true'][data-animated='true'] .pk-node--hub {
+  animation: pk-pop 0.35s ease-out 1.05s both, pk-node-hub var(--pk-cycle) ease-out var(--pk-start) infinite;
+}
+
+.pk[data-intro='true'] .pk-beacon {
+  animation: pk-drop 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.25) 1.1s both;
+}
+
+@keyframes pk-draw {
+  from { stroke-dashoffset: 1.05; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes pk-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes pk-drop {
+  from { transform: translateY(-5px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ---- reduced motion: the still mark ------------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .pk .pk-fx { display: none !important; }
+  .pk,
+  .pk * { animation: none !important; transition: none !important; }
+}

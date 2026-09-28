@@ -23,6 +23,7 @@ database/*.json
 temp
 backups
 deploy/certs
+brand
 docs/screenshots
 tests
 mlruns
