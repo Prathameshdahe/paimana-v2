@@ -64,6 +64,18 @@ def test_stagnation_override_skips_nearly_finished_projects():
     assert score.stagnant(cur).tolist() == [True, False, True, False, False]
 
 
+def test_model_version_names_every_champion_run():
+    runs = [{"entry_id": f"{r}/{m}/{y}_h{h}", "run_id": r, "model": m} for r, m in (("ML-1", "lightgbm"),
+            ("ML-2", "lightgbm_incumbent")) for y, h in score.PROBS.values()]
+    reg = {"runs": runs, "champions": {f"{y}_h{h}": {"entry_id": f"ML-1/lightgbm/{y}_h{h}"}
+                                       for y, h in score.PROBS.values()}}
+    assert score.model_version(reg) == "lgbm-any2q-1"
+    reg["champions"]["y_any_h4"] = {"entry_id": "ML-2/lightgbm_incumbent/y_any_h4"}
+    assert score.model_version(reg) == "lgbm-any2q-1+2"
+    reg["champions"]["y_any_h2"] = {"entry_id": "ML-2/lightgbm_incumbent/y_any_h2"}
+    assert score.model_version(reg) == "lgbm-any2q-2+1"
+
+
 def test_calibrator_comes_from_the_champion_run(tmp_path, monkeypatch):
     monkeypatch.setattr(score.backtest, "RUNS", tmp_path)
     (tmp_path / "R1").mkdir()

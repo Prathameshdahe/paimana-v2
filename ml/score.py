@@ -87,6 +87,15 @@ def champion(reg, y, h):
     return next(r for r in reg["runs"] if r["entry_id"] == reg["champions"][f"{y}_h{h}"]["entry_id"])
 
 
+def model_version(reg):
+    """The served model version: the p_any_2q champion's type and run, then "+run" for each other run a champion of
+    PROBS comes from (targets are promoted one by one, and the briefs and the prediction log key on this string)."""
+    lead = champion(reg, "y_any", 2)
+    runs = sorted({champion(reg, y, h)["run_id"] for y, h in PROBS.values()} - {lead["run_id"]})
+    return (f"{SHORT[registry.family(lead['model'])]}-any2q-{lead['run_id'].removeprefix('ML-')}"
+            + "".join(f"+{r.removeprefix('ML-')}" for r in runs))
+
+
 def calibrator(entry):
     """The Platt parameters of entry's model and target from its run folder, or None (raw scores)."""
     path = backtest.RUNS / entry["run_id"] / backtest.PLATT_FILE
@@ -136,7 +145,7 @@ def main(asof=None):
     cur = current(feats, obs, master, asof)
 
     lead = champion(reg, "y_any", 2)
-    mv = f"{SHORT[registry.family(lead['model'])]}-any2q-{lead['run_id'].removeprefix('ML-')}"
+    mv = model_version(reg)
     out = cur[["project_key"]].assign(asof=asof, model_version=mv, gold_version=man["gold_version"],
                                       silver_version=man["silver_version"])
     fitted = {}

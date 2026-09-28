@@ -88,7 +88,18 @@ LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_
 # and 0.018-0.024 validation on y_any_h4; the mean of 5 seeds stayed inside the noise everywhere (y_any_h2 flash
 # +0.0048 against a 0.0076 margin); age weights lost on both blocks for y_any_h2 and y_cost_rev_h2 and on the flash
 # block for y_date_push_h2; flash-report rows weighted 3x cleared the noise nowhere (y_cost_rev_h2 flash -0.010).
-TARGET_PARAMS = {}
+TARGET_PARAMS = {
+    # rows halve in weight every 8 quarters of age: +0.0124 validation PR-AUC [+0.0050, +0.0204], +0.0031 flash
+    # [-0.0135, +0.0200] (one fold of 335 rows). Deadline feasibility also passed here (+0.0060, +0.0041) but lost on
+    # the flash block together with the half-life, which gained more on its own.
+    ("y_any", 4): {"half_life_q": 8},
+    # the best tree-count trial of the y_any_h2 validation search (ml/experiment.py TUNED_TREES), picked there and
+    # not on this target: +0.0105 validation [-0.0052, +0.0251], +0.0288 flash [+0.0077, +0.0499]; the early-stopped
+    # pick did as well (+0.0113, +0.0284) and this one is simpler, with the lower validation ECE
+    ("y_cost_rev", 2): {"learning_rate": 0.02, "num_leaves": 63, "min_child_samples": 20, "colsample_bytree": 0.8,
+                        "subsample": 0.8, "reg_lambda": 20.0, "reg_alpha": 0.0, "min_split_gain": 0.02,
+                        "n_estimators": 150},
+}
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
 ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]), ("+context", ["state", "dynamics", "context"]),
