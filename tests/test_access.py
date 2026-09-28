@@ -424,3 +424,18 @@ def test_a_failed_run_error_never_reaches_a_scoped_official(client, scopes, monk
     assert body["scout"]["lastError"] is None                               # no error stays no error
     ipmd()
     assert client.get("/api/live/status").json()["research"]["lastError"] == text
+
+
+def test_the_developer_may_send_its_own_role(client, fresh_db):
+    """Review finding (unit B, round 1): a role sent in a body or query must be the signed-in one, and the developer's
+    own is accepted like any other (it was 422, outside the role type); anyone else's is still 403."""
+    key = sorted(serving.scope_keys(None))[0]
+    db.add_alerts([{"project_key": key, "kind": "signal", "severity": 2, "title": "t"}])
+    aid = db.max_alert_id()
+    h = as_role(client, "developer")
+    assert client.post(f"/api/alerts/{aid}/ack", json={"role": "developer"}, headers=h).status_code == 200
+    assert client.get("/api/watchlist", params={"role": "developer"}).status_code == 200
+    assert client.post("/api/watchlist", json={"role": "developer", "projectKey": key}, headers=h).json()["total"] == 1
+    assert client.post(f"/api/alerts/{aid}/ack", json={"role": "ipmd_analyst"}, headers=h).status_code == 403
+    ipmd()
+    assert client.get("/api/watchlist", params={"role": "developer"}).status_code == 403

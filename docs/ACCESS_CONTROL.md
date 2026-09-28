@@ -111,7 +111,7 @@ always shown, so they can compare with their peers. The watchlist is one list pe
 | Alert bell and live stream | – | ✓ scoped | ✓ scoped | ✓ with pipeline errors | ✓ with pipeline errors |
 | Acknowledge an alert | – | – | ✓ scoped | ✓ | ✓ |
 | AI assistant (chat) | ✓ public tools and public outputs only | ✓ scoped, every tool | ✓ scoped, every tool | ✓ every tool | ✓ every tool |
-| Approvals | – | memos to agency officials, own projects | memos to ministry officials, own projects | every memo | every memo |
+| Approvals | – | memos to agency officials, own projects | memos to ministry officials, own projects | every memo | every memo, view only |
 | Live job status | – | ✓ counts | ✓ counts | ✓ | ✓ |
 | Check inbox, run scout, upload a report, research, second-opinion job, portal pulls | – | – | – | – | ✓ |
 | Models page, worker console and trigger | – | – | – | – | ✓ |
@@ -141,7 +141,7 @@ evidence line and the per-project PARIVESH lists (open proposals, the proposals 
 | `/api/watchlist` | 403 | scoped | scoped | ✓ | ✓ |
 | `/api/bottlenecks`, `/api/agencies/matrix`, `/api/agencies/{a}/projects` | 403 | scoped | scoped | ✓ | ✓ |
 | `/api/signals/feed`, `/api/radar/summary` | 403 | linked, scoped | linked, scoped | linked | ✓ |
-| `/api/dispatch`, `POST /api/approvals` | 403 | addressed, scoped | addressed, scoped | ✓ | ✓ |
+| `/api/dispatch`, `POST /api/approvals` | 403 | addressed, scoped | addressed, scoped | ✓ | every memo to read; decides none (no memo is addressed to the developer, 403) |
 | `/api/live/status`, `/api/jobs` | 403 | counts only | counts only | ✓ | ✓ |
 | `POST /api/jobs/*` (ingest, watch, scout, research, second-opinion, parivesh-snapshot, bhoomi-pull) | 403 | 403 | 403 | 403 | ✓ |
 | `/api/models`, `/api/worker-runs`, `POST /api/worker-runs/trigger` | 403 | 403 | 403 | 403 | ✓ |
@@ -152,7 +152,7 @@ evidence line and the per-project PARIVESH lists (open proposals, the proposals 
 | `/api/admin/audit` | 403 | 403 | 403 | 403 | ✓ |
 
 A `role` still sent in a request body or query (ack, watchlist, approvals) must match the signed-in role, or it is
-403. Every write records an `app.audit_log` row: role, action, target, detail, and the actor's account id, email and
+403 (the developer may send `developer`). Every write records an `app.audit_log` row: role, action, target, detail, and the actor's account id, email and
 client address.
 
 **Request and response shapes** (camelCase; `frontend/src/contracts/auth.ts`, `backend/schemas.py`):

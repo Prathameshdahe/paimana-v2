@@ -727,7 +727,9 @@ class SecondOpinionUnavailable(CamelModel):
 
 # ---------- app state (PostgreSQL, backend/db/) ----------
 
-Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public"]
+# a role a request may name (ack, watchlist, approvals: it must be the signed-in one, backend/access.py acting_as);
+# the developer names its own like anyone else, and stays out of OfficialRole / RecipientRole
+Role = Literal["ipmd_analyst", "ministry_official", "agency_official", "public", "developer"]
 AlertKind = Literal["tier_up", "tier_down", "new_project", "slip_realised", "signal", "early_notice",
                     "pipeline_error"]
 
