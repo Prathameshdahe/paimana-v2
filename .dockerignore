@@ -27,4 +27,6 @@ docs
 tests
 mlruns
 dataset.zip
+*.tar
+*.tar.gz
 Dataset drive folder

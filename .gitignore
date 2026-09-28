@@ -36,6 +36,8 @@ Thumbs.db
 # large data: shared via the team drive, not git
 Dataset drive folder/
 dataset.zip
+# the demo images for an offline machine (scripts/demo-save.*)
+paimana-demo-images.tar*
 dataset/clean/_parts/
 dataset/clean/performance/performance_detail.csv
 dataset/clean/projects/project_summaries.csv
@@ -50,8 +52,6 @@ dataset/silver/identity/resolved_rows.parquet
 # the SQLite app state of earlier versions (python -m backend.db.migrate_sqlite copies it into PostgreSQL once)
 database/*.db
 database/*.db-journal
-
-# production stack (docs/DEPLOYMENT.md): database dumps and TLS certificates stay on the host
 
 # report inbox: files wait here for the live watcher (backend/live/watcher.py)
 dataset/raw/inbox/*

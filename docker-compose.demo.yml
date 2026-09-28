@@ -1,0 +1,100 @@
+# PAIMANA demo stack: the whole app on one laptop with one command and no setup (README, Quick start;
+# docs/DEPLOYMENT.md, Demo). The data and the model are inside the api image (Dockerfile.demo), PostgreSQL keeps its
+# own volume, and the dashboard is http://localhost:8080 with a one-click sign-in button per role.
+#   docker compose -f docker-compose.demo.yml up -d --build     first start builds the images (a few minutes)
+#   docker compose -f docker-compose.demo.yml down              stop; the api's writes go back to the image
+#   docker compose -f docker-compose.demo.yml down -v           stop and forget the database too
+# The local LLM is optional: LM Studio on the host (port 1234) with the models in .env.example; without it the
+# assistant answers from the data and the LLM features say they are off.
+# For a demo machine only: a fixed database password, DEMO_LOGIN on, plain http bound to 127.0.0.1. A real server
+# uses docker-compose.yml (TLS, generated secrets, approved accounts).
+name: paimana-demo
+
+x-demo-db: &demo-db
+  POSTGRES_USER: paimana
+  POSTGRES_PASSWORD: paimana-demo     # a throwaway database inside the demo stack, never published; not a secret
+  POSTGRES_DB: paimana
+
+x-demo-api: &demo-api
+  build:
+    context: .
+    dockerfile: Dockerfile.demo
+    target: api
+  image: paimana-demo-api
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment: *demo-db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+
+  init:
+    <<: *demo-api
+    environment:
+      <<: *demo-db
+      POSTGRES_HOST: postgres
+      LIVE_JOBS: "0"
+    command: ["sh", "/app/deploy/demo-init.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *demo-api
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *demo-db
+      POSTGRES_HOST: postgres
+      DEMO_LOGIN: "1"
+      API_DOCS: "1"
+      SECURE_COOKIES: "0"
+      ALLOWED_ORIGINS: http://localhost:${DEMO_PORT:-8080},http://127.0.0.1:${DEMO_PORT:-8080}
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      TRUSTED_PROXIES: 10.202.0.0/24
+      LIVE_JOBS: ${LIVE_JOBS:-1}
+      LLM_BASE_URL: ${LM_STUDIO_URL:-http://host.docker.internal:1234/v1}
+      LLM_MODEL: ${LLM_MODEL:-qwen/qwen2.5-coder-14b}
+      LLM_EMBED_MODEL: ${LLM_EMBED_MODEL:-text-embedding-nomic-embed-text-v1.5}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tmpfs:
+      - /tmp:size=512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+      target: web
+    image: paimana-demo-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DEMO_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.202.0.0/24
