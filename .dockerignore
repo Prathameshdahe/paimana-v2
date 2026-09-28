@@ -1,0 +1,30 @@
+# What never enters an image (both Dockerfiles build from the repo root). Data, models and app state are bind mounts
+# at run time (docker-compose.yml); secrets, certificates and backups stay on the host.
+.git
+.gitignore
+.claude
+.vscode
+.idea
+**/__pycache__
+**/*.pyc
+.venv
+venv
+.pytest_cache
+.env
+.env.*
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+dataset
+model
+database/*.db
+database/*.db-journal
+database/*.json
+temp
+backups
+deploy/certs
+docs
+tests
+mlruns
+dataset.zip
+Dataset drive folder

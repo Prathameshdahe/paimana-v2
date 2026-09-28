@@ -1,0 +1,141 @@
+# PAIMANA production stack (docs/DEPLOYMENT.md): postgres (application truth), migrate (alembic upgrade head, once
+# per start), api (FastAPI, one worker), web (nginx: TLS, the dashboard, the /api/ proxy; the only published ports),
+# backup (pg_dump daily into ./backups). Settings come from two files that never enter git: .env (copy
+# .env.production.example) and .env.db (scripts/first-run.* writes it). Compose reads .env for the ${...} defaults
+# below; the containers get both files whole through env_file, and the environment: keys win over them.
+# Laptop: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d (ports 8443, 8080, 5434).
+name: paimana
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: [.env.db]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/10-paimana.sh:ro
+      - ./backups:/backups
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    # no ports: the database is reachable on the compose network only (docker-compose.dev.yml publishes 5434)
+
+  migrate:
+    build: &api-build
+      context: .
+      dockerfile: Dockerfile.api
+    image: paimana-api
+    env_file: [.env, .env.db]
+    environment:
+      POSTGRES_HOST: postgres
+      LIVE_JOBS: "0"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  api:
+    build: *api-build
+    image: paimana-api
+    restart: unless-stopped
+    init: true
+    env_file: [.env, .env.db]
+    environment:
+      POSTGRES_HOST: postgres                       # deploy/api-entrypoint.sh builds DATABASE_URL from .env.db
+      LLM_BASE_URL: ${LM_STUDIO_URL:-http://host.docker.internal:1234/v1}
+      LIVE_JOBS: ${LIVE_JOBS:-1}
+      SECURE_COOKIES: ${SECURE_COOKIES:-1}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.201.0.0/24}   # the compose network below: X-Forwarded-For from web
+    extra_hosts:
+      - "host.docker.internal:host-gateway"         # LM Studio on the host (Linux: it must listen on 0.0.0.0)
+    volumes:
+      - ./dataset:/app/dataset      # the watcher's pipeline writes silver, gold, the raw archive, rag and the inbox
+      - ./model:/app/model:ro
+      - ./database:/app/database    # worker_runs.json, dispatch_drafts.json (and paimana.db before the migration)
+      - ./temp:/app/temp
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m              # upload spool, library caches
+      - /app/.tmp                   # DuckDB's spill directory for an in-memory database
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # the healthcheck (GET /healthz) is in Dockerfile.api; GET /readyz says whether the data and the database are ready
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: paimana-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_HTTP_PORT:-80}:80"
+      - "${WEB_HTTPS_PORT:-443}:443"
+    environment:
+      PAIMANA_SERVER_NAME: ${SERVER_NAME:-_}
+      PAIMANA_HTTPS_SUFFIX: ""
+    volumes:
+      - ./deploy/certs:/etc/nginx/certs:ro
+    read_only: true
+    tmpfs: [/etc/nginx/conf.d, /var/cache/nginx, /var/run, /tmp]
+    depends_on:
+      api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, SETGID, SETUID, NET_BIND_SERVICE]
+
+  backup:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: [.env.db]
+    environment:
+      PGHOST: postgres
+      BACKUP_HOUR: ${BACKUP_HOUR:-02}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    entrypoint: ["bash", "/backup.sh"]
+    command: ["loop"]
+    volumes:
+      - ./deploy/backup.sh:/backup.sh:ro
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${PAIMANA_SUBNET:-10.201.0.0/24}

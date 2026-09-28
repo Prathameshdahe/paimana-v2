@@ -1,0 +1,71 @@
+# Continuous checks, the same as scripts/check.*: pytest against a throwaway Postgres (pgvector) service, then the
+# frontend lint, typecheck and build. It only reads the repository: no push, no deploy, no secrets, no images.
+name: check
+
+on:
+  push:
+    branches: [main, v2-early-warning]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: paimana
+          POSTGRES_PASSWORD: paimana-ci   # a database that lives for one job on the runner; not a secret
+          POSTGRES_DB: paimana_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U paimana -d paimana_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://paimana:paimana-ci@localhost:5432/paimana_test
+      LIVE_JOBS: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: system libraries (LightGBM's OpenMP runtime, psql)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgomp1 postgresql-client
+      - name: python packages
+        run: python -m pip install -r requirements.txt
+      - name: extensions the migrations expect
+        run: psql "$DATABASE_URL_PSQL" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS citext;"
+        env:
+          DATABASE_URL_PSQL: postgresql://paimana:paimana-ci@localhost:5432/paimana_test
+      - name: pytest
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build

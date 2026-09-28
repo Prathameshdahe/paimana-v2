@@ -2,6 +2,12 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
+
+# production stack (docs/DEPLOYMENT.md): database dumps and TLS certificates stay on the host
+backups/
+deploy/certs/*
+!deploy/certs/README.md
 
 # node
 node_modules/

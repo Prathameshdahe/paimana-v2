@@ -180,6 +180,12 @@ project page without model internals. The role goes to the backend in
 `X-Paimana-*` headers that it trusts: a prototype, not authentication. The
 role-by-page table is in `docs/ACCESS_CONTROL.md`.
 
+## Run in production
+
+One Docker Compose stack (nginx with TLS, the api, PostgreSQL, daily backups) with LM Studio on the host:
+`sh scripts/first-run.sh` on a Linux server, `scripts\first-run.ps1 -Dev` for a laptop demo on
+https://localhost:8443. Everything about it is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Rebuilding data and the model
 
 The outputs are already in the repo, so you only need this if the raw data or the

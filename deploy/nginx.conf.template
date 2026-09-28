@@ -1,0 +1,131 @@
+# PAIMANA web (docs/DEPLOYMENT.md; docs/SECURITY.md, Deployment): nginx in front of the built dashboard and the api
+# container. The nginx image's entrypoint renders this file into /etc/nginx/conf.d/paimana.conf, substituting only
+# ${PAIMANA_*} (NGINX_ENVSUBST_FILTER in Dockerfile.web): PAIMANA_SERVER_NAME (the domain; "_" answers any name) and
+# PAIMANA_HTTPS_SUFFIX (":8443" in docker-compose.dev.yml, empty when https is on 443). nginx's own $variables stay.
+
+server_tokens off;
+
+# per-client-IP request limits, 429 above them (the api keeps its own per-user limits behind these)
+limit_req_zone $binary_remote_addr zone=auth:1m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=api:10m rate=60r/m;
+limit_req_zone $binary_remote_addr zone=chat:1m rate=10r/m;
+limit_req_status 429;
+limit_req_log_level warn;
+
+log_format paimana '$remote_addr [$time_iso8601] "$request" $status $body_bytes_sent rt=$request_time '
+                   'rid=$request_id "$http_user_agent"';
+access_log /dev/stdout paimana;
+
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_min_length 1024;
+gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+# http: the container's own health probe answers, everything else is sent to https
+server {
+    listen 80;
+    server_name ${PAIMANA_SERVER_NAME};
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+    location / {
+        return 301 https://$host${PAIMANA_HTTPS_SUFFIX}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${PAIMANA_SERVER_NAME};
+
+    # deploy/certs/ (scripts/gen-dev-cert.* for a self-signed pair; docs/DEPLOYMENT.md, Real server, for a CA one)
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # security headers on every response, the api's included (add_header adds; the api may send the same ones)
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+
+    root /usr/share/nginx/html;
+    index index.html;
+    client_max_body_size 1m;          # the api's JSON limit; only the report upload below takes more
+
+    # the api container, looked up through Docker's DNS on every change of address (a restarted api keeps working)
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $api http://api:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    proxy_max_temp_file_size 16m;
+    error_page 502 503 504 = @api_down;   # nginx's own errors only: the api's 503s pass through untouched
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /api/auth/ {
+        limit_req zone=auth burst=5 nodelay;
+        proxy_pass $api;
+    }
+    # the assistant streams its answer: no buffering, ten minutes for a long one
+    location = /api/chat {
+        limit_req zone=chat burst=3 nodelay;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+        proxy_pass $api;
+    }
+    # the alert stream (server-sent events) stays open; the api sends a heartbeat every 15 s
+    location = /api/stream {
+        limit_req zone=api burst=100 nodelay;
+        proxy_buffering off;
+        proxy_read_timeout 600s;
+        proxy_pass $api;
+    }
+    # report upload: the api caps a file at 100 MB (backend/live/watcher.py MAX_UPLOAD); streamed, not buffered here
+    location = /api/jobs/ingest {
+        client_max_body_size 110m;
+        limit_req zone=api burst=100 nodelay;
+        proxy_request_buffering off;
+        proxy_read_timeout 600s;
+        proxy_pass $api;
+    }
+    location /api/ {
+        limit_req zone=api burst=100 nodelay;
+        proxy_pass $api;
+    }
+    location @api_down {
+        default_type application/json;
+        return 503 '{"detail":"api unavailable"}';
+    }
+
+    # the dashboard: hashed assets cache for a year, everything else (index.html) revalidates; unknown paths are
+    # routes of the single-page app
+    location /assets/ {
+        expires 1y;
+    }
+    location / {
+        expires -1;
+        try_files $uri $uri/ /index.html;
+    }
+}

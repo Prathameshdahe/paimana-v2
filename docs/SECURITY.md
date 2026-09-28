@@ -1,5 +1,6 @@
 # Security
 
+<<<<<<< HEAD
 What PAIMANA does about the items of the team's security plan (the 24-point checklist: data pipeline integrity,
 identity, quarantine, the model, poisoning, report remarks, the LLM's place, SHAP, intervals, calibration, agency
 names, the agency flag, PARIVESH, early notice, scenarios, the API boundary, roles, the agent, read-mostly AI, tests),
@@ -182,3 +183,61 @@ the public page redacted) and `tests/test_input_validation.py`; modified or dupl
 recorded `tests/test_parivesh.py`, `tests/test_research_pipeline.py`; quarantined rows stay out
 `tests/test_silver.py`; model version verified before use: added with the checksum (above). Not done: the raw
 archive's own hash manifest.
+=======
+What the production build enforces and what it does not, layer by layer, against the team's security plan.
+Deployment is below; the API section (sign-in, sessions, roles, request limits) and the Data, Model and AI sections
+(source checksums, quarantine, model checksums, the read-only assistant) are added by the units that own that code.
+
+## Deployment
+
+The stack is `docker-compose.yml` ([DEPLOYMENT.md](DEPLOYMENT.md)).
+
+**Network exposure.** The web container publishes 80 and 443 and nothing else does. The api (8000), postgres (5432)
+and the backup container are reachable on the compose network only; `docker-compose.dev.yml` publishes postgres on
+127.0.0.1:5434 for the laptop. LM Studio is reached from the api through the Docker host's bridge address and is
+never published by the stack.
+
+**TLS.** nginx 1.27 terminates TLS 1.2 and 1.3 (Mozilla's intermediate ciphers, session tickets off). Port 80 answers
+the container's health probe and redirects everything else to https. HSTS is set for a year (no `includeSubDomains`,
+no preload). The certificate is a file pair in `deploy/certs/`, git-ignored: self-signed on a laptop
+(`scripts/gen-dev-cert.*`), from a CA on a server.
+
+**Headers.** Every response through nginx carries `Content-Security-Policy` (`default-src 'self'`; images self and
+`data:`; fonts self and fonts.gstatic.com; styles self, inline and fonts.googleapis.com; `connect-src 'self'`;
+`frame-ancestors 'none'`; `base-uri 'self'`; `object-src 'none'`), `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera,
+microphone, geolocation and payment off) and `Strict-Transport-Security`. nginx adds headers and never removes the
+api's own. `server_tokens` is off.
+
+**Rate limits, per client IP, 429 above them.** `/api/auth/*` 10 a minute (burst 5), `/api/chat` 10 a minute
+(burst 3), everything else under `/api/` 60 a minute (burst 100). Request bodies: 1 MB everywhere except the report
+upload (`/api/jobs/ingest`: 110 MB, streamed to the api, which enforces its own 100 MB). The chat and alert streams
+and the upload may last 10 minutes; other calls 60 s at nginx (the api's own per-request timeout is shorter). The api
+keeps its per-user limits behind these.
+
+**Containers.** api: python 3.13-slim, a non-root user (uid 1000), read-only root filesystem, every Linux capability
+dropped, `no-new-privileges`, a 4 GB memory limit, one worker. web: read-only root filesystem, capabilities cut to the
+five nginx needs, 256 MB. migrate and backup: read-only, short-lived or idle. The writable bind mounts are `dataset/`,
+`database/` and `temp/` for the api and `backups/` for postgres and backup; `model/` is read-only. Health checks:
+`pg_isready`, the api's `/healthz`, nginx's `/healthz`.
+
+**Secrets.** `.env` and `.env.db` are git-ignored and never enter an image (`.dockerignore`); the compose files pass
+them through `env_file` only. `scripts/first-run.*` generates the database password (32 alphanumeric characters
+from the OS random generator, file mode 600 on Linux). The administrator's password is typed at the bootstrap's
+prompt and never written to a file, an argument or a log. Rotation of the database password: DEPLOYMENT.md.
+
+**Backups.** A daily `pg_dump -Fc` with 14 days kept; on Linux the files belong to root with mode 600. They hold the
+user rows (emails, argon2 hashes), sessions and the audit log, so `backups/` needs the same protection as the
+database, and an off-machine copy.
+
+**Updates.** `git pull`, `docker compose build`, `docker compose up -d` rebuilds from the pinned bases
+(`python:3.13-slim`, `node:22-alpine`, `nginx:1.27-alpine`, `pgvector/pgvector:pg16`) and runs the migrations before
+the new api starts; the bases move with their tags, so a monthly rebuild takes their fixes. The CI workflow
+(`.github/workflows/check.yml`) runs the tests and the frontend checks on every push with read-only repository
+permissions; it never builds images, deploys or pushes.
+
+**Not done.** No web application firewall or intrusion detection. No automatic certificate renewal (a certbot cron is
+described in DEPLOYMENT.md). The rate limits are per address, so an office behind one NAT shares one budget. No
+egress filtering from the api container: it needs the news sources, PIB, PARIVESH, Bhoomi Rashi and LM Studio.
+Docker Desktop on Windows is a demo host, not a hardened one. The postgres container keeps its default capabilities.
+>>>>>>> 72d37b3 (feat(ops): production Docker Compose stack, nginx TLS front, backups, first-run and check scripts, CI workflow)
