@@ -48,3 +48,6 @@ database/*.db-journal
 # report inbox: files wait here for the live watcher (backend/live/watcher.py)
 dataset/raw/inbox/*
 !dataset/raw/inbox/README.md
+
+# the assistant's search index (python -m llm.rag build; rebuilt by the backend when its inputs change)
+dataset/rag/
