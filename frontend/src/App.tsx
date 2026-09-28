@@ -72,7 +72,7 @@ export default function App() {
         {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
         {!isLogin && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
 
-        {/* shown to IPMD analysts and ministry officials only (lib/auth/access.ts canChat) */}
+        {/* the project assistant, for every role (lib/auth/access.ts canChat); the backend scopes each tool to the viewer */}
         {!isLogin && <ChatWidget />}
       </div>
     </TooltipProvider>

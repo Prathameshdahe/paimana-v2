@@ -9,7 +9,7 @@ import {
   Layers, Map as MapIcon, Newspaper, Pause, Repeat, Scale, Siren, Trees, TrendingDown, TrendingUp, Wallet,
   type LucideIcon,
 } from 'lucide-react'
-import type { Flag, RiskState, Tier, TierFilter } from '@/contracts/project'
+import type { Flag, OpinionConcern, RiskState, Tier, TierFilter } from '@/contracts/project'
 import type { AlertKind, ExternalFactorKey } from '@/contracts/portfolio'
 
 /** the rank tiers; Watch comes after them */
@@ -170,3 +170,10 @@ export const EVENT_CATEGORY: Record<string, { label: string; color: string; ink:
 export function categoryLabel(c: string | null | undefined): string {
   return c ? (EVENT_CATEGORY[c]?.label ?? c.replace(/_/g, ' ')) : 'uncategorised'
 }
+
+/** the AI second opinion's reading (llm/second_opinion.py): label and Badge variant; it never changes the tier */
+export const CONCERN = {
+  none: { label: 'No added concern', variant: 'stable' },
+  watch: { label: 'Worth watching', variant: 'warning' },
+  concern: { label: 'Concern', variant: 'critical' },
+} as const satisfies Record<OpinionConcern, { label: string; variant: keyof typeof TONE_CHIP }>

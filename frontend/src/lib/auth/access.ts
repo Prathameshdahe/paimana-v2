@@ -33,7 +33,8 @@ export const FEATURE_ROLES = {
   /** alert bell, alert inbox, live stream */
   canSeeAlerts: OFFICIALS,
   canAck: MINISTRY_UP,
-  canChat: MINISTRY_UP,
+  /** the project assistant; each of its tools reads only what the viewer may (backend llm/tools.py) */
+  canChat: EVERYONE,
   /** the live job status strip */
   canSeeLive: OFFICIALS,
   /** the linked news feed (External Evidence Radar data) */
