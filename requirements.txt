@@ -25,3 +25,9 @@ duckdb>=1.1
 pyarrow>=17
 rapidfuzz>=3.9
 pymupdf>=1.24
+lxml>=5.2                  # pd.read_html used by pipeline/bhoomi_rashi.py
+
+# tests
+pytest>=8.3
+pytest-asyncio>=0.24
+anyio[trio]>=4.4           # anyio backend for pytest-asyncio
