@@ -16,7 +16,8 @@ A ToolResult has
   summary  one plain line with only numbers from its facts (the progress list and the deterministic answer),
   cards    the SPEC 4 card dicts, camelCase, sent to the browser as they are,
   facts    the compact JSON the writer may use and the answer is checked against (backend/brief.validate): percents
-           as whole numbers ('slip_chance_2q_pct': 69), money in Rs crore, dates as 'June 2028', small lists capped;
+           as whole numbers ('slip_chance_within_2_quarters_pct': 69; keys say their horizon, which the writer
+           otherwise shortens to 'next quarter'), money in Rs crore, dates as 'June 2028', small lists capped;
            a dict item with "cite": i points at the i-th of the result's own sources (1-based; the agent renumbers),
            the whole block at its first source unless it says otherwise,
   sources  what the answer may cite, {kind, title, source, url, date, projectKey},
@@ -336,7 +337,7 @@ def _row_item(r: dict) -> dict:
 
 def _row_fact(r: dict) -> dict:
     return _compact({"key": r["key"], "name": _short(r["name"]), "state": r["state"], "tier": r["tier"],
-                     "slip_chance_2q_pct": _pct(r["p_any_2q"]), "cost_cr": _r(r["anticipated_cost_cr"]),
+                     "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"]), "cost_cr": _r(r["anticipated_cost_cr"]),
                      "progress_pct": _r(r["physical_progress_pct"]),
                      "completion": _month(r["anticipated_completion"]),
                      "flags": [FLAG_WORDS.get(f, f) for f in r["flags"] or []]})
@@ -379,7 +380,7 @@ def _project_facts(viewer, d: dict, row: dict | None, brief: bool = False) -> di
     sc, latest, m = d["scores"] or {}, d["latest"] or {}, d["master"] or {}
     tier = sc.get("tier")
     f = {"key": d["key"], "name": _short(_name(d, row), 25), "state": m.get("state") or latest.get("state"),
-         "tier": tier, "slip_chance_2q_pct": _pct(sc.get("p_any_2q")),
+         "tier": tier, "slip_chance_within_2_quarters_pct": _pct(sc.get("p_any_2q")),
          "progress_pct": _r(latest.get("physical_progress_pct")),
          "anticipated_cost_cr": _r(latest.get("anticipated_cost_cr")),
          "anticipated_completion": _month(latest.get("anticipated_completion")),
@@ -389,9 +390,10 @@ def _project_facts(viewer, d: dict, row: dict | None, brief: bool = False) -> di
     f.update({"sector": m.get("sector"), "ministry": m.get("ministry"), "agency": m.get("agency"),
               "horizon_quarters": HORIZONS, "as_of": _month(d["provenance"]["asof"]),
               "latest_report": _month(latest.get("period")), "stalled": bool(sc.get("stagnation_override")) or None,
-              "date_push_chance_2q_pct": _pct(sc.get("p_date_push_2q")),
-              "cost_revision_chance_2q_pct": _pct(sc.get("p_cost_rev_2q")),
-              "slip_chance_4q_pct": _pct(sc.get("p_any_4q")), "likely_slip_months_2q": _r(sc.get("months_p50")),
+              "date_push_chance_within_2_quarters_pct": _pct(sc.get("p_date_push_2q")),
+              "cost_revision_chance_within_2_quarters_pct": _pct(sc.get("p_cost_rev_2q")),
+              "slip_chance_within_4_quarters_pct": _pct(sc.get("p_any_4q")),
+              "likely_slip_months_within_2_quarters": _r(sc.get("months_p50")),
               "original_cost_cr": _r(latest.get("original_cost_cr")), "spent_cr": _r(latest.get("expenditure_cr")),
               "sanctioned": _month(m.get("sanction_date")),
               "original_completion": _month(latest.get("scheduled_completion")),
@@ -489,7 +491,9 @@ def portfolio_stats(viewer, group_by="state", rank_by="capital", tier=None, sect
              "groups_ranked_by": "number of projects" if rank_by == "projects" else "capital",
              "groups": [_compact({"name": r["name"], "projects": r["n"], "capital_cr": _r(r["capital_cr"], 0),
                                   "critical": r["n_critical"], "high": r["n_high"]}) for r in rows[:10]],
-             "groups_total": len(rows)}
+             "groups_total": len(rows),
+             "groups_note": f"groups lists the first {min(10, len(rows))} of {len(rows)} {group_by} groups in that "
+                            "order; the others are not listed, so the last one listed is not the smallest"}
     top = rows[0] if rows else None
     summary = (f"{_plural(k['n_projects'], 'current project')}{' (' + what + ')' if what else ''}"
                + (f" with an anticipated cost of Rs {k['anticipated_cost_cr']:,.0f} crore"
@@ -516,7 +520,8 @@ def get_project(viewer, key) -> ToolResult:
     d, row = _bundle(viewer, k)
     facts = _project_facts(viewer, d, row)
     progress, when = facts.get("progress_pct"), facts.get("anticipated_completion")
-    summary = (f"{_short(_name(d, row), 12)} ({k}) {_tier_words(facts.get('tier'), facts.get('slip_chance_2q_pct'))}"
+    pct = facts.get("slip_chance_within_2_quarters_pct")
+    summary = (f"{_short(_name(d, row), 12)} ({k}) {_tier_words(facts.get('tier'), pct)}"
                + (f"; progress {progress:g}%" if progress is not None else "")
                + (f", anticipated completion {when}" if when else "") + ".")
     return ToolResult(summary=summary, facts=facts, cards=[_project_card(d, row)],
@@ -578,7 +583,8 @@ def project_history(viewer, key) -> ToolResult:
         log = _chat_prediction_log(k)
         if len(log) > 1:
             facts["predictions"] = [_compact({"as_of": _month(r["asof"]), "tier": r["tier"],
-                                              "slip_chance_2q_pct": _pct(r["p_any_2q"])}) for r in log[-6:]]
+                                              "slip_chance_within_2_quarters_pct": _pct(r["p_any_2q"])})
+                                    for r in log[-6:]]
     if not pts:
         return ToolResult(summary=f"No report history for {_short(name, 12)} ({k}).", facts=_compact(facts),
                           sources=sources, keys=[k], found=False)
@@ -805,7 +811,9 @@ def _external_all(viewer, factor=None, state=None, limit=5) -> ToolResult:
     facts = {"as_of": _asof(), "factors": [{"factor": r["name"], "projects": r["n"],
                                             "capital_cr": _r(r["capitalCr"], 0), "critical": r["nCritical"],
                                             "high": r["nHigh"]} for r in rows],
-             "early_notice": {"projects": notice["n_projects"], "capital_cr": _r(notice["capital_exposed_cr"], 0)},
+             "early_notice": {"projects": notice["n_projects"], "capital_cr": _r(notice["capital_exposed_cr"], 0),
+                              "meaning": "an outside factor is flagged while the reports show no slip yet (or the "
+                                         "tier is Low or Medium): a warning, not a requirement"},
              "note": "Report remarks are free text only through 2023, so remark-based flags describe the situation up "
                      "to 2023; unknown is not clear."}
     cards = [{"type": "stats", "title": title, "groupBy": "factor", "rows": rows}]
@@ -899,7 +907,8 @@ def explain_prediction(viewer, key) -> ToolResult:
             "flagged": [{"dimension": r["dimension"], "label": labels.dimension_label(r["dimension"]),
                          "evidence": r["evidence"]} for r in flagged]}
     facts = _compact({
-        "key": k, "name": _short(name, 25), "tier": sc.get("tier"), "slip_chance_2q_pct": _pct(sc.get("p_any_2q")),
+        "key": k, "name": _short(name, 25), "tier": sc.get("tier"),
+        "slip_chance_within_2_quarters_pct": _pct(sc.get("p_any_2q")),
         "horizon_quarters": HORIZONS,
         "drivers": [{"input": labels.feature_label(x["feature"]), "value": _value(x["value"]),
                      "effect": labels.direction(x["contribution"])} for x in shap],
@@ -1016,7 +1025,10 @@ def agency_scorecard(viewer, agency=None, sort="capital", limit=8) -> ToolResult
                                                                     "high_open": r["nHigh"]}
                                                 for p, r in zip(chosen, rows)],
              "note": "Schedule overrun: how much longer than planned the agency's median project runs (0% is on "
-                     "time); cost overrun likewise; agencies with few projects are shrunk toward their sector."}
+                     "time); cost overrun likewise; agencies with few projects are shrunk toward their sector. "
+                     "recent_trend_pct: the median schedule overrun of projects sanctioned in the last 3 years "
+                     "minus that of older ones, in points; recent projects have had less time to slip, so a "
+                     "negative trend is partly that."}
     p = chosen[0]
     if agency:
         summary = f"{p['agency']}: {_plural(p['n_open'], 'open project')}" + "".join(
