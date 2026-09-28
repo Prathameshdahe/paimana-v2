@@ -7,10 +7,12 @@ One train run backtests every target (ml/backtest.py), refits logistic regressio
 label, saves them into the run folder and registers one entry per (model, target, horizon). Promotion: a challenger
 replaces the champion of its (target, horizon) only when both were scored on the same validation and flash folds of
 the same gold version, its within-cutoff PR-AUC (GAIN, the mean of each fold's own PR-AUC) is not lower on either
-block (validation, flash) and higher on at least one by NOISE_SDS seed standard deviations, and its validation ECE is
-at most the champion's + ECE_SLACK (rule). The gain is within-cutoff because a served score is only ever ranked
-against the other projects of the same as-of date: pooled PR-AUC over several folds also rewards a model whose score
-level follows each fold's base rate, which is calibration, not ranking (ECE guards that).
+block (validation, flash) and higher on at least one by NOISE_SDS seed standard deviations of that block (margins),
+and its validation ECE is at most the champion's + ECE_SLACK (rule). The gain is within-cutoff because a served score
+is only ever ranked against the other projects of the same as-of date: pooled PR-AUC over several folds also rewards a
+model whose score level follows each fold's base rate, which is calibration, not ranking (ECE guards that). The gate
+scores seed 0 only, so it is a check of the configuration a run serves, not an independent confirmation: the evidence
+for a change is the 3-seed paired comparison of ml/experiment.py.
 
 A new gold version (new data, new or changed features) or new folds (a changed window rule) make the champion's
 metrics incomparable. The run then also backtests the champion's own configuration (model type, feature list,
@@ -38,11 +40,14 @@ from ml import backtest  # noqa: E402
 REGISTRY = backtest.ROOT / "model" / "registry.json"
 ECE_SLACK = 0.02
 GAIN = "pr_auc_fold_mean"      # the promotion metric: each fold's PR-AUC, averaged over the block's folds
-# sd of pooled validation PR-AUC over 5 LightGBM seeds of the unchanged champion (research audit 2026-09-27 on
-# ML-20260927-174106's features and folds; seed 0 was the luckiest of the 5). A single-seed gain inside NOISE_SDS of
-# these is noise. Re-measure when the features or folds change a lot. (Measured on pooled PR-AUC; they set the GAIN
-# margin until the within-cutoff metric's own are measured.)
-SEED_SD = {"y_any_h2": 0.0038, "y_date_push_h2": 0.0025, "y_cost_rev_h2": 0.0022, "y_any_h4": 0.0011}
+# target -> block -> sd of the champion's within-cutoff PR-AUC (GAIN) over 5 LightGBM seeds, on each block's own
+# folds: python -m ml.experiment --seed-sd --champion-run ML-20260927-222602 (model/experiments/seed_sd.csv, the
+# champions of 2026-09-27 on gold 2676494d0207 and the disjoint windows). Per block, because a one-fold block (y_any_h4
+# flash) swings far more between seeds than six folds do (0.0047 against 0.0002 on validation). A gain inside NOISE_SDS
+# of these is noise; the harness's ship guard also asks for a bootstrap CI above 0. Re-measure when the features or
+# folds change a lot.
+SEED_SD = {"y_any_h2": {"val": 0.0012, "flash": 0.0067}, "y_date_push_h2": {"val": 0.0028, "flash": 0.0067},
+           "y_cost_rev_h2": {"val": 0.0034, "flash": 0.0053}, "y_any_h4": {"val": 0.0002, "flash": 0.0047}}
 NOISE_SDS = 2
 BLOCKS = {"val": ("pooled", "folds"), "flash": ("flash", "flash_folds")}    # block -> (pooled key, folds key)
 CANDIDATES = {"logreg": backtest.fit_logreg, "lightgbm": backtest.fit_lgbm}   # logistic is the first-run incumbent
@@ -98,16 +103,23 @@ def pr_auc_gains(new, old):
             if get(new, k) is not None and get(old, k) is not None}
 
 
+def margins(key):
+    """block -> the noise margin of target key: NOISE_SDS x that block's SEED_SD."""
+    return {b: NOISE_SDS * sd for b, sd in SEED_SD.get(key, {}).items()}
+
+
 def rule(gains, margin, ece_new, ece_old):
-    """The promotion rule on block -> within-cutoff PR-AUC gain: not lower on any block, at least margin on one, and
-    validation ECE at most ece_old + ECE_SLACK. Returns (ok, reason). Shared with the experiment harness
-    (ml/experiment.py)."""
+    """The promotion rule on block -> within-cutoff PR-AUC gain: not lower on any block, at least its block's margin
+    (margin: block -> margin, or one number for every block) on one, and validation ECE at most ece_old + ECE_SLACK.
+    Returns (ok, reason). Shared with the experiment harness (ml/experiment.py)."""
+    m = margin if isinstance(margin, dict) else {b: margin for b in gains}
     not_worse = all(g >= 0 for g in gains.values())
-    better = any(g >= margin for g in gains.values())
+    better = any(g >= m.get(b, 0.0) for b, g in gains.items())
     calibrated = ece_new <= ece_old + ECE_SLACK
-    why = ("within-cutoff PR-AUC gain " + ", ".join(f"{b} {g:+.4f}" for b, g in gains.items())
+    why = ("within-cutoff PR-AUC gain " + ", ".join(f"{b} {g:+.4f} (margin {m.get(b, 0.0):.4f})"
+                                                    for b, g in gains.items())
            + f" ({'not lower on any block' if not_worse else 'lower on a block'}, "
-           f"{'clears' if better else 'no block clears'} the noise margin {margin:.4f}); "
+           f"{'a block clears' if better else 'no block clears'} its noise margin); "
            f"ECE {ece_new:.4f} vs {ece_old:.4f} + {ECE_SLACK} ({'ok' if calibrated else 'too high'})")
     return not_worse and better and calibrated, why
 
@@ -127,7 +139,7 @@ def promote(reg, entry):
                "champion kept")
     else:
         old = cur["metrics"]["pooled"]
-        ok, why = rule(pr_auc_gains(entry, cur), NOISE_SDS * SEED_SD.get(key, 0.0), new["ece"], old["ece"])
+        ok, why = rule(pr_auc_gains(entry, cur), margins(key), new["ece"], old["ece"])
         why = (f"validation PR-AUC fold mean {new[GAIN]:.4f} vs champion {old[GAIN]:.4f} (pooled {new['pr_auc']:.4f} "
                f"vs {old['pr_auc']:.4f}); " + why)
     decision = {"at": entry["created_at"], "target": entry["target"], "horizon": entry["horizon"],

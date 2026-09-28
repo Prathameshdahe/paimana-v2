@@ -4,12 +4,13 @@ Paired champion-vs-challenger experiments (docs/MODEL_UPGRADES_2026-09.md).
 Run from repo root after the gold build:  python -m ml.experiment <candidate> [--seeds 0,1,2] [--targets y_any_h2]
                                                                      [--champion-run ML-20260927-222602]
                                           python -m ml.experiment --list | --table
+                                          python -m ml.experiment --seed-sd [--champion-run RUN]
                                           python -m ml.experiment --tune y_any_h2 [--trials 20] [--no-es]
                                           python -m ml.experiment g_intervals | g2_intervals_asym
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet,
          silver/observations.parquet (candidates that build features), model/registry.json (the champions)
-Outputs  model/experiments/<candidate>.csv (one row per target and block), tune_<target>[_trees].csv,
+Outputs  model/experiments/<candidate>.csv (one row per target and block), tune_<target>[_trees].csv, seed_sd.csv,
          temp/experiment_cache/ (champion predictions per gold version, target, cutoffs, columns, params and seed, and
          the code that makes them: ml/backtest.py and the LightGBM version; safe to delete)
 
@@ -27,7 +28,9 @@ a gain where the ranking got worse on 4 of 6 folds. A block's delta is the mean 
 fold_deltas column has each fold's. Its CI is a paired project bootstrap: BOOT resamples of the block's projects with
 replacement (a project is drawn with all its fold rows), both models' seed-mean fold-mean PR-AUC recomputed on each
 resample (pooled_ci_* the same for pooled PR-AUC). The decision is registry.rule, the promotion rule: gain >= 0 on
-both blocks, >= NOISE_SDS x SEED_SD on at least one, validation ECE at most the champion's + ECE_SLACK. The scores are
+both blocks, >= NOISE_SDS x SEED_SD of that block on at least one (registry.margins; --seed-sd measures the SDs:
+the champion's within-cutoff PR-AUC over SD_SEEDS seeds, per block, since a one-fold block is noisier than six),
+validation ECE at most the champion's + ECE_SLACK. The scores are
 raw: the cost revision's served Platt calibrator is left out here, the train run's registry gate compares the
 calibrated ones (Platt is monotone within a cutoff, so the within-cutoff PR-AUC is the same up to ties).
 
@@ -63,6 +66,7 @@ PK = bt.PK
 OUT = bt.ROOT / "model" / "experiments"
 CACHE = bt.ROOT / "temp" / "experiment_cache"
 SEEDS = (0, 1, 2)
+SD_SEEDS = (0, 1, 2, 3, 4)      # seed_sd: the seeds the noise margins are measured over
 BOOT = 2000
 CHUNK = 100                     # bootstrap resamples per vectorised batch
 BLOCKS = {"val": "validation", "flash": "flash"}     # registry block name -> backtest.windows key
@@ -108,12 +112,12 @@ def paired_bootstrap(y, groups, champ, chall, n_boot=BOOT, seed=0, folds=None):
     return np.concatenate(out)
 
 
-def robust(ok, blocks, margin):
-    """The shipping guard on top of the promotion rule (ok): some block that clears the margin also has its paired
+def robust(ok, blocks):
+    """The shipping guard on top of the promotion rule (ok): some block that clears its margin also has its paired
     bootstrap CI above 0. With a dozen candidates on four targets, and blocks as small as one fold (y_any_h4 flash,
-    335 rows), a pass inside the CI is too often luck. blocks: dicts with delta_fold_pr_auc (the within-cutoff gain)
-    and ci_lo (its CI)."""
-    return bool(ok and any(b["delta_fold_pr_auc"] >= margin and b["ci_lo"] > 0 for b in blocks))
+    335 rows), a pass inside the CI is too often luck. blocks: dicts with delta_fold_pr_auc (the within-cutoff gain),
+    margin (the block's noise margin) and ci_lo (the gain's CI)."""
+    return bool(ok and any(b["delta_fold_pr_auc"] >= b["margin"] and b["ci_lo"] > 0 for b in blocks))
 
 
 def ci(deltas, level=0.95):
@@ -569,6 +573,57 @@ def frames_equal(a, b):
         return False
 
 
+def block_cutoffs(cov, d, y, h):
+    """(block -> cutoffs, the union of them) of backtest.windows for target (y, h)."""
+    w = bt.windows(cov, d, y, h)
+    blocks = {b: pd.to_datetime(w[k]) for b, k in BLOCKS.items() if w[k]}
+    return blocks, pd.DatetimeIndex(sorted(set().union(*[set(c) for c in blocks.values()])))
+
+
+def champion_predictions(man, key, d, y, cutoffs, cols, cats, ps, use_cache=True):
+    """The champion configuration's rolling-origin predictions at cutoffs (params ps, seed included), cached."""
+    tag = json.dumps([man["gold_version"], key, [str(c.date()) for c in cutoffs], cols, cats, ps], sort_keys=True)
+    make = lambda: bt.backtest(d, y, cutoffs, {"m": (lgbm(ps), cols, cats)})[0]
+    return cached(tag, make) if use_cache else make()
+
+
+def seed_sd(seeds=SD_SEEDS, champion_run=None, out=OUT, targets=None):
+    """The seed noise the promotion margin is made of: for each target's champion (champion_run: that run's entries),
+    the SD over seeds (LightGBM random_state) of its within-cutoff PR-AUC on each block (registry.SEED_SD), and of its
+    pooled PR-AUC for reference. targets: target keys (default all). Writes model/experiments/seed_sd.csv and
+    returns the table."""
+    t0 = time.time()
+    feats, labels, cov, man = bt.load()
+    reg = registry.load()
+    rows = []
+    for y, h in bt.TARGETS:
+        key = f"{y}_h{h}"
+        if targets and key not in targets:
+            continue
+        cols, cats, params, entry_id = champion(reg, key, man, champion_run)
+        d = bt.frame(feats, labels[h], y, h)
+        blocks, cutoffs = block_cutoffs(cov, d, y, h)
+        ms = {b: [] for b in blocks}
+        for s in seeds:
+            p = champion_predictions(man, key, d, y, cutoffs, cols, cats, {**params, "random_state": s})
+            for b, cs in blocks.items():
+                ms[b].append(block_metrics(p[p.cutoff.isin(cs)], h))
+        for b, m in ms.items():
+            fold, pooled = [x[registry.GAIN] for x in m], [x.pr_auc for x in m]
+            rows.append({"target": key, "block": b, "champion_entry": entry_id, "n_seeds": len(seeds),
+                         "n_folds": len(blocks[b]), "fold_pr_auc_mean": float(np.mean(fold)),
+                         "fold_pr_auc_sd": float(np.std(fold, ddof=1)), "pr_auc_sd": float(np.std(pooled, ddof=1)),
+                         "fold_pr_auc_by_seed": "/".join(f"{v:.4f}" for v in fold),
+                         "margin": registry.NOISE_SDS * float(np.std(fold, ddof=1))})
+        print(f"  {key}: " + "  ".join(f"{r['block']} sd {r['fold_pr_auc_sd']:.4f} (pooled {r['pr_auc_sd']:.4f})"
+                                       for r in rows if r["target"] == key) + f"  {time.time() - t0:.0f}s", flush=True)
+    t = pd.DataFrame(rows)
+    out.mkdir(parents=True, exist_ok=True)
+    t.to_csv(out / "seed_sd.csv", index=False)
+    print(f"seed_sd: {out / 'seed_sd.csv'}, {time.time() - t0:.0f}s")
+    return t
+
+
 def check_point_in_time(cand, feats, labels, man, at=CHECK_AT):
     """Extra columns at each cutoff built from the full data vs from data cut at it; raises on a difference."""
     if cand.extra is None:
@@ -623,16 +678,12 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
         ccats = cats + [c for c in cand.cats if c not in cats]
         d, dc = bt.frame(feats, labels[h], y, h), bt.frame(cfeats, labels[h], y, h)
         assert d[PK].equals(dc[PK])
-        w = bt.windows(cov, d, y, h)
-        blocks = {b: pd.to_datetime(w[k]) for b, k in BLOCKS.items() if w[k]}
-        cutoffs = pd.DatetimeIndex(sorted(set().union(*[set(c) for c in blocks.values()])))
+        blocks, cutoffs = block_cutoffs(cov, d, y, h)
+        margins = registry.margins(key)
         champ, chall = [], []
         for s in seeds:
             ps = {**params, "random_state": s}
-            tag = json.dumps([man["gold_version"], key, [str(c.date()) for c in cutoffs], cols, cats, ps],
-                             sort_keys=True)
-            make = lambda: bt.backtest(d, y, cutoffs, {"m": (lgbm(ps), cols, cats)})[0]
-            champ.append(cached(tag, make) if use_cache else make())
+            champ.append(champion_predictions(man, key, d, y, cutoffs, cols, cats, ps, use_cache))
             fit = cand.fit(s, ctx, y, h, ps) if cand.fit else lgbm(ps)
             chall.append(bt.backtest(dc, y, cutoffs, {"m": (fit, ccols, ccats)})[0])
             assert (champ[-1][["cutoff", "project_key"]].values == chall[-1][["cutoff", "project_key"]].values).all()
@@ -644,13 +695,14 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
             mean = lambda ms, k: float(np.mean([m[k] for m in ms]))
             sd = lambda ms, k: float(np.std([m[k] for m in ms], ddof=1)) if len(seeds) > 1 else np.nan
             deltas = {k: [x[k] - z[k] for x, z in zip(mc, ma)] for k in (registry.GAIN, "pr_auc")}
-            y, g, f = a[0].y.to_numpy(), a[0].project_key.to_numpy(), a[0].cutoff.to_numpy()
+            yb, gb, fb = a[0].y.to_numpy(), a[0].project_key.to_numpy(), a[0].cutoff.to_numpy()
             pa, pc = [p.p.to_numpy() for p in a], [p.p.to_numpy() for p in c]
-            boot = paired_bootstrap(y, g, pa, pc, n_boot=n_boot, folds=f)
-            (lo, hi), (plo, phi) = ci(boot), ci(paired_bootstrap(y, g, pa, pc, n_boot=n_boot))
+            boot = paired_bootstrap(yb, gb, pa, pc, n_boot=n_boot, folds=fb)
+            (lo, hi), (plo, phi) = ci(boot), ci(paired_bootstrap(yb, gb, pa, pc, n_boot=n_boot))
             by_fold = (pd.concat([fold_pr_auc(p) for p in c], axis=1).mean(axis=1)
                        - pd.concat([fold_pr_auc(p) for p in a], axis=1).mean(axis=1))
-            res[b] = {"candidate": name, "target": key, "block": b, "champion_entry": entry_id,
+            res[b] = {"candidate": name, "target": key, "block": b, "margin": margins.get(b, 0.0),
+                      "champion_entry": entry_id,
                       "n_rows": len(a[0]), "n_projects": a[0].project_key.nunique(), "n_folds": len(cs),
                       "seeds": len(seeds),
                       "champion_fold_pr_auc": mean(ma, registry.GAIN),
@@ -667,12 +719,11 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
                       "champion_pooled_seed_sd": sd(ma, "pr_auc"),
                       **{f"{who}_{k}": mean(ms, k) for k in ["ece", "precision_50", "nyd_pr_auc", "brier", "roc_auc"]
                          for who, ms in (("champion", ma), ("challenger", mc))}}
-        margin = registry.NOISE_SDS * registry.SEED_SD.get(key, 0.0)
         gains = {b: r["delta_fold_pr_auc"] for b, r in res.items()}
-        ok, why = registry.rule(gains, margin, res["val"]["challenger_ece"], res["val"]["champion_ece"])
-        keep = robust(ok, res.values(), margin)
+        ok, why = registry.rule(gains, margins, res["val"]["challenger_ece"], res["val"]["champion_ece"])
+        keep = robust(ok, res.values())
         for r in res.values():
-            rows.append({**r, "margin": margin, "decision": "pass" if ok else "fail", "reason": why,
+            rows.append({**r, "decision": "pass" if ok else "fail", "reason": why,
                          "ship": "keep" if keep else "reject", "n_features": len(ccols),
                          "runtime_s": round(time.time() - t1, 1)})
         print(f"  {key}: {'PASS' if ok else 'fail'}{' (robust)' if keep else ''}  " + "  ".join(
@@ -703,7 +754,7 @@ def summary_table(out=OUT, names=None):
             b = g.set_index("block")
             v = b.loc["val"]
             rows.append((key, path.stem, v, b.loc["flash"] if "flash" in b.index else None,
-                         robust(v.decision == "pass", [r for _, r in b.iterrows()], v.margin)))
+                         robust(v.decision == "pass", [r for _, r in b.iterrows()])))
     fmt = lambda r: f"{r.delta_fold_pr_auc:+.4f} [{r.ci_lo:+.4f}, {r.ci_hi:+.4f}]"
     arrow = lambda a, b, n=4: f"{a:.{n}f} -> {b:.{n}f}"
     lines = []
@@ -711,7 +762,8 @@ def summary_table(out=OUT, names=None):
         mine = [r for r in rows if r[0] == key]
         if not mine:
             continue
-        lines += [f"**{key}** (noise margin {mine[0][2].margin:.4f})", "",
+        fm = f"{mine[0][3].margin:.4f}" if mine[0][3] is not None else "-"
+        lines += [f"**{key}** (noise margin: validation {mine[0][2].margin:.4f}, flash {fm})", "",
                   "| Candidate | Val PR-AUC | Flash PR-AUC | Flash P@50 | Val ECE | Val delta [95% CI] | "
                   "Flash delta [95% CI] | Val folds up | Pooled delta val / flash | Rule | Ship |",
                   "|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -740,6 +792,7 @@ def main(argv=None):
                     help="compare against this run's LightGBM entries instead of the current champions")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--table", action="store_true")
+    ap.add_argument("--seed-sd", action="store_true", help="measure the champions' seed SD per block")
     ap.add_argument("--tune", metavar="TARGET", help="random search on the validation block, e.g. y_any_h2")
     ap.add_argument("--trials", type=int, default=24)
     ap.add_argument("--no-es", action="store_true", help="tune: search the tree count instead of early stopping")
@@ -752,6 +805,8 @@ def main(argv=None):
         print("\n".join(f"{n:24s} {c.about}" for n, c in CANDIDATES.items()))
     elif a.table:
         print(summary_table())
+    elif a.seed_sd:
+        seed_sd(champion_run=a.champion_run, targets=a.targets.split(",") if a.targets else None)
     elif a.candidate:
         run(a.candidate, seeds=tuple(int(s) for s in a.seeds.split(",")),
             targets=a.targets.split(",") if a.targets else None, n_boot=a.boot, use_cache=not a.no_cache,

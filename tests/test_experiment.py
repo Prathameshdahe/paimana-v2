@@ -56,7 +56,11 @@ def test_rule_needs_both_blocks_a_margin_and_calibration():
     assert not registry.rule({"val": 0.005, "flash": 0.009}, m, 0.08, 0.08)[0]       # inside the noise margin
     assert not registry.rule({"val": 0.02, "flash": 0.02}, m, 0.101, 0.08)[0]        # ECE > champion + 0.02
     ok, why = registry.rule({"val": 0.02, "flash": 0.0}, m, 0.09, 0.08)
-    assert ok and "val +0.0200" in why and "clears" in why
+    assert ok and "val +0.0200 (margin 0.0100)" in why and "a block clears" in why
+    per_block = {"val": 0.004, "flash": 0.012}                                    # a one-fold flash block is noisier
+    assert registry.rule({"val": 0.005, "flash": 0.0}, per_block, 0.08, 0.08)[0]
+    assert not registry.rule({"val": 0.0, "flash": 0.010}, per_block, 0.08, 0.08)[0]
+    assert registry.margins("y_any_h4").keys() == {"val", "flash"}
 
 
 PERIODS = pd.date_range("2021-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
@@ -100,6 +104,7 @@ def test_harness_null_candidate_has_zero_deltas_and_fails(harness):
     t = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)
     assert set(t.block) == {"val", "flash"} and (t.delta_pr_auc == 0).all() and (t.ci_lo == 0).all()
     assert (t.delta_fold_pr_auc == 0).all() and (t.pooled_ci_lo == 0).all() and (t.folds_up == 0).all()
+    assert t.set_index("block").margin.to_dict() == registry.margins("y_any_h2")        # each block its own
     assert (t.decision == "fail").all() and (tmp / "null.csv").exists()
     assert t.set_index("block").loc["flash", "n_folds"] == 3                   # 2025-07 .. 2026-01
     again = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)   # from the cache
@@ -124,10 +129,11 @@ def test_harness_refuses_a_column_that_reads_the_future(harness):
 
 
 def test_ship_guard_needs_a_ci_above_zero_on_a_block_that_clears_the_margin():
-    b = lambda d, lo: {"delta_fold_pr_auc": d, "ci_lo": lo}
-    assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)], 0.01)
-    assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)], 0.01)   # the CI above 0 is under margin
-    assert not experiment.robust(False, [b(0.02, 0.01)], 0.01)                     # the rule failed
+    b = lambda d, lo, m=0.01: {"delta_fold_pr_auc": d, "ci_lo": lo, "margin": m}
+    assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)])
+    assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)])        # the CI above 0 is under margin
+    assert not experiment.robust(True, [b(0.02, 0.001, 0.03), b(0.0, -0.01)])      # under its own block's margin
+    assert not experiment.robust(False, [b(0.02, 0.01)])                           # the rule failed
 
 
 def test_harness_can_compare_against_an_earlier_run_and_names_the_champion(harness):
@@ -192,3 +198,12 @@ def test_fold_mean_bootstrap_is_the_within_cutoff_pr_auc_and_sees_through_a_leve
     assert hi < 0
     same = experiment.paired_bootstrap(y, groups, [champ], [champ], n_boot=50, folds=folds)
     assert np.allclose(same, 0)
+
+
+def test_seed_sd_measures_each_block_of_the_champion(harness):
+    _, tmp = harness
+    t = experiment.seed_sd(seeds=(0, 1, 2), out=tmp, targets=["y_any_h2"]).set_index(["target", "block"])
+    assert set(t.index.get_level_values("block")) == {"val", "flash"} and (tmp / "seed_sd.csv").exists()
+    r = t.loc[("y_any_h2", "flash")]
+    assert r.n_folds == 3 and r.n_seeds == 3 and r.fold_pr_auc_sd > 0 and r.margin == 2 * r.fold_pr_auc_sd
+    assert len(r.fold_pr_auc_by_seed.split("/")) == 3

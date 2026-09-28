@@ -41,14 +41,17 @@ def test_promotion_rule():
 
 
 def test_promotion_needs_both_blocks_and_a_noise_margin():
-    margin = registry.NOISE_SDS * registry.SEED_SD["y_any_h2"]
+    margin, flash_margin = registry.margins("y_any_h2")["val"], registry.margins("y_any_h2")["flash"]
     reg = {"runs": [], "champions": {}, "decisions": []}
     assert add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75)) == "promoted"
     assert add(reg, entry("logreg", 0.70 + margin / 2, 0.05, flash=0.75, run="R2")) == "rejected"   # inside noise
     assert add(reg, entry("logreg", 0.75, 0.05, flash=0.749, run="R3")) == "rejected"   # worse on the flash block
-    assert add(reg, entry("logreg", 0.70, 0.05, flash=0.75 + margin, run="R4")) == "promoted"   # flash gain alone
+    assert add(reg, entry("logreg", 0.70, 0.05, flash=0.75 + flash_margin * 0.9, run="R4x")) == "rejected"
+    assert add(reg, entry("logreg", 0.70, 0.05, flash=0.75 + flash_margin + 1e-9, run="R4")) == "promoted"  # flash
     assert reg["champions"]["y_any_h2"]["entry_id"] == "R4/logreg/y_any_h2"
     assert "flash -0.0010" in reg["decisions"][2]["reason"]
+    assert f"flash +{flash_margin:.4f} (margin {flash_margin:.4f})" in reg["decisions"][-1]["reason"]
+    assert "a block clears" in reg["decisions"][-1]["reason"]
     # a champion scored without the flash block has other folds: only its own model type may take over
     assert add(reg, entry("lightgbm", 0.99, 0.01, run="R5")) == "rejected"
 
@@ -78,9 +81,9 @@ def test_a_new_gold_version_needs_the_champion_configuration_rescored():
     old = dict(features=["a", "b"], cats=[], params=P, gold="g2", flash=0.70)
     assert add(reg, entry("lightgbm_incumbent", 0.60, 0.05, run="R4", **old)) == "promoted"   # re-scored champion
     assert "re-scored" in reg["decisions"][-1]["reason"]
-    margin = registry.NOISE_SDS * registry.SEED_SD["y_any_h2"]
+    margin = registry.margins("y_any_h2")["val"]
     assert add(reg, entry("lightgbm", 0.60 + margin / 2, 0.05, run="R5", **{**more, "flash": 0.70})) == "rejected"
-    assert add(reg, entry("lightgbm", 0.60 + margin, 0.05, run="R6", **{**more, "flash": 0.70})) == "promoted"
+    assert add(reg, entry("lightgbm", 0.60 + margin + 1e-9, 0.05, run="R6", **{**more, "flash": 0.70})) == "promoted"
 
 
 def test_incumbents_only_for_a_champion_of_another_gold_and_configuration():
@@ -122,7 +125,7 @@ def test_register_scores_the_incumbent_first_and_gates_the_new_configuration(tmp
     reg = {"runs": [], "champions": {}, "decisions": []}
     add(reg, entry("lightgbm", 0.70, 0.05, flash=0.75, features=["a", "b"], cats=[], params=P))
     folds = [{"cutoff": c} for c in ("2024-01-01", "2024-04-01")]
-    margin = registry.NOISE_SDS * registry.SEED_SD["y_any_h2"]
+    margin = min(registry.margins("y_any_h2").values())
     metrics = {}
     for name, v in {"lightgbm_incumbent": 0.60, "lightgbm": 0.60 + margin / 2, "logreg": 0.50}.items():
         metrics["y_any_h2", "val", name] = {"pooled": {"pr_auc": v, registry.GAIN: v, "ece": 0.05}, "folds": folds}
