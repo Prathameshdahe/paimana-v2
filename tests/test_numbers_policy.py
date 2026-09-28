@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend import brief, db, labels, serving  # noqa: E402
+from backend import brief, db, labels, serving, store  # noqa: E402
 from backend.access import Viewer  # noqa: E402
 from backend.live import scheduler  # noqa: E402
 from backend.main import app  # noqa: E402
@@ -45,7 +45,8 @@ HIDDEN_FACTS = {"slip_chance_within_2_quarters_pct", "date_push_chance_within_2_
 # fact, the anticipated against the original cost)
 # a model number written into text: the checklist's model rows, alerts, agency statistics, intervals, scores
 TEXT_LEAK = re.compile(r"\bP = \d|High-tier cut|P\(date push|\bCI [+-]?\d|pts date-push risk|agency timelines run"
-                       r"|slip rate \d|\bscore \d\.\d|median slip|nearest analogues")
+                       r"|slip rate \d|\bscore \d\.\d|median slip|nearest analogues"
+                       r"|(?:probability|chance) of (?:approximately )?\d|\bSHAP\b|risk exposure of")
 CHANCES = {"very likely", "likely", "possible", "unlikely", None}
 SLIPS = {"under 6 months", "6 to 12 months", "1 to 2 years", "over 2 years", None}
 OFFICIALS = ("agency", "ministry", "ipmd")
@@ -258,8 +259,7 @@ def test_no_hidden_number_reaches_a_viewer_without_numbers(client, world, role):
     assert must <= set(got), must - set(got)
     for path, body in got.items():
         assert not leaks(body), (role, path, leaks(body)[:5])
-        if path != "/api/dispatch":   # memo text is the worker LLM's (llm/worker.py gives it words, not numbers)
-            assert not text_leaks(body), (role, path, text_leaks(body)[:3])
+        assert not text_leaks(body), (role, path, text_leaks(body)[:3])
     detail = got[f"/api/projects/{k}"]
     o = detail["scores"]["outlook"]
     assert o["horizon"] == "next two quarters" and o["delay"] in CHANCES and o["slip"] in SLIPS
@@ -375,6 +375,53 @@ def test_map_rows_and_top_reason(client, world):
     rows = client.get("/api/projects", headers=ipmd, params={"size": 50}).json()["items"]
     assert all(r["topReason"] == words[r["key"]]["top_reason"] for r in rows)
     assert client.get("/api/projects/map", params={"tier": "Severe"}).status_code == 422
+
+
+MEMO = ("Project: VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT (PRJ-000698)\nSummary: The project has a high slip "
+        "probability of 0.7636 and significant risk exposure of Cr1454.89. The top SHAP drivers indicate that the "
+        "agency and physical progress are contributing to the risk.\nBottlenecks: ['agency', 'physical_progress']\n"
+        "Recommended action: Address the land acquisition delay (66 MW, KM 206.00 to KM 242.00).")
+
+
+def test_memo_in_words():
+    """The worker's stored memos (database/dispatch_drafts.json, written before llm/worker.py gave the analyst words)
+    quote the model's probability, a risk exposure (probability times cost) and 'SHAP': serving.plain_memo."""
+    p = serving.plain_memo
+    assert p(MEMO) == (
+        "Project: VISHNUGAD PIPALKOTI HYDRO ELECTRIC PROJECT (PRJ-000698)\nSummary: The project has a high slip "
+        "probability (rated very likely) and significant risk exposure. The top drivers indicate that the agency and "
+        "physical progress are contributing to the risk.\nBottlenecks: ['agency', 'physical_progress']\n"
+        "Recommended action: Address the land acquisition delay (66 MW, KM 206.00 to KM 242.00).")
+    assert p("a high slip probability of 69.47% and significant risk exposure of approximately 74.87 Cr. Next") == (
+        "a high slip probability (rated likely) and significant risk exposure. Next")
+    assert p("a high slip probability of 0.6816608236574031 with no risk exposure in currency terms") == (
+        "a high slip probability (rated likely) with no risk exposure in currency terms")
+    assert p("risk exposure of approximately 517 million Cr. The SHAP analysis identifies drivers") == (
+        "risk exposure. The analysis identifies drivers")
+    assert p("risk exposure of Cr 97.0987. To minimize slip probability, act.") == (
+        "risk exposure. To minimize slip probability, act.")
+    assert p(None) is None and p("") == ""
+
+
+def test_dispatch_memos_in_words(client, world, tmp_path, monkeypatch):
+    ipmd = client.get("/api/dispatch", headers=headers(client, world, "ipmd")).json()
+    dev = client.get("/api/dispatch", headers=headers(client, world, "developer")).json()
+    assert len(ipmd) == len(dev) and any("probability of 0." in d["draftMemo"] for d in dev)   # the developer's as stored
+    assert not text_leaks(ipmd)
+    k = world["key"]["ministry"]
+    drafts = [{"id": "m", "project_id": k, "project_name": "X", "draft_memo": MEMO,
+               "recommended_recipient_role": "ministry_official", "status": "pending",
+               "created_at": "2026-09-21T21:29:01+00:00",
+               "evidence": [{"tag": "news", "source_url": None, "note": "a slip probability of 0.91 (SHAP)"}]}]
+    path = tmp_path / "drafts.json"
+    path.write_text(json.dumps(drafts), encoding="utf-8")
+    monkeypatch.setattr(store, "DISPATCH_DRAFTS_PATH", str(path))
+    h = headers(client, world, "ministry")
+    got = client.get("/api/dispatch", headers=h).json()
+    assert len(got) == 1 and "(rated very likely)" in got[0]["draftMemo"] and not text_leaks(got)
+    decided = client.post("/api/approvals", headers=h, json={"draftId": "m", "decision": "approved"})
+    assert decided.status_code == 200 and decided.json()["status"] == "approved" and not text_leaks(decided.json())
+    assert json.loads(path.read_text(encoding="utf-8"))[0]["draft_memo"] == MEMO   # stored as written
 
 
 def test_alert_stream_sends_words(fresh_db, monkeypatch):

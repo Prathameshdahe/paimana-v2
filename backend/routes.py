@@ -621,7 +621,10 @@ def _addressed(v: Viewer, d: dict) -> bool:
 
 @router.get("/dispatch", response_model=list[DispatchDraft])
 def get_dispatch(v: Viewer = Depends(need("approvals"))):
-    return [d for d in store.load_dispatch_drafts() if _addressed(v, d)]
+    """The memos addressed to the viewer; without `numbers` in words (serving.plain_draft: memos stored before the
+    worker's analyst read words quote the model's probability)."""
+    out = [d for d in store.load_dispatch_drafts() if _addressed(v, d)]
+    return out if v.can("numbers") else [serving.plain_draft(d) for d in out]
 
 
 @router.post("/approvals", response_model=DispatchDraft)
@@ -635,7 +638,7 @@ def post_approval(body: ApprovalRequest, v: Viewer = Depends(need("approvals")))
         raise HTTPException(status_code=403, detail=f"this memo is addressed to {draft['recommended_recipient_role']}")
     updated = store.update_dispatch_draft(body.draft_id, body.decision)
     db.audit(role, f"dispatch.{body.decision}", body.draft_id, actor=v.actor)
-    return updated
+    return updated if v.can("numbers") else serving.plain_draft(updated)
 
 
 @router.post("/worker-runs/trigger", response_model=TriggerResult)

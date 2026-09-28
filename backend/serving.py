@@ -717,6 +717,11 @@ NO_EXTRA_RX = re.compile(rf"no measurable extra delay \({_N} months? over the ne
 _MO, _PTS = (rf"({_N}) months? over the next year \(CI {_N} to {_N}\)",
              rf"({_N}) pts date-push risk \(CI {_N} to {_N}\)")
 EXTRA_RX = re.compile(rf"(?:{_MO}(?: and {_PTS})?|{_PTS}), measured on (\d+) projects")
+_ABOUT = r"(?:approximately |about |around )?"   # the worker LLM's memos (plain_memo)
+MEMO_P_RX = re.compile(rf"\b(probability|chance|likelihood) of {_ABOUT}(\d*\.?\d+)(\s?%)?")
+MEMO_EXPOSURE_RX = re.compile(rf"\brisk exposure of {_ABOUT}(?:Rs\.?\s?|INR\s?|Cr\.?\s?)?\d[\d,]*(?:\.\d+)?"
+                              r"(?:\s?(?:million|lakh|crore))?(?:\s?Cr\b)?")
+MEMO_SHAP_RX = re.compile(r"\s?\(SHAP\)|\bSHAP\b\s*")
 
 
 def _finite(v) -> bool:
@@ -962,6 +967,28 @@ def plain_signal(s: dict) -> dict:
     """A news signal (or a feed item's linked project) without the linker's match score."""
     return {**s, "link_score": None, **({"projects": [plain_signal(p) for p in s["projects"]]}
                                         if "projects" in s else {})}
+
+
+def _memo_chance(m: re.Match) -> str:
+    v = float(m[2])
+    return f"{m[1]} (rated {chance_word(v / 100 if m[3] or v > 1 else v)})"
+
+
+def plain_memo(text: str | None) -> str | None:
+    """A worker memo (or its evidence note) without the model's numbers: memos stored before llm/worker.py gave the
+    analyst words (database/dispatch_drafts.json) quote the probability ('slip probability of 0.7636', '69.47%'),
+    a risk exposure (that probability times the cost) and 'SHAP'. The probability becomes the outlook's chance word,
+    the exposure figure and the word SHAP go; report facts (names, MW, km, costs elsewhere) stay."""
+    if not text:
+        return text
+    text = MEMO_P_RX.sub(_memo_chance, text)
+    return MEMO_SHAP_RX.sub("", MEMO_EXPOSURE_RX.sub("risk exposure", text))
+
+
+def plain_draft(d: dict) -> dict:
+    """A dispatch draft (schemas.DispatchDraft) with its memo and evidence notes in words (plain_memo)."""
+    return {**d, "draft_memo": plain_memo(d.get("draft_memo")),
+            "evidence": [{**e, "note": plain_memo(e.get("note"))} for e in d.get("evidence") or []]}
 
 
 # ---------------------------------------------------------------- research
