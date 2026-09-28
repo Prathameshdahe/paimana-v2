@@ -5,6 +5,7 @@ import dataclasses
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -221,6 +222,37 @@ def test_a_weak_route_asks_the_planner_and_falls_back_on_a_bad_plan(monkeypatch)
     ev = run(IPMD, "status of nagpur")
     assert tool_calls(ev) == [("search_knowledge", {"q": "status of nagpur"}),
                               ("search_projects", {"q": "nagpur", "limit": 5})]
+
+
+def test_a_weak_route_waits_briefly_for_the_planner_and_a_hang_up_asks_nothing(monkeypatch):
+    """The planner holds up the first card, so it waits only PLAN_GATE_WAIT_S for a busy LLM, then the fallback's
+    calls run (the writer still waits its own GATE_WAIT_S); a client that hangs up while the gate is awaited gets no
+    planner call once the gate is free."""
+    fake = FakeLLM(monkeypatch, answers=["x"])
+    monkeypatch.setattr(agent, "PLAN_GATE_WAIT_S", 0.1)
+    monkeypatch.setattr(agent, "GATE_WAIT_S", 0.3)
+    assert client.LLM_GATE.acquire(timeout=1)  # another answer or a background job is generating
+    try:
+        t0 = time.monotonic()
+        ev = run(PUBLIC, "Tell me something interesting")
+        took = time.monotonic() - t0
+    finally:
+        client.LLM_GATE.release()
+    assert fake.chats == [] and [n for n, _ in tool_calls(ev)] == ["search_knowledge"]
+    assert done(ev)["llm"] == "busy" and took < 2.0
+
+    monkeypatch.setattr(agent, "PLAN_GATE_WAIT_S", 5.0)
+    cancel = threading.Event()
+    assert client.LLM_GATE.acquire(timeout=1)
+
+    def hang_up_then_free():
+        cancel.set()
+        time.sleep(0.2)
+        client.LLM_GATE.release()
+    threading.Timer(0.2, hang_up_then_free).start()
+    ev = run(PUBLIC, "Tell me something interesting", cancel=cancel)
+    assert fake.chats == [] and "done" not in names(ev) and "tool" not in names(ev)
+    assert not client.chat_active()
 
 
 def test_the_second_round_adds_per_project_detail(monkeypatch):

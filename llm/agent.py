@@ -32,8 +32,10 @@ Steps:
      CHAT_WRITER=0 gives the deterministic answer: the tools' own summaries with their source numbers (validated
      by construction; llm says why).
 The LLM is one call at a time: the answer holds client.gate (chat=True, so background jobs pause) from its first
-LLM call to the end, waiting at most GATE_WAIT_S, else cards + the deterministic answer with llm 'busy'. The
-circuit breaker is the client's: down_recently() skips the LLM ('unavailable'), and a refused connection marks it
+LLM call to the end. The writer waits at most GATE_WAIT_S for it, else cards + the deterministic answer with llm
+'busy'; the planner only PLAN_GATE_WAIT_S (it holds up the first card), else the router's calls and the fallback's
+run and the writer may still wait its own GATE_WAIT_S. A client that hangs up while the gate was awaited is caught
+before the LLM is asked. The circuit breaker is the client's: down_recently() skips the LLM ('unavailable'), and a refused connection marks it
 down. Nothing here logs the question text.
 """
 from __future__ import annotations
@@ -53,7 +55,8 @@ from llm import client, router, tools
 
 log = logging.getLogger(__name__)
 
-GATE_WAIT_S = 20.0
+GATE_WAIT_S = 20.0          # the writer's wait for the LLM
+PLAN_GATE_WAIT_S = 2.0      # the planner's: no card is sent while it waits
 PLAN_TOKENS = 160
 WRITER_TOKENS = 260
 MAX_CALLS, MAX_ROUND2 = 4, 3
@@ -135,16 +138,18 @@ class _LLM:
     def usable(self) -> bool:
         return WRITER and self.state in (None, "ok") and not client.down_recently()
 
-    def acquire(self) -> bool:
+    def acquire(self, wait_s: float | None = None) -> bool:
+        """Hold the gate for the rest of the answer, waiting at most wait_s (GATE_WAIT_S by default); after a
+        planner found it busy the writer may wait again."""
         if self.state == "ok":
             return True
-        if self.state is not None:
+        if self.state == "unavailable":
             return False
         if client.down_recently():
             self.state = "unavailable"
             return False
         gate = ExitStack()
-        ok = gate.enter_context(client.gate(GATE_WAIT_S, chat=True))
+        ok = gate.enter_context(client.gate(GATE_WAIT_S if wait_s is None else wait_s, chat=True))
         if not ok:
             gate.close()                 # stop counting as an active chat at once
             self.state = "busy"
@@ -465,7 +470,8 @@ def _answer(viewer, messages, project_key, question, public, llm: _LLM, t0, canc
     if route.confidence < router.CONFIDENT:
         if llm.usable() and WORDY.search(question):  # '?' or 'a' is no question to plan for
             yield event("status", stage="planning", detail="Choosing what to look up")
-            if llm.acquire():
+            if llm.acquire(PLAN_GATE_WAIT_S):
+                _check_cancel(cancel)  # the client may have gone while the gate was awaited
                 raw = _ask(llm, _planner_messages(viewer, messages, project_key), PLAN_TOKENS)
                 _check_cancel(cancel)
                 planned_calls = _plan_calls(viewer, raw or "", MAX_CALLS)
@@ -499,6 +505,7 @@ def _answer(viewer, messages, project_key, question, public, llm: _LLM, t0, canc
         yield event("token", text=fallback)
         yield done(fallback, True, [], llm.state)
         return
+    _check_cancel(cancel)
     given = fit(blocks)
     reasons: list[str] = []
     for attempt in range(2):

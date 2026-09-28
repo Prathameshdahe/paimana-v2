@@ -132,12 +132,14 @@ Public outputs are built from `serving.public_project`, `public_page`, `public_e
 - **One LLM call at a time.** The answer holds `client.gate(chat=True)` from its first LLM call to its end;
   background jobs that take the gate (the research agent) and the search index's embedding refresh pause while a
   chat is active. The project brief and the worker cell do not take the gate yet, so one of them can still
-  generate next to an answer. The gate is waited for at most 20 s (`busy`). A refused connection trips the
-  shared circuit breaker (`unavailable`, no waiting for 30 s); a slow reply does not.
+  generate next to an answer. The writer waits for the gate at most 20 s (`busy`); the planner, which holds up
+  the first card, only 2 s, after which the router's and the fallback's calls run instead. A refused connection
+  trips the shared circuit breaker (`unavailable`, no waiting for 30 s); a slow reply does not.
 - **Rate limits** per client IP and role: the public 6 a minute and 40 an hour, officials 20 a minute
   (`backend/ratelimit.py`, in memory).
 - **Nothing is stored.** No audit row, no question text in the logs (only intents, tool names, timings).
-- **A client that hangs up** stops the answer at its next step and frees the LLM.
+- **A client that hangs up** stops the answer at its next step and frees the LLM; one that hangs up while the
+  gate is awaited gets no LLM call once it is free.
 
 ## Speed
 
