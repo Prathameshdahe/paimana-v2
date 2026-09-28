@@ -10,8 +10,8 @@ Run from repo root after the gold build:  python -m ml.experiment <candidate> [-
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet,
          silver/observations.parquet (candidates that build features), model/registry.json (the champions)
 Outputs  model/experiments/<candidate>.csv (one row per target and block), tune_<target>[_trees].csv,
-         temp/experiment_cache/ (champion predictions per gold version, target, cutoffs, columns, params and seed;
-         safe to delete)
+         temp/experiment_cache/ (champion predictions per gold version, target, cutoffs, columns, params and seed, and
+         the code that makes them: ml/backtest.py and the LightGBM version; safe to delete)
 
 The champion of each target is its registry entry (feature list, categoricals and LightGBM params), or with
 --champion-run that run's LightGBM entry of the target (the champions a round started from, so a result stays
@@ -528,9 +528,15 @@ def champion(reg, key, man, run=None):
     return e["feature_list"], e["categorical"], dict(e["params"]), e["entry_id"]
 
 
+def code_version():
+    """What champion predictions depend on besides their tag: the source of ml/backtest.py (frame, windows, fit_lgbm,
+    TRAIN_FROM, MIN_ROWS, ...) and the LightGBM version. Any edit there, comments included, starts a new cache."""
+    return hashlib.sha256(Path(bt.__file__).read_bytes() + lgb.__version__.encode()).hexdigest()[:16]
+
+
 def cached(tag, make):
-    """Predictions frame from the cache file of tag, else make() written there."""
-    path = CACHE / f"{hashlib.sha256(tag.encode()).hexdigest()[:20]}.parquet"
+    """Predictions frame from the cache file of tag and code_version(), else make() written there."""
+    path = CACHE / f"{hashlib.sha256((tag + code_version()).encode()).hexdigest()[:20]}.parquet"
     if path.exists():
         return pd.read_parquet(path)
     p = make()

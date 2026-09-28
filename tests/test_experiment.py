@@ -144,3 +144,15 @@ def test_harness_can_compare_against_an_earlier_run_and_names_the_champion(harne
         experiment.champion(reg, "y_any_h2", man, run="R9")
     t = experiment.run("null", seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
     assert t.champion_entry.isna().all()                                   # no champion: the manifest's features
+
+
+def test_champion_cache_key_follows_the_backtest_code(harness, monkeypatch):
+    _, tmp = harness
+    calls = []
+    make = lambda: calls.append(1) or pd.DataFrame({"p": [0.5]})
+    experiment.cached("tag", make)
+    experiment.cached("tag", make)
+    assert len(calls) == 1                                                  # second call from the cache
+    monkeypatch.setattr(experiment, "code_version", lambda: "edited")
+    experiment.cached("tag", make)
+    assert len(calls) == 2                                                  # backtest.py changed: made again
