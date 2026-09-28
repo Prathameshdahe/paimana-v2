@@ -222,6 +222,48 @@ def test_worker_cell_takes_the_llm_gate_per_call_so_a_chat_goes_between_calls(mo
         assert free
 
 
+def test_duckdb_runs_under_a_memory_and_thread_cap(monkeypatch):
+    import duckdb
+    from backend import serving
+    con = serving.state()["con"]
+    limit, threads = con.execute("SELECT current_setting('memory_limit'), current_setting('threads')").fetchone()
+    assert limit.endswith("GiB") and float(limit.split()[0]) < 2 and int(threads) == 4   # the 2GB / 4 defaults
+    monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", " 512MiB ")
+    monkeypatch.setenv("DUCKDB_THREADS", "2")
+    fresh = duckdb.connect()
+    serving._limits(fresh)
+    assert fresh.execute("SELECT current_setting('memory_limit'), current_setting('threads')").fetchone() == (
+        "512.0 MiB", 2)
+    for bad in ("lots", "2GB; DROP TABLE cur", "-1GB", ""):
+        monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", bad)
+        with pytest.raises(ValueError):
+            serving._limits(duckdb.connect())
+    monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", "1GB")
+    monkeypatch.setenv("DUCKDB_THREADS", "0")
+    with pytest.raises(ValueError):
+        serving._limits(duckdb.connect())
+
+
+def test_failed_reload_keeps_the_old_version_and_raises_one_pipeline_error_alert(client, monkeypatch):
+    from backend import serving
+    before = serving.state()
+    n0 = client.get("/api/alerts", params={"kind": "pipeline_error"}).json()["total"]
+    monkeypatch.setattr(serving, "_version", lambda: ("half-written",))
+    monkeypatch.setattr(serving, "_load", lambda: 1 / 0)
+    monkeypatch.setattr(serving, "_failed_at", 0.0)
+    assert serving.state() is before                      # the loaded version is still served
+    page = client.get("/api/alerts", params={"kind": "pipeline_error"}).json()
+    assert page["total"] == n0 + 1
+    a = page["items"][0]
+    assert a["projectKey"] is None and "still served" in a["title"] and "ZeroDivisionError" in a["detail"]
+    assert a["source"].startswith("reload:") and a["asof"] == str(before["asof"])
+    assert serving.state() is before                      # not retried within RETRY_S
+    monkeypatch.setattr(serving, "_failed_at", 0.0)
+    assert serving.state() is before                      # retried, failed again: the alert is not repeated
+    assert client.get("/api/alerts", params={"kind": "pipeline_error"}).json()["total"] == n0 + 1
+    assert client.get("/api/meta").status_code == 200     # and the app answers from the old version
+
+
 def test_cache_is_dropped_when_the_data_version_changes(monkeypatch):
     from backend import serving
     before = serving.state()

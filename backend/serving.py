@@ -10,9 +10,14 @@ before scenarios_/analogues_/risk_profile_<month>) never serves a half-written
 set; and of research_summary.json, which the research step writes after its two
 tables (research alone does not rewrite external_summary.json). When it changes
 the tables are reloaded and every cached result goes with the old version; a
-reload that fails keeps serving the loaded version and is retried after RETRY_S
-seconds. The in-app research agent's facts live in SQLite (backend/db.py) and
-are read per request, next to the cached gold part.
+reload that fails keeps serving the loaded version, raises one pipeline_error
+alert for that data version (the officials' feed says the new data did not
+load) and is retried after RETRY_S seconds. The DuckDB copy runs under a memory
+cap and a thread cap (DUCKDB_MEMORY_LIMIT, default 2GB, and DUCKDB_THREADS,
+default 4, read from the environment; backend/settings.py carries the same
+names), so a query over the wide tables cannot take the process with it. The
+in-app research agent's facts live in SQLite (backend/db.py) and are read per
+request, next to the cached gold part.
 """
 from __future__ import annotations
 
@@ -20,6 +25,7 @@ import functools
 import json
 import logging
 import math
+import os
 import re
 import threading
 import time
@@ -42,6 +48,8 @@ EXTERNAL_SUMMARY, BOTTLENECKS_SUMMARY = GOLD / "external_summary.json", GOLD / "
 RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
 RESEARCH_SUMMARY = GOLD / "research_summary.json"
 RETRY_S = 30
+DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS = "2GB", 4   # the defaults of the environment settings (module docstring)
+SIZE_RX = re.compile(r"\d+(?:\.\d+)?\s*(?:[KMGT]i?B)", re.I)
 TOP_MEMBERS = 5
 N_EVIDENCE = 3  # evidence lines per bottleneck, as pipeline/bottlenecks.py
 TOP_FACTOR, TOP_NOTICE = 10, 20  # top lists of external_summary.json, as ml/risk_profile.py
@@ -120,6 +128,19 @@ def _posix(p: Path) -> str:
     return p.as_posix().replace("'", "''")
 
 
+def _limits(con) -> None:
+    """Cap the connection's memory and threads (module docstring); a DUCKDB_MEMORY_LIMIT that is not a size such
+    as 2GB or 512MiB is a ValueError, not a string in SQL."""
+    limit = os.environ.get("DUCKDB_MEMORY_LIMIT", DUCKDB_MEMORY_LIMIT).strip()
+    if not SIZE_RX.fullmatch(limit):
+        raise ValueError(f"DUCKDB_MEMORY_LIMIT {limit!r} is not a size like 2GB")
+    threads = int(os.environ.get("DUCKDB_THREADS", DUCKDB_THREADS))
+    if threads < 1:
+        raise ValueError(f"DUCKDB_THREADS must be at least 1, not {threads}")
+    con.execute(f"SET memory_limit = '{limit}'")
+    con.execute(f"SET threads = {threads}")
+
+
 def _load() -> dict:
     """Read one data version into a fresh in-memory DuckDB."""
     ptr = json.loads(POINTER.read_text(encoding="utf-8"))
@@ -127,6 +148,7 @@ def _load() -> dict:
     asof = date.fromisoformat(ptr["asof"])
     ym = f"{asof:%Y-%m}"
     con = duckdb.connect()
+    _limits(con)
     files = {
         "obs": SILVER / "observations.parquet", "master": SILVER / "project_master.parquet",
         "rp": GOLD / f"risk_profile_{ym}.parquet", "events": GOLD / "project_events.parquet",
@@ -240,9 +262,24 @@ def _due(v: tuple) -> bool:
     return _state.get("version") != v and (not _state or time.monotonic() - _failed_at >= RETRY_S)
 
 
+def _reload_failed(v: tuple, e: Exception) -> None:
+    """One pipeline_error alert per failed data version (db.add_alerts_once on its source), so the feed says the
+    new data did not load and the previous version is still served; the app database is not needed to serve, so
+    a failure here is only logged."""
+    from . import db   # db imports serving: bound here, not at import
+    try:
+        db.add_alerts_once([{"project_key": None, "kind": "pipeline_error", "severity": 3,
+                             "title": "New data failed to load; the previous version is still served",
+                             "detail": f"{type(e).__name__}: {e}"[:500], "asof": str(_state["asof"]),
+                             "model_version": _state["model_version"], "source": f"reload:{v}"}])
+    except Exception:  # noqa: BLE001 - the alert is a courtesy; the log above holds the failure
+        log.exception("could not record the reload failure as an alert")
+
+
 def state() -> dict:
     """The loaded data version, reloaded when the version file changes (unless pinned). A failed reload keeps
-    serving the loaded version and is retried after RETRY_S; with nothing loaded yet it raises."""
+    serving the loaded version, raises a pipeline_error alert once (_reload_failed) and is retried after RETRY_S;
+    with nothing loaded yet it raises."""
     global _state, _failed_at
     if _state and _pinned.is_set():
         return _state
@@ -252,12 +289,13 @@ def state() -> dict:
             if _due(v):
                 try:
                     _state = {**_load(), "version": v}
-                except Exception:
+                except Exception as e:
                     if not _state:
                         raise
                     _failed_at = time.monotonic()
                     log.exception("data reload failed; still serving asof %s (%s)", _state["asof"],
                                   _state["model_version"])
+                    _reload_failed(v, e)
     return _state
 
 
