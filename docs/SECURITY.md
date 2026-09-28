@@ -213,7 +213,9 @@ so timing does not reveal an account. Five failures within 15 minutes lock the e
 lock does not reveal an account. Twenty failures a minute from one address are refused (429). Sign-up allows three
 requests an hour per address and one pending request per email, enforced by a unique index. A reset allows ten
 attempts a minute per address. The password policy is at least 12 characters (whitespace at either end not counted), at
-least 5 different characters, not a common password, and not the email's local part. A wrong current password on a password change counts toward the lock. Nothing writes a password
+least 5 different characters, not a common password, and not the email's local part. A wrong current password on a password change counts toward the lock. At most four
+argon2 computations (64 MiB each) run at once; a request that waits more than 2 s for one gets 503 with
+`Retry-After`, so a burst of sign-ins cannot exhaust the api's memory or worker threads. Nothing writes a password
 or a token to the audit log, the access log or a response other than the one that issued it.
 
 **Audit (plan 20).** Every write records who did it: the account id, the email, the client address (`app.audit_log`),

@@ -266,6 +266,43 @@ def test_password_policy_refuses_blank_and_repeated_passwords(client, coal):
     assert r.status_code == 422 and "different characters" in r.json()["detail"]
 
 
+def test_argon2_work_is_bounded(client, coal, monkeypatch):
+    """Review finding (unit B, round 1): at most HASH_SLOTS argon2 computations (64 MiB each) run at once, and a
+    request that gets no slot within HASH_WAIT_S is answered 503 with Retry-After instead of queueing."""
+    import threading
+    import time
+    _, email = official(ministry=coal)
+    monkeypatch.setattr(passwords, "HASH_WAIT_S", 0.2)
+    held = [passwords._slots.acquire(timeout=1) for _ in range(passwords.HASH_SLOTS)]
+    try:
+        r = login(client, email)
+        assert r.status_code == 503 and int(r.headers["Retry-After"]) > 0 and "busy" in r.json()["detail"]
+    finally:
+        for _ in held:
+            passwords._slots.release()
+    assert login(client, email).status_code == 200
+
+    live, peak, lock = [0], [0], threading.Lock()
+
+    class Slow:
+        def verify(self, h, pw):
+            with lock:
+                live[0] += 1
+                peak[0] = max(peak[0], live[0])
+            time.sleep(0.05)
+            with lock:
+                live[0] -= 1
+            return False
+    monkeypatch.setattr(passwords, "_hasher", Slow())
+    monkeypatch.setattr(passwords, "HASH_WAIT_S", 10)
+    threads = [threading.Thread(target=passwords.verify, args=("h", "p")) for _ in range(4 * passwords.HASH_SLOTS)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert peak[0] == passwords.HASH_SLOTS
+
+
 def test_change_password(client, coal):
     u, email = official(ministry=coal)
     with TestClient(app) as elsewhere:

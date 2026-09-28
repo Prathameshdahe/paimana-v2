@@ -5,17 +5,24 @@ run of one repeated character, no blank password), not a common password (COMMON
 without its non-alphanumerics, as frontend/src/lib/auth/password.ts does), and not containing the email's local part
 when that is 3 characters or more. The password itself is kept as typed (nothing is trimmed from it).
 
-verify() never raises: a wrong password, a malformed hash or None is False. dummy_verify() spends the same time
-on nothing, so a sign-in with an unknown email takes as long as one with a known email and a wrong password.
+At most HASH_SLOTS argon2 computations run at once (each takes 64 MiB, and a burst of sign-ins with fresh emails
+from a few addresses passes every lock): hash_password, verify and dummy_verify wait up to HASH_WAIT_S for a slot and
+then raise Busy, an HTTP 503 with Retry-After, instead of queueing on the api's worker threads.
+
+verify() raises nothing but Busy: a wrong password, a malformed hash or None is False. dummy_verify() spends the same
+time on nothing, so a sign-in with an unknown email takes as long as one with a known email and a wrong password.
 normal_email() trims an address and checks its shape (and, for a sign-up, settings.allowed_email_domains when set).
 """
 from __future__ import annotations
 
 import re
+import threading
+from contextlib import contextmanager
 from functools import lru_cache
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from fastapi import HTTPException
 
 from backend import settings as cfg
 
@@ -23,6 +30,25 @@ MIN_LENGTH, MAX_LENGTH, MIN_DISTINCT = 12, 256, 5
 EMAIL_MAX = 254
 EMAIL_RX = re.compile(r"[^@\s]{1,64}@[^@\s]+\.[^@\s.]{2,}")
 _hasher = PasswordHasher()
+HASH_SLOTS, HASH_WAIT_S = 4, 2.0
+_slots = threading.BoundedSemaphore(HASH_SLOTS)
+
+
+class Busy(HTTPException):
+    """Every argon2 slot stayed taken for HASH_WAIT_S: 503 with Retry-After."""
+    def __init__(self):
+        super().__init__(status_code=503, detail="the server is busy checking passwords; try again in a few seconds",
+                         headers={"Retry-After": "5"})
+
+
+@contextmanager
+def _slot():
+    if not _slots.acquire(timeout=HASH_WAIT_S):
+        raise Busy()
+    try:
+        yield
+    finally:
+        _slots.release()
 
 COMMON = frozenset("""
 password password1 password12 password123 password1234 password12345 password123456 passw0rd p@ssw0rd password@123
@@ -39,14 +65,16 @@ government123 government@123 goi@123456 nic@123456 computer123 internet123 super
 
 
 def hash_password(password: str) -> str:
-    return _hasher.hash(password)
+    with _slot():
+        return _hasher.hash(password)
 
 
 def verify(password_hash: str | None, password: str | None) -> bool:
     if not password_hash or password is None:
         return False
     try:
-        return _hasher.verify(password_hash, password)
+        with _slot():
+            return _hasher.verify(password_hash, password)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
 
