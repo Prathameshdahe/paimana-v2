@@ -36,7 +36,7 @@ const INLINE = 5;
 const linkCls = cn(
   "inline-flex h-8 w-max items-center justify-center rounded-lg px-2.5 text-sm font-medium transition-colors",
   "text-fg-muted hover:bg-surface-elevated hover:text-fg-base",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
   "data-[active]:bg-surface-panel data-[active]:text-fg-base data-[active]:shadow-sm data-[active]:ring-1 data-[active]:ring-border-subtle",
   "data-[state=open]:bg-surface-elevated"
 );

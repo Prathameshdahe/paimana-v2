@@ -34,7 +34,7 @@ export function RouteFallback({ onRetry }: { onRetry?: () => void }) {
       </p>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Button variant="primary" onClick={() => (onRetry ? onRetry() : window.location.reload())}>Reload</Button>
-        <Link to="/" className="inline-flex h-9 items-center rounded-lg border border-border-default bg-surface-panel px-4 text-sm font-medium text-fg-base hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+        <Link to="/" className="inline-flex h-9 items-center rounded-lg border border-border-default bg-surface-panel px-4 text-sm font-medium text-fg-base hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           Go to Home
         </Link>
       </div>

@@ -10,7 +10,7 @@ const TIER_ON: Record<TierFilter | 'ALL', string> = {
   ALL: 'bg-fg-base',
   Critical: 'bg-critical',
   High: 'bg-warning',
-  Medium: 'bg-accent',
+  Medium: 'bg-fg-muted',
   Low: 'bg-stable',
   Watch: 'bg-watch',
 }
@@ -66,7 +66,7 @@ export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: 
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border-subtle bg-surface-panel px-3 py-2.5 shadow-card" role="search" aria-label="Filter projects">
-      <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border-default bg-surface-panel px-2.5 focus-within:ring-2 focus-within:ring-accent/30 lg:max-w-[280px]">
+      <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border-default bg-surface-panel px-2.5 focus-within:ring-2 focus-within:ring-accent lg:max-w-[280px]">
         <Search className="size-4 shrink-0 text-fg-dimmed" aria-hidden="true" />
         <span className="sr-only">Search projects</span>
         <input
@@ -95,13 +95,13 @@ export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: 
               onKeyDown={(e) => onChipKey(e, i)}
               title={t === 'Watch' ? WATCH_TITLE : undefined}
               className={cn(
-                'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 on ? `text-white shadow-sm ${TIER_ON[t]}` : 'text-fg-muted hover:bg-surface-elevated hover:text-fg-base'
               )}
             >
               {t !== 'ALL' && !on && <span className="size-2 rounded-full" style={{ background: TIER_COLOR[t] }} aria-hidden="true" />}
               {t === 'ALL' ? 'All' : TIER_LABEL[t]}
-              {n !== undefined && <span className={cn('tabular-nums', on ? 'text-white/80' : 'text-fg-dimmed')}>{n.toLocaleString('en-IN')}</span>}
+              {n !== undefined && <span className={cn('tabular-nums', on ? 'text-white' : 'text-fg-dimmed')}>{n.toLocaleString('en-IN')}</span>}
             </button>
           )
         })}
@@ -137,7 +137,7 @@ export function FilterBar({ query, onChange }: { query: ProjectQuery; onChange: 
           <button
             type="button"
             onClick={() => { setText(''); onChange({ q: undefined, tier: undefined, sector: undefined, state: undefined, ministry: undefined, flag: undefined }) }}
-            className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <X className="size-3.5" aria-hidden="true" /> Clear filters
           </button>

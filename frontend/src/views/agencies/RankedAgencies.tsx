@@ -50,7 +50,7 @@ export function RankedAgencies({ points, selected, onPick }: {
                   onClick={() => onPick(a.agency)}
                   aria-pressed={selected === a.agency}
                   className={cn(
-                    'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 sm:grid-cols-[minmax(0,1fr)_9rem_7rem_auto]',
+                    'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:grid-cols-[minmax(0,1fr)_9rem_7rem_auto]',
                     selected === a.agency && 'bg-accent/10 shadow-[inset_3px_0_0_hsl(var(--color-accent))]',
                     a.isSelf && 'font-semibold'
                   )}

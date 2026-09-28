@@ -74,7 +74,7 @@ function Blocker({ b }: { b: ResearchBlocker }) {
       {b.summary && <p className="text-sm leading-snug text-fg-base">{b.summary}</p>}
       {href ? (
         <a href={href} target="_blank" rel="noreferrer" title={b.headline}
-          className={cn('inline-flex max-w-full items-center gap-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', b.summary ? 'text-xs text-accent' : 'text-sm font-medium text-fg-base')}>
+          className={cn('inline-flex max-w-full items-center gap-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', b.summary ? 'text-xs text-accent' : 'text-sm font-medium text-fg-base')}>
           <span className="line-clamp-2">{b.headline}</span>
           <ExternalLink className="size-3 shrink-0 text-fg-dimmed" aria-label="opens in a new tab" />
         </a>
@@ -86,7 +86,7 @@ function Blocker({ b }: { b: ResearchBlocker }) {
         <div className="flex min-w-0 items-center gap-2 text-xs">
           {b.tier && <Badge tier={b.tier} />}
           <button type="button" onClick={() => panel.open(b.projectKey ?? '')}
-            className="min-w-0 truncate text-left font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="min-w-0 truncate text-left font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             title={b.projectName ?? undefined}>
             {b.projectName ?? b.projectKey}
           </button>
@@ -148,7 +148,7 @@ export function ResearchPanel() {
               </ul>
               {s.topRecentBlockers.length > SHOWN && (
                 <button type="button" onClick={() => setAll((v) => !v)}
-                  className="w-full border-t border-border-subtle px-5 py-2.5 text-center text-xs font-medium text-accent hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                  className="w-full border-t border-border-subtle px-5 py-2.5 text-center text-xs font-medium text-accent hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                   {all ? 'Show fewer' : `Show all ${s.topRecentBlockers.length}`}
                 </button>
               )}

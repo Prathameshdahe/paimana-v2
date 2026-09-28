@@ -91,7 +91,7 @@ export function WhyBlock({ drivers, checks, numbers, compact, className }: {
             )}
             {clear.length > 0 && (
               <details className="group mt-2 text-sm">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-fg-muted hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-fg-muted hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                   {clear.length} check{clear.length === 1 ? '' : 's'} clear
                   <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
                 </summary>

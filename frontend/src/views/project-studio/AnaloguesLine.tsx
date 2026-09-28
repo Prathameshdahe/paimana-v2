@@ -45,7 +45,7 @@ export function AnaloguesLine({ forecast, error, className }: { forecast: Foreca
               return (
                 <li key={`${c.key ?? c.name}-${i}`}>
                   {c.key ? (
-                    <Link to={`/projects/${c.key}`} className={cn(cls, 'hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40')}>{body}</Link>
+                    <Link to={`/projects/${c.key}`} className={cn(cls, 'hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent')}>{body}</Link>
                   ) : (
                     <span className={cls}>{body}</span>
                   )}

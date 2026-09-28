@@ -76,7 +76,7 @@ function SortTh({ by, query, disabled, onSort, className, children }: {
   return (
     <th className={cn(TH, className)} aria-sort={on ? (query.order === 'asc' ? 'ascending' : 'descending') : 'none'}>
       <button type="button" disabled={disabled} onClick={() => onSort(by)}
-        className="inline-flex items-center gap-1 rounded hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-default disabled:hover:text-fg-muted">
+        className="inline-flex items-center gap-1 rounded hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:hover:text-fg-muted">
         {children}
         {on && <Arrow className="size-3" aria-hidden="true" />}
       </button>
@@ -163,7 +163,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
             <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 py-0.5 pl-2.5 pr-1 text-xs font-medium text-fg-base ring-1 ring-inset ring-accent/25">
               {selection.rows.length.toLocaleString('en-IN')} selected on the map
               <button type="button" onClick={selection.clear} aria-label="Clear the map selection"
-                className="inline-flex size-5 items-center justify-center rounded-full hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                className="inline-flex size-5 items-center justify-center rounded-full hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                 <X className="size-3" aria-hidden="true" />
               </button>
             </span>
@@ -235,7 +235,7 @@ export function TriageTable({ query, onChange, page, error, isFetching, selected
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onOpenDetail(p.key) } }}
                       aria-label={`${p.name ?? p.key}, ${p.tier ?? 'not scored'}`}
                       className={cn(
-                        'cursor-pointer border-b border-border-subtle/70 align-top transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40',
+                        'cursor-pointer border-b border-border-subtle/70 align-top transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
                         p.key === selectedKey ? 'bg-accent/10 shadow-[inset_3px_0_0_hsl(var(--color-accent))]' : 'hover:bg-surface-elevated'
                       )}
                     >

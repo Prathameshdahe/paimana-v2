@@ -54,7 +54,7 @@ export function ProjectIdentityStrip({ detail }: { detail: ProjectDetail }) {
 
   return (
     <header className="space-y-3">
-      <Link to="/command" className="inline-flex items-center gap-1 rounded text-xs text-fg-dimmed transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+      <Link to="/command" className="inline-flex items-center gap-1 rounded text-xs text-fg-dimmed transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <ArrowLeft className="size-3.5" aria-hidden="true" /> All projects
       </Link>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

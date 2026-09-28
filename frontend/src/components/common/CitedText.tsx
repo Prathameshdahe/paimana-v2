@@ -48,7 +48,7 @@ export function CiteChip({ label, title, active, onClick, className }: {
       className={cn(
         // raised by position, not vertical-align, so a cited line keeps its height
         'relative -top-1.5 mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded px-1 text-xs font-semibold leading-none transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         active ? 'bg-accent text-fg-inverse' : 'bg-accent/15 text-accent hover:bg-accent/25',
         className
       )}

@@ -300,7 +300,7 @@ function Chat() {
             whileTap={{ scale: 0.95 }}
             onClick={() => setOpen(true)}
             data-no-print
-            className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-fg-inverse shadow-lg shadow-black/25 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/40"
+            className="fixed bottom-5 right-5 z-40 flex size-14 items-center justify-center rounded-full bg-accent text-fg-inverse shadow-lg shadow-black/25 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
             aria-label="Open the project assistant"
           >
             <Bot className="size-6" strokeWidth={2} />
@@ -362,7 +362,7 @@ function Chat() {
               <button
                 onClick={clear}
                 disabled={turns.length === 0}
-                className="flex size-9 items-center justify-center rounded-lg text-fg-dimmed transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:pointer-events-none disabled:opacity-40"
+                className="flex size-9 items-center justify-center rounded-lg text-fg-dimmed transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-40"
                 aria-label="Clear the conversation"
                 title="Clear the conversation"
               >
@@ -370,7 +370,7 @@ function Chat() {
               </button>
               <button
                 onClick={() => setOpen(false)}
-                className="flex size-9 items-center justify-center rounded-lg text-fg-dimmed transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="flex size-9 items-center justify-center rounded-lg text-fg-dimmed transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Close the assistant"
               >
                 <ChevronRight className="size-5" />
@@ -408,7 +408,7 @@ function Chat() {
                     <button
                       type="button"
                       onClick={() => setDropped(askKey)}
-                      className="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      className="flex size-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       aria-label="Stop asking about this project"
                       title="Stop asking about this project"
                     >
@@ -428,7 +428,7 @@ function Chat() {
                         key={s}
                         onClick={() => ask(s)}
                         disabled={busy}
-                        className="rounded-full border border-border-subtle bg-surface-base px-3 py-1.5 text-left text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50"
+                        className="rounded-full border border-border-subtle bg-surface-base px-3 py-1.5 text-left text-xs text-fg-muted transition-colors hover:border-accent/40 hover:bg-accent/10 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
                       >
                         {s}
                       </button>
@@ -463,7 +463,7 @@ function Chat() {
                   aria-label={busy ? 'Stop the answer' : 'Send'}
                   title={busy ? 'Stop the answer' : undefined}
                   className={cn(
-                    'absolute right-2 flex size-8 items-center justify-center rounded-lg text-fg-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40',
+                    'absolute right-2 flex size-8 items-center justify-center rounded-lg text-fg-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40',
                     busy ? 'bg-fg-base' : 'bg-accent'
                   )}
                 >

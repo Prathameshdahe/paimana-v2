@@ -137,7 +137,7 @@ function Opinion({ o, tier, numbers }: { o: SecondOpinionOut; tier?: string | nu
               return (
                 <li key={id} id={anchor(id)} tabIndex={-1}
                   className={cn(
-                    'flex gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                    'flex gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                     active === id && 'bg-accent/10 ring-1 ring-inset ring-accent/30'
                   )}>
                   <span className={cn(
@@ -159,7 +159,7 @@ function Opinion({ o, tier, numbers }: { o: SecondOpinionOut; tier?: string | nu
                         {KIND_LABEL[e.kind] ?? e.kind}
                         {e.date && ` · ${formatLooseDate(e.date)}`}
                         {href ? (
-                          <> · <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">{e.source ?? 'source'}</a></>
+                          <> · <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{e.source ?? 'source'}</a></>
                         ) : e.source ? ` · ${e.source}` : ''}
                       </div>
                     </div>

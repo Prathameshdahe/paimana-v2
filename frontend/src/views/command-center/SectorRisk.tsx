@@ -73,7 +73,7 @@ export function SectorRisk({ filters, selected, onPick, ignored, className }: {
                         onClick={() => onPick(on ? undefined : (r.name ?? undefined))}
                         aria-label={`${r.name}: ${r.nCritical} Critical, ${r.nHigh} High of ${r.n} projects${on ? ', filtering the page' : ''}`}
                         className={cn(
-                          'grid w-full grid-cols-[minmax(0,7.5rem)_1fr_3rem] items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                          'grid w-full grid-cols-[minmax(0,7.5rem)_1fr_3rem] items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                           on && 'bg-accent/10 ring-1 ring-inset ring-accent/30'
                         )}
                       >
@@ -81,7 +81,7 @@ export function SectorRisk({ filters, selected, onPick, ignored, className }: {
                         <span className="flex h-2.5 overflow-hidden rounded-full bg-surface-input" style={{ width: `${Math.max(4, (r.n / max) * 100)}%` }}>
                           <span className="h-full bg-critical" style={{ width: `${(r.nCritical / Math.max(r.n, 1)) * 100}%` }} />
                           <span className="h-full bg-warning" style={{ width: `${(r.nHigh / Math.max(r.n, 1)) * 100}%` }} />
-                          <span className="h-full bg-fg-dimmed/35" style={{ width: `${(rest / Math.max(r.n, 1)) * 100}%` }} />
+                          <span className="h-full bg-fg-dimmed" style={{ width: `${(rest / Math.max(r.n, 1)) * 100}%` }} />
                         </span>
                         <span className="text-right tabular-nums text-fg-muted">{r.n.toLocaleString('en-IN')}</span>
                       </button>
@@ -93,7 +93,7 @@ export function SectorRisk({ filters, selected, onPick, ignored, className }: {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-dimmed">
               <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-critical" />Critical</span>
               <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-warning" />High</span>
-              <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-fg-dimmed/35" />the rest</span>
+              <span className="inline-flex items-center gap-1"><span className="size-2 rounded-full bg-fg-dimmed" />the rest</span>
               {rows.length > ROWS && <span>· the {ROWS} with the most Critical and High of {rows.length} sectors</span>}
             </div>
             {ignored && (

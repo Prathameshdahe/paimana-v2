@@ -56,7 +56,7 @@ export function ScopePicker({ options, value, onChange, noun, plural, compact, i
               aria-selected={o.name === value}
               onClick={() => onChange(o.name)}
               className={cn(
-                'flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40',
+                'flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
                 o.name === value ? 'bg-accent/15' : 'hover:bg-surface-elevated'
               )}
             >

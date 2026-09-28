@@ -30,7 +30,7 @@ export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLS
   return (
     <select
       className={cn(
-        'h-8 max-w-[220px] rounded-lg border border-border-default bg-surface-panel px-2 text-xs text-fg-base shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/30',
+        'h-8 max-w-[220px] rounded-lg border border-border-default bg-surface-panel px-2 text-xs text-fg-base shadow-sm focus:outline-none focus:ring-2 focus:ring-accent',
         className
       )}
       {...props}

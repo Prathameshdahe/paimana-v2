@@ -82,7 +82,7 @@ export function TopBar() {
             <Popover.Root>
               <Popover.Trigger
                 aria-label="account"
-                className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <span className="flex size-8 items-center justify-center rounded-full bg-fg-base text-xs font-semibold text-fg-inverse">
                   {initials(displayName, role)}
@@ -143,7 +143,7 @@ export function TopBar() {
           ) : status === 'loading' ? null : (
             <Link
               to="/login"
-              className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              className="inline-flex h-8 items-center rounded-lg bg-fg-base px-3 text-xs font-medium text-fg-inverse shadow-sm hover:bg-fg-base/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Sign in
             </Link>

@@ -123,7 +123,7 @@ export function Signup() {
                   setScope('')
                 }}
                 className={cn(
-                  'border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                  'border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   role === r.value ? 'border-accent bg-accent/10 text-fg-base' : 'border-border-default text-fg-muted hover:border-border-strong hover:text-fg-base'
                 )}
               >

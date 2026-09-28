@@ -21,7 +21,7 @@ export function ApiErrorNote({ error, className }: { error: unknown; className?:
       <button
         type="button"
         onClick={() => client.refetchQueries({ type: 'active' })}
-        className="rounded underline underline-offset-2 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="rounded underline underline-offset-2 hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         Try again
       </button>

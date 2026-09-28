@@ -72,7 +72,7 @@ function Fact({ f, group }: { f: ResearchFact; group: ResearchGroup }) {
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-w-0 max-w-full items-center gap-1 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="inline-flex min-w-0 max-w-full items-center gap-1 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             title={f.headline ?? href}
           >
             <span className="truncate">{label}</span>
@@ -142,7 +142,7 @@ function Body({ data, panel }: { data: ProjectResearch; panel: boolean }) {
         <button
           type="button"
           onClick={() => setAll((v) => !v)}
-          className="w-full rounded-lg py-1.5 text-center text-xs font-medium text-accent transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="w-full rounded-lg py-1.5 text-center text-xs font-medium text-accent transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {all ? 'Show fewer' : `Show all ${data.facts.length} facts`}
         </button>

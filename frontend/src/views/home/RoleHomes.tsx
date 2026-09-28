@@ -36,7 +36,7 @@ export function LinkButton({ to, primary, children }: { to: string; primary?: bo
     <Link
       to={to}
       className={cn(
-        'inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+        'inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         primary
           ? 'bg-fg-base text-fg-inverse hover:bg-fg-base/85'
           : 'border border-border-default bg-surface-panel text-fg-base hover:bg-surface-elevated'
@@ -49,7 +49,7 @@ export function LinkButton({ to, primary, children }: { to: string; primary?: bo
 
 function MoreLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
-    <Link to={to} className="inline-flex items-center gap-1 rounded font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+    <Link to={to} className="inline-flex items-center gap-1 rounded font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
       {children} <ArrowRight className="size-3.5" aria-hidden="true" />
     </Link>
   )
@@ -87,7 +87,7 @@ function ProjectList<T extends Row>({ title, info, more, rows, error, right, emp
                 key={r.key}
                 type="button"
                 onClick={() => panel.open(r.key)}
-                className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40"
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
               >
                 <span className="size-2.5 shrink-0 rounded-full" style={{ background: TIER_COLOR[t] }} title={TIER_LABEL[t]} aria-label={TIER_LABEL[t]} role="img" />
                 <span className="min-w-0 flex-1">
@@ -196,7 +196,7 @@ function AgenciesRanked() {
     .filter((g) => g.rows.length > 0)
   const row = (a: AgencyPoint) => (
     <Link key={a.agency} to={`/agencies?agency=${encodeURIComponent(a.agency)}`}
-      className="flex items-center justify-between gap-3 px-5 py-2 transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40">
+      className="flex items-center justify-between gap-3 px-5 py-2 transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
       <span className="min-w-0 truncate text-sm font-medium text-fg-base" title={a.names ?? undefined}>{a.agency}</span>
       <span className="shrink-0 text-xs tabular-nums text-fg-dimmed">{a.nProjects} past · {a.nOpen} open</span>
     </Link>
@@ -277,7 +277,7 @@ export function MinistryHome({ ministry }: { ministry: string }) {
   return (
     <Page>
       <PageHeader
-        title={<><Landmark className="size-6 text-accent" aria-hidden="true" /> {ministry}</>}
+        title={<><Landmark className="size-6 text-fg-dimmed" aria-hidden="true" /> {ministry}</>}
         actions={<LinkButton to="/command">Open Command Center <ArrowRight className="size-4" aria-hidden="true" /></LinkButton>}
       />
       <WeekBrief />
@@ -358,7 +358,7 @@ function ApprovalsCard() {
           </div>
           {pending.length === 0 && <p className="text-xs text-fg-dimmed">Nothing is waiting for you.</p>}
           {pending.slice(0, 3).map((d) => (
-            <Link key={d.id} to="/approvals" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+            <Link key={d.id} to="/approvals" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
               <FileText className="size-4 shrink-0 text-fg-dimmed" aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate text-sm text-fg-base">{d.projectName}</span>
               <span className="shrink-0 text-xs text-fg-dimmed">{formatDate(d.createdAt)}</span>
@@ -380,7 +380,7 @@ export function AgencyHome({ agency }: { agency: string }) {
   return (
     <Page>
       <PageHeader
-        title={<><Building2 className="size-6 text-accent" aria-hidden="true" /> {agency}</>}
+        title={<><Building2 className="size-6 text-fg-dimmed" aria-hidden="true" /> {agency}</>}
         subtitle={self ? [self.ministry, self.sector].filter(Boolean).join(' · ') : undefined}
         actions={<LinkButton to="/command">Your projects <ArrowRight className="size-4" aria-hidden="true" /></LinkButton>}
       />

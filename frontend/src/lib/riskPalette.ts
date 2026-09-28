@@ -44,11 +44,14 @@ export const TIER_COLOR: Record<TierFilter, string> = {
   Watch: '#9d93bd',
 }
 
-/** text token per tier (deep variants of TIER_COLOR, readable on the sand canvas) */
+/**
+ * text token per tier (deep variants of TIER_COLOR, readable on the sand canvas). Medium is the neutral slate ink, not
+ * the accent: the accent marks the viewer's own action (a selection, a focus), never data.
+ */
 export const TIER_TEXT: Record<TierFilter, string> = {
   Critical: 'text-critical',
   High: 'text-warning',
-  Medium: 'text-accent',
+  Medium: 'text-fg-muted',
   Low: 'text-stable',
   Watch: 'text-watch',
 }
@@ -57,7 +60,7 @@ export const TIER_TEXT: Record<TierFilter, string> = {
 export const TIER_SENTIMENT = {
   Critical: 'critical',
   High: 'warning',
-  Medium: 'accent',
+  Medium: 'muted',
   Low: 'stable',
   Watch: 'watch',
 } as const satisfies Record<TierFilter, string>

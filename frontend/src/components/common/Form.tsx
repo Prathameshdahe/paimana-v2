@@ -45,7 +45,7 @@ export function PasswordInput({ className, ...props }: InputHTMLAttributes<HTMLI
         onClick={() => setShown((s) => !s)}
         aria-label={shown ? 'Hide the password' : 'Show the password'}
         aria-pressed={shown}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
       </button>

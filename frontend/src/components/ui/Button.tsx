@@ -23,7 +23,7 @@ export function Button({ className, variant = 'secondary', size = 'md', children
     <button
       className={cn(
         'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-medium transition-colors select-none cursor-pointer',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         'disabled:pointer-events-none disabled:opacity-40',
         VARIANT[variant],
         SIZE[size],

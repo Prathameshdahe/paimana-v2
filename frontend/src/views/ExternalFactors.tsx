@@ -277,7 +277,7 @@ function NoticeTable({ rows }: { rows: ExternalProject[] }) {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); panel.open(p.project_key) }}
-                    className="block max-w-full truncate text-left font-medium text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    className="block max-w-full truncate text-left font-medium text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     title={p.project_name ?? undefined}
                   >
                     {p.project_name ?? p.project_key}
@@ -620,7 +620,7 @@ function OpenList({ rows }: { rows: PortalOpen[] }) {
               className="cursor-pointer border-b border-border-subtle/70 transition-colors hover:bg-surface-elevated/70 focus-within:bg-surface-elevated/70">
               <td className="max-w-[320px] py-2.5 pl-5 pr-4">
                 <button type="button" onClick={(e) => { e.stopPropagation(); panel.open(p.project_key) }}
-                  className="block max-w-full truncate text-left font-medium text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  className="block max-w-full truncate text-left font-medium text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   title={p.project_name ?? undefined}>
                   {p.project_name ?? p.project_key}
                 </button>

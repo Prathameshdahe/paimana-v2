@@ -110,7 +110,7 @@ const DotsLayer = memo(function DotsLayer({ dots, selection, openKey }: {
             )}
             <circle cx={d.x} cy={d.y} r={d.r} fill={TIER_COLOR[t]} fillOpacity={0.85}
               strokeWidth={d.key === openKey ? 2 : 1}
-              className={d.key === openKey ? 'stroke-accent' : 'stroke-surface-panel'} />
+              className={d.key === openKey ? 'stroke-accent' : 'stroke-fg-base/50'} />
           </g>
         )
       })}
@@ -307,14 +307,14 @@ export function RiskMap(p: RiskMapProps) {
         {ZOOMS.map((z) => (
           <button key={z.id} type="button" aria-pressed={zoom === z.id} onClick={() => setZoom(z.id)}
             className={cn(
-              'h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+              'h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               zoom === z.id ? 'bg-surface-panel text-fg-base shadow-sm' : 'text-fg-muted hover:text-fg-base'
             )}>
             {z.label}
           </button>
         ))}
       </span>
-      <a href="#project-list" className="text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+      <a href="#project-list" className="text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         View as list
       </a>
     </span>
@@ -403,6 +403,12 @@ export function RiskMap(p: RiskMapProps) {
                     <text x={o.x} y={o.y + 4} textAnchor="middle" fontSize={12} fontWeight={600} className="fill-current">+{o.n}</text>
                   </g>
                 ))}
+                {focus && layout.lanes[focus.lane] && (
+                  // the focused lane's own outline: the keyboard's place is visible even between dots
+                  <rect data-lane-focus="" x={layout.plotX0 - 2} y={(layout.lanes[focus.lane]?.y0 ?? 0) - 1}
+                    width={layout.plotX1 - layout.plotX0 + 4} height={(layout.lanes[focus.lane]?.y1 ?? 0) - (layout.lanes[focus.lane]?.y0 ?? 0) + 2}
+                    rx={4} fill="none" strokeWidth={2} className="stroke-accent" pointerEvents="none" />
+                )}
                 {shownMark && (
                   <rect x={shownMark.x - shownMark.halfW - 2} y={shownMark.y - OVERFLOW_H / 2} width={2 * shownMark.halfW + 4} height={OVERFLOW_H}
                     rx={5} fill="none" strokeWidth={2} className="stroke-accent" pointerEvents="none" />
@@ -426,7 +432,7 @@ export function RiskMap(p: RiskMapProps) {
           <p className="text-xs text-fg-muted">
             {layout.later.toLocaleString('en-IN')} more {layout.later === 1 ? 'is' : 'are'} due after {zoom === '12' ? 'the next 12 months' : 'the next three years'} (counted
             at the right edge of each lane).{' '}
-            <button type="button" onClick={() => setZoom('all')} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+            <button type="button" onClick={() => setZoom('all')} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
               Show all
             </button>
           </p>
@@ -438,7 +444,7 @@ export function RiskMap(p: RiskMapProps) {
               ? 'Projects without a completion date are not placed'
               : `${noDate.toLocaleString('en-IN')} project${noDate === 1 ? ' has' : 's have'} no completion date, so ${noDate === 1 ? 'it is' : 'they are'} not placed`}
             {p.tierFilter !== 'Watch' && (
-              <button type="button" onClick={p.onListNoDate} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+              <button type="button" onClick={p.onListNoDate} className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                 · list them
               </button>
             )}

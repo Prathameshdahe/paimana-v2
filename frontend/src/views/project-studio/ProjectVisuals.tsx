@@ -429,7 +429,7 @@ export function RiskGrid({ detail, plain, numbers, className }: {
                 </div>
               }>
                 <button type="button" aria-label={`${label}: ${STATE_WORD[st]}`}
-                  className={cn('flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', RISK_STATE_CHIP[st])}>
+                  className={cn('flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', RISK_STATE_CHIP[st])}>
                   <Icon className="size-5" strokeWidth={2} />
                   <span className="text-xs font-medium leading-tight">{short}</span>
                 </button>

@@ -55,7 +55,7 @@ export function AlertBell() {
     <Popover.Root onOpenChange={(open) => open && markSeen()}>
       <Popover.Trigger
         aria-label={`alerts: ${n} unread`}
-        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <Bell className="h-4 w-4" />
         {n > 0 && (

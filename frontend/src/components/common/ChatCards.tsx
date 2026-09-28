@@ -59,7 +59,7 @@ function OpenProject({ projectKey, children, className }: { projectKey: string; 
     <button
       type="button"
       onClick={() => panel.open(projectKey)}
-      className={cn('rounded text-left font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', className)}
+      className={cn('rounded text-left font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', className)}
     >
       {children}
     </button>
@@ -89,7 +89,7 @@ function ProjectLine({ p }: { p: ChatProjectRow }) {
     <button
       type="button"
       onClick={() => panel.open(p.key)}
-      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <span className="size-2.5 shrink-0 rounded-full" style={{ background: TIER_COLOR[t] }} title={TIER_LABEL[t]} aria-label={TIER_LABEL[t]} role="img" />
       <span className="min-w-0 flex-1">
@@ -513,7 +513,7 @@ export function SourcesList({ items, anchor, flashed }: {
               tabIndex={-1}
               className={cn(
                 // a chip moves the focus here: keyboard viewers keep a ring after the highlight fades
-                'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                'flex scroll-mt-4 gap-2 rounded-lg px-1.5 py-1.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 flashed === s.n ? 'bg-accent/10 ring-1 ring-inset ring-accent/30' : ''
               )}
             >
@@ -522,7 +522,7 @@ export function SourcesList({ items, anchor, flashed }: {
               </span>
               <div className="min-w-0 flex-1 space-y-0.5">
                 {href ? (
-                  <a href={href} target="_blank" rel="noreferrer" className="inline font-medium leading-snug text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                  <a href={href} target="_blank" rel="noreferrer" className="inline font-medium leading-snug text-fg-base hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                     {s.title}
                     <ExternalLink className="ml-1 inline size-3 align-baseline text-fg-dimmed" aria-label="opens in a new tab" />
                   </a>
@@ -537,7 +537,7 @@ export function SourcesList({ items, anchor, flashed }: {
                     <span>
                       ·{' '}
                       <button type="button" onClick={() => panel.open(s.projectKey ?? '')}
-                        className="font-mono text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+                        className="font-mono text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                         {s.projectKey}
                       </button>
                     </span>
@@ -629,7 +629,7 @@ export function ToolSteps({ steps, stage, detail, retries, streaming, latest }: 
         aria-expanded={expanded}
         aria-controls={listId}
         onClick={() => setOpen(!expanded)}
-        className="flex max-w-full items-center gap-1.5 rounded-md py-0.5 pr-1 text-fg-muted transition-colors hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="flex max-w-full items-center gap-1.5 rounded-md py-0.5 pr-1 text-fg-muted transition-colors hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <ChevronDown className={cn('size-3.5 shrink-0 transition-transform', !expanded && '-rotate-90')} aria-hidden="true" />
         {streaming && <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" aria-hidden="true" />}

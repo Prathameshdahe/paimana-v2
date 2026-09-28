@@ -22,7 +22,7 @@ import { BriefCard } from '@/views/project-studio/BriefCard'
 import { ResearchNews } from '@/views/project-studio/ResearchNews'
 import { SecondOpinionCard } from '@/views/project-studio/SecondOpinionCard'
 
-const HEAD_LINK = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border-border-default bg-surface-panel px-3 text-xs font-medium text-fg-base shadow-sm transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
+const HEAD_LINK = 'inline-flex h-8 items-center gap-1.5 rounded-lg border border-border-default bg-surface-panel px-3 text-xs font-medium text-fg-base shadow-sm transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
 
 /**
  * The project side panel: one project in the order an officer reads it — the sentence, the outlook tiles, why it is
@@ -69,7 +69,7 @@ function FoldedBrief({ projectKey }: { projectKey: string }) {
   return (
     <section className="rounded-xl border border-border-subtle bg-surface-panel shadow-card">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-fg-base hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+        className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-fg-base hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         Read the AI brief
         <ChevronDown className={cn('size-4 text-fg-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
@@ -110,7 +110,7 @@ function PanelBody({ projectKey }: { projectKey: string }) {
             </Link>
           )}
           <Dialog.Close
-            className="inline-flex size-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="inline-flex size-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             aria-label="Close project panel"
           >
             <X className="size-4" />

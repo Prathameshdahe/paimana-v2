@@ -306,7 +306,7 @@ function AgencyPanel({ agency, point, peers, numbers, onClose }: {
     <Card
       title={agency}
       titleRight={
-        <button type="button" onClick={onClose} className="rounded text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40" aria-label="Close the agency">
+        <button type="button" onClick={onClose} className="rounded text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close the agency">
           Close ✕
         </button>
       }
@@ -350,7 +350,7 @@ function AgencyPanel({ agency, point, peers, numbers, onClose }: {
             {data.total} open projects · the riskiest first
           </div>
           {data.items.map((p) => (
-            <button key={p.key} type="button" onClick={() => panel.open(p.key)} className="block w-full px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40">
+            <button key={p.key} type="button" onClick={() => panel.open(p.key)} className="block w-full px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate text-sm text-fg-base" title={p.name ?? undefined}>{p.name ?? p.key}</span>
                 <OutlookChip outlook={outlookOf(p, numbers)} tier={p.tier} />
@@ -441,7 +441,7 @@ export function Agencies() {
                       aria-pressed={view === v}
                       onClick={() => setView(v)}
                       className={cn(
-                        'h-7 rounded-full px-3 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                        'h-7 rounded-full px-3 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                         view === v ? 'bg-surface-panel text-fg-base shadow-sm' : 'hover:text-fg-base'
                       )}
                     >
