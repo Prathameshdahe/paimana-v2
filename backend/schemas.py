@@ -570,11 +570,15 @@ class LiveJob(CamelModel):
 
 
 class LiveStatus(CamelModel):
-    """enabled False: LIVE_JOBS=0, the loops are not running (jobs still start from the API)."""
+    """enabled False: LIVE_JOBS=0, the loops are not running (jobs still start from the API, the Bhoomi Rashi pull
+    only with BHOOMI_PULL=1). A job whose loop is off has interval_s None."""
     enabled: bool
     inbox_pending: int
     watch: LiveJob
     scout: LiveJob
+    parivesh_snapshot: LiveJob | None = None
+    bhoomi_rashi_pull: LiveJob | None = None
+    bhoomi_pull_enabled: bool = False
 
 
 class LeadTime(CamelModel):

@@ -1,11 +1,15 @@
 """Background jobs inside the backend process (docs/IMPLEMENTATION_GUIDE_v2.md A.2: in-process scheduler, no broker)
 and the alert stream.
 
-start() runs the inbox watcher every WATCH_INTERVAL_S seconds (default 60, first tick at start) and the scout batch
-every SCOUT_INTERVAL_H hours (default 24, first run SCOUT_FIRST_DELAY_S after start); LIVE_JOBS=0 starts neither
-(the tests). The blocking work runs in a thread (asyncio.to_thread), and the watcher and the scout each hold their
-own lock, so a scheduled run never overlaps one started from the API. A run that ingests or scouts writes its
-job_runs row; an idle watch tick only updates STATUS.
+start() runs the inbox watcher every WATCH_INTERVAL_S seconds (default 60, first tick at start), the scout batch
+every SCOUT_INTERVAL_H hours (default 24, first run SCOUT_FIRST_DELAY_S after start) and the public-portal jobs of
+backend/live/portals.py: the PARIVESH dashboard snapshot every PARIVESH_SNAPSHOT_INTERVAL_H hours (default 6; a
+date already archived is not fetched again, so this is one fetch a day with same-day retries; PARIVESH_SNAPSHOT=0
+turns it off) and, only with BHOOMI_PULL=1, a daily check that pulls the Bhoomi Rashi register when the newest pull
+is BHOOMI_PULL_EVERY_D days old (default 91, quarterly). LIVE_JOBS=0 starts none of them (the tests). The blocking
+work runs in a thread (asyncio.to_thread), and every job holds its own lock, so a scheduled run never overlaps one
+started from the API. A run that ingests, scouts or fetches writes its job_runs row; an idle tick (nothing in the
+inbox, today already archived, pull not due) only updates STATUS.
 
 alert_stream() is the Server-Sent Events body of GET /api/stream: it polls SQLite every POLL_S seconds for alerts
 with an id above the last one sent and writes a comment line every HEARTBEAT_S seconds so proxies keep it open.
@@ -18,12 +22,13 @@ from datetime import datetime, timedelta, timezone
 from backend import db
 from backend.schemas import Alert
 
-from . import scout, watcher
+from . import portals, scout, watcher
 
 SCOUT_FIRST_DELAY_S = 600
+PORTALS_FIRST_DELAY_S = 120
 POLL_S, HEARTBEAT_S = 2.0, 15.0
 STATUS = {job: {"interval_s": None, "running": False, "last_tick": None, "next_due": None, "last_error": None}
-          for job in ("watch", "scout")}
+          for job in ("watch", "scout", "parivesh_snapshot", "bhoomi_rashi_pull")}
 
 
 def _iso(t: datetime) -> str:
@@ -32,6 +37,11 @@ def _iso(t: datetime) -> str:
 
 def enabled() -> bool:
     return os.environ.get("LIVE_JOBS", "1") != "0"
+
+
+def bhoomi_enabled() -> bool:
+    """BHOOMI_PULL=1: the Bhoomi Rashi pull may run (scheduled and from the API); off by default."""
+    return os.environ.get("BHOOMI_PULL", "0") == "1"
 
 
 async def _every(job: str, fn, interval_s: float, first_delay_s: float) -> None:
@@ -52,13 +62,19 @@ async def _every(job: str, fn, interval_s: float, first_delay_s: float) -> None:
 
 
 def start() -> list[asyncio.Task]:
-    """Start the two job loops on the running event loop (FastAPI lifespan); none when LIVE_JOBS=0."""
+    """Start the job loops on the running event loop (FastAPI lifespan); none when LIVE_JOBS=0."""
     if not enabled():
         return []
-    watch_s = float(os.environ.get("WATCH_INTERVAL_S", 60))
-    scout_s = float(os.environ.get("SCOUT_INTERVAL_H", 24)) * 3600
-    return [asyncio.create_task(_every("watch", watcher.watch_once, watch_s, 0)),
-            asyncio.create_task(_every("scout", scout.batch, scout_s, SCOUT_FIRST_DELAY_S))]
+    env = os.environ.get
+    loops = [("watch", watcher.watch_once, float(env("WATCH_INTERVAL_S", 60)), 0),
+             ("scout", scout.batch, float(env("SCOUT_INTERVAL_H", 24)) * 3600, SCOUT_FIRST_DELAY_S)]
+    if env("PARIVESH_SNAPSHOT", "1") != "0":
+        loops.append(("parivesh_snapshot", portals.snapshot_once,
+                      float(env("PARIVESH_SNAPSHOT_INTERVAL_H", 6)) * 3600, PORTALS_FIRST_DELAY_S))
+    if bhoomi_enabled():
+        every_d = int(env("BHOOMI_PULL_EVERY_D", portals.PULL_EVERY_D))
+        loops.append(("bhoomi_rashi_pull", lambda: portals.pull_if_due(every_d), 86400.0, PORTALS_FIRST_DELAY_S))
+    return [asyncio.create_task(_every(job, fn, s, first), name=job) for job, fn, s, first in loops]
 
 
 async def stop(tasks: list[asyncio.Task]) -> None:
@@ -72,7 +88,9 @@ def status() -> dict:
     jobs = {j["job"]: j for j in db.latest_jobs()}
     return {"enabled": enabled(), "inbox_pending": len(watcher.pending()),
             "watch": {**STATUS["watch"], "last_run": jobs.get("ingest")},
-            "scout": {**STATUS["scout"], "last_run": jobs.get("scout")}}
+            "scout": {**STATUS["scout"], "last_run": jobs.get("scout")},
+            **{job: {**STATUS[job], "last_run": jobs.get(job)} for job in ("parivesh_snapshot", "bhoomi_rashi_pull")},
+            "bhoomi_pull_enabled": bhoomi_enabled()}
 
 
 async def alert_stream(after: int | None, keys=None):

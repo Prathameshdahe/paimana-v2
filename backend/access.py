@@ -33,7 +33,7 @@ FEATURES = {
     "watchlist": "per-role watchlist", "bottlenecks": "Bottleneck Intelligence", "agencies": "Agency matrix",
     "radar": "External Evidence Radar", "approvals": "approval inbox (memos addressed to the role)",
     "live": "live job status", "models": "Models page", "chat": "project assistant (frontend only)",
-    "jobs": "run the inbox watcher, news scout and uploads", "workers": "worker console and trigger",
+    "jobs": "run the inbox watcher, news scout, portal refreshes and uploads", "workers": "worker console and trigger",
     "unlinked_signals": "news items not linked to any project",
 }
 

@@ -8,7 +8,7 @@ from llm import worker
 
 from . import brief, db, serving, store
 from .access import Viewer, in_scope, need, stream_viewer, viewer
-from .live import scheduler, scout, watcher
+from .live import portals, scheduler, scout, watcher
 from .schemas import (
     AgencyMatrix,
     Alert,
@@ -265,6 +265,33 @@ def post_scout(background: BackgroundTasks, project_key: str | None = Query(None
     db.audit(v.role, "jobs.scout", "batch", f"{len(keys)} projects")
     background.add_task(scout.run, keys)
     return {"started": True, "detail": f"scouting {len(keys)} projects in the background", "pending": len(keys)}
+
+
+@router.post("/jobs/parivesh-snapshot", response_model=JobStarted)
+def post_parivesh_snapshot(background: BackgroundTasks, v: Viewer = Depends(need("jobs"))):
+    """Archive today's PARIVESH 2.0 dashboard table now, in the background (once per date)."""
+    if portals.snapshot_busy():
+        return {"started": False, "detail": "a PARIVESH snapshot is already being taken"}
+    path = portals.snapshot_path()
+    if path.exists():
+        return {"started": False, "detail": f"{path.name} is already archived"}
+    db.audit(v.role, "jobs.parivesh_snapshot", path.name)
+    background.add_task(portals.snapshot_once)
+    return {"started": True, "detail": f"archiving the PARIVESH dashboard as {path.name}"}
+
+
+@router.post("/jobs/bhoomi-pull", response_model=JobStarted)
+def post_bhoomi_pull(background: BackgroundTasks, state: str | None = Query(None, max_length=60),
+                     v: Viewer = Depends(need("jobs"))):
+    """Pull the Bhoomi Rashi register (one state, or every state) now, in the background; only with BHOOMI_PULL=1."""
+    if not scheduler.bhoomi_enabled():
+        return {"started": False, "detail": "the Bhoomi Rashi pull is off (BHOOMI_PULL=0)"}
+    if portals.pull_busy():
+        return {"started": False, "detail": "a Bhoomi Rashi pull is already running"}
+    states = [state.strip()] if state else None
+    db.audit(v.role, "jobs.bhoomi_pull", state or "all states")
+    background.add_task(portals.bhoomi_pull, states)
+    return {"started": True, "detail": f"pulling {states[0] if states else 'every state'} in the background"}
 
 
 @router.get("/signals/feed", response_model=SignalFeed)

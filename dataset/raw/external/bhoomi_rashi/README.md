@@ -15,7 +15,9 @@ projects land-acquisition data. Nothing else needs to change.
 
 All 29 states with data were pulled on 2026-09-27 and are already in `../land_acquisition_india.csv` (aggregated
 stretches only; the raw exports total about 731 MB, so they are not committed). Arunachal Pradesh and Nagaland
-return an empty table.
+return an empty table. To refresh, run the backend's pull instead of dropping files here: with `BHOOMI_PULL=1` it
+pulls every state once a quarter (or one state on `POST /api/jobs/bhoomi-pull?state=GOA`), runs the checks of step
+3 itself and keeps only the stretches, in `../bhoomi_rashi_pulls/<date>.csv`.
 
 `pipeline/bhoomi_rashi.py` parses each file (header row inside the table, blank group cells forward-filled,
 Publish Date dd/mm/YYYY) and aggregates it to NH stretches in the schema of `../land_acquisition_maharashtra.csv`.

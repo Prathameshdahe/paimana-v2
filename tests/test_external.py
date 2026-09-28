@@ -442,6 +442,19 @@ def test_load_land_reads_every_state_and_dedupes(tmp_path):
     assert X.state_key(la["state"]).value_counts().to_dict() == {"MAHARASHTRA": 4, "GUJARAT": 2}
 
 
+def test_load_land_takes_a_pulled_state_whole_from_its_newest_pull(tmp_path):
+    LA.assign(chainage_raw=["0 - 9", "9 - 12", "0 - 4", "0 - 2"]).to_csv(tmp_path / "land_acquisition_maharashtra.csv",
+                                                                       index=False)
+    guj = B.aggregate_stretches(B.parse_bhoomi_rashi(write_export(tmp_path / "gujarat.xls")))
+    guj.to_csv(tmp_path / "land_acquisition_gujarat.csv", index=False)
+    (tmp_path / "bhoomi_rashi_pulls").mkdir()
+    pd.concat([guj, LA.head(1)]).to_csv(tmp_path / "bhoomi_rashi_pulls" / "2026-06-01.csv", index=False)
+    guj.head(1).to_csv(tmp_path / "bhoomi_rashi_pulls" / "2026-09-01.csv", index=False)       # Gujarat only
+    la = X.load_land(tmp_path)
+    assert X.state_key(la["state"]).value_counts().to_dict() == {"MAHARASHTRA": 1, "GUJARAT": 1}
+    assert la.loc[X.state_key(la["state"]) == "GUJARAT", "chainage_raw"].tolist() == [guj["chainage_raw"].iloc[0]]
+
+
 def test_link_land_needs_the_state_of_the_stretch():
     guj = pd.DataFrame({"state": "Gujarat", "highway_name": ["48"], "districts_touched": ["SURAT"],
                         "num_parcels": [300], "total_area_ha": [25.0], "acquisition_complexity_score": [2],

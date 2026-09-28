@@ -980,11 +980,18 @@ def read_land(path):
 def load_land(external=EXTERNAL):
     """Every land source as one stretch table (the land_acquisition_maharashtra.csv schema): the stretch CSVs
     raw/external/land_acquisition_*.csv, then the raw Bhoomi Rashi exports in raw/external/bhoomi_rashi/ (.xls,
-    .html) parsed and aggregated. A (state, highway, chainage) stretch found in more than one keeps its first copy."""
+    .html) parsed and aggregated. A (state, highway, chainage) stretch found in more than one keeps its first copy.
+    A state in a scheduled pull (raw/external/bhoomi_rashi_pulls/<date>.csv, backend/live/portals.py) comes from the
+    newest pull that has it instead, whole."""
     parts = [read_land(p) for p in sorted(external.glob("land_acquisition_*.csv"))]
     raw = sorted(p for p in (external / "bhoomi_rashi").glob("*") if p.suffix.lower() in (".xls", ".html", ".htm"))
     parts += [aggregate_stretches(parse_bhoomi_rashi(p)) for p in raw]
     la = pd.concat(parts, ignore_index=True)
+    pulls = [read_land(p).assign(pull=p.stem) for p in sorted((external / "bhoomi_rashi_pulls").glob("*.csv"))]
+    if pulls:
+        pl = pd.concat(pulls, ignore_index=True).assign(k=lambda d: state_key(d["state"]))
+        pl = pl[pl["pull"] == pl.groupby("k")["pull"].transform("max")].drop(columns=["pull", "k"])
+        la = pd.concat([pl, la[~state_key(la["state"]).isin(set(state_key(pl["state"])))]], ignore_index=True)
     return la[~la.assign(k=state_key(la["state"])).duplicated(["k", "highway_name", "chainage_raw"])].reset_index(
         drop=True)
 

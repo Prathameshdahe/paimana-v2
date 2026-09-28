@@ -30,6 +30,8 @@ def test_scheduler_runs_both_loops_when_on(monkeypatch):
     calls = []
     monkeypatch.setenv("LIVE_JOBS", "1")
     monkeypatch.setenv("WATCH_INTERVAL_S", "0.05")
+    monkeypatch.setenv("PARIVESH_SNAPSHOT", "0")  # the portal loops: tests/test_portals.py
+    monkeypatch.delenv("BHOOMI_PULL", raising=False)
     monkeypatch.setattr(scheduler, "SCOUT_FIRST_DELAY_S", 0.1)
     monkeypatch.setattr(watcher, "watch_once", lambda: calls.append("watch"))
     monkeypatch.setattr(scout, "batch", lambda: calls.append("scout") or 1 / 0)  # a failing run keeps the loop
