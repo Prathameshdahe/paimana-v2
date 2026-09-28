@@ -111,8 +111,13 @@ function ProjectsCardView({ card }: { card: ProjectsCard }) {
   )
 }
 
+/** an unmapped kind or group in sentence case, so a newer backend's word still reads as a label */
+const asLabel = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).replace(/_/g, ' ')
+
+/** the first column's header per stats groupBy (llm/tools.py: portfolio, outside factors, agencies, bottlenecks) */
 const GROUP_LABEL: Record<string, string> = {
-  state: 'State', sector: 'Sector', ministry: 'Ministry', agency: 'Agency', tier: 'Tier',
+  state: 'State', sector: 'Sector', ministry: 'Ministry', agency: 'Agency', tier: 'Tier', factor: 'Outside factor',
+  bottleneck: 'Bottleneck',
 }
 
 function StatsCardView({ card }: { card: StatsCard }) {
@@ -123,7 +128,7 @@ function StatsCardView({ card }: { card: StatsCard }) {
         <table className="w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-border-subtle text-fg-muted">
-              <th scope="col" className={cn(th, 'pl-1')}>{GROUP_LABEL[card.groupBy] ?? card.groupBy}</th>
+              <th scope="col" className={cn(th, 'pl-1')}>{GROUP_LABEL[card.groupBy] ?? asLabel(card.groupBy)}</th>
               <th scope="col" className={cn(th, 'text-right')}>Projects</th>
               <th scope="col" className={cn(th, 'text-right')}>Capital</th>
               <th scope="col" className={cn(th, 'text-right text-critical')}>Critical</th>
@@ -417,9 +422,11 @@ export function ChatCardView({ card }: { card: ChatCard }) {
 
 // ------------------------------------------------------------------ sources
 
+/** a source's kind in words: llm/tools.py's own sources, then the knowledge search's document kinds (llm/rag.py) */
 const KIND_LABEL: Record<string, string> = {
-  project: 'Project data', research: 'Web research', news: 'News', event: 'Report remark', external: 'External data',
-  help: 'Help page', doc: 'Documentation', glossary: 'Glossary', opinion: 'AI second opinion',
+  project: 'Project data', portfolio: 'Portfolio figures', model: 'Risk model', checklist: 'Risk checks',
+  agency: 'Agency figures', bottleneck: 'Bottlenecks', research: 'Web research', news: 'News', event: 'Report remark',
+  external: 'External data', help: 'Help page', doc: 'Documentation', glossary: 'Glossary', opinion: 'AI second opinion',
 }
 
 /** the numbered sources the narrative cites; each item is the target of its [n] chips */
@@ -459,7 +466,7 @@ export function SourcesList({ items, anchor, flashed }: {
                   <span className="font-medium leading-snug text-fg-base">{s.title}</span>
                 )}
                 <div className="flex flex-wrap items-center gap-x-1.5 text-fg-dimmed">
-                  <span>{KIND_LABEL[s.kind] ?? s.kind}</span>
+                  <span>{KIND_LABEL[s.kind] ?? asLabel(s.kind)}</span>
                   {s.source && <span className="truncate">· {s.source}</span>}
                   {s.date && <span>· {formatLooseDate(s.date)}</span>}
                   {s.projectKey && (
