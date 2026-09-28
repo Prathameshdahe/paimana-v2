@@ -11,14 +11,17 @@ Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summar
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
 The newest usable cutoff is the test fold; the N_VAL usable cutoffs before it that sit in the newest reliable block
-are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
+and before FLASH_FROM are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
 label was known by c) and predict the rows at t = c. Completed projects are left out: there is nothing to warn about.
 
 The validation block is quarterly-report (QPISR) era: anticipated vs anticipated dates, and 0% remarks or progress at
 some folds. Live scoring and the test fold are the flash-report era (revised vs revised, a higher slip rate), where
 val rankings have flipped. So a second block, flash, holds every cutoff from FLASH_FROM with >= MIN_ROWS labelled rows
-(these fail the coverage rule: flash reports print no anticipated fields). For the 2-quarter targets it includes the
-test cutoff, so there the test fold is no longer independent of promotion. Every pooled row also reports the
+(the date fields fail the coverage rule there: flash reports print no anticipated date). The two blocks are disjoint:
+validation stops before FLASH_FROM even for the cost revision, whose cost fields stay reliable into the flash era (it
+used to take 2025-07 and 2025-10 as validation folds too, so the two blocks shared them and were not two pieces of
+evidence). For the 2-quarter targets flash includes the test cutoff, so there the test fold is no longer independent
+of promotion. Every pooled row also reports the
 not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
 early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
 
@@ -115,7 +118,8 @@ ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
 WINDOW_RULE = ("A quarter is reliable for a target when every field its label compares (needs) is >= reliable_min "
                "complete in silver/coverage.parquet. A cutoff c is usable when c and c + h are reliable and c has "
                f">= {MIN_ROWS} labelled rows. test = the newest {N_TEST} usable cutoff(s). validation = the last "
-               f"{N_VAL} usable cutoffs before test inside the newest reliable block that still has usable cutoffs. "
+               f"{N_VAL} usable cutoffs before test and before {FLASH_FROM.date()} inside the newest reliable block "
+               "that still has usable cutoffs (validation and flash never share a cutoff). "
                "Each fold trains on every label row with target_period <= cutoff (outcome known by the cutoff, any "
                "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded. "
                f"flash = every cutoff from {FLASH_FROM.date()} with >= {MIN_ROWS} labelled rows (reliability not "
@@ -167,7 +171,7 @@ def windows(coverage, d, y, h):
     test, rest = usable[-N_TEST:], usable[:-N_TEST]
     last = qindex([rest[-1]])[0]
     block = next(b for b in blocks(rel) if b[0] <= last <= b[1])
-    val = [c for c in rest if qindex([c])[0] >= block[0]][-N_VAL:]
+    val = [c for c in rest if qindex([c])[0] >= block[0] and c < FLASH_FROM][-N_VAL:]   # disjoint from flash
     flash = [c for c in n.index if c >= FLASH_FROM and n[c] >= MIN_ROWS]
     iso = lambda p: pd.Timestamp(p).date().isoformat()
     return {
@@ -488,7 +492,7 @@ def run(run_dir, extra=None):
             want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
             more = sorted(c for c in want - done if (d.period == c).any())
             pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, more, models)[0]] if more else []))
-            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # val and flash can share cutoffs
+            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # test and flash can share cutoffs
             for split, (p, f) in splits.items():
                 cp = calibrate(p, pool, h)
                 splits[split] = (cp, rescore(cp, f))

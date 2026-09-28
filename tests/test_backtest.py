@@ -83,6 +83,21 @@ def test_flash_block_takes_every_cutoff_with_enough_rows():
     assert w["rows_per_cutoff"]["2026-01-01"] == 150
 
 
+def test_validation_and_flash_blocks_never_share_a_cutoff():
+    """The cost fields stay reliable into the flash era, so the cost revision's usable cutoffs run up to the test
+    fold; its validation block still stops before FLASH_FROM."""
+    periods = pd.date_range("2022-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
+    cov = pd.DataFrame({"period": periods, "anticipated_completion": 0.9, "anticipated_cost_cr": 1.0})
+    cov.loc[cov.period >= backtest.FLASH_FROM, "anticipated_completion"] = 0.6
+    t = [p for p in periods if p + pd.DateOffset(months=6) <= periods[-1]]
+    d = pd.DataFrame({"period": np.repeat(t, 150)})
+    w = backtest.windows(cov, d, "y_cost_rev", 2)
+    assert w["test"] == ["2026-01-01"] and "2025-07-01" in w["usable_cutoffs"]
+    assert w["validation"] == ["2024-01-01", "2024-04-01", "2024-07-01", "2024-10-01", "2025-01-01", "2025-04-01"]
+    assert not set(w["validation"]) & set(w["flash"])
+    assert w["flash"] == ["2025-07-01", "2025-10-01", "2026-01-01"]
+
+
 def test_not_yet_due_slice():
     d = labelled(2)
     d["months_to_anticipated_completion"] = np.tile([3.0, 12.0, np.nan], len(d))[:len(d)]
