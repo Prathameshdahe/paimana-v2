@@ -67,10 +67,12 @@ shown.
 
 The four roles (public, agency, ministry, IPMD) never see a raw model number:
 no probability, SHAP value, quantile interval, rank percentile, bias statistic,
-CI, lift, analogue distance or rate, or scenario value. They read the tier, the
+CI, lift (nor the notice backtest's slip rates it is the ratio of), analogue
+distance or rate, composite score statistic, or scenario value. They read the tier, the
 outlook in words (`Scores.outlook` / `ProjectRow.outlook`: delay and cost
 "very likely / likely / possible / unlikely", slip "under 6 months ... over 2
-years"), the drivers in words (`Scores.driversPlain`), the agencies' words
+years"), the drivers in words (`Scores.driversPlain`; officials only: the
+public gets `[]` and its "Why it is happening" opens with the checks), the agencies' words
 (`scheduleWord`, `costWord`), the measured delay as a band (`extraMonthsWord`;
 `extra_months_word` in the external summary's snake_case rows), what happened to
 similar past projects (each analogue's `outcome` and `yearsAgo`), and report

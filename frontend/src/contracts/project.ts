@@ -103,8 +103,8 @@ export interface MapRow {
   flags: Flag[]
 }
 
+/** unit G's MapPage: total counts every match, items (at most 5,000) come by tier, then key */
 export interface ProjectMap {
-  asof?: string | null
   total: number
   items: MapRow[]
 }
