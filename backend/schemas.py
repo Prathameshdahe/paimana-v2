@@ -208,7 +208,7 @@ class ReviewBadge(CamelModel):
 
 class ResearchFact(CamelModel):
     """A cited web fact (backend/serving.py research). origin 'sweep': found by a research agent and checked by a
-    second one that re-opened the source (verified keep | fix); 'agent': a news item the in-app research agent judged
+    second one (verified keep | fix; it re-opened the source of an article fact); 'agent': a news item the in-app research agent judged
     relevant with the local LLM (signal_id, judged_at). live: negative, not resolved, within 4 quarters of asof.
     headline is the citation label; the public gets no match_reason, and no headline on agent facts (a raw news feed
     title): label those by summary and source. basis: 'article' when the researcher read the source, 'headline' when

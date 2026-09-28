@@ -556,9 +556,10 @@ def public_page(page: dict) -> dict:
 
 N_RESEARCH_TOP, N_BLOCKERS = 3, 20
 RESEARCH_NOTE = (
-    "Web research is evidence, not a model input. Sweep facts were found by a research agent and checked by a second "
-    "one that re-opened the source; agent facts are news items the in-app research agent judged with the local LLM "
-    "from the headline and feed summary alone. A fact is live when it is negative, not resolved and dated within "
+    "Web research is evidence, not a model input. Sweep facts were found by a research agent, some read from the "
+    "article and most judged from a news headline and its feed summary (each fact says which), and checked by a "
+    "second agent; agent facts are news items the in-app research agent judged with the local LLM from the headline "
+    "and feed summary alone. A fact is live when it is negative, not resolved and dated within "
     f"{LIVE_Q} quarters of the as-of quarter. No news is not no problem: coverage favours large, much-reported "
     "projects.")
 

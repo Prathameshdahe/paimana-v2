@@ -139,7 +139,7 @@ export function ResearchPanel() {
           <h4 className="px-5 pt-4 text-sm font-medium text-fg-base">Newest blockers</h4>
           {s.topRecentBlockers.length === 0 ? (
             <div className="px-5 py-6 text-center text-sm text-fg-dimmed">
-              No live blocker in the research for your projects. Not the same as no problem: most projects are not researched yet.
+              No live blocker in the research for your projects. Not the same as no problem: news coverage favours large, much-reported projects.
             </div>
           ) : (
             <>
@@ -162,8 +162,8 @@ export function ResearchPanel() {
               {states.map((r) => (
                 <li key={r.state ?? 'unknown'} className="flex items-baseline justify-between gap-3 text-xs">
                   <span className="truncate text-fg-base">{r.state ?? 'state unknown'}</span>
-                  <span className="shrink-0 tabular-nums text-fg-muted">
-                    <span className="font-semibold text-critical">{r.nProjectsNegativeLive}</span> of {r.nSearched} researched
+                  <span className="shrink-0 tabular-nums text-fg-muted" title="projects with a live blocker, of the projects researched in this state">
+                    <span className="font-semibold text-critical">{r.nProjectsNegativeLive}</span> of {r.nSearched} projects
                   </span>
                 </li>
               ))}

@@ -1,6 +1,7 @@
 """
 Web research evidence (dataset/raw/external/research/README.md): what the public web said about each current
-project, one cited fact per row, each checked by a second agent that re-opened the source.
+project, one cited fact per row, each checked by a second agent (basis 'article': the source was read and
+re-opened; 'headline': a news-feed headline and its feed summary were judged).
 
 Run from repo root after the external step:  python -m pipeline.run research
 
