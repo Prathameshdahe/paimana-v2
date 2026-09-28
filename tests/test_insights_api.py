@@ -1,5 +1,6 @@
 """Agency matrix, bottlenecks, radar summary, models page and the project brief (B 6, B 8 rows 7-9)."""
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -11,16 +12,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import brief, serving  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import client as llm_client  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 MAX_ROWS = 100
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory):
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
-            yield c
+def client():
+    with TestClient(app) as c:
+        as_role(c, "developer")   # the models page and the model numbers are the developer's
+        yield c
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +32,7 @@ def top_key(client):
 # ------------------------------------------------------------------ agencies
 
 def test_agency_matrix_hides_small_agencies_and_merges_names(client):
-    m = client.get("/api/agencies/matrix").json()
+    m = client.get("/api/agencies/matrix", headers=as_role(client, "developer")).json()   # with its statistics
     pts = m["points"]
     assert 0 < len(pts) <= 500 and m["nAgencies"] >= len(pts) and m["method"]
     assert all(p["nProjects"] >= 5 and not p["hidden"] for p in pts)
@@ -88,7 +89,7 @@ def test_new_endpoints_never_return_more_than_100_project_rows(client, top_key):
     for path in ("/api/agencies/matrix", "/api/agencies/matrix?include_hidden=true", "/api/agencies/NHAI/projects",
                  "/api/agencies/NHAI/projects?size=100", "/api/bottlenecks", "/api/bottlenecks?size=100",
                  f"/api/bottlenecks/{bid}?size=100", "/api/radar/summary", "/api/models"):
-        r = client.get(path)
+        r = client.get(path, headers=as_role(client, "developer") if path == "/api/models" else None)
         assert r.status_code == 200, path
 
         def lists(v):
@@ -110,7 +111,7 @@ def test_radar_summary_on_an_empty_database(client):
 
 
 def test_models_page_has_registry_calibration_shap_and_honest_live_accuracy(client):
-    m = client.get("/api/models").json()
+    m = client.get("/api/models", headers=as_role(client, "developer")).json()
     assert 0 < len(m["shapSummary"]) <= 20 and "meanAbsShap" in m["shapSummary"][0]
     shap = [r["meanAbsShap"] for r in m["shapSummary"]]
     assert shap == sorted(shap, reverse=True)
@@ -162,21 +163,64 @@ def test_brief_is_503_quickly_when_the_llm_is_down(client, top_key, monkeypatch)
     assert time.time() - t0 < 10
     t0 = time.time()                                   # remembered: the next ask does not wait again
     assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and time.time() - t0 < 1
-    brief._down_at = -brief.DOWN_S                     # forget the outage for the next tests
+    assert llm_client.down_recently()                  # through the client's breaker, shared with the chat
+    llm_client._down_at = -1e9                         # forget the outage for the next tests
+
+
+def test_brief_shares_the_clients_breaker_and_a_timeout_does_not_trip_it(client, top_key, monkeypatch):
+    calls = []
+
+    def slow(system, user):
+        calls.append(user)
+        raise llm_client.LLMTimeoutError("LM Studio did not answer in time (ReadTimeout)")
+    monkeypatch.setattr(llm_client, "complete", slow)
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
+    r = client.get(f"/api/projects/{top_key}/brief")
+    assert r.status_code == 503 and "did not answer in time" in r.json()["detail"]
+    assert not llm_client.down_recently()              # LM Studio is up, only slow: not marked down
+    assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and len(calls) == 2   # asked again
+    llm_client.mark_down()                             # the chat found the connection refused just now
+    assert client.get(f"/api/projects/{top_key}/brief").status_code == 503 and len(calls) == 2   # not asked
+    assert "unreachable in the last" in client.get(f"/api/projects/{top_key}/brief").json()["detail"]
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
+    with llm_client.gate(1) as ok:                     # the request ahead holds the LLM and finds it down
+        assert ok
+        seen = []
+        t = threading.Thread(target=lambda: seen.append(client.get(f"/api/projects/{top_key}/brief").json()))
+        t.start()
+        time.sleep(0.2)
+        llm_client.mark_down()
+    t.join(5)
+    assert seen[0]["status"] == "llm_unavailable" and "unreachable" in seen[0]["detail"] and len(calls) == 2
+    monkeypatch.setattr(llm_client, "_down_at", -1e9)
+
+
+def test_brief_waits_for_the_llm_gate_and_says_busy(client, top_key, monkeypatch):
+    other = client.get("/api/projects", params={"size": 1, "page": 3}).json()["items"][0]["key"]
+    calls = []
+    monkeypatch.setattr(llm_client, "complete", lambda system, user: calls.append(user) or "x")
+    monkeypatch.setattr(brief, "BUSY_WAIT_S", 0.2)
+    assert llm_client.LLM_GATE.acquire(timeout=1)       # a chat answer is generating
+    try:
+        r = client.get(f"/api/projects/{other}/brief")
+    finally:
+        llm_client.LLM_GATE.release()
+    assert r.status_code == 503 and "busy" in r.json()["detail"] and calls == []
 
 
 def test_brief_accepts_caches_and_rejects(client, top_key, monkeypatch):
-    facts = brief.payload(top_key)
+    facts = brief.payload(top_key, numbers=True)   # the developer's view (tests/test_numbers_policy.py: the plain one)
     p = facts["prediction"]
     good = (f"The model rates this project {p['tier']}: P(any slip, 2 quarters) = {p['p_any_2q']}.\n\n"
             f"The expected slip is {p['slip_months_p50']} months.")
     calls = []
     monkeypatch.setattr(llm_client, "complete", lambda system, user: calls.append(user) or good)
-    r = client.get(f"/api/projects/{top_key}/brief")
+    dev = as_role(client, "developer")
+    r = client.get(f"/api/projects/{top_key}/brief", headers=dev)
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["status"] == "ok" and not out["cached"] and len(out["paragraphs"]) == 2 and out["payload"]
-    again = client.get(f"/api/projects/{top_key}/brief").json()
+    again = client.get(f"/api/projects/{top_key}/brief", headers=dev).json()
     assert again["cached"] and again["text"] == good and len(calls) == 1
 
     other = client.get("/api/projects", params={"size": 1, "page": 2}).json()["items"][0]["key"]

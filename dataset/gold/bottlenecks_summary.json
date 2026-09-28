@@ -9,7 +9,7 @@
     "forest_env": 4,
     "land": 8
   },
-  "signals_used": 27,
+  "signals_used": 35,
   "signals_source": "database/paimana.db",
   "note": "Projects that would be affected while this issue stays open: they share an open issue of this category and place (for multi-state projects, of this named authority) in their report remarks or linked news. This is a grouping, not a causal claim about what resolving it would change."
 }

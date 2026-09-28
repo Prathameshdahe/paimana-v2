@@ -7,7 +7,7 @@ import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDateTime } from '@/lib/formatters'
@@ -29,7 +29,7 @@ function readSeen(): string | undefined {
  * (backend scope). Analysts and ministry officials can acknowledge (lib/auth/access.ts).
  */
 export function AlertBell() {
-  const { role } = useRole()
+  const { role } = useSession()
   const panel = useProjectPanel()
   const [seenAt, setSeenAt] = useState(readSeen)
   const latest = useAlerts({ acked: false, size: 8 })
@@ -55,7 +55,7 @@ export function AlertBell() {
     <Popover.Root onOpenChange={(open) => open && markSeen()}>
       <Popover.Trigger
         aria-label={`alerts: ${n} unread`}
-        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        className="relative flex size-9 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <Bell className="h-4 w-4" />
         {n > 0 && (
@@ -85,7 +85,7 @@ export function AlertBell() {
           {latest.error ? (
             <ApiErrorNote error={latest.error} className="py-4" />
           ) : !latest.data ? (
-            <div className="px-4 py-6 text-center text-xs text-fg-dimmed">loading alerts...</div>
+            <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
           ) : latest.data.items.length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-fg-dimmed">no open alerts</div>
           ) : (

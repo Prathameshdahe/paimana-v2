@@ -1,0 +1,209 @@
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+from sklearn.metrics import average_precision_score
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from ml import backtest, experiment, registry  # noqa: E402
+
+
+def test_weighted_average_precision_matches_sklearn():
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 2, 400)
+    p = np.round(rng.random(400), 2)                       # many tied scores
+    W = rng.integers(0, 4, (5, 400))
+    assert np.allclose(experiment.ap_weighted(y, p, np.ones(400)), average_precision_score(y, p))
+    want = [average_precision_score(y, p, sample_weight=w) for w in W]
+    assert np.allclose(experiment.ap_weighted(y, p, W), want)
+
+
+def test_bootstrap_of_identical_models_is_zero_and_a_better_one_is_above_zero():
+    rng = np.random.default_rng(1)
+    y = rng.integers(0, 2, 600)
+    groups = np.repeat(np.arange(200), 3)
+    noise = [rng.random(600) for _ in range(2)]
+    same = experiment.paired_bootstrap(y, groups, noise, noise, n_boot=200)
+    assert np.allclose(same, 0)
+    good = [0.6 * y + 0.4 * n for n in noise]
+    lo, hi = experiment.ci(experiment.paired_bootstrap(y, groups, noise, good, n_boot=200))
+    assert 0 < lo < hi
+
+
+def test_bootstrap_resamples_projects_not_rows():
+    """The challenger wins on one big project only: drawing whole projects makes the interval much wider than
+    drawing rows would."""
+    rng = np.random.default_rng(2)
+    n = 1000
+    y = rng.integers(0, 2, n)
+    champ = rng.random(n)
+    chall = champ.copy()
+    big = np.arange(200)                                   # rows of project 0
+    chall[big] = 0.5 * y[big] + 0.5 * champ[big]
+    clustered = np.r_[np.zeros(200, int), np.arange(1, n - 199)]
+    rows = np.arange(n)
+    width = lambda g: np.diff(experiment.ci(experiment.paired_bootstrap(y, g, [champ], [chall], n_boot=400)))[0]
+    assert width(clustered) > 2 * width(rows)
+
+
+def test_rule_needs_both_blocks_a_margin_and_calibration():
+    m = 0.01
+    assert registry.rule({"val": 0.0, "flash": 0.02}, m, 0.08, 0.08)[0]
+    assert not registry.rule({"val": -0.001, "flash": 0.05}, m, 0.08, 0.08)[0]       # lower on a block
+    assert not registry.rule({"val": 0.005, "flash": 0.009}, m, 0.08, 0.08)[0]       # inside the noise margin
+    assert not registry.rule({"val": 0.02, "flash": 0.02}, m, 0.101, 0.08)[0]        # ECE > champion + 0.02
+    ok, why = registry.rule({"val": 0.02, "flash": 0.0}, m, 0.09, 0.08)
+    assert ok and "val +0.0200 (margin 0.0100)" in why and "a block clears" in why
+    per_block = {"val": 0.004, "flash": 0.012}                                    # a one-fold flash block is noisier
+    assert registry.rule({"val": 0.005, "flash": 0.0}, per_block, 0.08, 0.08)[0]
+    assert not registry.rule({"val": 0.0, "flash": 0.010}, per_block, 0.08, 0.08)[0]
+    assert registry.margins("y_any_h4").keys() == {"val", "flash"}
+
+
+PERIODS = pd.date_range("2021-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
+
+
+def synthetic(n_keys=240, seed=4):
+    """A gold-like panel: one feature x, y_any_h2 labels driven by x, a reliable coverage table (the validation
+    block ends 2024-10, the flash block starts 2025-07) and a manifest."""
+    rng = np.random.default_rng(seed)
+    keys = [f"PRJ-{k:06d}" for k in range(n_keys)]
+    feats = pd.DataFrame({"project_key": np.repeat(keys, len(PERIODS)), "period": np.tile(PERIODS, n_keys)})
+    feats["x"] = rng.normal(size=len(feats))
+    feats["noise"] = rng.normal(size=len(feats))
+    feats["is_completed"] = False
+    lab = feats[["project_key", "period"]].assign(target_period=feats.period + pd.DateOffset(months=6))
+    lab = lab[lab.target_period <= PERIODS[-1]]
+    z = feats.loc[lab.index, "x"] + rng.normal(size=len(lab))
+    lab = lab.assign(y_any=(z > 0.3).astype("Int8"), y_date_push=(z > 0.3).astype("Int8"),
+                     y_cost_rev=(z > 1.5).astype("Int8"))
+    cov = pd.DataFrame({"period": PERIODS, "anticipated_completion": 0.95, "anticipated_cost_cr": 0.95})
+    cov.loc[cov.period >= "2025-01-01", ["anticipated_completion", "anticipated_cost_cr"]] = 0.5
+    man = {"gold_version": "test", "features": {g: [] for _, gs in backtest.ABLATION for g in gs},
+           "categorical": []}
+    man["features"]["state"] = ["noise"]
+    return feats, {2: lab, 4: lab.iloc[:0]}, cov, man
+
+
+@pytest.fixture
+def harness(monkeypatch, tmp_path):
+    data = synthetic()
+    monkeypatch.setattr(backtest, "load", lambda: data)
+    monkeypatch.setattr(registry, "load", lambda: {"runs": [], "champions": {}, "decisions": []})
+    monkeypatch.setattr(experiment, "CACHE", tmp_path / "cache")
+    monkeypatch.setattr(backtest, "LGB_PARAMS", {**backtest.LGB_PARAMS, "n_estimators": 60, "learning_rate": 0.1,
+                                                          "n_jobs": 1})
+    return data, tmp_path
+
+
+def test_harness_null_candidate_has_zero_deltas_and_fails(harness):
+    _, tmp = harness
+    t = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)
+    assert set(t.block) == {"val", "flash"} and (t.delta_pr_auc == 0).all() and (t.ci_lo == 0).all()
+    assert (t.delta_fold_pr_auc == 0).all() and (t.pooled_ci_lo == 0).all() and (t.folds_up == 0).all()
+    assert t.set_index("block").margin.to_dict() == registry.margins("y_any_h2")        # each block its own
+    assert (t.decision == "fail").all() and (tmp / "null.csv").exists()
+    assert t.set_index("block").loc["flash", "n_folds"] == 3                   # 2025-07 .. 2026-01
+    again = experiment.run("null", seeds=(0, 1), targets=["y_any_h2"], n_boot=50, out=tmp)   # from the cache
+    pd.testing.assert_frame_equal(t.drop(columns="runtime_s"), again.drop(columns="runtime_s"))
+
+
+def test_harness_passes_an_informative_point_in_time_column(harness):
+    (feats, *_), tmp = harness
+    cand = experiment.Candidate("x itself", extra=lambda ctx: ctx.feats[backtest.PK + ["x"]])
+    t = experiment.run("x", cand, seeds=(0,), targets=["y_any_h2"], n_boot=50, out=tmp)
+    assert (t.delta_pr_auc > 0.05).all() and (t.ci_lo > 0).all() and (t.decision == "pass").all()
+    assert (t.delta_fold_pr_auc > 0.05).all() and (t.folds_up == t.n_folds).all()
+    assert '"identical": true' in t.point_in_time.iloc[0]
+
+
+def test_harness_refuses_a_column_that_reads_the_future(harness):
+    _, tmp = harness
+    leak = experiment.Candidate("key mean of x over all periods", extra=lambda ctx: ctx.feats[backtest.PK].assign(
+        xbar=ctx.feats.groupby("project_key").x.transform("mean")))
+    with pytest.raises(AssertionError, match="change when the data are cut"):
+        experiment.run("leak", leak, seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+
+
+def test_ship_guard_needs_a_ci_above_zero_on_a_block_that_clears_the_margin():
+    b = lambda d, lo, m=0.01: {"delta_fold_pr_auc": d, "ci_lo": lo, "margin": m}
+    assert experiment.robust(True, [b(0.02, 0.001), b(0.0, -0.01)])
+    assert not experiment.robust(True, [b(0.02, -0.001), b(0.005, 0.001)])        # the CI above 0 is under margin
+    assert not experiment.robust(True, [b(0.02, 0.001, 0.03), b(0.0, -0.01)])      # under its own block's margin
+    assert not experiment.robust(False, [b(0.02, 0.01)])                           # the rule failed
+
+
+def test_harness_can_compare_against_an_earlier_run_and_names_the_champion(harness):
+    _, tmp = harness
+    old = {"entry_id": "R1/lightgbm/y_any_h2", "run_id": "R1", "model": "lightgbm", "target": "y_any", "horizon": 2,
+           "feature_list": ["noise"], "categorical": [], "params": {**backtest.LGB_PARAMS, "n_estimators": 20}}
+    new = {**old, "entry_id": "R2/lightgbm/y_any_h2", "run_id": "R2",
+           "params": {**backtest.LGB_PARAMS, "n_estimators": 20, "half_life_q": 8}}
+    reg = {"runs": [old, new], "champions": {"y_any_h2": {"entry_id": new["entry_id"]}}, "decisions": []}
+    man = {"features": {}, "categorical": []}
+    assert experiment.champion(reg, "y_any_h2", man)[2]["half_life_q"] == 8 and \
+        experiment.champion(reg, "y_any_h2", man)[3] == "R2/lightgbm/y_any_h2"
+    cols, cats, params, entry = experiment.champion(reg, "y_any_h2", man, run="R1")
+    assert entry == "R1/lightgbm/y_any_h2" and "half_life_q" not in params and cols == ["noise"]
+    with pytest.raises(AssertionError, match="no LightGBM entry"):
+        experiment.champion(reg, "y_any_h2", man, run="R9")
+    t = experiment.run("null", seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+    assert t.champion_entry.isna().all()                                   # no champion: the manifest's features
+
+
+def test_champion_cache_key_follows_the_backtest_code(harness, monkeypatch):
+    _, tmp = harness
+    calls = []
+    make = lambda: calls.append(1) or pd.DataFrame({"p": [0.5]})
+    experiment.cached("tag", make)
+    experiment.cached("tag", make)
+    assert len(calls) == 1                                                  # second call from the cache
+    monkeypatch.setattr(experiment, "code_version", lambda: "edited")
+    experiment.cached("tag", make)
+    assert len(calls) == 2                                                  # backtest.py changed: made again
+
+
+def test_harness_refuses_a_column_that_reads_unrealised_labels(harness):
+    """A column from ctx.labels at t: the outcome at t + 2q is not known at t, so the cut context must differ."""
+    _, tmp = harness
+    leak = experiment.Candidate("the row's own label", extra=lambda ctx: ctx.feats[backtest.PK].merge(
+        ctx.labels[2][backtest.PK + ["y_any"]].rename(columns={"y_any": "own_y"}), on=backtest.PK, how="left"))
+    with pytest.raises(AssertionError, match="change when the data are cut"):
+        experiment.run("leak_y", leak, seeds=(0,), targets=["y_any_h2"], n_boot=10, out=tmp)
+
+
+def fold_panel(seed=5):
+    """Three folds whose base rates fall (0.8, 0.5, 0.2). The champion ranks well inside each fold at one score level;
+    the challenger ranks a little worse inside each fold but its level follows the fold's base rate."""
+    rng = np.random.default_rng(seed)
+    folds = np.repeat([0, 1, 2], 800)
+    y = (rng.random(len(folds)) < np.array([0.8, 0.5, 0.2])[folds]).astype(int)
+    z = y + rng.normal(0, 0.9, len(y))
+    champ = 1 / (1 + np.exp(-z))
+    chall = 1 / (1 + np.exp(-(z + rng.normal(0, 0.3, len(y)) + np.array([1.5, 0.0, -1.5])[folds])))
+    return y, folds, np.arange(len(y)) // 4, champ, chall
+
+
+def test_fold_mean_bootstrap_is_the_within_cutoff_pr_auc_and_sees_through_a_level_shift():
+    y, folds, groups, champ, chall = fold_panel()
+    fold_ap = lambda p: np.mean([average_precision_score(y[folds == f], p[folds == f]) for f in range(3)])
+    one = lambda f: experiment.ap_weighted(y[folds == f], chall[folds == f], np.ones((folds == f).sum()))
+    assert np.isclose(np.mean([one(f) for f in range(3)]), fold_ap(chall))
+    assert average_precision_score(y, chall) > average_precision_score(y, champ)      # pooled: a "gain"
+    assert fold_ap(chall) < fold_ap(champ)                                              # within cutoff: a loss
+    lo, hi = experiment.ci(experiment.paired_bootstrap(y, groups, [champ], [chall], n_boot=200, folds=folds))
+    assert hi < 0
+    same = experiment.paired_bootstrap(y, groups, [champ], [champ], n_boot=50, folds=folds)
+    assert np.allclose(same, 0)
+
+
+def test_seed_sd_measures_each_block_of_the_champion(harness):
+    _, tmp = harness
+    t = experiment.seed_sd(seeds=(0, 1, 2), out=tmp, targets=["y_any_h2"]).set_index(["target", "block"])
+    assert set(t.index.get_level_values("block")) == {"val", "flash"} and (tmp / "seed_sd.csv").exists()
+    r = t.loc[("y_any_h2", "flash")]
+    assert r.n_folds == 3 and r.n_seeds == 3 and r.fold_pr_auc_sd > 0 and r.margin == 2 * r.fold_pr_auc_sd
+    assert len(r.fold_pr_auc_by_seed.split("/")) == 3

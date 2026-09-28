@@ -4,7 +4,7 @@ Bottleneck clusters across projects (docs/IMPLEMENTATION_GUIDE_v2.md B 6.1).
 Run from repo root after score (part of the profile step):  python -m pipeline.run profile
 
 Inputs   gold/project_events.parquet, gold/predictions_latest.json (and the file it names: the current portfolio),
-         optionally the app database (database/paimana.db or PAIMANA_DB): linked news signals of severity >= 2
+         optionally the app database (backend/db, PostgreSQL): linked news signals of severity >= 2
 Outputs  gold/bottlenecks.parquet (one row per cluster), gold/bottleneck_members.parquet (cluster x project x
          evidence line), gold/bottlenecks_summary.json
 
@@ -22,8 +22,6 @@ while the issue stays open. It is a grouping of shared open issues, not a causal
 """
 import hashlib
 import json
-import os
-import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -34,7 +32,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.silver import ROOT  # noqa: E402
 
 GOLD = ROOT / "dataset" / "gold"
-DB = ROOT / "database" / "paimana.db"
 MIN_PROJECTS, SEVERITY_MIN, N_EVIDENCE = 3, 2, 3
 UNSPECIFIED = "unspecified"
 PLACELESS = {"Multi-State", "PAN India", "unknown"}
@@ -52,17 +49,20 @@ MEMBER_COLS = ["bottleneck_id", "project_key", "kind", "authority", "first_seen"
                "source_doc_id", "source_page", "url"]
 
 
-def load_signals(path=None) -> pd.DataFrame:
+def load_signals(rows: list[dict] | None = None) -> pd.DataFrame:
     """Linked signals (project_key, category, severity, title, source, published_at, url) of severity >=
-    SEVERITY_MIN with a category; empty when the database is missing (the pipeline never needs it)."""
-    path = Path(path or os.environ.get("PAIMANA_DB") or DB)
+    SEVERITY_MIN with a category, read from the app database (rows: given instead); empty when the database cannot
+    be reached or has no schema yet (the pipeline never needs it: the profile step then clusters report events
+    alone and says so in its summary)."""
     cols = ["project_key", "category", "severity", "title", "source", "published_at", "url"]
-    if not path.exists():
-        return pd.DataFrame(columns=cols)
-    with sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) as con:
-        return pd.read_sql_query(f"""SELECT sp.project_key, s.category, s.severity, s.title, s.source, s.published_at,
-            s.url FROM signal_projects sp JOIN signals s ON s.id = sp.signal_id
-            WHERE s.severity >= {SEVERITY_MIN} AND s.category IS NOT NULL""", con)
+    if rows is None:
+        from backend import db  # noqa: PLC0415 - the pipeline's only use of the app database
+        try:
+            rows = db.linked_signals(SEVERITY_MIN)
+        except db.Unavailable as e:
+            print(f"bottlenecks: app database unavailable, clustering report events only ({str(e).splitlines()[0]})")
+            rows = []
+    return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
 
 
 def members(events: pd.DataFrame, cur: pd.DataFrame, signals: pd.DataFrame) -> pd.DataFrame:
@@ -148,20 +148,19 @@ def summary(b: pd.DataFrame, mem: pd.DataFrame, cur: pd.DataFrame, asof, n_signa
     }
 
 
-def main(gold=GOLD, db=None):
+def main(gold=GOLD, signals: pd.DataFrame | None = None):
     t0 = time.time()
     ptr = json.loads((gold / "predictions_latest.json").read_text(encoding="utf-8"))
     cur = pd.read_parquet(ROOT / ptr["path"], columns=CUR_COLS)
     events = pd.read_parquet(gold / "project_events.parquet")
-    db = Path(db or os.environ.get("PAIMANA_DB") or DB)
-    signals = load_signals(db)
+    signals = load_signals() if signals is None else signals
     m = members(events, cur, signals)
     b, mem = cluster(m, cur)
     b.insert(1, "asof", pd.Timestamp(ptr["asof"]))
     b.to_parquet(gold / "bottlenecks.parquet", index=False)
     mem.to_parquet(gold / "bottleneck_members.parquet", index=False)
     s = summary(b, mem, cur, ptr["asof"], int(m["kind"].eq("signal").sum()),
-                db.relative_to(ROOT).as_posix() if db.exists() and db.is_relative_to(ROOT) else None)
+                "app database (app.signals)" if len(signals) else None)
     (gold / "bottlenecks_summary.json").write_text(json.dumps(s, indent=2) + "\n", encoding="utf-8")
     print(f"bottlenecks: {s['n_bottlenecks']} clusters + {s['n_rollups']} state rollups over {s['n_projects']} "
           f"projects (Rs {s['capital_exposed_cr']:,.0f} Cr), {s['signals_used']} signal rows, {time.time() - t0:.1f}s")

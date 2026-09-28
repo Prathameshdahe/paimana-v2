@@ -13,7 +13,7 @@ import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { SignalCard } from './external-factors/EvidenceFeed'
 import { GEO_URL, MAP_CENTER, OFF_MAP, normStateKey } from './home/indiaGeo'
 import { useLiveStatus, usePortfolio, useRadarSummary, useScoutNow, useSignalFeed, type FeedFilters } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { EVENT_CATEGORY, TIER_COLOR, categoryLabel } from '@/lib/riskPalette'
 import { cn, formatDateTime } from '@/lib/formatters'
@@ -167,7 +167,7 @@ function HeatMap({ feed, state, onState }: { feed: SignalFeed | undefined; state
  * scout batch; its progress shows through the live status.
  */
 export function Radar() {
-  const { role } = useRole()
+  const { role } = useSession()
   const client = useQueryClient()
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState<FeedFilters>({})
@@ -270,7 +270,7 @@ export function Radar() {
           {feed.error ? (
             <ApiErrorNote error={feed.error} />
           ) : !feed.data ? (
-            <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading signals...</div>
+            <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
           ) : feed.data.items.length === 0 ? (
             <div className="px-5 py-8 text-center text-xs text-fg-dimmed space-y-1">
               {filtered ? (

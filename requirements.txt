@@ -5,6 +5,11 @@ pydantic>=2.7
 httpx>=0.27
 python-dotenv>=1.0
 python-multipart>=0.0.9    # report upload, POST /api/jobs/ingest
+pyyaml>=6.0                # tests/test_ops.py reads the compose files and the CI workflow
+sqlalchemy>=2.0            # app state and serving tables in PostgreSQL (backend/db/, docs/DATABASE.md)
+psycopg[binary]>=3.2
+alembic>=1.13              # database/postgres/migrations
+argon2-cffi>=23.1          # password hashes, argon2id (backend/auth/passwords.py)
 
 # data pipeline + ml
 pandas>=2.2

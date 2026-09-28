@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { MonoFigure } from '@/components/ui/MonoFigure'
 import { formatDate, formatINR, formatPct, orDash } from '@/lib/formatters'
@@ -8,15 +9,30 @@ function basename(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-/** asof -> model -> gold -> silver -> source document and page: where every number on the page comes from */
-function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
+/** where the page's facts come from: the report, its document and page (the public gets none of these) */
+function SourceLine({ detail }: { detail: ProjectDetail }) {
+  const p = detail.provenance
+  if (!p.period && !p.sourceDocId) return null
+  return (
+    <div className="text-xs text-fg-dimmed" title={p.sourceDocId ?? undefined}>
+      From the {p.period ? `${formatDate(p.period)} ` : ''}report
+      {p.sourceDocId && <> · {basename(p.sourceDocId)}{p.sourcePage !== null && `, p.${p.sourcePage}`}</>}
+    </div>
+  )
+}
+
+/**
+ * The developer's provenance: as-of, model, gold and silver versions and the source document — where every number
+ * on the Model detail tab comes from.
+ */
+export function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
   const p = detail.provenance
   return (
-    <div className="text-xs text-fg-dimmed flex flex-wrap gap-x-1.5">
+    <div className="flex flex-wrap gap-x-1.5 text-xs text-fg-dimmed">
       <span>asof {p.asof.slice(0, 7)}</span>·
       <span>model {p.modelVersion ?? 'not scored'}</span>·
-      <span>gold {p.goldVersion}</span>·
-      <span>silver {p.silverVersion}</span>·
+      <span>gold {p.goldVersion ?? '—'}</span>·
+      <span>silver {p.silverVersion ?? '—'}</span>·
       <span title={p.sourceDocId ?? undefined}>
         source: {p.sourceDocId ? basename(p.sourceDocId) : 'unknown'}
         {p.sourcePage !== null && ` p.${p.sourcePage}`}
@@ -26,82 +42,59 @@ function ProvenanceLine({ detail }: { detail: ProjectDetail }) {
   )
 }
 
+/**
+ * The project page's header: back to the list, key, tier and stalled badges, the name, who runs it and where, and
+ * the three report facts that frame it (anticipated cost, progress, expected completion). An identity under review
+ * says so under it.
+ */
 export function ProjectIdentityStrip({ detail }: { detail: ProjectDetail }) {
   const m: MasterRecord = detail.master ?? {}
   const o: ObservationRecord = detail.latest ?? {}
-  const codes = [o.projectCode, ...(m.codesSeen ?? '').split(';')]
-    .filter((c, i, all): c is string => !!c && all.indexOf(c) === i)
+  const who = [m.ministry, m.agency, m.state, m.sanctionDate ? `sanctioned ${formatDate(m.sanctionDate)}` : null].filter(Boolean)
 
   return (
-    <div className="space-y-2">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-fg-dimmed">
-        <Link to="/command" className="hover:text-fg-muted transition-colors">
-          Command
-        </Link>
-        <span>/</span>
-        <span className="text-fg-muted">{detail.key}</span>
-      </div>
-
-      {/* Identity bar — single horizontal strip */}
-      <div className="border border-border-subtle bg-surface-panel rounded-xl shadow-card overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
-              <span className="text-fg-base font-medium">{detail.key}</span>
-              <Badge tier={detail.scores ? detail.scores.tier : undefined} />
-              {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
-              <span className="text-fg-dimmed">{m.sector ?? 'sector unknown'}</span>
-              {codes.length > 0 && <span className="text-fg-dimmed">codes {codes.join(' · ')}</span>}
-            </div>
-
-            <h1 className="text-base font-medium text-fg-base">{m.projectName ?? detail.key}</h1>
-
-            <div className="flex flex-wrap items-center gap-x-4 text-xs text-fg-dimmed">
-              <span>{m.ministry ?? 'ministry unknown'}</span>
-              <span className="text-border-strong">│</span>
-              <span>{m.agency ?? 'agency unknown'}</span>
-              <span className="text-border-strong">│</span>
-              <span>{m.state ?? 'state unknown'}</span>
-              {m.sanctionDate && (
-                <>
-                  <span className="text-border-strong">│</span>
-                  <span>sanctioned {formatDate(m.sanctionDate)}</span>
-                </>
-              )}
-            </div>
-
-            <ProvenanceLine detail={detail} />
+    <header className="space-y-3">
+      <Link to="/command" className="inline-flex items-center gap-1 rounded text-xs text-fg-dimmed transition-colors hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <ArrowLeft className="size-3.5" aria-hidden="true" /> All projects
+      </Link>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs text-fg-dimmed">{detail.key}</span>
+            {detail.scores && <Badge tier={detail.scores.tier} />}
+            {detail.scores?.stagnationOverride && <StalledBadge quarters={detail.scores.stagnationQuarters} />}
           </div>
-
-          {/* Key figures from the latest report — inline, right-aligned */}
-          <div className="flex items-center gap-5 font-mono text-xs shrink-0">
-            <div className="text-right">
-              <div className="text-xs text-fg-dimmed">Anticipated cost</div>
-              <MonoFigure size="lg">{orDash(o.anticipatedCostCr, formatINR)}</MonoFigure>
-              <div className="text-xs text-fg-dimmed">orig {orDash(o.originalCostCr, formatINR)}</div>
-            </div>
-            <div className="w-px h-8 bg-border-subtle" />
-            <div className="text-right">
-              <div className="text-xs text-fg-dimmed">Progress</div>
-              <MonoFigure size="lg">{orDash(o.physicalProgressPct, (v) => formatPct(v, 0))}</MonoFigure>
-              <div className="text-xs text-fg-dimmed">spent {orDash(o.expenditureCr, formatINR)}</div>
-            </div>
-            <div className="w-px h-8 bg-border-subtle" />
-            <div className="text-right">
-              <div className="text-xs text-fg-dimmed">Completion</div>
-              <MonoFigure size="lg">{orDash(o.anticipatedCompletion, formatDate)}</MonoFigure>
-              <div className="text-xs text-fg-dimmed">scheduled {orDash(o.scheduledCompletion, formatDate)}</div>
-            </div>
-          </div>
+          <h1 className="max-w-4xl text-2xl font-semibold leading-tight tracking-tight text-fg-base">{m.projectName ?? detail.key}</h1>
+          {who.length > 0 && <div className="text-sm text-fg-muted">{who.join(' · ')}</div>}
+          <SourceLine detail={detail} />
         </div>
 
-        {detail.review && (
-          <div className="border-t border-warning/30 bg-warning/5 px-4 py-1.5 text-xs text-warning">
-            Identity under review: {detail.review.note}
+        <dl className="flex shrink-0 items-end gap-5">
+          <div className="text-right">
+            <dt className="text-xs text-fg-dimmed">Anticipated cost</dt>
+            <dd><MonoFigure size="xl">{orDash(o.anticipatedCostCr, formatINR)}</MonoFigure></dd>
+            <dd className="text-xs text-fg-dimmed">sanctioned {orDash(o.originalCostCr, formatINR)}</dd>
           </div>
-        )}
+          <div className="h-10 w-px bg-border-subtle" aria-hidden="true" />
+          <div className="text-right">
+            <dt className="text-xs text-fg-dimmed">Built</dt>
+            <dd><MonoFigure size="xl">{orDash(o.physicalProgressPct, (v) => formatPct(v, 0))}</MonoFigure></dd>
+            <dd className="text-xs text-fg-dimmed">spent {orDash(o.expenditureCr, formatINR)}</dd>
+          </div>
+          <div className="h-10 w-px bg-border-subtle" aria-hidden="true" />
+          <div className="text-right">
+            <dt className="text-xs text-fg-dimmed">Expected completion</dt>
+            <dd><MonoFigure size="xl">{orDash(o.anticipatedCompletion, formatDate)}</MonoFigure></dd>
+            <dd className="text-xs text-fg-dimmed">first planned {orDash(o.scheduledCompletion, formatDate)}</dd>
+          </div>
+        </dl>
       </div>
-    </div>
+
+      {detail.review && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-2 text-xs text-warning">
+          Identity under review: {detail.review.note}
+        </div>
+      )}
+    </header>
   )
 }

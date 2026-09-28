@@ -1,0 +1,4 @@
+canonical_project_key,report_period,model_version,p_risk,risk_score,risk_tier,p_schedule_deterioration,p_cost_deterioration,expected_slip_months,expected_cost_pct,slip_interval_low,slip_interval_high,cost_interval_low,cost_interval_high,risk_rank,shap_top5,prediction_payload
+OCMS:060100093,2025-06-01,test-model-v1,0.2,20,GREEN,0.15,0.08,1.2,1.8,0.0,3.0,0.5,4.0,3,"[{""feature"":""delay_months"",""value"":4,""contribution"":0.12}]","{""source"":""test_fixture""}"
+OCMS:180100221,2025-06-01,test-model-v1,0.55,55,AMBER,0.48,0.21,3.4,4.9,1.0,6.0,1.0,8.0,2,"[{""feature"":""physical_financial_gap_pct"",""value"":65,""contribution"":0.24}]","{""source"":""test_fixture""}"
+OCMS:180100242,2025-06-01,test-model-v1,0.85,85,RED,0.76,0.41,7.5,9.2,3.0,12.0,3.0,15.0,1,"[{""feature"":""expenditure_velocity_cr"",""value"":250,""contribution"":0.31}]","{""source"":""test_fixture""}"

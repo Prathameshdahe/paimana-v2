@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/ui/Card'
 import { formatDate, formatPct, orDash, cn } from '@/lib/formatters'
+import { numericAnalogues } from '@/lib/forecast'
 import type { Forecast } from '@/contracts/project'
 
 /** The 10 nearest historical projects at the same stage and what happened to them within 4 quarters. */
 export function AnaloguesTable({ forecast }: { forecast: Forecast | undefined }) {
-  const rows = forecast?.analogues ?? []
+  const rows = numericAnalogues(forecast)
 
   return (
     <Card title={`Analogue projects · ${rows.length}`} className="h-full">

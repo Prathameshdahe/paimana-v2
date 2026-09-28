@@ -4,7 +4,7 @@
  * Portfolio-level shapes as served by the FastAPI backend (backend/schemas.py;
  * keys are camelCase): data version, aggregates, alerts, external rollup.
  */
-import type { TierFilter } from './project'
+import type { DatePrecision, DelayWord, Outlook, TierFilter } from './project'
 
 export interface Meta {
   asof: string
@@ -49,7 +49,13 @@ export interface TopProject {
   sector: string | null
   state: string | null
   tier: string | null
+  /** a hidden number: null without the numbers feature */
   pAny2q: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
+  /** as on ProjectRow: the first plain driver that raises the risk, else the first flagged check (the public: always
+   * the check); absent from an older backend */
+  topReason?: string | null
   anticipatedCostCr: number | null
   /** the stagnation badge */
   override: boolean | null
@@ -212,7 +218,10 @@ export interface ExternalProject {
   state: string | null
   anticipated_cost_cr: number | null
   tier: string | null
+  /** a hidden number: null without the numbers feature */
   p_any_2q: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
   slip_to_date_months: number | null
   /** "factor: evidence" lines from the risk profile; empty for the public (as the public project page) */
   evidence: string[]
@@ -298,7 +307,10 @@ export interface EarlyNotice {
   top: ExternalProject[]
 }
 
-/** notice backtest: past rows with no slip to date; slip = completion pushed >= 3 months by t + 4 quarters */
+/**
+ * notice backtest: past rows with no slip to date; slip = completion pushed >= 3 months by t + 4 quarters. The rates
+ * and lifts are hidden numbers (null without the numbers feature); the counts stay.
+ */
 export interface Lift {
   n_with: number
   slip_rate_with: number | null
@@ -314,15 +326,17 @@ export interface NoticeLift extends Lift {
   by_sector: Record<string, Lift>
 }
 
+/** the composite score's distribution per coverage: the counts stay; the score statistics are hidden numbers (null
+ * without the numbers feature) */
 export interface CompositeDistribution {
   n_projects: number
   n_score_ge_high: number
-  mean: number
-  min: number
-  '25%': number
-  '50%': number
-  '75%': number
-  max: number
+  mean: number | null
+  min: number | null
+  '25%': number | null
+  '50%': number | null
+  '75%': number | null
+  max: number | null
 }
 
 /** pipeline/hidden_delay.py: extra slip over the next 4 quarters against matched projects */
@@ -344,10 +358,19 @@ export interface HiddenDelayPrior {
   extra_push_hi: number | null
   holm_months: number | null
   holm_push: number | null
+  /**
+   * the extra months in words (months, push and their CIs are hidden numbers); absent from an older backend. Unit G
+   * sends it snake_case, like the rest of the summary's nested keys (extra_months_word); lib/external reads either.
+   * null: too few projects to measure (measurable false); 'no measurable extra delay': the interval does not lie
+   * above zero.
+   */
+  extra_months_word?: DelayWord | null
+  extraMonthsWord?: DelayWord | null
   /** current projects in scope it applies to; null for the NH/district grouping (not rated) */
   n_current?: number | null
   garvit_status: string
-  garvit_band: string
+  /** Garvit's guessed band in months: a hidden number (null without the numbers feature) */
+  garvit_band: string | null
   as_of_note: string
 }
 
@@ -404,10 +427,83 @@ export interface ExternalSummary {
     n_rated: number
     n_flagged: number
     n_possible: number
-    link_check?: Record<string, { n: number; correct: number; ci_lo: number; ci_hi: number }>
+    /** a hand-checked sample per link method: n and correct stay; the bootstrap interval is a hidden number */
+    link_check?: Record<string, { n: number; correct: number; ci_lo: number | null; ci_hi: number | null }>
     by_state?: LandState[]
   } | null
   hiddenDelayPriors: { note: string; min_projects: number; rows: HiddenDelayPrior[] } | null
+}
+
+/* GET /api/research/summary: web research over the current projects in the viewer's scope (evidence, not a model input) */
+
+export interface ResearchCoverage {
+  nCurrent: number
+  /** searched by the sweep or the in-app agent */
+  nSearched: number
+  nWithFacts: number
+  nFacts: number
+  nNegativeLive: number
+  nProjectsNegativeLive: number
+  nAgentFacts: number
+  nAgentProjects: number
+}
+
+/** facts of one research category by direction, and the live blockers among them */
+export interface ResearchCategoryRow {
+  category: string
+  taxonomy: string
+  negative: number
+  positive: number
+  neutral: number
+  nLive: number
+  nProjectsLive: number
+}
+
+export interface ResearchStateRow {
+  state: string | null
+  nCurrent: number
+  nSearched: number
+  nWithFacts: number
+  nNegativeLive: number
+  nProjectsNegativeLive: number
+}
+
+/**
+ * A live negative fact of severity 2 or more with its project, newest first. The public gets the sweep's blockers
+ * only, as headline, url and dates: every other field is null. Date it by eventDate (datePrecision), else publishedDate.
+ */
+export interface ResearchBlocker {
+  headline: string
+  url: string
+  eventDate: string | null
+  datePrecision: DatePrecision | null
+  publishedDate: string | null
+  factId: string | null
+  projectKey: string | null
+  projectName: string | null
+  state: string | null
+  tier: string | null
+  category: string | null
+  severity: number | null
+  summary: string | null
+  source: string | null
+  origin: 'sweep' | 'agent' | null
+}
+
+export interface ResearchSummary {
+  asof: string
+  /** a fact is live within this many quarters of the as-of quarter */
+  liveWindowQuarters: number
+  /** when the sweep searched (its first and last day) */
+  researchedOn: { first: string | null; last: string | null }
+  coverage: ResearchCoverage
+  byCategory: ResearchCategoryRow[]
+  byState: ResearchStateRow[]
+  topRecentBlockers: ResearchBlocker[]
+  /** the in-app research agent's last run on a project in scope */
+  agentLastRun: string | null
+  /** method and caveats in one paragraph */
+  note: string
 }
 
 /** GET /api/scopes: the sign-in picker */

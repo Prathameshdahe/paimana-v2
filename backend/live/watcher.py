@@ -7,10 +7,12 @@ first, one pipeline run per file:
      copy goes into its source folder in the Dataset drive folder, the folder the extractor rebuilds the family
      from and records source_file, hence source_doc_id, relative to).
   2. the extractor, pipeline/build_clean_projects.py, then python -m pipeline.run silver (which resolves identity
-     first), external, gold, score and profile. train is the monthly run and is started by hand.
+     first), external, research, gold, score and profile. train is the monthly run and is started by hand.
   3. success: the inbox file moves to dataset/raw/<csv|pdf>/<fiscal year>/, the old and new predictions are diffed
-     into tier_up / tier_down / new_project alerts, and prediction_log rows whose t + 2q is now labelled get their
-     realised outcome (a slip_realised alert when they were High / Critical and slipped).
+     into tier_up / tier_down / new_project alerts, prediction_log rows whose t + 2q is now labelled get their
+     realised outcome (a slip_realised alert when they were High / Critical and slipped), the accepted report and
+     its run are registered in ingest.source_documents / load_runs, and python -m pipeline.run serve loads the
+     PostgreSQL serving tables (best effort: its failure is a severity-2 pipeline_error, never a failed ingest).
      failure: the predictions pointer and file, the prediction log and the clean input the run replaced are put
      back, serving stays on the version it had (pinned), the file stays in the inbox and a pipeline_error alert is
      raised. The source row keeps status error, so the file is retried only under a new pipeline version.
@@ -41,7 +43,7 @@ INBOX = RAW / "inbox"
 CLEAN = ROOT / "dataset" / "clean"
 POINTER = serving.POINTER
 LOG, LABELS = serving.GOLD / "prediction_log.parquet", serving.GOLD / "labels_h2.parquet"
-PIPELINE = ["silver", "external", "gold", "score", "profile"]
+PIPELINE = ["silver", "external", "research", "gold", "score", "profile"]
 PORTAL_HEADER = ["Sr. No.", "Sector Name", "Line Ministry", "Implementing Agency", "Project Code", "Project Name"]
 UPLOAD_SUFFIXES = (".csv", ".pdf")
 MAX_UPLOAD = 100 << 20
@@ -238,6 +240,10 @@ def _archive(path: Path, kind: str, period: str | None, sha: str) -> Path:
     return path.replace(dest)
 
 
+def _first(frame: pd.DataFrame, col: str) -> str | None:
+    return str(frame[col].iloc[0]) if col in frame and len(frame) and pd.notna(frame[col].iloc[0]) else None
+
+
 def _rows(kind: str, copied: Path | None) -> int:
     if kind == "portal_csv":
         return len(pd.read_csv(CLEAN / "portal" / "portal_projects.csv", usecols=["project_code"]))
@@ -248,7 +254,7 @@ def _rows(kind: str, copied: Path | None) -> int:
 
 def _fail(row: dict, started: str, error: str, summary: dict) -> dict:
     s = serving.state()
-    row.update(status="error", error=error)
+    row.update(status="error", error=error, started_at=started)
     db.record_source(row)
     db.record_job("ingest", started, "error", {**summary, "file": row["filename"], "error": error})
     db.add_alerts([{"project_key": None, "kind": "pipeline_error", "severity": 3,
@@ -256,6 +262,22 @@ def _fail(row: dict, started: str, error: str, summary: dict) -> dict:
                     "detail": f"{error[:1500]} -- still serving asof {s['asof']} ({s['model_version']})",
                     "asof": str(s["asof"]), "model_version": s["model_version"], "source": f"ingest:{row['filename']}"}])
     return row
+
+
+def _serve(timings: dict, filename: str) -> str | None:
+    """The serving tables after a successful run (python -m pipeline.run serve), best effort: the report is
+    ingested whatever happens here; a failure (the database down) is the returned error, logged in the job summary
+    and raised as a severity-2 pipeline_error alert, and the next serve run loads what this one did not."""
+    try:
+        timings["serve"] = run_step([sys.executable, "-X", "utf8", "-m", "pipeline.run", "serve"])
+        return None
+    except Exception as e:  # noqa: BLE001 - any failing step, as for the pipeline steps
+        error = f"{type(e).__name__}: {e}"
+        db.add_alerts([{"project_key": None, "kind": "pipeline_error", "severity": 2,
+                        "title": f"Serving tables not loaded after {filename}",
+                        "detail": f"{error[:1500]} -- the report is ingested and served; python -m pipeline.run serve "
+                                  "loads the tables once the database answers", "source": f"serve:{filename}"}])
+        return error
 
 
 def ingest(path: Path, sha: str, pv: str) -> dict:
@@ -298,8 +320,12 @@ def ingest(path: Path, sha: str, pv: str) -> dict:
         serving.pin(not ran and serving._version() != version)  # noqa: SLF001
         return _fail(row, started, f"{type(e).__name__}: {e}", {**summary, "seconds": round(time.time() - t0, 1)})
     serving.pin(False)
+    summary["serve_error"] = _serve(timings, path.name)
     row.update(status="ok", rows=n_rows, archived_as=archived.relative_to(ROOT).as_posix())
-    db.record_source(row)
+    # the lineage row of ingest.source_documents / load_runs: the run and the versions its scores carry
+    db.record_source({**row, "started_at": started, "rows_read": n_rows, "rows_loaded": n_rows, "rows_failed": 0,
+                      "silver_version": _first(new, "silver_version"), "gold_version": _first(new, "gold_version"),
+                      "model_version": _first(new, "model_version")})
     db.record_job("ingest", started, "ok", {
         **summary, "rows": n_rows, "archived_as": row["archived_as"], "asof": str(new["asof"].max().date()),
         "model_version": new["model_version"].iloc[0], "alerts": dict(Counter(a["kind"] for a in alerts)),

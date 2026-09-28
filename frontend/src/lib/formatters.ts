@@ -101,6 +101,26 @@ export function formatDateTime(iso: string): string {
 }
 
 /**
+ * A date as precise as it is given, read in UTC so a first-of-month never slips a day: 'YYYY' → "2026",
+ * 'YYYY-MM' → "Aug 2026", a day or a timestamp → "13 Aug 2026". precision coarsens a full date (a month-precise
+ * fact is stored as its first day).
+ */
+export function formatLooseDate(value: string, precision?: 'day' | 'month' | 'year' | null): string {
+  const m = value.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/)
+  if (!m) return value
+  const [, y, mo, d] = m
+  const p = precision ?? (d ? 'day' : mo ? 'month' : 'year')
+  if (p === 'year' || !mo) return y ?? value
+  const date = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d ?? 1)))
+  return date.toLocaleDateString('en-IN', {
+    ...(p === 'day' && d ? { day: 'numeric' } : {}),
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
  * Formats a date range as "start → end".
  * Example: "2022-06-30", "2027-09-30" → "Jun 2022 → Sep 2027"
  */

@@ -264,7 +264,12 @@ One run per (model, gold_version, cutoff) with params (feature list,
 hyperparameters, silver/gold versions), metrics, and artifacts (model file,
 SHAP summary, calibration table, backtest table). Champion/challenger: a
 candidate replaces the champion only when it beats it on the same folds on
-PR-AUC and calibration; the decision is recorded in the registry.
+PR-AUC and calibration; the decision is recorded in the registry. A run on a
+new gold version or new folds first re-scores the champion's own configuration
+(type, feature list, params) as `<type>_incumbent`, and a new configuration has
+to beat that; nothing else takes over across gold versions or folds.
+`python -m ml.registry revert <target>` undoes a promotion that a corrected rule
+no longer supports.
 
 #### 3.5 Scoring the current portfolio
 
@@ -280,14 +285,33 @@ by flagged checklist rows and then P(cost revision); that order is not
 validated.
 
 Validation and promotion (ml/backtest.py, ml/registry.py): besides the
-quarterly-era validation folds, every cutoff from 2025-07 with 100+ labelled
-rows forms a flash block (the report format live scoring uses; for the
-2-quarter targets it includes the test cutoff). A challenger is promoted only
-when its PR-AUC is not lower on either block and beats the champion on one by
-twice the measured seed sd. Each pooled metric also has a not-yet-due slice
+quarterly-era validation folds (all before 2025-07), every cutoff from 2025-07
+with 100+ labelled rows forms a flash block (the report format live scoring
+uses; for the 2-quarter targets it includes the test cutoff). The two blocks
+share no cutoff. A challenger is promoted only when its within-cutoff PR-AUC
+(each fold's own, averaged: a score is only ranked within its as-of date) is
+not lower on either block and beats the champion on one by twice that block's
+measured seed sd. Each pooled metric also has a not-yet-due slice
 (anticipated completion after t + h). Only the cost revision is
 Platt-calibrated; calibrating the date targets and training h4 from 2014 both
 lost on the flash block and were reverted.
+
+Model upgrades (Sep 2026, docs/MODEL_UPGRADES_2026-09.md): candidates are
+measured with `python -m ml.experiment <candidate>`: 3 seeds, the validation
+and flash blocks, a paired project bootstrap CI, and the promotion rule plus a
+CI-above-0 guard. Of 19 candidates one shipped, through
+`backtest.TARGET_PARAMS`: y_cost_rev_h2 trains with regularised params
+(learning rate 0.02, 63 leaves, lambda 20, 150 trees; within-cutoff PR-AUC
+0.175 -> 0.182 validation, 0.123 -> 0.160 flash, 3 seeds), provisionally, with
+a pre-registered check at the 2026-04 fold. An 8-quarter half-life for y_any_h4
+shipped first and was reverted: its pooled gain came from score levels
+following each fold's base rate, while it ranked worse inside 4 of 6
+validation folds. y_any_h2, y_date_push_h2 and y_any_h4 keep their champions:
+no feature family, tuning, weighting or ensemble beat them on both blocks. Every train
+run writes `intervals.csv`, the p05-p95 coverage and pinball loss of the
+served intervals (months: 0.915 validation, 0.883 flash). The served
+model_version names every champion run, e.g.
+`lgbm-any2q-20260927-222602+20260928-072744`.
 
 ### 4. Serving
 

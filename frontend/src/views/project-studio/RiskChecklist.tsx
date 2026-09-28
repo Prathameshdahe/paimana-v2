@@ -1,18 +1,7 @@
 import { Card } from '@/components/ui/Card'
 import { formatDate, cn } from '@/lib/formatters'
-import { RISK_DIMENSION, RISK_STATE_CHIP } from '@/lib/riskPalette'
+import { RISK_DIMENSION, RISK_STATE_CHIP, SOURCE_LABEL } from '@/lib/riskPalette'
 import type { RiskRow, RiskState } from '@/contracts/project'
-
-const SOURCE_LABEL: Record<string, string> = {
-  model: 'model',
-  silver: 'reports',
-  report: 'report remarks',
-  sector_context: 'sector output data',
-  agency_stats: 'agency history',
-  bhoomi_rashi: 'Bhoomi Rashi land records',
-  parivesh_rules: 'Parivesh FC rules',
-  external_composite: 'land + forest composite',
-}
 
 const CHIP_TEXT: Record<RiskState, string> = { flagged: 'Flagged', clear: 'Clear', unknown: 'Unknown ?' }
 

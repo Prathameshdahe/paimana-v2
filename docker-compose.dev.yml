@@ -1,0 +1,22 @@
+# Laptop overrides for docker-compose.yml (Docker Desktop; docs/DEPLOYMENT.md, First run on a laptop). Published
+# ports that stay clear of the dev servers (backend 8000/8010, Vite 3000/5174, Postgres 5432/5433): the dashboard on
+# https://localhost:8443 (http://localhost:8080 redirects there), postgres on localhost:5434 for psql and pytest, plus
+# a paimana_test database. TLS stays on with the self-signed certificate from scripts/gen-dev-cert.*. The ports bind
+# to 127.0.0.1; drop that prefix to show the laptop's stack to another device on the LAN.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5434:5432"
+    environment:
+      PAIMANA_TEST_DB: paimana_test     # deploy/postgres/init.sh creates it on the first start
+  api:
+    environment:
+      ALLOWED_ORIGINS: https://localhost:8443
+      ALLOWED_HOSTS: localhost,127.0.0.1
+  web:
+    ports: !override                    # replaces the production ports instead of adding to them
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8443:443"
+    environment:
+      PAIMANA_HTTPS_SUFFIX: ":8443"

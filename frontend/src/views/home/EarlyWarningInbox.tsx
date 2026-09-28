@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Input'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
-import { useRole } from '@/lib/auth/RoleContext'
+import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
+import { scrubModelNumbers } from '@/lib/outlook'
 import { formatDate, formatDateTime } from '@/lib/formatters'
 import type { AlertKind } from '@/contracts/portfolio'
 
@@ -24,12 +25,14 @@ const KINDS = Object.keys(ALERT_KIND_LABEL) as AlertKind[]
  */
 export function EarlyWarningInbox() {
   const panel = useProjectPanel()
-  const { role } = useRole()
+  const { role } = useSession()
   const [page, setPage] = useState(1)
   const [kind, setKind] = useState<AlertKind | undefined>()
   const { data, error, isLoading } = useAlerts({ acked: false, kind, page, size: PAGE_SIZE })
   const ack = useAckAlert()
   const canAck = can(role, 'canAck')
+  // stored alerts carry the watcher's probability in their detail: only the developer reads it
+  const detailOf = (d: string | null) => (d && !can(role, 'canSeeNumbers') ? scrubModelNumbers(d) : d)
   const kinds = KINDS.filter((k) => k !== 'pipeline_error' || can(role, 'canSeePipelineErrors'))
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
 
@@ -59,7 +62,7 @@ export function EarlyWarningInbox() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : isLoading || !data ? (
-        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">loading alerts...</div>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : data.items.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-fg-dimmed">
           {kind
@@ -79,13 +82,13 @@ export function EarlyWarningInbox() {
                 <div className="truncate text-sm font-medium text-fg-base">{a.title ?? ALERT_KIND_LABEL[a.kind]}</div>
                 <div
                   className="truncate text-xs text-fg-dimmed"
-                  title={[a.detail, a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
+                  title={[detailOf(a.detail), a.asof && `as of ${formatDate(a.asof)}`].filter(Boolean).join(' · ') || undefined}
                 >
                   {ALERT_KIND_LABEL[a.kind] ?? a.kind}
                   {a.projectKey && <> · {a.projectKey}</>}
                   {' · '}
                   {formatDateTime(a.createdAt)}
-                  {a.detail && <> · {a.detail}</>}
+                  {detailOf(a.detail) && <> · {detailOf(a.detail)}</>}
                 </div>
               </button>
               {canAck && (

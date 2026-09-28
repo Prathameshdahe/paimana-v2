@@ -1,5 +1,4 @@
 import sys
-from contextlib import closing
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db  # noqa: E402
 from backend.live import scout  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 ROWS = [
     {"project_key": "PRJ-A", "project_name": "Upgradation and 4L of Haridwar Bypass from Km 0.000 Km 188.100 of NH-58 "
@@ -74,8 +74,7 @@ def test_link_and_classify():
 
 
 @pytest.fixture()
-def tmp_db(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def tmp_db(fresh_db, monkeypatch):
     db.init()
     idx = scout.build_index(ROWS)
     monkeypatch.setattr(scout, "index", lambda: idx)
@@ -92,17 +91,16 @@ def test_run_stores_dedupes_links_and_alerts(tmp_db, monkeypatch):
     assert [c[1] for c in calls] == scout.aliases(tmp_db["projects"]["PRJ-A"])
     assert out["regional_skipped"] == len(calls) and out["stored"] == 3 and out["linked"] == 2
     assert out["ambiguous"] == 1 and out["alerts"] == 1
-    with closing(db.connect()) as con:
-        signals = {r["url"]: dict(r) for r in con.execute("SELECT * FROM signals")}
-        links = dict(con.execute("SELECT signal_id, project_key FROM signal_projects").fetchall())
-        scouted = con.execute("SELECT project_key FROM scouted").fetchall()
+    signals = {r["url"]: r for r in db.signals()}
+    links = {ln["signal_id"]: ln["project_key"] for ln in db.signal_links()}
+    scouted = list(db.scouted_at())
     assert set(signals) == {"https://n/1", "https://n/4", "https://n/6"}
     assert links == {signals["https://n/1"]["id"]: "PRJ-A", signals["https://n/6"]["id"]: "PRJ-D"}
     assert (signals["https://n/1"]["category"], signals["https://n/1"]["severity"]) == ("land", 2)
     assert signals["https://n/4"]["severity"] == 3  # stored in the unlinked pool, no alert
     alerts = db.alerts(kind="signal")["items"]
     assert [(a["project_key"], a["severity"]) for a in alerts] == [("PRJ-A", 2)]
-    assert [r[0] for r in scouted] == ["PRJ-A"]
+    assert scouted == ["PRJ-A"]
     again = scout.run(["PRJ-A"], pib=False, get=get)
     assert again.get("stored", 0) == 0 and again["duplicate"] > 0 and db.alerts(kind="signal")["total"] == 1
 
@@ -138,7 +136,8 @@ def test_cuf_changes_on_real_panel():
 
 
 def test_feed_endpoint_bounds(tmp_db):
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         assert c.get("/api/signals/feed", params={"size": 101}).status_code == 422
         assert c.get("/api/signals/feed", params={"severity": 4}).status_code == 422
         body = c.get("/api/signals/feed").json()
@@ -159,9 +158,7 @@ def test_worker_scout_reads_only_recorded_evidence(tmp_db, monkeypatch):
     assert worker.scout({"project_key": bare}) == (worker.ScoutOutput(tags=[]), []) and prompts == []  # no evidence
     tags, signals = worker.scout({"project_key": with_events})
     assert "report remark" in prompts[0] and " p." in prompts[0] and signals == []
-    with closing(db.connect()) as con, con:
-        sid = con.execute("INSERT INTO signals (url, title, source, published_at, severity) VALUES "
-                          "('https://n/9', 'Work halted', 'PTI', '2026-08-01', 2)").lastrowid
-        con.execute("INSERT INTO signal_projects (signal_id, project_key) VALUES (?, ?)", [sid, bare])
+    db.save_signals([{"url": "https://n/9", "title": "Work halted", "source": "PTI", "published_at": "2026-08-01",
+                      "severity": 2, "links": [(bare, None, None)]}])
     _, signals = worker.scout({"project_key": bare})
     assert [x["url"] for x in signals] == ["https://n/9"] and "news, 2026-08-01, PTI" in prompts[1]

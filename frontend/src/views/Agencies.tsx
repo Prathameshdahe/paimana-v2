@@ -17,9 +17,16 @@ import { Info } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge, StalledBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { OutlookChip } from '@/components/ui/OutlookChip'
 import { Page, PageHeader } from '@/components/layout/Page'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAgencyMatrix, useAgencyProjects } from '@/lib/queries'
+import { useSession } from '@/lib/auth/SessionContext'
+import { can } from '@/lib/auth/access'
+import { outlookOf } from '@/lib/outlook'
+import { COST_PHRASE, SCHEDULE_PHRASE, agencyTakeaway, peerClause } from '@/lib/agencyWords'
+import { RankedAgencies } from './agencies/RankedAgencies'
+import { AgencyDotPlot } from './agencies/AgencyDotPlot'
 import {
   cn, formatBiasCi as rawCi, formatDate, formatINR, formatINRShort, formatProb, formatRatioRange as ci,
   formatSignedRatio as signedPct, orDash,
@@ -263,7 +270,33 @@ function BiasCompare({ label, value, sector, note }: { label: string; value: num
   )
 }
 
-function AgencyPanel({ agency, point, onClose }: { agency: string; point: AgencyPoint | undefined; onClose: () => void }) {
+/** the agency's pattern in two sentences: its schedule and cost words on its past projects, and what its peers do */
+function AgencySentences({ point, peers }: { point: AgencyPoint; peers: AgencyPoint[] }) {
+  if (!point.scheduleWord) {
+    return <p className="text-sm text-fg-muted">How this agency&rsquo;s projects usually finish is not available in words yet.</p>
+  }
+  const peer = peerClause(peers.filter((a) => a !== point && a.sector === point.sector), point.sector)
+  return (
+    <div className="space-y-1.5 text-sm leading-relaxed text-fg-base">
+      <p>
+        <span className="font-semibold">Schedule:</span> {SCHEDULE_PHRASE[point.scheduleWord].toLowerCase()}, on {point.nProjects} past project{point.nProjects === 1 ? '' : 's'}
+        {peer && point.scheduleWord !== 'too few projects' ? `; ${peer}.` : '.'}
+      </p>
+      {point.costWord && (
+        <p><span className="font-semibold">Cost:</span> {COST_PHRASE[point.costWord].toLowerCase()}, on {point.nCost} past project{point.nCost === 1 ? '' : 's'} with costs.</p>
+      )}
+    </div>
+  )
+}
+
+function AgencyPanel({ agency, point, peers, numbers, onClose }: {
+  agency: string
+  point: AgencyPoint | undefined
+  peers: AgencyPoint[]
+  /** the developer: the bias bars and each project's probability too */
+  numbers: boolean
+  onClose: () => void
+}) {
   const [page, setPage] = useState(1)
   const panel = useProjectPanel()
   const { data, error, isFetching } = useAgencyProjects(agency, page)
@@ -273,28 +306,33 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
     <Card
       title={agency}
       titleRight={
-        <button onClick={onClose} className="text-fg-dimmed hover:text-fg-base" aria-label="Close">
-          close ✕
+        <button type="button" onClick={onClose} className="rounded text-fg-dimmed hover:text-fg-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Close the agency">
+          Close ✕
         </button>
       }
     >
       {point && (
         <div className="space-y-3 border-b border-border-subtle px-5 py-4">
           <div className="text-xs text-fg-muted">
-            {point.ministry ?? 'ministry unknown'} · {point.sector ?? 'sector unknown'} · n {point.nProjects}
+            {point.ministry ?? 'ministry unknown'} · {point.sector ?? 'sector unknown'} · {point.nProjects} past projects · {point.nOpen} open
           </div>
-          <BiasCompare
-            label="Schedule"
-            value={point.scheduleBias}
-            sector={point.sectorScheduleBias}
-            note={rawCi(point.shrunk, point.scheduleBiasRaw, point.scheduleBiasCiLo, point.scheduleBiasCiHi).trim()}
-          />
-          <BiasCompare
-            label="Cost"
-            value={point.costBias}
-            sector={point.sectorCostBias}
-            note={rawCi(point.shrunk, point.costBiasRaw, point.costBiasCiLo, point.costBiasCiHi).trim()}
-          />
+          <AgencySentences point={point} peers={peers} />
+          {numbers && (
+            <>
+              <BiasCompare
+                label="Schedule"
+                value={point.scheduleBias}
+                sector={point.sectorScheduleBias}
+                note={rawCi(point.shrunk, point.scheduleBiasRaw, point.scheduleBiasCiLo, point.scheduleBiasCiHi).trim()}
+              />
+              <BiasCompare
+                label="Cost"
+                value={point.costBias}
+                sector={point.sectorCostBias}
+                note={rawCi(point.shrunk, point.costBiasRaw, point.costBiasCiLo, point.costBiasCiHi).trim()}
+              />
+            </>
+          )}
           {point.names && (
             <div className="truncate text-xs text-fg-dimmed" title={point.names}>printed as: {point.names}</div>
           )}
@@ -303,22 +341,25 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading projects...</div>
+        <div className="space-y-2 px-5 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded bg-surface-input/60" />)}</div>
       ) : data.items.length === 0 ? (
-        <div className="px-5 py-8 text-center text-sm text-fg-dimmed">no current projects: its record is all completed work</div>
+        <div className="px-5 py-8 text-center text-sm text-fg-muted">No open projects: its record is all completed work.</div>
       ) : (
         <div className={cn('divide-y divide-border-subtle transition-opacity', isFetching && 'opacity-60')}>
           <div className="px-5 py-2 text-xs text-fg-dimmed">
-            {data.total} current projects · riskiest first
+            {data.total} open projects · the riskiest first
           </div>
           {data.items.map((p) => (
-            <button key={p.key} onClick={() => panel.open(p.key)} className="block w-full px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated">
-              <div className="truncate text-sm text-fg-base" title={p.name ?? undefined}>{p.name ?? p.key}</div>
+            <button key={p.key} type="button" onClick={() => panel.open(p.key)} className="block w-full px-5 py-2.5 text-left transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-sm text-fg-base" title={p.name ?? undefined}>{p.name ?? p.key}</span>
+                <OutlookChip outlook={outlookOf(p, numbers)} tier={p.tier} />
+              </div>
               <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-fg-dimmed">
                 <Badge tier={p.tier} />
                 {p.override && <StalledBadge />}
                 <span className="truncate">
-                  {p.key} · P(slip, 2q) {orDash(p.pAny2q, (x) => formatProb(x))} · {orDash(p.anticipatedCostCr, formatINR)} · {p.state ?? 'state unknown'}
+                  {p.key}{numbers && ` · P(slip, 2q) ${orDash(p.pAny2q, (x) => formatProb(x))}`} · {orDash(p.anticipatedCostCr, formatINR)} · {p.state ?? 'state unknown'}
                 </span>
               </div>
             </button>
@@ -338,14 +379,21 @@ function AgencyPanel({ agency, point, onClose }: { agency: string; point: Agency
   )
 }
 
+type View = 'words' | 'chart' | 'table'
+const VIEW_LABEL: Record<View, string> = { words: 'In words', chart: 'Matrix', table: 'Leaderboard' }
+
 /**
- * Agency Performance Matrix (/agencies, guide §6.3) over /api/agencies/matrix: each canonical
- * agency's median schedule and cost bias on past projects, with n and a 90% CI. n < 10 is shrunk
- * toward the sector median and n < 5 hidden unless asked for.
+ * Agencies (/agencies, guide §6.3) over /api/agencies/matrix: how each canonical agency's past projects usually
+ * finished against the first plan, in words — a list grouped by schedule word with counts, capital and a cost word,
+ * and a dot plot of agencies by sector and word. n < 5 is too few to say (hidden unless asked for). The developer
+ * also gets the numeric matrix and leaderboard (medians, 90% CIs, shrinkage); nobody else sees a bias statistic.
  */
 export function Agencies() {
+  const { role } = useSession()
+  const numbers = can(role, 'canSeeNumbers')
   const [showSmall, setShowSmall] = useState(false)
-  const [view, setView] = useState<'chart' | 'table'>('chart')
+  const [picked, setView] = useState<View>('words')
+  const view: View = numbers ? picked : 'words'
   // the picked agency lives in the URL (?agency=), so a link can open the page with it selected
   const [params, setParams] = useSearchParams()
   const selected = params.get('agency')
@@ -361,60 +409,78 @@ export function Agencies() {
   return (
     <Page>
       <PageHeader
-        title="Agency Performance"
-        subtitle="How much longer and costlier each agency's projects ran than first planned"
+        title="Agencies"
+        subtitle="How each agency's projects usually finish against the first plan"
         actions={
           data && (
             <span className="text-xs text-fg-dimmed">
-              as of {formatDate(data.asof)} · {data.nAgencies} agencies · {data.nHidden} with n &lt; 5{' '}
+              as of {formatDate(data.asof)} · {data.nAgencies} agencies · {data.nHidden} with fewer than 5 past projects{' '}
               {showSmall ? 'shown' : 'hidden'}
             </span>
           )
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+      {data && agencyTakeaway(data.points) && (
+        <p className="max-w-4xl text-lg leading-relaxed text-fg-base">{agencyTakeaway(data.points)}</p>
+      )}
+
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
         <Card
-          className={selected ? 'lg:col-span-2' : 'lg:col-span-3'}
-          title={<>Agencies <span className="font-normal text-fg-dimmed">{data ? data.points.length : ''}{isFetching ? ' · loading' : ''}</span></>}
-          info="Each agency's median schedule and cost overrun on its past projects. Small samples are shrunk toward the sector median; this is a historical pattern, not a verdict. Click a bubble or row for its projects."
+          className={selected ? 'xl:col-span-2' : 'xl:col-span-3'}
+          title={<>Which agencies usually finish late <span className="font-normal text-fg-dimmed">{data ? data.points.length : ''}{isFetching ? ' · updating' : ''}</span></>}
+          info="Each agency's past projects against their first plan, in words. A pattern from history, not a verdict on a project. Pick an agency for its open projects."
           titleRight={
-            <div className="flex items-center gap-3 text-xs text-fg-muted">
-              <label className="flex items-center gap-1.5 cursor-pointer">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-fg-muted">
+              <label className="flex cursor-pointer items-center gap-1.5">
                 <input type="checkbox" checked={showSmall} onChange={(e) => setShowSmall(e.target.checked)} className="accent-[hsl(var(--color-accent))]" />
-                include n &lt; 5
+                include agencies with fewer than 5 past projects
               </label>
-              <span className="flex rounded-full bg-surface-elevated p-0.5">
-                {(['chart', 'table'] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    className={cn(
-                      'h-7 rounded-full px-3 font-medium transition-colors',
-                      view === v ? 'bg-surface-panel text-fg-base shadow-sm' : 'hover:text-fg-base'
-                    )}
-                  >
-                    {v === 'chart' ? 'Matrix' : 'Leaderboard'}
-                  </button>
-                ))}
-              </span>
+              {numbers && (
+                <span className="flex rounded-full bg-surface-elevated p-0.5" role="group" aria-label="View">
+                  {(['words', 'chart', 'table'] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-pressed={view === v}
+                      onClick={() => setView(v)}
+                      className={cn(
+                        'h-7 rounded-full px-3 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                        view === v ? 'bg-surface-panel text-fg-base shadow-sm' : 'hover:text-fg-base'
+                      )}
+                    >
+                      {VIEW_LABEL[v]}
+                    </button>
+                  ))}
+                </span>
+              )}
             </div>
           }
         >
           {error ? (
             <ApiErrorNote error={error} />
           ) : !data ? (
-            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">loading agency matrix...</div>
+            <div className="grid animate-pulse gap-2 p-5 lg:grid-cols-2" aria-busy="true">
+              <div className="h-64 rounded-lg bg-surface-input/60" />
+              <div className="h-64 rounded-lg bg-surface-input/60" />
+            </div>
           ) : data.points.length === 0 ? (
-            <div className="px-5 py-8 text-center text-xs text-fg-dimmed">
-              no agency has 5 or more past projects with a known planned duration
+            <div className="px-5 py-8 text-center text-sm text-fg-muted">
+              No agency has 5 or more past projects with a known planned duration yet.
+            </div>
+          ) : view === 'words' ? (
+            <div className={cn('grid grid-cols-1', !selected && 'lg:grid-cols-2')}>
+              <div className={cn('max-h-[640px] overflow-y-auto border-border-subtle', selected ? 'border-b' : 'border-b lg:border-b-0 lg:border-r')} data-lenis-prevent>
+                <RankedAgencies points={data.points} selected={selected} onPick={setSelected} />
+              </div>
+              <AgencyDotPlot points={data.points} selected={selected} onPick={setSelected} />
             </div>
           ) : view === 'chart' ? (
             <MatrixChart points={data.points} onPick={setSelected} />
           ) : (
             <Leaderboard points={data.points} selected={selected} onPick={setSelected} />
           )}
-          {data && (
+          {data && numbers && (
             <details className="group border-t border-border-subtle px-5 py-2.5 text-xs text-fg-dimmed">
               <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-fg-muted">
                 <Info className="size-3.5" /> About this data
@@ -424,7 +490,9 @@ export function Agencies() {
           )}
         </Card>
 
-        {selected && <AgencyPanel key={selected} agency={selected} point={point} onClose={() => setSelected(null)} />}
+        {selected && (
+          <AgencyPanel key={selected} agency={selected} point={point} peers={data?.points ?? []} numbers={numbers} onClose={() => setSelected(null)} />
+        )}
       </div>
     </Page>
   )

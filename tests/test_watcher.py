@@ -1,7 +1,6 @@
 import io
 import json
 import sys
-from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db, serving  # noqa: E402
 from backend.live import watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 PORTAL_CSV = ('"Projects Details"\n\n"Sr. No.","Sector Name","Line Ministry","Implementing Agency","Project Code",'
               '"Project Name","Original Cost\n(in cr.)","Revised Cost\n(in cr.)","Expenditure\n(in cr.)",'
@@ -72,9 +72,8 @@ def test_fill_realised_is_idempotent_and_alerts_flagged_slips():
 
 
 @pytest.fixture()
-def live(tmp_path, monkeypatch):
+def live(fresh_db, tmp_path, monkeypatch):
     """The watcher's files in tmp_path; the real serving data stays loaded for asof / model_version."""
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     db.init()
     gold, clean, inbox = tmp_path / "gold", tmp_path / "clean", tmp_path / "raw" / "inbox"
     for d in (gold, clean / "portal", inbox):
@@ -112,8 +111,7 @@ def fake_pipeline(monkeypatch, fail_at=None):
 
 def alerts_of(kind):
     """Alerts the watcher raised (not the seeded feed)."""
-    with closing(db.connect()) as con:
-        return [dict(r) for r in con.execute("SELECT * FROM alerts WHERE kind = ? AND source LIKE 'ingest:%'", [kind])]
+    return [a for a in db.alerts(kind=kind, size=100)["items"] if (a["source"] or "").startswith("ingest:")]
 
 
 def test_ingest_runs_once_per_sha256(live, monkeypatch):
@@ -121,7 +119,8 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     (watcher.INBOX / "Projects_Report.csv").write_text(PORTAL_CSV, encoding="utf-8")
     out = watcher.watch_once()
     assert [f["status"] for f in out["files"]] == ["ok"], out
-    assert calls == ["portal_csv", "build_clean_projects", "silver", "external", "gold", "score", "profile"]
+    assert calls == ["portal_csv", "build_clean_projects", "silver", "external", "research", "gold", "score",
+                     "profile", "serve"]
     row = out["files"][0]
     assert row["kind"] == "portal_csv" and row["rows"] == 2
     assert (live / row["archived_as"]).exists() and row["archived_as"].startswith("raw/csv/")
@@ -132,7 +131,13 @@ def test_ingest_runs_once_per_sha256(live, monkeypatch):
     # the same bytes again: nothing to do
     (watcher.INBOX / "copy.csv").write_text(PORTAL_CSV, encoding="utf-8")
     assert watcher.pending() == [] and watcher.watch_once()["files"] == []
-    assert len(calls) == 7
+    assert len(calls) == 9
+    # the accepted report and its run are registered for the lineage (ingest.source_documents / load_runs)
+    (doc,) = db.source_documents(row["sha256"])
+    assert (doc["file_type"], doc["report_type"], doc["source_path"]) == ("csv", "portal_csv", row["archived_as"])
+    (run,) = db.load_runs("INGEST")
+    assert (run["status"], run["rows_loaded"], run["source_document_id"]) == ("SUCCESS", 2, doc["source_document_id"])
+    assert run["model_version"] == "mv-new" and db.latest_jobs()[0]["summary"]["serve_error"] is None
     # a new pipeline version ingests it again
     monkeypatch.setattr(watcher, "pipeline_version", lambda: "next")
     assert [p.name for p, _ in watcher.pending()] == ["copy.csv"]
@@ -160,6 +165,20 @@ def test_failed_step_keeps_the_old_predictions(live, monkeypatch):
     assert db.latest_jobs()[0]["status"] == "error"
 
 
+def test_failed_serve_step_does_not_fail_the_ingest(live, monkeypatch):
+    """The serving tables are best effort: the report is ingested and served, the failure is a severity-2 alert."""
+    calls = fake_pipeline(monkeypatch, fail_at="serve")
+    (watcher.INBOX / "Projects_Report.csv").write_text(PORTAL_CSV, encoding="utf-8")
+    row = watcher.watch_once()["files"][0]
+    assert row["status"] == "ok" and calls[-1] == "serve" and not (watcher.INBOX / "Projects_Report.csv").exists()
+    assert "serve broke" in db.latest_jobs()[0]["summary"]["serve_error"]
+    (err,) = alerts_of("pipeline_error") or [None]
+    assert err is None
+    (err,) = [a for a in db.alerts(kind="pipeline_error")["items"] if a["source"] == "serve:Projects_Report.csv"]
+    assert err["severity"] == 2 and "serve broke" in err["detail"] and "python -m pipeline.run serve" in err["detail"]
+    assert [r["status"] for r in db.load_runs("INGEST")] == ["SUCCESS"]
+
+
 def test_unknown_file_is_an_error_not_a_run(live, monkeypatch):
     calls = fake_pipeline(monkeypatch)
     (watcher.INBOX / "notes.csv").write_text("a,b\n1,2\n")
@@ -168,7 +187,8 @@ def test_unknown_file_is_an_error_not_a_run(live, monkeypatch):
 
 
 def test_upload_endpoint(live, monkeypatch):
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         r = c.post("/api/jobs/ingest", files={"file": ("../../Projects_Report.csv", io.BytesIO(PORTAL_CSV.encode()))})
         assert r.status_code == 200 and r.json()["kind"] == "portal_csv", r.text
         assert r.json()["savedAs"].endswith("inbox/Projects_Report.csv")

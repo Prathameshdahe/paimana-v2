@@ -29,13 +29,21 @@ interface Row {
   scurve?: number
 }
 
-const SERIES: Record<string, { name: string; pct: boolean }> = {
-  progress: { name: 'Physical progress', pct: true },
-  spend: { name: 'Expenditure', pct: false },
-  cont: { name: 'Continue own velocity', pct: true },
-  rec: { name: 'Recover to sector median', pct: true },
-  agy: { name: 'Agency pattern', pct: true },
-  scurve: { name: 'Sector S-curve', pct: true },
+/** series names: the scenarios in plain sentences; `fact` series are report figures whose values any viewer may read */
+const SERIES: Record<string, { name: string; pct: boolean; fact: boolean }> = {
+  progress: { name: 'Work done (reported)', pct: true, fact: true },
+  spend: { name: 'Spent (reported)', pct: false, fact: true },
+  cont: { name: 'If it keeps its own pace', pct: true, fact: false },
+  rec: { name: 'If it recovers to the sector’s pace', pct: true, fact: false },
+  agy: { name: 'If it follows its agency’s pattern', pct: true, fact: false },
+  scurve: { name: 'A typical project in the sector', pct: true, fact: false },
+}
+
+/** "Likely completion: 6 to 12 months past Nov 2026" from the words forecast; null without the band */
+function bandCaption(f: Forecast | undefined): string | null {
+  const b = f?.completion.band
+  if (!b || !f?.completion.anticipated) return null
+  return `Likely completion: ${b} past ${formatDate(f.completion.anticipated)}, the date the latest report gives.`
 }
 
 const ts = (iso: string) => Date.parse(iso)
@@ -70,7 +78,7 @@ function buildRows(timeline: Timeline | undefined, forecast: Forecast | undefine
     if (s.recover !== null) r.rec = s.recover
     if (s.agency !== null) r.agy = s.agency
   }
-  for (const b of forecast.band) at(ts(b.quarter)).band = [b.lo, b.hi]
+  for (const b of forecast.band ?? []) at(ts(b.quarter)).band = [b.lo, b.hi]
 
   const end = Math.max(...[...rows.keys()])
   for (const c of forecast.scurve) {
@@ -80,51 +88,56 @@ function buildRows(timeline: Timeline | undefined, forecast: Forecast | undefine
 }
 
 /**
- * Trajectory fan chart (guide §5.1): reported progress and expenditure, the
- * three scenario curves with their min–max range as the band, the sector
- * S-curve as reference, and the predicted completion window.
+ * Where it could go from here (guide §5.1): reported progress and spend (facts, with their axes), the three scenario
+ * curves with their range as the band, and a typical project in the sector as reference — a picture of the paths,
+ * not a number. numbers (the developer's Model detail): the tooltip gives every value and the predicted completion
+ * window is shaded; otherwise the tooltip names the month and the lines present, and the window is a sentence.
  */
 export function TrajectoryChart({
   timeline,
   forecast,
   forecastError,
   asof,
+  numbers = false,
 }: {
   timeline: Timeline | undefined
   forecast: Forecast | undefined
   forecastError: unknown
   asof: string
+  numbers?: boolean
 }) {
   const rows = useMemo(() => buildRows(timeline, forecast), [timeline, forecast])
   const c = forecast?.completion
+  const caption = bandCaption(forecast)
 
   return (
     <Card
       variant="section"
-      title="Trajectory & scenarios"
+      title={numbers ? 'Trajectory and scenarios' : 'Where it could go from here'}
       info={
         forecast && (
           <>
             <p>
-              S-curve: {forecast.sector ?? 'sector'} median progress by elapsed share of the sanctioned span
-              {forecast.scurveFitYear && ` (fit ${forecast.scurveFitYear})`}, placed on this project&apos;s own dates.
+              The dashed lines are three paths from the last report: keeping the project&apos;s own recent pace,
+              recovering to the sector&apos;s typical pace, and following how its agency&apos;s projects usually went. The
+              dotted line is a typical {forecast.sector ?? 'sector'} project at the same share of its schedule
+              {numbers && forecast.scurveFitYear ? ` (fit ${forecast.scurveFitYear})` : ''}.
             </p>
-            <p>{forecast.bandMethod}</p>
+            {numbers && forecast.bandMethod && <p>{forecast.bandMethod}</p>}
           </>
         )
       }
       titleRight={
         <span className="text-fg-dimmed hidden sm:inline text-xs">
           {timeline ? `${timeline.points.length} reports` : ''}
-          {forecast && ` · ${forecast.scenarios.length} forecast quarters`}
-          {c?.p50 && ` · completion p50 ${formatDate(c.p50)}`}
+          {numbers && c?.p50 && ` · completion p50 ${formatDate(c.p50)}`}
         </span>
       }
       className="h-full flex flex-col"
     >
       {rows.length === 0 ? (
-        <div className="h-[320px] flex items-center justify-center text-xs text-fg-dimmed">
-          no reported progress for this project
+        <div className="h-[320px] flex items-center justify-center text-sm text-fg-muted">
+          No reported progress for this project yet.
         </div>
       ) : (
         <div className="flex-1 w-full p-2 min-h-[340px]">
@@ -174,7 +187,9 @@ export function TrajectoryChart({
                       {payload.map((item) => {
                         const key = String(item.dataKey)
                         const v = item.value
-                        const text = Array.isArray(v)
+                        // a scenario's value is a model output: the four roles see the line's name, not its value
+                        const shown = numbers || SERIES[key]?.fact
+                        const text = !shown ? null : Array.isArray(v)
                           ? `${formatPct(Number(v[0]), 0)} – ${formatPct(Number(v[1]), 0)}`
                           : SERIES[key]?.pct
                             ? formatPct(Number(v), 1)
@@ -182,7 +197,7 @@ export function TrajectoryChart({
                         return (
                           <div key={key} className="flex items-center justify-between gap-4">
                             <span style={{ color: item.color }}>{item.name}</span>
-                            <span className="font-semibold text-fg-base">{text}</span>
+                            {text && <span className="font-semibold text-fg-base">{text}</span>}
                           </div>
                         )
                       })}
@@ -192,7 +207,7 @@ export function TrajectoryChart({
               />
               <Legend verticalAlign="top" height={30} wrapperStyle={{ fontSize: '12px', fontFamily: 'IBM Plex Sans' }} />
 
-              {c?.p05 && c.p95 && (
+              {numbers && c?.p05 && c.p95 && (
                 <ReferenceArea
                   yAxisId="pct"
                   x1={ts(c.p05)}
@@ -208,9 +223,9 @@ export function TrajectoryChart({
                   ifOverflow="extendDomain" label={{ value: 'reported completion', position: 'insideTopLeft', fontSize: 12, fill: '#707987' }} />
               )}
               <ReferenceLine yAxisId="pct" x={ts(asof)} stroke="#1f2937" strokeDasharray="4 4"
-                label={{ value: 'asof', position: 'insideBottomRight', fontSize: 12, fill: '#1f2937' }} />
+                label={{ value: 'today', position: 'insideBottomRight', fontSize: 12, fill: '#1f2937' }} />
 
-              <Area yAxisId="pct" dataKey="band" name="Scenario range" stroke="none" fill="#5b7299" fillOpacity={0.18}
+              <Area yAxisId="pct" dataKey="band" name="Range of the three paths" stroke="none" fill="#5b7299" fillOpacity={0.18}
                 connectNulls isAnimationActive={false} legendType="square" />
               <Line yAxisId="pct" dataKey="scurve" name={SERIES.scurve?.name} stroke="#8a8578" strokeWidth={1.5}
                 strokeDasharray="1 3" dot={false} connectNulls isAnimationActive={false} />
@@ -229,14 +244,18 @@ export function TrajectoryChart({
         </div>
       )}
 
+      {caption && !numbers && (
+        <div className="border-t border-border-subtle px-5 py-2.5 text-sm text-fg-base">{caption}</div>
+      )}
+
       {!forecast && (
         <div className="border-t border-border-subtle px-5 py-2 text-xs text-fg-dimmed leading-relaxed">
           {forecastError instanceof ApiError && forecastError.status === 404 ? (
-            <div>no forecast — the project is not in the current scored portfolio; the history is shown alone</div>
+            <div>No paths ahead: the project is not in the current scored portfolio, so the history is shown alone.</div>
           ) : forecastError ? (
             <ApiErrorNote error={forecastError} className="py-2 text-left" />
           ) : (
-            <div>loading forecast...</div>
+            <div>Loading the paths ahead…</div>
           )}
         </div>
       )}

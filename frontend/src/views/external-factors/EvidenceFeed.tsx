@@ -6,14 +6,19 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useLiveStatus, useSignalFeed } from '@/lib/queries'
+import { useSession } from '@/lib/auth/SessionContext'
+import { can } from '@/lib/auth/access'
 import { formatDate, formatDateTime, cn } from '@/lib/formatters'
 import { EVENT_CATEGORY, categoryLabel } from '@/lib/riskPalette'
 import type { FeedItem } from '@/contracts/portfolio'
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN') : 'date unknown')
 
+/** one news item and the projects it was linked to; the match score is the developer's (canSeeNumbers) */
 export function SignalCard({ s }: { s: FeedItem }) {
   const panel = useProjectPanel()
+  const { role } = useSession()
+  const numbers = can(role, 'canSeeNumbers')
   const cat = s.category ? EVENT_CATEGORY[s.category] : undefined
   const sev = s.severity ?? 0
   return (
@@ -49,7 +54,7 @@ export function SignalCard({ s }: { s: FeedItem }) {
             </div>
             <div className="flex flex-wrap items-center gap-x-2">
               <span>{p.state ?? 'state unknown'}</span>
-              {p.linkScore !== null && (
+              {numbers && p.linkScore !== null && (
                 <span title={`matched by ${p.method ?? 'match'}`}>· link {p.linkScore.toFixed(2)}</span>
               )}
               {p.cufChangePeriod ? (
@@ -91,7 +96,7 @@ export function EvidenceFeed() {
       {error ? (
         <ApiErrorNote error={error} />
       ) : !data ? (
-        <div className="px-5 py-8 text-center text-xs text-fg-dimmed">loading news evidence...</div>
+        <div className="space-y-2 px-4 py-4" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface-input/60" />)}</div>
       ) : data.items.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-fg-dimmed space-y-1">
           <div>no news evidence stored yet — not the same as no external trouble</div>

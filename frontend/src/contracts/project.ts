@@ -3,6 +3,11 @@
  *
  * One-project and project-list shapes as served by the FastAPI backend
  * (backend/schemas.py; keys are camelCase). Dates are ISO strings.
+ *
+ * The numbers policy (SPEC9_ui section 6): only the developer role gets the raw model numbers (probabilities, SHAP,
+ * quantiles, rank percentiles). For every other viewer the backend sends them as null or [] and adds words instead:
+ * `outlook` and `driversPlain` on scores, `outlook` and `topReason` on rows, the words forecast. Fields marked
+ * "absent from an older backend" are optional so a page renders against either backend.
  */
 
 /** Rank-based tier; a project without an anticipated completion date is in the Watch tier (no date-based score). */
@@ -10,6 +15,34 @@ export type Tier = 'Critical' | 'High' | 'Medium' | 'Low' | 'Watch'
 export type TierFilter = Tier
 export type Flag = 'land' | 'forest' | 'litigation' | 'contractor' | 'early_notice'
 export type ProjectSort = 'risk' | 'cost' | 'slip' | 'name' | 'progress'
+
+/* ------------------------------------------------------------------ the numbers policy's words */
+
+/** how likely, in words, from fixed bands of a hidden probability: >= 0.75 very likely, >= 0.5 likely, >= 0.25 possible */
+export type OutlookWord = 'very likely' | 'likely' | 'possible' | 'unlikely'
+/** the likely further slip, from the hidden median months */
+export type SlipBand = 'under 6 months' | '6 to 12 months' | '1 to 2 years' | 'over 2 years'
+/** a measured extra delay in words, from the hidden months (the hidden-delay priors) */
+export type DelayWord = 'no measurable extra delay' | 'a few months' | 'about half a year' | 'about a year' | 'over a year'
+
+/**
+ * The outlook in words, on scores and on list rows: delay from P(date push, 2q), cost from P(cost revision, 2q) with
+ * the same bands, slip from the median further slip. A part is null when the project is not ranked (no completion
+ * date) or the model has no value; horizon names the window ('next two quarters').
+ */
+export interface Outlook {
+  delay: OutlookWord | null
+  cost: OutlookWord | null
+  slip: SlipBand | null
+  horizon: string | null
+}
+
+/** one of the project's top five model drivers in words: which way it pushes and how hard, within those five */
+export interface PlainDriver {
+  label: string
+  direction: 'raises' | 'lowers'
+  strength: 'strong' | 'moderate' | 'slight'
+}
 
 export interface ProjectRow {
   key: string
@@ -19,6 +52,7 @@ export interface ProjectRow {
   agency: string | null
   ministry: string | null
   tier: Tier | null
+  /** a hidden number, as are the five after override: null without the numbers feature */
   tierRankPct: number | null
   override: boolean | null
   pAny2q: number | null
@@ -26,6 +60,13 @@ export interface ProjectRow {
   pCostRev2q: number | null
   monthsP50: number | null
   monthsP95: number | null
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
+  /** the top five drivers in words, strongest first ([] for the public); absent from an older backend */
+  driversPlain?: PlainDriver[] | null
+  /** the plainest reason it ranks where it does (the first plain driver, else the first flagged check); absent from an
+   * older backend */
+  topReason?: string | null
   anticipatedCostCr: number | null
   expenditureCr: number | null
   physicalProgressPct: number | null
@@ -42,12 +83,39 @@ export interface ProjectPage {
   items: ProjectRow[]
 }
 
+/**
+ * GET /api/projects/map: every row in scope for the command centre's risk map, slim and unpaged (the list's filters,
+ * redacted like the list). Position on the map comes only from the due date and the key, never a hidden number.
+ */
+export interface MapRow {
+  key: string
+  name: string | null
+  sector: string | null
+  state: string | null
+  tier: Tier | null
+  override: boolean | null
+  anticipatedCompletion: string | null
+  anticipatedCostCr: number | null
+  physicalProgressPct: number | null
+  noCompletionDate: boolean | null
+  outlook?: Outlook | null
+  topReason?: string | null
+  flags: Flag[]
+}
+
+/** unit G's MapPage: total counts every match, items (at most 5,000) come by tier, then key */
+export interface ProjectMap {
+  total: number
+  items: MapRow[]
+}
+
 export interface ShapValue {
   feature: string
   value: unknown
   contribution: number
 }
 
+/** the model's view of one project; the probabilities, quantiles, rank and shapTop5 are hidden numbers (null / []) */
 export interface Scores {
   pDatePush2q: number | null
   pCostRev2q: number | null
@@ -67,6 +135,10 @@ export interface Scores {
   stagnationQuarters: number | null
   elapsedRatio: number | null
   shapTop5: ShapValue[]
+  /** the numbers in words; absent from an older backend */
+  outlook?: Outlook | null
+  /** the top five drivers in words, strongest first; absent from an older backend */
+  driversPlain?: PlainDriver[] | null
 }
 
 export type RiskState = 'flagged' | 'clear' | 'unknown'
@@ -173,14 +245,17 @@ export interface RemarkStatus {
   proposalNo: string | null
 }
 
-/** a measured hidden-delay prior that applies to the project (pipeline/hidden_delay.py) */
+/**
+ * a measured hidden-delay prior that applies to the project (pipeline/hidden_delay.py; unit G's schemas
+ * HiddenDelayPrior, whose descriptive fields are nullable)
+ */
 export interface HiddenDelayMatch {
   factor: 'forest_clearance' | 'land_progress' | 'land_complexity'
   group: string
-  label: string
-  nRows: number
-  nProjects: number
-  measurable: boolean
+  label: string | null
+  nRows: number | null
+  nProjects: number | null
+  measurable: boolean | null
   extraMonths: number | null
   extraMonthsLo: number | null
   extraMonthsHi: number | null
@@ -189,12 +264,17 @@ export interface HiddenDelayMatch {
   extraPushHi: number | null
   holmMonths: number | null
   holmPush: number | null
+  /**
+   * the measured extra months in words (the months, push and CIs are hidden numbers); null: too few projects to
+   * measure; absent from an older backend
+   */
+  extraMonthsWord?: DelayWord | null
   /** what it was matched on */
-  basis: string
+  basis: string | null
   /** the remark quarter it is as of; null for the land register */
   asOf: string | null
   /** the status still describes the project at asof (a remark within 4 quarters, or the land register); else it is the last report's */
-  current: boolean
+  current: boolean | null
 }
 
 /** portal, proposals, remarkStatus and hiddenDelay are empty on the public page */
@@ -229,6 +309,104 @@ export interface ReviewBadge {
   note: string
 }
 
+/* web research (backend/serving.py research; pipeline/research.py): cited evidence, never a model input */
+
+/** the sweep's categories (pipeline/research.py TAXONOMY_OF keys) */
+export type ResearchCategory =
+  | 'land'
+  | 'forest_env'
+  | 'litigation'
+  | 'contractor'
+  | 'funds'
+  | 'utility_shifting'
+  | 'inter_agency'
+  | 'law_order'
+  | 'natural_event'
+  | 'approvals_other'
+  | 'design_scope'
+  | 'progress'
+  | 'other'
+
+export type DatePrecision = 'day' | 'month' | 'year'
+
+/**
+ * A cited web fact. origin 'sweep': found by a research agent and checked by a second one that re-opened the source
+ * (verified keep | fix); 'agent': a news item the in-app research agent judged with the local LLM from its headline
+ * and feed summary. live: negative, not resolved, dated within 4 quarters of the as-of quarter. headline is the
+ * citation label; the public gets no matchReason and no headline on agent facts (label those by source).
+ */
+export interface ResearchFact {
+  factId: string
+  category: ResearchCategory | string
+  /** the pipeline/external.py taxonomy name (funds -> funding, natural_event -> weather; the rest as is) */
+  taxonomy: string
+  direction: 'negative' | 'positive' | 'neutral'
+  /** 1-3 */
+  severity: number
+  /** the first of the month or year when datePrecision is coarser than a day */
+  eventDate: string | null
+  datePrecision: DatePrecision | null
+  publishedDate: string | null
+  /** ongoing | resolved | unknown */
+  status: string
+  /** our own paraphrase, never the article text */
+  summary: string
+  headline: string | null
+  source: string | null
+  url: string
+  domain: string | null
+  /** high | medium: how surely the item is about this project */
+  match: string | null
+  matchReason: string | null
+  verified: 'keep' | 'fix' | null
+  /** article: the researcher read the source; headline: only a news-feed headline and its feed summary were judged */
+  basis: 'article' | 'headline' | null
+  origin: 'sweep' | 'agent'
+  researchedOn: string | null
+  live: boolean
+  signalId: number | null
+  judgedAt: string | null
+}
+
+/** the latest figure the researched sources give, each as of its own date ('YYYY-MM' or 'YYYY-MM-DD'); null when none */
+export interface ResearchExternal {
+  landAcquiredPct: { value: number | null; asOf: string | null } | null
+  forestClearance: { stage: string | null; asOf: string | null } | null
+  courtCase: { court: string | null; status: string | null; asOf: string | null } | null
+  contractor: { company: string | null; status: string | null; asOf: string | null } | null
+  /** date: 'YYYY-MM' as the source gives it */
+  newTarget: { date: string | null; asOf: string | null } | null
+  costRevision: { newCostCr: number | null; asOf: string | null } | null
+}
+
+/**
+ * The project page's research block (in ProjectDetail). searched false: not researched yet; searched with nFacts 0:
+ * searched, nothing found (not the same as clear). top: up to 3 facts, live blockers first.
+ */
+export interface ResearchBrief {
+  researchedOn: string | null
+  searched: boolean
+  /** the in-app agent's last run on this project (ISO time) */
+  agentResearchedAt: string | null
+  latestStatus: string | null
+  nFacts: number
+  nNegativeLive: number
+  top: ResearchFact[]
+}
+
+/** GET /api/projects/{key}/research (every role; the public gets the redacted facts): newest first */
+export interface ProjectResearch {
+  key: string
+  researchedOn: string | null
+  searched: boolean
+  agentResearchedAt: string | null
+  latestStatus: string | null
+  external: ResearchExternal
+  nFacts: number
+  nNegativeLive: number
+  facts: ResearchFact[]
+}
+
 export interface ProjectDetail {
   key: string
   master: MasterRecord | null
@@ -242,6 +420,8 @@ export interface ProjectDetail {
   external: External
   provenance: Provenance
   review: ReviewBadge | null
+  /** the web research counts and top facts; null when the backend has none for it */
+  research: ResearchBrief | null
 }
 
 export interface TimelinePoint {
@@ -272,6 +452,11 @@ export interface ScenarioPoint {
   agencyBasis: string | null
 }
 
+/**
+ * A nearest past project at the same stage (unit G's schemas.Analogue). The numbers (distance, the y_* outcome figures)
+ * are the developer's; for the four roles they come null. name, outcome and yearsAgo come to every viewer from unit G's
+ * backend and are absent from an older one (the outcome is then read from yAny, the age from analoguePeriod).
+ */
 export interface Analogue {
   rank: number
   analogueKey: string
@@ -286,6 +471,22 @@ export interface Analogue {
   yAny: number | null
   yDatePush: number | null
   yCostRev: number | null
+  name?: string | null
+  outcome?: AnalogueOutcome | null
+  yearsAgo?: number | null
+}
+
+/** what happened to a past project like this one, within 4 quarters */
+export type AnalogueOutcome = 'slipped' | 'held' | 'unknown'
+
+/** a nearest past project as the four roles get it: what happened, how long ago; no distance, slip or rate */
+export interface AnalogueBrief {
+  name: string | null
+  sector: string | null
+  outcome: AnalogueOutcome
+  yearsAgo: number | null
+  /** its project key, when the backend sends one */
+  key?: string | null
 }
 
 export interface ScurvePoint {
@@ -304,30 +505,38 @@ export interface BandPoint {
   hi: number
 }
 
+/** the reported completion and, as hidden numbers, the predicted window; `band` says the window in words */
 export interface CompletionBand {
   anticipated: string | null
-  monthsP05: number | null
-  monthsP50: number | null
-  monthsP95: number | null
-  p05: string | null
-  p50: string | null
-  p95: string | null
+  monthsP05?: number | null
+  monthsP50?: number | null
+  monthsP95?: number | null
+  p05?: string | null
+  p50?: string | null
+  p95?: string | null
+  /** how far past the reported date completion likely lands, in words; absent from an older backend */
+  band?: SlipBand | null
 }
 
+/**
+ * GET /api/projects/{key}/forecast (officials). The scenario curves, S-curve and band are a picture and come to every
+ * official; the page shows their values only to the developer. The four roles get the analogues as AnalogueBrief
+ * and the completion window in words; the fields marked optional are absent from that answer.
+ */
 export interface Forecast {
   key: string
   asof: string
-  sector: string | null
-  elapsedRatio: number | null
-  physicalProgressPct: number | null
+  sector?: string | null
+  elapsedRatio?: number | null
+  physicalProgressPct?: number | null
   scenarios: ScenarioPoint[]
-  analogues: Analogue[]
-  analogueSummary: string
-  scurveFitYear: number | null
+  analogues: Array<Analogue | AnalogueBrief>
+  analogueSummary?: string | null
+  scurveFitYear?: number | null
   scurve: ScurvePoint[]
-  band: BandPoint[]
+  band?: BandPoint[] | null
   completion: CompletionBand
-  bandMethod: string
+  bandMethod?: string | null
 }
 
 export interface Signal {
@@ -340,6 +549,7 @@ export interface Signal {
   summary: string | null
   category: string | null
   severity: number | null
+  /** the match score: the page shows it to the developer only */
   linkScore: number | null
   method: string | null
   /** first report period after the article whose CUF row changed; null while none has */
@@ -370,6 +580,8 @@ export interface BriefOut {
   nNumbersChecked: number | null
   attempts: number | null
   payload: Record<string, unknown>
+  /** the payload it was written from: 'numbers' (the developer) or 'plain' (outlook words); absent from an older backend */
+  view?: 'numbers' | 'plain'
 }
 
 /** the 422 body: numbers in the text that are not in the payload */
@@ -377,4 +589,92 @@ export interface BriefRejected {
   status: 'rejected'
   reasons: string[]
   attempts: number
+}
+
+/* the AI second opinion (llm/second_opinion.py, SPEC section 5): officials, never changes the tier */
+
+/** the second opinion's reading of the evidence */
+export type OpinionConcern = 'none' | 'watch' | 'concern'
+/** against the model's tier: the same, more worried, less worried */
+export type OpinionVsModel = 'agrees' | 'higher' | 'lower'
+
+/** one item of the evidence pack the model read, cited as [E#] */
+export interface OpinionEvidence {
+  /** 'E1' .. 'En' */
+  id: string
+  /** status | model | check | event | parivesh | land | research | news */
+  kind: string
+  date: string | null
+  text: string
+  /**
+   * negative | positive | neutral | context (the status line, the model and the research summary: never grounds
+   * for a concern); the pack may call it stance
+   */
+  direction?: string | null
+  stance?: string | null
+  /** 1-3 for negative items (a concern needs a current one of 2 or more) */
+  severity?: number | null
+  /**
+   * an old item: a report remark past the live window, a resolved or old research fact, old progress or an old
+   * headline; it may since have been resolved, so it is not today's state
+   */
+  stale?: boolean | null
+  source?: string | null
+  url?: string | null
+}
+
+/**
+ * GET /api/projects/{key}/second-opinion, status 200 (need insights): the LLM's JSON after validation — every [E#]
+ * exists, numbers traced to the pack, a 'concern' cites at least one negative item. 422 carries
+ * SecondOpinionRejected, 503 SecondOpinionUnavailable (LM Studio down or busy), 404 not scored. The fields after
+ * `gaps` are the envelope; the evidence list may come as `evidence` or `pack.items`.
+ */
+export interface SecondOpinionOut {
+  status: 'ok'
+  key: string
+  concern: OpinionConcern
+  /** at most 15 words */
+  headline: string
+  /** at most 90 words with [E#] citations */
+  narrative: string
+  keyEvidence: string[]
+  vsModel: OpinionVsModel
+  /** up to 3: what the evidence does not tell */
+  gaps: string[]
+  asof?: string | null
+  model?: string | null
+  promptVersion?: string | null
+  evidenceHash?: string | null
+  generatedAt?: string | null
+  cached?: boolean | null
+  attempts?: number | null
+  nNumbersChecked?: number | null
+  evidence?: OpinionEvidence[] | null
+  pack?: { items?: OpinionEvidence[] | null } | null
+  /** the pack it was made from: 'numbers' (the developer) or 'plain' (the tier and outlook in words); absent from an
+   * older backend */
+  view?: 'numbers' | 'plain'
+}
+
+/** ?cached=1 with no opinion for the current evidence yet */
+export interface SecondOpinionNone {
+  status: 'none'
+}
+
+/** the 422 body: why the opinion was rejected after its retry */
+export interface SecondOpinionRejected {
+  status: 'rejected'
+  reasons: string[]
+  attempts: number
+}
+
+/**
+ * the 503 body: LM Studio is not reachable (down), it answered nothing in time (down false), or (busy) it is
+ * serving the chat or a brief; an older backend sends neither flag, which reads as down
+ */
+export interface SecondOpinionUnavailable {
+  status: 'llm_unavailable'
+  detail: string
+  busy?: boolean
+  down?: boolean
 }

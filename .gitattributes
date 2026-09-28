@@ -1,2 +1,8 @@
 # LightGBM model text must keep the bytes LightGBM wrote: CRLF conversion on checkout breaks loading
 model/**/*.txt -text
+
+# shell scripts and everything Docker runs must stay LF on every checkout (a Windows checkout defaults to CRLF,
+# and a CRLF shebang or nginx directive fails inside the containers)
+*.sh text eol=lf
+deploy/** text eol=lf
+Dockerfile.* text eol=lf

@@ -6,26 +6,37 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet
 Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summary.csv (b table), ablation.csv
-         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators)
+         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators), intervals.csv
 
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
 The newest usable cutoff is the test fold; the N_VAL usable cutoffs before it that sit in the newest reliable block
-are the validation folds. At every cutoff c the models train on label rows whose outcome quarter t + h is <= c (the
-label was known by c) and predict the rows at t = c. Completed projects are left out: there is nothing to warn about.
+and before FLASH_FROM are the validation folds. At every cutoff c the models train on label rows whose outcome quarter
+t + h is <= c (the label was known by c) and predict the rows at t = c. Completed projects are left out: there is
+nothing to warn about.
 
 The validation block is quarterly-report (QPISR) era: anticipated vs anticipated dates, and 0% remarks or progress at
 some folds. Live scoring and the test fold are the flash-report era (revised vs revised, a higher slip rate), where
 val rankings have flipped. So a second block, flash, holds every cutoff from FLASH_FROM with >= MIN_ROWS labelled rows
-(these fail the coverage rule: flash reports print no anticipated fields). For the 2-quarter targets it includes the
-test cutoff, so there the test fold is no longer independent of promotion. Every pooled row also reports the
+(the date fields fail the coverage rule there: flash reports print no anticipated date). The two blocks are disjoint:
+validation stops before FLASH_FROM even for the cost revision, whose cost fields stay reliable into the flash era (it
+used to take 2025-07 and 2025-10 as validation folds too, so the two blocks shared them and were not two pieces of
+evidence). For the 2-quarter targets flash includes the test cutoff, so there the test fold is no longer independent
+of promotion. Every pooled row also reports the
 not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
 early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
 
 A target in TRAIN_FROM trains on rows from that date only (none today). A target in CALIBRATED gets a Platt
 calibrator fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
 it; the summary's calibration column says which. The ablation table compares the raw LightGBM scores.
+
+The score step's intervals (LightGBM quantile regressors at 5/50/95% of the months pushed and the cost change % by
+t + 2q, fit_quantiles) are backtested the same way on the validation and flash cutoffs of their binary counterparts
+(y_date_push, y_cost_rev): intervals.csv has the p05-p95 coverage (nominal 90%), the share below p05 and above p95,
+the mean width and the pinball loss at each quantile. A conformal widening from folds realised by the cutoff was
+tried and left out (docs/MODEL_UPGRADES_2026-09.md): those folds already cover >= 90%, so it moved nothing.
 """
+import functools
 import json
 import time
 from pathlib import Path
@@ -46,6 +57,8 @@ SILVER = ROOT / "dataset" / "silver"
 RUNS = ROOT / "model" / "runs"
 
 TARGETS = [("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2), ("y_any", 4)]   # first is the primary target
+# y_any_h2 has its own model: 1 - (1 - p_date)(1 - p_cost) from the date and cost models (which train on more rows)
+# lost 0.020 validation PR-AUC [-0.027, -0.013], and its mean with the direct model 0.009 [-0.013, -0.004]
 NEEDS = {"y_date_push": ["anticipated_completion"], "y_cost_rev": ["anticipated_cost_cr"],
          "y_any": ["anticipated_completion", "anticipated_cost_cr"]}
 RELIABLE = 0.8      # field completeness that makes a quarter reliable
@@ -71,6 +84,27 @@ PK = ["project_key", "period"]
 LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_leaves=15, min_child_samples=50,
                   subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0, random_state=0,
                   n_jobs=8, verbose=-1)
+# target -> LightGBM params that differ from LGB_PARAMS for that target alone. One enters only after it passed the
+# promotion rule on that target in ml/experiment.py (3 seeds, within-cutoff PR-AUC, paired project bootstrap) with a
+# CI above 0 on a block that clears its margin. half_life_q is not a LightGBM param: fit_lgbm turns it into sample
+# weights that halve every half_life_q quarters of row age. Tried and left out (docs/MODEL_UPGRADES_2026-09.md,
+# within-cutoff deltas against ML-20260927-222602): age weights on y_any_h4 (8 quarters shipped at first on a pooled
+# validation gain of +0.0124, but it ranked worse inside 4 of the 6 validation folds, -0.0031: the pooled gain was
+# its score level following each fold's base rate; 16 quarters +0.0003) and on the 2-quarter targets (flash -0.013 to
+# -0.027); the y_any_h2 validation search's picks on y_any_h2 and y_date_push_h2 (flash -0.039 to -0.058; early
+# stopping on an inner time split kept 20-400 trees) and on y_any_h4 (flash -0.012 to -0.017); the mean of 5 seeds
+# (y_any_h2 flash +0.0060 against a 0.0134 margin); flash-report rows weighted 3x (y_cost_rev_h2 flash -0.009).
+TARGET_PARAMS = {
+    # the best tree-count trial of the y_any_h2 validation search (ml/experiment.py TUNED_TREES), picked there and
+    # not on this target: validation +0.0073 [-0.0106, +0.0263] (2023-07..2024-10, 4 of 6 folds up), flash +0.0365
+    # [+0.0059, +0.0631] (3 of 3 up). Provisional: this target and this variant (over the early-stopped pick, which
+    # also passes) were chosen after the flash results had been seen, so no untouched block backs it. Pre-registered
+    # check: the 2026-04 fold, once its outcome quarter 2026-10 is reported; if these params' within-cutoff PR-AUC
+    # there (3 seeds) is below LGB_PARAMS', revert: python -m ml.registry revert y_cost_rev_h2
+    ("y_cost_rev", 2): {"learning_rate": 0.02, "num_leaves": 63, "min_child_samples": 20, "colsample_bytree": 0.8,
+                        "subsample": 0.8, "reg_lambda": 20.0, "reg_alpha": 0.0, "min_split_gain": 0.02,
+                        "n_estimators": 150},
+}
 LOGREG_PARAMS = dict(C=1.0, max_iter=2000)
 ONEHOT_MIN = 20     # categories rarer than this in training share one "infrequent" column
 ABLATION = [("state", ["state"]), ("+dynamics", ["state", "dynamics"]), ("+context", ["state", "dynamics", "context"]),
@@ -80,10 +114,14 @@ ABLATION_MODEL = {"state": "lgbm_state", "+dynamics": "lgbm_state_dyn", "+contex
                   "+freshness": "lgbm_state_dyn_ctx_fresh", "+external": "lightgbm"}
 ABLATION_GAINS = ["pr_auc", "precision_50", "recall_100"]     # each step minus the step before
 MAIN = ["naive", "rule", "logreg", "lightgbm"]
+# the score step's interval models: name -> (h = 2 regression label, the binary target whose windows it is tested on)
+QUANTILE_TARGETS = {"months": ("y_months", "y_date_push"), "cost_pct": ("y_cost_pct", "y_cost_rev")}
+ALPHAS = {"p05": 0.05, "p50": 0.5, "p95": 0.95}
 WINDOW_RULE = ("A quarter is reliable for a target when every field its label compares (needs) is >= reliable_min "
                "complete in silver/coverage.parquet. A cutoff c is usable when c and c + h are reliable and c has "
                f">= {MIN_ROWS} labelled rows. test = the newest {N_TEST} usable cutoff(s). validation = the last "
-               f"{N_VAL} usable cutoffs before test inside the newest reliable block that still has usable cutoffs. "
+               f"{N_VAL} usable cutoffs before test and before {FLASH_FROM.date()} inside the newest reliable block "
+               "that still has usable cutoffs (validation and flash never share a cutoff). "
                "Each fold trains on every label row with target_period <= cutoff (outcome known by the cutoff, any "
                "quarter, reliable or not) and scores the rows at period == cutoff. Completed projects are excluded. "
                f"flash = every cutoff from {FLASH_FROM.date()} with >= {MIN_ROWS} labelled rows (reliability not "
@@ -135,7 +173,7 @@ def windows(coverage, d, y, h):
     test, rest = usable[-N_TEST:], usable[:-N_TEST]
     last = qindex([rest[-1]])[0]
     block = next(b for b in blocks(rel) if b[0] <= last <= b[1])
-    val = [c for c in rest if qindex([c])[0] >= block[0]][-N_VAL:]
+    val = [c for c in rest if qindex([c])[0] >= block[0] and c < FLASH_FROM][-N_VAL:]   # disjoint from flash
     flash = [c for c in n.index if c >= FLASH_FROM and n[c] >= MIN_ROWS]
     iso = lambda p: pd.Timestamp(p).date().isoformat()
     return {
@@ -195,9 +233,65 @@ def fit_logreg(tr, cols, cats, y):
     return m, lambda d: m.predict_proba(X(d))[:, 1]
 
 
-def fit_lgbm(tr, cols, cats, y):
-    m = lgb.LGBMClassifier(**LGB_PARAMS).fit(lgb_X(tr, cols, cats), tr[y])
+def lgb_params(y, h):
+    """The LightGBM params of target (y, h): LGB_PARAMS with its TARGET_PARAMS."""
+    return {**LGB_PARAMS, **TARGET_PARAMS.get((y, h), {})}
+
+
+def fit_lgbm(tr, cols, cats, y, params=None, weight=None):
+    """LightGBM with LGB_PARAMS, or with params (a target's lgb_params, a registry entry's own). A half_life_q in
+    params weights each training row 0.5 ** (age / half_life_q), age = quarters from its t to the newest training t;
+    weight(tr) multiplies in any other sample weights."""
+    params = dict(params or LGB_PARAMS)
+    half = params.pop("half_life_q", None)
+    w = np.ones(len(tr))
+    if half:
+        q = qindex(tr.period).to_numpy()
+        w = w * 0.5 ** ((q.max() - q) / half)
+    if weight is not None:
+        w = w * weight(tr)
+    m = lgb.LGBMClassifier(**params).fit(lgb_X(tr, cols, cats), tr[y],
+                                         sample_weight=None if half is None and weight is None else w)
     return m, lambda d: m.predict_proba(lgb_X(d, cols, cats))[:, 1]
+
+
+def qframe(feats, lab, y):
+    """Rows with a known regression label y joined to their features, completed projects dropped."""
+    d = lab[PK + ["target_period", y]].dropna(subset=[y]).merge(feats, on=PK, how="inner")
+    return d[~d.is_completed.astype(bool)].sort_values(PK, ignore_index=True)
+
+
+def fit_quantiles(tr, y, cols, cats):
+    """One LightGBM quantile regressor of y per ALPHAS level (LGB_PARAMS). Returns predict(d) -> (rows x levels),
+    sorted along each row so the quantiles never cross."""
+    X = lgb_X(tr, cols, cats)
+    ms = [lgb.LGBMRegressor(**{**LGB_PARAMS, "objective": "quantile", "alpha": a}).fit(X, tr[y])
+          for a in ALPHAS.values()]
+    return lambda d: np.sort(np.column_stack([m.predict(lgb_X(d, cols, cats)) for m in ms]), axis=1)
+
+
+def quantile_backtest(d, y, cutoffs, cols, cats):
+    """Rolling origin for fit_quantiles: at each cutoff c, fitted on rows with target_period <= c, the rows at c."""
+    out = []
+    for c in cutoffs:
+        tr, te = d[d.target_period <= c], d[d.period == c]
+        q = fit_quantiles(tr, y, cols, cats)(te)
+        out.append(pd.DataFrame({"cutoff": c, "project_key": te.project_key.to_numpy(), "y": te[y].to_numpy(float),
+                                 **{s: q[:, i] for i, s in enumerate(ALPHAS)}}))
+    return pd.concat(out, ignore_index=True)
+
+
+def pinball(y, q, a):
+    u = np.asarray(y, float) - np.asarray(q, float)
+    return float(np.mean(np.maximum(a * u, (a - 1) * u)))
+
+
+def interval_metrics(p):
+    """p05-p95 coverage, the shares below and above, mean width and the pinball loss at each ALPHAS level."""
+    inside = (p.y >= p.p05) & (p.y <= p.p95)
+    return {"n": len(p), "coverage": float(inside.mean()), "below_p05": float((p.y < p.p05).mean()),
+            "above_p95": float((p.y > p.p95).mean()), "mean_width": float((p.p95 - p.p05).mean()),
+            **{f"pinball_{s}": pinball(p.y, p[s], a) for s, a in ALPHAS.items()}}
 
 
 def topk(y, p, k):
@@ -359,36 +453,48 @@ def deltas(summary):
     return pd.concat(out, ignore_index=True)
 
 
-def run(run_dir):
-    """Backtest every target in TARGETS and write the tables into run_dir. Returns what the registry needs."""
+def model_cols(groups):
+    """The model's feature list: every group of the ABLATION step that ABLATION_MODEL maps to "lightgbm"."""
+    return [f for step, gs in ABLATION if ABLATION_MODEL[step] == "lightgbm" for g in gs for f in groups[g]]
+
+
+def run(run_dir, extra=None):
+    """Backtest every target in TARGETS and write the tables into run_dir. extra = {target key: {name: (fit_fn, cols,
+    cats)}} adds models to a target's main table (the registry's re-scored incumbent). Returns what the registry
+    needs."""
+    extra = extra or {}
     t0 = time.time()
     feats, labels, coverage, manifest = load()
     groups, cats = manifest["features"], manifest["categorical"]
     step_cols = {ABLATION_MODEL[step]: [f for g in gs for f in groups[g]] for step, gs in ABLATION}
     cols = step_cols["lightgbm"]
-    main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
-            "lightgbm": (fit_lgbm, cols, cats)}
-    ablation = {name: (fit_lgbm, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
+    assert cols == model_cols(groups)
     wins, all_folds, summary, abl, calib, shap, frames, fold_metrics, platt = {}, [], [], [], [], [], {}, {}, {}
     latest = feats.period.max()
     for y, h in TARGETS:
         key = f"{y}_h{h}"
+        fit = functools.partial(fit_lgbm, params=lgb_params(y, h))
+        main = {"naive": (fit_naive, [], cats), "rule": (fit_rule, [], cats), "logreg": (fit_logreg, cols, cats),
+                "lightgbm": (fit, cols, cats)}
+        abl_models = {name: (fit, c, cats) for name, c in step_cols.items() if name != "lightgbm"}
         d = frame(feats, labels[h], y, h)
         frames[y, h] = d
         w = wins[key] = windows(coverage, d, y, h)
         val, test, flash = (pd.to_datetime(w[k]) for k in ["validation", "test", "flash"])
-        pv, fv, fitted = backtest(d, y, val, {**main, **ablation})
-        splits = {"val": (pv[pv.model.isin(MAIN)], fv[fv.model.isin(MAIN)]), "test": backtest(d, y, test, main)[:2]}
+        models, names = {**main, **extra.get(key, {})}, MAIN + list(extra.get(key, {}))
+        pv, fv, fitted = backtest(d, y, val, {**models, **abl_models})
+        splits = {"val": (pv[pv.model.isin(names)], fv[fv.model.isin(names)]),
+                  "test": backtest(d, y, test, models)[:2]}
         if len(flash):
-            splits["flash"] = backtest(d, y, flash, main)[:2]
+            splits["flash"] = backtest(d, y, flash, models)[:2]
         method = "none"
         if (y, h) in CALIBRATED:
             method = f"platt_k{PLATT_FOLDS}"
             done = {c for p, _ in splits.values() for c in p.cutoff}
             want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
-            extra = sorted(c for c in want - done if (d.period == c).any())
-            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, extra, main)[0]] if extra else []))
-            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # val and flash can share cutoffs
+            more = sorted(c for c in want - done if (d.period == c).any())
+            pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, more, models)[0]] if more else []))
+            pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # test and flash can share cutoffs
             for split, (p, f) in splits.items():
                 cp = calibrate(p, pool, h)
                 splits[split] = (cp, rescore(cp, f))
@@ -402,11 +508,11 @@ def run(run_dir):
             all_folds.append(f)
             s = pooled(p, f, h).assign(target=y, horizon=h, split=split, calibration=method)
             summary.append(s)
-            for name in MAIN:
+            for name in names:
                 fold_metrics[key, split, name] = {"pooled": s[s.model == name].iloc[0].drop(
                     ["target", "horizon", "split", "model"]).to_dict(), "folds": f[f.model == name].to_dict("records")}
         # the ablation compares raw LightGBM scores; the calibration table shows the served (calibrated) ones
-        all_folds.append(fv[~fv.model.isin(MAIN)].assign(target=y, horizon=h, split="val"))
+        all_folds.append(fv[~fv.model.isin(names)].assign(target=y, horizon=h, split="val"))
         s, prev = pooled(pv, fv, h).assign(target=y, horizon=h), None
         for step, gs in ABLATION:
             r = s[s.model == ABLATION_MODEL[step]].iloc[0].to_dict()
@@ -415,7 +521,7 @@ def run(run_dir):
             prev = r
             abl.append(r)
         pc = splits["val"][0]
-        for name in MAIN:
+        for name in names:
             q = pc[pc.model == name]
             calib.append(calibration(q.y, q.p).assign(target=y, horizon=h, model=name))
         contrib = [fitted[c, "lightgbm"].booster_.predict(lgb_X(d[d.period == c], cols, cats),
@@ -427,6 +533,20 @@ def run(run_dir):
                     .sort_values("mean_abs_shap", ascending=False))
         print(f"  {key}: val {w['validation'][0]}..{w['validation'][-1]} test {w['test']} flash {w['flash']} "
               f"calibration {method}  {time.time() - t0:.0f}s")
+
+    ivals = []
+    for name, (y, like) in QUANTILE_TARGETS.items():
+        d = qframe(feats, labels[2], y)
+        for split, k in (("val", "validation"), ("flash", "flash")):
+            cs = pd.to_datetime(wins.get(f"{like}_h2", {}).get(k, []))
+            if len(cs):
+                ivals.append({"target": name, "label": y, "split": split, "n_folds": len(cs),
+                              **interval_metrics(quantile_backtest(d, y, cs, cols, cats))})
+    ivals = pd.DataFrame(ivals)
+    if len(ivals):
+        print("  intervals: " + "  ".join(f"{r.target} {r.split} coverage {r.coverage:.3f} pinball p50 "
+                                          f"{r.pinball_p50:.3f}" for r in ivals.itertuples())
+              + f"  {time.time() - t0:.0f}s")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     lead = ["target", "horizon"]
@@ -440,6 +560,7 @@ def run(run_dir):
     calib = pd.concat(calib, ignore_index=True)[lead + ["model", "bin", "n", "mean_pred", "obs_rate"]]
     folds.to_csv(run_dir / "backtest_folds.csv", index=False)
     summary.to_csv(run_dir / "backtest_summary.csv", index=False)
+    ivals.to_csv(run_dir / "intervals.csv", index=False)
     abl.to_csv(run_dir / "ablation.csv", index=False)
     calib.to_csv(run_dir / "calibration.csv", index=False)
     pd.concat(shap, ignore_index=True).to_csv(run_dir / "shap_summary.csv", index=False)
@@ -450,11 +571,12 @@ def run(run_dir):
         "gold_version": manifest["gold_version"], "silver_version": manifest["silver_version"], **wins},
         indent=2), encoding="utf-8")
     return {"windows": wins, "frames": frames, "features": cols, "groups": groups, "categorical": cats,
-            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt}
+            "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt,
+            "intervals": ivals}
 
 
-def main(run_id=None):
+def main(run_id=None, extra=None):
     run_id = run_id or time.strftime("ML-%Y%m%d-%H%M%S", time.gmtime())
-    res = run(RUNS / run_id)
+    res = run(RUNS / run_id, extra)
     print(f"backtest {run_id}: {RUNS / run_id}")
     return run_id, res

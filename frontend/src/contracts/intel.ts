@@ -6,11 +6,19 @@
  * Bottleneck Intelligence (GET /api/bottlenecks, /api/bottlenecks/{id}).
  */
 
+import type { Outlook } from './project'
+
+/** an agency's past schedule in words (backend, from the hidden schedule bias); 'too few projects' under the floor */
+export type ScheduleWord = 'usually later' | 'about on time' | 'usually earlier' | 'too few projects'
+/** an agency's past cost in words, from the hidden cost bias */
+export type CostWord = 'usually costs more' | 'about as planned' | 'usually costs less' | 'too few projects'
+
 /**
  * One canonical agency (printed names merged, gold/agency_map.csv). Biases are ratios
  * (0.56 = 56% longer / costlier than first planned). scheduleBias / costBias are shrunk
  * toward the sector median when n < 10; the *Raw ones are not; the CIs are bootstrap
- * 90% intervals of the raw median.
+ * 90% intervals of the raw median. Every bias, quantile, CI, the shrink weight and the trend are hidden numbers (null
+ * without the numbers feature); the counts and capital stay, and the two words say the pattern.
  */
 export interface AgencyPoint {
   agency: string
@@ -46,6 +54,10 @@ export interface AgencyPoint {
   nRecent: number
   /** the signed-in agency official's own agency */
   isSelf: boolean
+  /** absent from an older backend */
+  scheduleWord?: ScheduleWord | null
+  /** absent from an older backend */
+  costWord?: CostWord | null
 }
 
 export interface AgencyMatrix {
@@ -60,7 +72,10 @@ export interface MemberBrief {
   key: string
   name: string | null
   tier: string | null
+  /** a hidden number */
   pAny2q: number | null
+  /** absent from an older backend */
+  outlook?: Outlook | null
   anticipatedCostCr: number | null
 }
 
@@ -79,6 +94,7 @@ export interface Bottleneck {
   state: string | null
   nProjects: number
   capitalExposedCr: number
+  /** hidden numbers, as meanMonthsP50 */
   meanPAny2q: number | null
   meanMonthsP50: number | null
   nCriticalHigh: number
@@ -133,8 +149,11 @@ export interface BottleneckMember {
   state: string | null
   agency: string | null
   tier: string | null
+  /** hidden numbers, as monthsP50 */
   pAny2q: number | null
   monthsP50: number | null
+  /** absent from an older backend */
+  outlook?: Outlook | null
   anticipatedCostCr: number | null
   evidence: MemberEvidence[]
 }

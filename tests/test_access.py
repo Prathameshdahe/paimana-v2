@@ -1,10 +1,10 @@
-"""Role-scoped API (backend/access.py): each role sees its own projects, the public a redacted page, POLICY 403s."""
+"""Role-scoped API (backend/access.py): each role sees its own projects, the public a redacted page, POLICY 403s.
+Every viewer is a real account signed in through tests/viewers.py as_role; the public is a client without a cookie."""
 import asyncio
 import sys
-from contextlib import closing
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,25 +14,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db, serving, store  # noqa: E402
 from backend.live import scheduler, scout  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py (pytest puts tests/ on sys.path)
 
-IPMD = {"X-Paimana-Role": "ipmd_analyst"}
+_client = None
+
+
+def public():
+    return as_role(_client, "public")
+
+
+def ipmd():
+    return as_role(_client, "ipmd")
 
 
 def ministry(name):
-    return {"X-Paimana-Role": "ministry_official", "X-Paimana-Ministry": quote(name)}
+    return as_role(_client, "ministry", ministry=name)
 
 
 def agency(name):
-    return {"X-Paimana-Role": "agency_official", "X-Paimana-Agency": quote(name)}
+    return as_role(_client, "agency", agency=name)
 
 
 @pytest.fixture(scope="module")
-def client(tmp_path_factory):
-    """No default headers: a request without any is the public."""
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("PAIMANA_DB", str(tmp_path_factory.mktemp("db") / "paimana.db"))
-        with TestClient(app) as c:
-            yield c
+def client():
+    """One client for the module; each helper above signs it in as its viewer just before the request that
+    passes its headers (public() signs it out)."""
+    global _client
+    with TestClient(app) as c:
+        _client = c
+        yield c
+    _client = None
 
 
 @pytest.fixture(scope="module")
@@ -49,12 +60,13 @@ def total(client, path, headers, **params):
 
 
 def test_each_role_sees_its_own_projects(client, scopes):
-    n = client.get("/api/portfolio").json()["kpis"]["nProjects"]
-    assert client.get("/api/portfolio", headers=IPMD).json()["kpis"]["nProjects"] == n
+    n = client.get("/api/portfolio", headers=public()).json()["kpis"]["nProjects"]
+    assert client.get("/api/portfolio", headers=ipmd()).json()["kpis"]["nProjects"] == n
     assert sum(m["n"] for m in scopes["ministries"]) == n
     m, a = scopes["ministries"][2], next(x for x in scopes["agencies"] if x["n"] >= 5)
-    for h, want, col, val in ((ministry(m["name"]), m["n"], "ministry", m["name"]),
-                              (agency(a["name"]), a["n"], "agency", None)):
+    for sign_in, want, col, val in ((lambda: ministry(m["name"]), m["n"], "ministry", m["name"]),
+                                    (lambda: agency(a["name"]), a["n"], "agency", None)):
+        h = sign_in()
         assert client.get("/api/portfolio", headers=h).json()["kpis"]["nProjects"] == want
         assert total(client, "/api/projects", h) == want
         rows = client.get("/api/projects", headers=h, params={"size": 100}).json()["items"]
@@ -65,13 +77,13 @@ def test_each_role_sees_its_own_projects(client, scopes):
     # alerts: only on the viewer's projects, never the project-less ones
     keys = serving.scope_keys(("ministry", m["name"]))
     alerts = client.get("/api/alerts", headers=ministry(m["name"]), params={"size": 100}).json()
-    assert alerts["total"] < total(client, "/api/alerts", IPMD)
+    assert alerts["total"] < total(client, "/api/alerts", ipmd())
     assert all(x["projectKey"] in keys for x in alerts["items"])
 
 
 def test_out_of_scope_project_is_404(client, scopes):
     coal, rail = scopes["ministries"][2]["name"], scopes["ministries"][1]["name"]
-    key = client.get("/api/projects", headers=IPMD, params={"ministry": rail, "size": 1}).json()["items"][0]["key"]
+    key = client.get("/api/projects", headers=ipmd(), params={"ministry": rail, "size": 1}).json()["items"][0]["key"]
     for path in (f"/api/projects/{key}", f"/api/projects/{key}/timeline", f"/api/projects/{key}/forecast",
                  f"/api/projects/{key}/signals"):
         assert client.get(path, headers=ministry(coal)).status_code == 404
@@ -79,14 +91,16 @@ def test_out_of_scope_project_is_404(client, scopes):
 
 
 def test_public_project_page_is_redacted(client):
-    key = client.get("/api/projects", params={"size": 1}).json()["items"][0]["key"]
-    full = client.get(f"/api/projects/{key}", headers=IPMD).json()
-    pub = client.get(f"/api/projects/{key}").json()
+    key = client.get("/api/projects", params={"size": 1}, headers=public()).json()["items"][0]["key"]
+    # the model's numbers: the developer only (tests/test_numbers_policy.py)
+    full = client.get(f"/api/projects/{key}", headers=as_role(client, "developer")).json()
+    pub = client.get(f"/api/projects/{key}", headers=public()).json()
     assert full["scores"]["shapTop5"] and full["scores"]["monthsP95"] is not None
     assert full["provenance"]["modelVersion"] and full["provenance"]["sourceDocId"]
     assert pub["scores"]["shapTop5"] == [] and pub["scores"]["monthsP05"] is None
     assert pub["scores"]["monthsP95"] is None and pub["scores"]["costPctP95"] is None
-    assert pub["scores"]["tier"] == full["scores"]["tier"] and pub["scores"]["monthsP50"] == full["scores"]["monthsP50"]
+    assert pub["scores"]["tier"] == full["scores"]["tier"] and pub["scores"]["monthsP50"] is None
+    assert pub["scores"]["outlook"] == full["scores"]["outlook"] and pub["scores"]["driversPlain"] == []
     prov = pub["provenance"]
     assert prov["modelVersion"] is None and prov["goldVersion"] is None and prov["sourceDocId"] is None
     assert prov["asof"] == full["provenance"]["asof"] and pub["review"] is None
@@ -96,52 +110,70 @@ def test_public_project_page_is_redacted(client):
     assert [r["state"] for r in pub["riskProfile"]] == [r["state"] for r in full["riskProfile"]]
     assert all(r["evidence"] is None for r in pub["riskProfile"])  # no "P = 0.55 (High-tier cut ...)"
     assert all(e["sourceDocId"] is None for e in pub["external"]["events"])
-    pub_rows = client.get("/api/projects", params={"size": 20}).json()["items"]
-    full_rows = client.get("/api/projects", headers=IPMD, params={"size": 20}).json()["items"]
+    pub_rows = client.get("/api/projects", params={"size": 20}, headers=public()).json()["items"]
+    full_rows = client.get("/api/projects", headers=as_role(client, "developer"), params={"size": 20}).json()["items"]
     assert any(r["monthsP95"] is not None and r["tierRankPct"] is not None for r in full_rows)
     assert all(r["monthsP95"] is None and r["tierRankPct"] is None for r in pub_rows)
     assert [r["tier"] for r in pub_rows] == [r["tier"] for r in full_rows]
     flagged = [r for r in full["riskProfile"] if r["state"] == "flagged"]
     assert pub["topRisksPlain"] == full["topRisksPlain"] and len(pub["topRisksPlain"]) == min(3, len(flagged))
     assert all(s.endswith(".") and len(s) < 90 for s in pub["topRisksPlain"])
-    assert all(p["sourceDocId"] is None for p in client.get(f"/api/projects/{key}/timeline").json()["points"])
+    points = client.get(f"/api/projects/{key}/timeline", headers=public()).json()["points"]
+    assert all(p["sourceDocId"] is None for p in points)
     for path in (f"/api/projects/{key}/forecast", f"/api/projects/{key}/brief", f"/api/projects/{key}/signals"):
-        assert client.get(path).status_code == 403
+        assert client.get(path, headers=public()).status_code == 403
 
 
-@pytest.mark.parametrize("role, allowed", [
+OFFICIAL_GETS = {"/api/external/summary", "/api/scopes", "/api/alerts", "/api/bottlenecks", "/api/agencies/matrix",
+                 "/api/signals/feed", "/api/radar/summary", "/api/dispatch", "/api/live/status", "/api/jobs"}
+DEVELOPER_ONLY = {"/api/models", "/api/worker-runs", "/api/admin/audit"}
+ADMIN_GETS = {"/api/admin/signups", "/api/admin/users"}
+
+
+@pytest.mark.parametrize("viewer, allowed", [
     ("public", {"/api/external/summary", "/api/scopes"}),
-    ("agency_official", {"/api/external/summary", "/api/scopes", "/api/alerts", "/api/bottlenecks",
-                         "/api/agencies/matrix", "/api/signals/feed", "/api/radar/summary", "/api/dispatch",
-                         "/api/live/status", "/api/jobs"}),
-    ("ministry_official", {"/api/external/summary", "/api/scopes", "/api/alerts", "/api/bottlenecks",
-                           "/api/agencies/matrix", "/api/signals/feed", "/api/radar/summary", "/api/dispatch",
-                           "/api/live/status", "/api/jobs", "/api/models"}),
+    ("agency", OFFICIAL_GETS),
+    ("ministry", OFFICIAL_GETS),
+    ("ipmd", OFFICIAL_GETS),
+    ("ipmd-admin", OFFICIAL_GETS | ADMIN_GETS),
+    ("developer", OFFICIAL_GETS | ADMIN_GETS | DEVELOPER_ONLY),
 ])
-def test_policy_403s(client, scopes, role, allowed):
-    h = {"public": {}, "agency_official": agency(scopes["agencies"][0]["name"]),
-         "ministry_official": ministry(scopes["ministries"][0]["name"])}[role]
-    for path in ("/api/external/summary", "/api/scopes", "/api/alerts", "/api/bottlenecks", "/api/agencies/matrix",
-                 "/api/signals/feed", "/api/radar/summary", "/api/dispatch", "/api/live/status", "/api/jobs",
-                 "/api/models", "/api/worker-runs"):
-        assert client.get(path, headers=h).status_code == (200 if path in allowed else 403), path
-    for path in ("/api/jobs/watch", "/api/jobs/scout", "/api/worker-runs/trigger"):
-        assert client.post(path, headers=h).status_code == 403, path
-    if role != "ministry_official":
+def test_policy_403s(client, scopes, viewer, allowed):
+    """The four roles lose the models page, the worker console, the job controls and the audit log to the
+    developer; administration needs the admin flag (an IPMD analyst's) or the developer."""
+    h = {"public": public, "agency": lambda: agency(scopes["agencies"][0]["name"]),
+         "ministry": lambda: ministry(scopes["ministries"][0]["name"]), "ipmd": ipmd,
+         "ipmd-admin": lambda: as_role(client, "ipmd", admin=True),
+         "developer": lambda: as_role(client, "developer")}[viewer]()
+    for path in sorted(OFFICIAL_GETS | DEVELOPER_ONLY | ADMIN_GETS):
+        assert client.get(path).status_code == (200 if path in allowed else 403), path
+    if viewer != "developer":   # the developer's would start real jobs
+        for path in ("/api/jobs/watch", "/api/jobs/scout", "/api/jobs/research", "/api/jobs/second-opinion",
+                     "/api/jobs/parivesh-snapshot", "/api/jobs/bhoomi-pull", "/api/worker-runs/trigger"):
+            assert client.post(path, headers=h).status_code == 403, path
+    # the assistant is open to every role (its tools cut what each one reads): a bad body is 422, never 403
+    assert client.post("/api/chat", headers=h, json={"messages": []}).status_code == 422
+    if viewer in ("public", "agency"):
         assert client.post("/api/alerts/1/ack", headers=h).status_code == 403
-    # the stream takes the viewer as query parameters: the public may not open it, a role without its scope is 400
-    assert client.get("/api/stream", params={"role": role}).status_code == (403 if role == "public" else 400)
+    if viewer == "public":   # the stream reads the cookie only: query parameters make no viewer
+        assert client.get("/api/stream", params={"role": "ipmd_analyst"}).status_code == 403
 
 
-def test_bad_viewer_headers_are_400(client):
-    assert client.get("/api/portfolio", headers={"X-Paimana-Role": "admin"}).status_code == 400
-    assert client.get("/api/portfolio", headers={"X-Paimana-Role": "ministry_official"}).status_code == 400
-    assert client.get("/api/portfolio", headers=ministry("Ministry of Nothing")).status_code == 400
-    assert client.get("/api/portfolio", headers=agency("NOPE")).status_code == 400
+def test_hidden_roles_and_features():
+    """The developer has every feature; administration needs the flag on an IPMD analyst; nobody can ask for the
+    developer role."""
+    from backend.access import OFFICIAL_ROLES, POLICY, Viewer
+    assert "developer" not in OFFICIAL_ROLES
+    assert all(Viewer("developer").can(f) for f in set().union(*(p["features"] for p in POLICY.values())))
+    assert not Viewer("ipmd_analyst").can("admin") and Viewer("ipmd_analyst", is_admin=True).can("admin")
+    assert not Viewer("ministry_official", ministry="x", is_admin=True).can("admin")
+    for role in ("public", "agency_official", "ministry_official", "ipmd_analyst"):
+        for f in ("numbers", "models", "workers", "jobs", "unlinked_signals", "audit"):
+            assert not Viewer(role, is_admin=True).can(f), (role, f)
 
 
 def test_scoped_external_summary_adds_up(client, scopes):
-    full = client.get("/api/external/summary", headers=IPMD).json()
+    full = client.get("/api/external/summary", headers=ipmd()).json()
     parts = [client.get("/api/external/summary", headers=ministry(m["name"])).json() for m in scopes["ministries"]]
     assert sum(p["nProjects"] for p in parts) == full["nProjects"]
     for f, block in full["factors"].items():
@@ -159,17 +191,17 @@ def test_scoped_external_summary_adds_up(client, scopes):
 
 
 def test_parivesh_details_and_hidden_delay_are_redacted_for_the_public(client):
-    full = client.get("/api/external/summary", headers=IPMD).json()["portal"]
-    pub = client.get("/api/external/summary").json()["portal"]
+    full = client.get("/api/external/summary", headers=ipmd()).json()["portal"]
+    pub = client.get("/api/external/summary", headers=public()).json()["portal"]
     assert full["open_list"] and full["cases"] and pub["n_open"] == full["n_open"]
     assert pub["open_list"] == [] and pub["cases"] == [] and all(r["evidence"] == [] for r in pub["top_overdue"])
-    pub_notice = client.get("/api/external/summary").json()["earlyNotice"]["top"]
+    pub_notice = client.get("/api/external/summary", headers=public()).json()["earlyNotice"]["top"]
     assert pub_notice and all(r["evidence"] == [] and r["factors"] for r in pub_notice)
     key = next(c["project_key"] for c in full["cases"] if c["current"])  # a remark-named PARIVESH proposal
-    ext = client.get(f"/api/projects/{key}", headers=IPMD).json()["external"]
+    ext = client.get(f"/api/projects/{key}", headers=ipmd()).json()["external"]
     assert ext["portal"]["stageAtAsof"] and ext["proposals"][0]["proposalNo"] and ext["remarkStatus"]
     assert ext["hiddenDelay"] and all(h["basis"] for h in ext["hiddenDelay"])
-    pub_ext = client.get(f"/api/projects/{key}").json()["external"]
+    pub_ext = client.get(f"/api/projects/{key}", headers=public()).json()["external"]
     assert pub_ext["portal"] is None and pub_ext["remarkStatus"] is None
     assert pub_ext["proposals"] == [] and pub_ext["hiddenDelay"] == []
 
@@ -191,7 +223,7 @@ def test_hidden_delay_matches_the_risk_profile_groups():
 
 
 def test_bottlenecks_matrix_and_memos_in_scope(client, scopes):
-    full = client.get("/api/bottlenecks", headers=IPMD, params={"size": 100}).json()
+    full = client.get("/api/bottlenecks", headers=ipmd(), params={"size": 100}).json()
     m = scopes["ministries"][2]["name"]
     keys = serving.scope_keys(("ministry", m))
     cut = client.get("/api/bottlenecks", headers=ministry(m), params={"size": 100}).json()
@@ -209,16 +241,16 @@ def test_bottlenecks_matrix_and_memos_in_scope(client, scopes):
     pts = client.get("/api/agencies/matrix", headers=agency(a)).json()["points"]
     assert [p["agency"] for p in pts if p["isSelf"]] == [a] and len(pts) > 1  # peers shown, own flagged
     mpts = client.get("/api/agencies/matrix", headers=ministry(m)).json()["points"]
-    assert 0 < len(mpts) < len(client.get("/api/agencies/matrix", headers=IPMD).json()["points"])
+    assert 0 < len(mpts) < len(client.get("/api/agencies/matrix", headers=ipmd()).json()["points"])
 
     drafts = store.load_dispatch_drafts()
-    assert len(client.get("/api/dispatch", headers=IPMD).json()) == len(drafts)
-    for h, role in ((agency(a), "agency_official"), (ministry(m), "ministry_official")):
-        seen = client.get("/api/dispatch", headers=h).json()
+    assert len(client.get("/api/dispatch", headers=ipmd()).json()) == len(drafts)
+    for sign_in, role in ((lambda: agency(a), "agency_official"), (lambda: ministry(m), "ministry_official")):
+        seen = client.get("/api/dispatch", headers=sign_in()).json()
         assert all(d["recommendedRecipientRole"] == role for d in seen)
     other = next((d for d in drafts if d["recommended_recipient_role"] != "ipmd_analyst"), None)
     if other:  # IPMD sees it but decides only its own memos (checked before anything is written)
-        r = client.post("/api/approvals", headers=IPMD, json={"draftId": other["id"], "decision": "approved"})
+        r = client.post("/api/approvals", headers=ipmd(), json={"draftId": other["id"], "decision": "approved"})
         assert r.status_code == 403
 
 
@@ -235,7 +267,7 @@ def test_memos_reach_the_official_they_are_addressed_to(client, scopes, tmp_path
         for i, k, role in (("m", mkey, "ministry_official"), ("a", akey, "agency_official"),
                            ("o", okey, "ministry_official"))])
     ids = lambda h: [d["id"] for d in client.get("/api/dispatch", headers=h).json()]  # noqa: E731
-    assert ids(IPMD) == ["m", "a", "o"]
+    assert ids(ipmd()) == ["m", "a", "o"]
     assert ids(ministry(m)) == ["m"] and ids(ministry(other)) == ["o"] and ids(agency(a)) == ["a"]
     r = client.post("/api/approvals", headers=ministry(other), json={"draftId": "m", "decision": "approved"})
     assert r.status_code == 404
@@ -265,11 +297,10 @@ def test_signal_state_filter_keeps_the_viewer_scope(client, scopes):
     theirs_x = next(k for k, p in idx.items() if k not in keys and p["state"] == x)
     y = idx[theirs_y]["state"]
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with closing(db.connect()) as con, con:
-        sids = [con.execute("INSERT INTO signals (url, title, source, published_at, severity) VALUES (?, ?, 'PTI', ?, 3)",
-                            [f"https://n/state-{i}", f"s{i}", now]).lastrowid for i in range(2)]
-        con.executemany("INSERT INTO signal_projects (signal_id, project_key) VALUES (?, ?)",
-                        [(sids[0], mine), (sids[0], theirs_y), (sids[1], theirs_x)])
+    sids = db.save_signals([{"url": "https://n/state-0", "title": "s0", "source": "PTI", "published_at": now,
+                             "severity": 3, "links": [(mine, None, None), (theirs_y, None, None)]},
+                            {"url": "https://n/state-1", "title": "s1", "source": "PTI", "published_at": now,
+                             "severity": 3, "links": [(theirs_x, None, None)]}])
     feed = lambda h, **p: client.get("/api/signals/feed", headers=h, params=p).json()  # noqa: E731
     base = feed(ministry(m))
     assert {h["state"]: h["n"] for h in base["stateHeat"]} == {x: 1}
@@ -279,13 +310,12 @@ def test_signal_state_filter_keeps_the_viewer_scope(client, scopes):
         assert all(p["key"] in keys for s in got["items"] for p in s["projects"])
     assert feed(ministry(m), state=y)["total"] == 0  # its only link to y is not the viewer's project
     assert [s["id"] for s in feed(ministry(m), state=x)["items"]] == [sids[0]]
-    ipmd = feed(IPMD, state=x)
-    assert {h["state"] for h in ipmd["stateHeat"]} >= {x, y}  # IPMD: heat and links of every state
-    assert {p["key"] for s in ipmd["items"] if s["id"] == sids[0] for p in s["projects"]} == {mine, theirs_y}
+    every = feed(ipmd(), state=x)
+    assert {h["state"] for h in every["stateHeat"]} >= {x, y}  # IPMD: heat and links of every state
+    assert {p["key"] for s in every["items"] if s["id"] == sids[0] for p in s["projects"]} == {mine, theirs_y}
 
 
-def test_stream_skips_alerts_outside_the_scope(tmp_path, monkeypatch):
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
+def test_stream_skips_alerts_outside_the_scope(fresh_db, monkeypatch):
     monkeypatch.setattr(scheduler, "POLL_S", 0.05)
     db.init()
     start = db.max_alert_id()
@@ -298,3 +328,116 @@ def test_stream_skips_alerts_outside_the_scope(tmp_path, monkeypatch):
                 return line
     line = asyncio.run(asyncio.wait_for(first_event(), 10))
     assert '"projectKey":"PRJ-IN"' in line and "PRJ-OUT" not in line
+
+
+def test_job_summaries_never_show_a_scoped_official_another_scopes_project(client, scopes, monkeypatch):
+    """Segment 8 review finding [0]: the research and second-opinion runs record counts only, and /api/jobs and
+    /api/live/status strip every per-project field for a viewer with a scope (older rows kept their key lists)."""
+    from backend.live import opinions
+    from llm import second_opinion as so
+    m = scopes["ministries"][2]["name"]
+    mine = serving.scope_keys(("ministry", m))
+    other = next(r["project_key"] for r in serving.in_tier("Critical") if r["project_key"] not in mine)
+    monkeypatch.setattr(opinions, "due", lambda key: "due")
+    monkeypatch.setattr(so, "generate", lambda key, **kw: {"status": "ok", "concern": "high", "llm_ms": 5})
+    monkeypatch.setattr(opinions.client, "wait_chat_idle", lambda *a, **kw: True)
+    out = opinions.run([other])
+    assert out["keys"] == [other] and out["asked"] == 1                  # the caller still gets the keys
+    stored = {j["job"]: j for j in db.latest_jobs()}["second_opinion"]["summary"]
+    assert "keys" not in stored and other not in str(stored) and stored["asked"] == 1
+    db.record_job("research", "2026-09-28T00:00:00+00:00", "ok",      # a row recorded before the fix
+                  {"projects": 1, "keys": [other], "errors": [f"{other} 'Some Dam': timeout"], "facts": 2})
+    ministry(m)
+    for path in ("/api/jobs", "/api/live/status"):
+        text = client.get(path).text
+        assert other not in text, path
+    runs = {r["job"]: r for r in client.get("/api/jobs").json()}
+    assert runs["research"]["summary"] == {"projects": 1, "facts": 2}
+    assert client.get("/api/live/status").json()["research"]["lastRun"]["summary"] == {"projects": 1, "facts": 2}
+    agency(scopes["agencies"][0]["name"])
+    assert other not in client.get("/api/jobs").text
+    ipmd()   # no scope: every project is theirs anyway
+    assert other in client.get("/api/jobs").text
+
+
+def test_only_the_developer_sees_the_unlinked_news_pool(client, fresh_db):
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    key = client.get("/api/projects", params={"size": 1}, headers=public()).json()["items"][0]["key"]
+    db.save_signals([{"url": "https://n/linked", "title": "linked", "source": "PTI", "published_at": now,
+                      "severity": 2, "links": [(key, None, None)]},
+                     {"url": "https://n/unlinked", "title": "unlinked", "source": "PTI", "published_at": now,
+                      "severity": 2, "links": []}])
+    titles = lambda: {s["title"] for s in client.get("/api/signals/feed").json()["items"]}  # noqa: E731
+    ipmd()
+    assert titles() == {"linked"} and client.get("/api/radar/summary").json()["nUnlinked"] == 0
+    as_role(client, "developer")
+    assert titles() == {"linked", "unlinked"} and client.get("/api/radar/summary").json()["nUnlinked"] == 1
+
+
+def test_shutdown_stops_an_llm_run_started_from_the_api():
+    """scheduler.stop() sets the stop flags, waits for a research run that is not one of its loops (POST
+    /api/jobs/research runs it as a background task) and clears the flags once it has ended."""
+    import threading
+    from backend.live import research
+    ended = threading.Event()
+
+    def run():
+        with research._lock:
+            while not research.stopping():
+                time.sleep(0.02)
+        ended.set()
+    t = threading.Thread(target=run)
+    t.start()
+    time.sleep(0.1)
+    t0 = time.monotonic()
+    asyncio.run(scheduler.stop([]))
+    assert ended.is_set() and time.monotonic() - t0 < 5 and not research.stopping()
+    t.join(5)
+
+
+def test_the_developer_is_never_named_on_an_alert(client, fresh_db):
+    """Review finding (unit B, round 1): an alert the developer acknowledges names no acknowledger, for anyone who
+    reads it (the hidden role's name stays in the audit log, which only developers read)."""
+    coal = "Ministry of Coal"
+    key = sorted(serving.scope_keys(("ministry", coal)))[0]
+    db.add_alerts([{"project_key": key, "kind": "signal", "severity": 2, "title": "t"}])
+    aid = db.max_alert_id()
+    r = client.post(f"/api/alerts/{aid}/ack", headers=as_role(client, "developer"))
+    assert r.status_code == 200 and r.json()["ackedAt"] and r.json()["ackedBy"] is None
+    h = ministry(coal)
+    items = client.get("/api/alerts").json()["items"]
+    assert [a["ackedBy"] for a in items if a["id"] == aid] == [None] and "developer" not in str(items)
+    again = client.post(f"/api/alerts/{aid}/ack", headers=h).json()        # the first ack stands
+    assert again["ackedBy"] is None and "developer" not in str(again)
+    assert [a["role"] for a in db.audit_rows(action="alert.ack")["items"]] == ["ministry_official", "developer"]
+
+
+def test_a_failed_run_error_never_reaches_a_scoped_official(client, scopes, monkeypatch):
+    """Review finding (unit B, round 1): a scheduled run's last_error (an exception's text, which can name any
+    project, e.g. a database key violation) is shown whole to viewers without a scope only."""
+    m = scopes["ministries"][2]["name"]
+    mine = serving.scope_keys(("ministry", m))
+    other = next(k for k in sorted(serving.scope_keys(None)) if k not in mine)
+    text = f"UniqueViolation: duplicate key; DETAIL: Key (project_key)=({other}) already exists."
+    monkeypatch.setitem(scheduler.STATUS["research"], "last_error", text)
+    ministry(m)
+    body = client.get("/api/live/status").json()
+    assert other not in str(body) and body["research"]["lastError"] == "the last run failed"
+    assert body["scout"]["lastError"] is None                               # no error stays no error
+    ipmd()
+    assert client.get("/api/live/status").json()["research"]["lastError"] == text
+
+
+def test_the_developer_may_send_its_own_role(client, fresh_db):
+    """Review finding (unit B, round 1): a role sent in a body or query must be the signed-in one, and the developer's
+    own is accepted like any other (it was 422, outside the role type); anyone else's is still 403."""
+    key = sorted(serving.scope_keys(None))[0]
+    db.add_alerts([{"project_key": key, "kind": "signal", "severity": 2, "title": "t"}])
+    aid = db.max_alert_id()
+    h = as_role(client, "developer")
+    assert client.post(f"/api/alerts/{aid}/ack", json={"role": "developer"}, headers=h).status_code == 200
+    assert client.get("/api/watchlist", params={"role": "developer"}).status_code == 200
+    assert client.post("/api/watchlist", json={"role": "developer", "projectKey": key}, headers=h).json()["total"] == 1
+    assert client.post(f"/api/alerts/{aid}/ack", json={"role": "ipmd_analyst"}, headers=h).status_code == 403
+    ipmd()
+    assert client.get("/api/watchlist", params={"role": "developer"}).status_code == 403

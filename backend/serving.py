@@ -7,9 +7,30 @@ plus the cross-project ones: agency matrix and map, bottlenecks and members.
 The version is the mtime of external_summary.json: the profile step writes it
 last, so score and analogues rewriting their files first (predictions_latest.json
 before scenarios_/analogues_/risk_profile_<month>) never serves a half-written
-set. When it changes the tables are reloaded and every cached result goes with
-the old version; a reload that fails keeps serving the loaded version and is
-retried after RETRY_S seconds.
+set; and of research_summary.json, which the research step writes after its two
+tables (research alone does not rewrite external_summary.json). When it changes
+the tables are reloaded and every cached result goes with the old version; a
+reload that fails keeps serving the loaded version, raises one pipeline_error
+alert for that data version (the officials' feed says the new data did not
+load) and is retried after RETRY_S seconds. The DuckDB copy runs under a memory
+cap and a thread cap (DUCKDB_MEMORY_LIMIT, default 2GB, and DUCKDB_THREADS,
+default 4, read from the environment; backend/settings.py carries the same
+names), so a query over the wide tables cannot take the process with it. The
+in-app research agent's facts live in the app database (backend/db, PostgreSQL)
+and are read per request, next to the cached gold part.
+
+Numbers policy (SPEC9_ui section 6, docs/ACCESS_CONTROL.md): the model's own
+numbers (probabilities, quantiles, SHAP drivers, rank, agency bias statistics,
+analogue outcomes, composite scores, measured hidden-delay months, backtest
+lifts) reach only a viewer with the `numbers` feature. Every function here
+returns the full result with words added for everyone: an `outlook` on scores
+and rows (the chance of a date push and of a cost revision in four words, the
+likely slip in four bands), `drivers_plain` (the SHAP drivers as label,
+direction and strength), `top_reason`, the agency matrix's schedule and cost
+words, the hidden-delay priors' extra_months_word, the analogues' outcome; the
+routes pass the result through the plain_* functions for anyone else, which set
+the numbers to null (keys stay, so the response shapes do not change) and
+rewrite the checklist's evidence lines into words (plain_text).
 """
 from __future__ import annotations
 
@@ -17,6 +38,8 @@ import functools
 import json
 import logging
 import math
+import os
+import re
 import threading
 import time
 from collections import Counter
@@ -27,14 +50,21 @@ import duckdb
 
 from pipeline import external
 from pipeline.hidden_delay import LIVE_Q, applicable
+from pipeline.research import EXT_COLS, TAXONOMY_OF, is_live
 from pipeline.identity.config import IdentityConfig
 from pipeline.identity.identity_map import IdentityMap
+
+from . import labels
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD, SILVER, MODEL = ROOT / "dataset" / "gold", ROOT / "dataset" / "silver", ROOT / "model"
 POINTER, SILVER_MANIFEST = GOLD / "predictions_latest.json", SILVER / "silver_manifest.json"
 EXTERNAL_SUMMARY, BOTTLENECKS_SUMMARY = GOLD / "external_summary.json", GOLD / "bottlenecks_summary.json"
+RESEARCH_FACTS, RESEARCH_PROJECTS = GOLD / "research_facts.parquet", GOLD / "research_projects.parquet"
+RESEARCH_SUMMARY = GOLD / "research_summary.json"
 RETRY_S = 30
+DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS = "2GB", 4   # the defaults of the environment settings (module docstring)
+SIZE_RX = re.compile(r"\d+(?:\.\d+)?\s*(?:[KMGT]i?B)", re.I)
 TOP_MEMBERS = 5
 N_EVIDENCE = 3  # evidence lines per bottleneck, as pipeline/bottlenecks.py
 TOP_FACTOR, TOP_NOTICE = 10, 20  # top lists of external_summary.json, as ml/risk_profile.py
@@ -106,20 +136,65 @@ log = logging.getLogger(__name__)
 
 
 def _version() -> tuple:
-    return (EXTERNAL_SUMMARY.stat().st_mtime_ns,)
+    return EXTERNAL_SUMMARY.stat().st_mtime_ns, RESEARCH_SUMMARY.exists() and RESEARCH_SUMMARY.stat().st_mtime_ns
 
 
 def _posix(p: Path) -> str:
     return p.as_posix().replace("'", "''")
 
 
+def _limits(con) -> None:
+    """Cap the connection's memory and threads (module docstring); a DUCKDB_MEMORY_LIMIT that is not a size such
+    as 2GB or 512MiB is a ValueError, not a string in SQL."""
+    limit = os.environ.get("DUCKDB_MEMORY_LIMIT", DUCKDB_MEMORY_LIMIT).strip()
+    if not SIZE_RX.fullmatch(limit):
+        raise ValueError(f"DUCKDB_MEMORY_LIMIT {limit!r} is not a size like 2GB")
+    threads = int(os.environ.get("DUCKDB_THREADS", DUCKDB_THREADS))
+    if threads < 1:
+        raise ValueError(f"DUCKDB_THREADS must be at least 1, not {threads}")
+    con.execute(f"SET memory_limit = '{limit}'")
+    con.execute(f"SET threads = {threads}")
+
+
+class ModelIntegrityError(RuntimeError):
+    """A champion model file is not the one model/registry.json sealed (secure.txt section 4)."""
+
+
+def verify_models() -> dict[str, dict]:
+    """The champion model files against the sha256 sealed in model/registry.json (ml/registry.py verify): returns
+    target key -> {entry_id, path, status, sha256}. A mismatch or a missing file refuses the data version
+    (ModelIntegrityError, after a pipeline_error alert); an unsealed entry is logged as a warning (python -m
+    ml.registry seal), not refused."""
+    from ml import registry  # noqa: PLC0415 - the check reads the registry, nothing else of the ml package
+    checks = registry.verify(registry.load(), ROOT)
+    bad = {k: v for k, v in checks.items() if v["status"] in ("mismatch", "missing")}
+    for k, v in checks.items():
+        if v["status"] == "unsealed":
+            log.warning("model %s (%s) has no sealed sha256: python -m ml.registry seal", k, v["entry_id"])
+    if bad:
+        detail = "; ".join(f"{k}: {v['status']} {v['path']}" for k, v in bad.items())
+        log.error("champion model files fail their integrity check: %s", detail)
+        try:
+            from . import db  # noqa: PLC0415 - db imports this module
+            db.add_alerts_once([{"project_key": None, "kind": "pipeline_error", "severity": 3,
+                                 "title": "Model integrity check failed: the served data version was refused",
+                                 "detail": detail[:1500],
+                                 "source": "model:" + ",".join(v["entry_id"] for v in bad.values())}])
+        except Exception:  # noqa: BLE001 - the alert is best effort; the refusal is not
+            log.exception("could not raise the model integrity alert")
+        raise ModelIntegrityError(detail)
+    return checks
+
+
 def _load() -> dict:
-    """Read one data version into a fresh in-memory DuckDB."""
+    """Read one data version into a fresh in-memory DuckDB (after the champion model files pass verify_models)."""
+    verify_models()
     ptr = json.loads(POINTER.read_text(encoding="utf-8"))
     silver = json.loads(SILVER_MANIFEST.read_text(encoding="utf-8"))
     asof = date.fromisoformat(ptr["asof"])
     ym = f"{asof:%Y-%m}"
     con = duckdb.connect()
+    _limits(con)
     files = {
         "obs": SILVER / "observations.parquet", "master": SILVER / "project_master.parquet",
         "rp": GOLD / f"risk_profile_{ym}.parquet", "events": GOLD / "project_events.parquet",
@@ -147,6 +222,7 @@ def _load() -> dict:
         last_notif=("last_notif_date", "max"))
     con.execute("CREATE TABLE register AS SELECT k, stretches, parcels, area_ha, last_notif::DATE AS last_notif "
                 "FROM register")
+    _load_research(con)
     con.execute(f"CREATE TABLE amap AS SELECT * FROM read_csv_auto('{_posix(GOLD / 'agency_map.csv')}')")
     con.execute(f"""CREATE TABLE review AS SELECT project_key, count(*) AS n_rows, min(period) AS first_period,
         max(period) AS last_period FROM read_parquet('{_posix(SILVER / "observations_review.parquet")}') GROUP BY 1""")
@@ -198,6 +274,30 @@ def _load() -> dict:
     }
 
 
+# gold research tables (pipeline/research.py FACT_COLS, PROJECT_COLS); empty with these columns before the first run
+RESEARCH_DDL = {
+    "rfacts": (RESEARCH_FACTS, """fact_id VARCHAR, project_key VARCHAR, category VARCHAR, taxonomy VARCHAR,
+        direction VARCHAR, severity TINYINT, event_date TIMESTAMP, date_precision VARCHAR, published_date TIMESTAMP,
+        status VARCHAR, summary VARCHAR, headline VARCHAR, source VARCHAR, url VARCHAR, domain VARCHAR, match VARCHAR,
+        match_reason VARCHAR, verified VARCHAR, basis VARCHAR, origin VARCHAR, researched_on TIMESTAMP,
+        live BOOLEAN"""),
+    "rprojects": (RESEARCH_PROJECTS, """project_key VARCHAR, researched_on TIMESTAMP, searched BOOLEAN,
+        n_queries BIGINT, n_facts BIGINT, n_negative_live BIGINT, latest_status VARCHAR, land_acquired_pct DOUBLE,
+        land_as_of VARCHAR, fc_stage VARCHAR, fc_as_of VARCHAR, court VARCHAR, court_status VARCHAR,
+        court_as_of VARCHAR, contractor VARCHAR, contractor_status VARCHAR, contractor_as_of VARCHAR,
+        new_target VARCHAR, new_target_as_of VARCHAR, cost_revision_cr DOUBLE, cost_revision_as_of VARCHAR"""),
+}
+
+
+def _load_research(con) -> None:
+    """The web research tables rfacts and rprojects: the gold files, or empty tables when research never ran."""
+    for name, (path, ddl) in RESEARCH_DDL.items():
+        if path.exists():
+            con.execute(f"CREATE TABLE {name} AS SELECT * FROM read_parquet('{_posix(path)}') ORDER BY project_key")
+        else:
+            con.execute(f"CREATE TABLE {name} ({ddl})")
+
+
 def pin(on: bool) -> None:
     """While pinned, state() keeps the loaded version even if the version file changes: the report watcher pins
     it while a pipeline run rewrites the data, and leaves it pinned when a failed run left it half rewritten."""
@@ -208,9 +308,24 @@ def _due(v: tuple) -> bool:
     return _state.get("version") != v and (not _state or time.monotonic() - _failed_at >= RETRY_S)
 
 
+def _reload_failed(v: tuple, e: Exception) -> None:
+    """One pipeline_error alert per failed data version (db.add_alerts_once on its source), so the feed says the
+    new data did not load and the previous version is still served; the app database is not needed to serve, so
+    a failure here is only logged."""
+    from . import db   # db imports serving: bound here, not at import
+    try:
+        db.add_alerts_once([{"project_key": None, "kind": "pipeline_error", "severity": 3,
+                             "title": "New data failed to load; the previous version is still served",
+                             "detail": f"{type(e).__name__}: {e}"[:500], "asof": str(_state["asof"]),
+                             "model_version": _state["model_version"], "source": f"reload:{v}"}])
+    except Exception:  # noqa: BLE001 - the alert is a courtesy; the log above holds the failure
+        log.exception("could not record the reload failure as an alert")
+
+
 def state() -> dict:
     """The loaded data version, reloaded when the version file changes (unless pinned). A failed reload keeps
-    serving the loaded version and is retried after RETRY_S; with nothing loaded yet it raises."""
+    serving the loaded version, raises a pipeline_error alert once (_reload_failed) and is retried after RETRY_S;
+    with nothing loaded yet it raises."""
     global _state, _failed_at
     if _state and _pinned.is_set():
         return _state
@@ -220,12 +335,14 @@ def state() -> dict:
             if _due(v):
                 try:
                     _state = {**_load(), "version": v}
-                except Exception:
+                except Exception as e:
                     if not _state:
                         raise
                     _failed_at = time.monotonic()
                     log.exception("data reload failed; still serving asof %s (%s)", _state["asof"],
                                   _state["model_version"])
+                    if not isinstance(e, ModelIntegrityError):   # verify_models raised its own alert
+                        _reload_failed(v, e)
     return _state
 
 
@@ -364,9 +481,9 @@ def portfolio(s, ministry=None, sector=None, state_=None, tier=None, scope=None)
             count(*) FILTER (WHERE tier = 'Critical') AS n_critical, count(*) FILTER (WHERE tier = 'High') AS n_high
             FROM cur{where} GROUP BY 1 ORDER BY capital_cr DESC NULLS LAST, n DESC""", params)
 
-    top = _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, tier, p_any_2q,
+    top = with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, tier, p_any_2q,
         anticipated_cost_cr, stagnation_override AS override FROM cur{where}
-        ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params)
+        ORDER BY p_any_2q DESC NULLS LAST, project_key LIMIT 20""", params))
     return {
         "asof": s["asof"], "filters": {"ministry": ministry, "sector": sector, "state": state_, "tier": tier},
         "kpis": k,
@@ -386,7 +503,27 @@ def projects(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag
     items = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
         ORDER BY {SORTS[sort]} {direction} NULLS LAST, watch_score DESC NULLS LAST, project_key LIMIT ? OFFSET ?""",
                   params + [size, (page - 1) * size])
-    return {"total": total, "page": page, "size": size, "items": items}
+    return {"total": total, "page": page, "size": size, "items": with_words(items)}
+
+
+MAP_MAX = 5000   # rows of the command centre's risk map (every current project today: 1,763)
+MAP_COLS = ("key", "name", "sector", "state", "tier", "override", "anticipated_completion", "anticipated_cost_cr",
+            "physical_progress_pct", "no_completion_date", "flags", "outlook", "top_reason", "top_check")
+
+
+@cached
+def projects_map(s, q=None, ministry=None, sector=None, state_=None, tier=None, flag=None, scope=None,
+                 near_complete=False):
+    """Every current project in scope that matches the filters (as projects(), no paging, at most MAP_MAX), as the
+    slim risk-map row: dates, cost, progress, tier, flags and the words; no model number, so every viewer gets
+    the same row (the public's top_reason is the first flagged check: public_map). Ordered by tier (TIERS, then
+    Watch) and key, never by the chance of a slip: a row's place among all of them would give its hidden rank."""
+    where, params = _where(ministry, sector, state_, tier, q, flag, None, scope, near_complete)
+    total = _one(s, f"SELECT count(*) AS n FROM cur{where}", params)["n"]
+    rank = " ".join(f"WHEN '{t}' THEN {i}" for i, t in enumerate(TIERS + [WATCH]))
+    rows = _rows(s, f"""SELECT {ROW_SQL} FROM cur{where}
+        ORDER BY CASE tier {rank} ELSE {len(TIERS) + 1} END, project_key LIMIT ?""", params + [MAP_MAX])
+    return {"total": total, "items": [{c: r[c] for c in MAP_COLS} for r in with_words(rows)]}
 
 
 @cached
@@ -395,8 +532,8 @@ def rows_for_keys(s, keys: tuple):
     keys = list(keys)[:100]
     if not keys:
         return []
-    got = {r["key"]: r for r in _rows(
-        s, f"SELECT {ROW_SQL} FROM cur WHERE project_key IN ({','.join('?' * len(keys))})", keys)}
+    got = {r["key"]: r for r in with_words(_rows(
+        s, f"SELECT {ROW_SQL} FROM cur WHERE project_key IN ({','.join('?' * len(keys))})", keys))}
     return [got[k] for k in keys if k in got]
 
 
@@ -408,9 +545,15 @@ def top_projects(s, n=10):
 
 # -------------------------------------------------------------------- project
 
+def project(key):
+    """Everything the project page shows for one canonical key (see canonical()), with its web research summary
+    (research_brief: read per call, since the research agent adds facts between data versions)."""
+    return {**_project(key), "research": research_brief(key)}
+
+
 @cached
-def project(s, key):
-    """Everything the project page shows for one canonical key (see canonical())."""
+def _project(s, key):
+    """project() without the research summary, cached per data version."""
     master = _one(s, "SELECT * FROM master WHERE project_key = ?", [key])
     latest = _one(s, f"""SELECT * FROM obs WHERE project_key = ? AND period <= DATE '{s["asof"]}'
         ORDER BY period DESC LIMIT 1""", [key])
@@ -419,6 +562,8 @@ def project(s, key):
     if cur:
         scores = {c: cur[c] for c in SCORE_COLS}
         scores["shap_top5"] = json.loads(cur["shap_top5_json"] or "[]")
+        scores["outlook"] = outlook(cur["p_date_push_2q"], cur["p_cost_rev_2q"], cur["months_p50"])
+        scores["drivers_plain"] = drivers_plain(scores["shap_top5"])
     review = _one(s, "SELECT n_rows, first_period, last_period FROM review WHERE project_key = ?", [key])
     if review:
         review["note"] = (f"{review['n_rows']} report rows are linked to this project with an identity match still "
@@ -472,7 +617,8 @@ def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, a
     checklist picks them): basis says what it was matched on, as_of the remark quarter, current whether that status
     still describes the project at asof (else it is the status at the last report, not an expected delay)."""
     pri = _priors()
-    return [{**pri[(f, g)], "basis": basis, "as_of": as_of, "current": cur}
+    return [{**pri[(f, g)], "extra_months_word": extra_months_word(pri[(f, g)]), "basis": basis, "as_of": as_of,
+             "current": cur}
             for f, g, basis, as_of, cur in applicable(remarks, (land or {}).get("la_state"), portal, asof)
             if (f, g) in pri]
 
@@ -480,13 +626,17 @@ def hidden_delay(land: dict | None, remarks: dict | None, portal: dict | None, a
 def public_project(d: dict) -> dict:
     """The project page for the public: no SHAP drivers, quantile intervals, identity review, risk evidence lines
     (model probabilities, tier cuts), PARIVESH proposal details, remark status or measured hidden delay, or
-    provenance internals (model, data versions, source documents); tier, progress, cost, completion, risk states
-    and top risks stay."""
+    provenance internals (model, data versions, source documents), and no match reasons on the research facts nor
+    the research agent's headlines (public_facts); tier, progress, cost, completion, risk states, top risks and the
+    cited research facts stay. The drivers go in words too (drivers_plain: an `insights` feature); the other model
+    numbers go by plain_project, as for every viewer without `numbers`."""
     no_src = {"source_doc_id": None, "source_page": None}
-    scores = d["scores"] and {**d["scores"], "shap_top5": [], "tier_rank_pct": None, "tier_by_rank": None,
-                              **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
+    scores = d["scores"] and {**d["scores"], "shap_top5": [], "drivers_plain": [], "tier_rank_pct": None,
+                              "tier_by_rank": None, **{c: None for c in SCORE_COLS if c.endswith(("_p05", "_p95"))}}
     prov = {**d["provenance"], "model_version": None, "gold_version": None, "silver_version": None, **no_src}
+    research = d.get("research")
     return {**d, "scores": scores, "provenance": prov, "review": None,
+            "research": research and {**research, "top": public_facts(research["top"])},
             "latest": d["latest"] and {**d["latest"], **no_src},
             "risk_profile": [{**r, "evidence": None} for r in d["risk_profile"]],
             "external": {**d["external"], "events": [{**e, **no_src} for e in d["external"]["events"]],
@@ -507,8 +657,545 @@ def public_external(d: dict) -> dict:
 
 
 def public_page(page: dict) -> dict:
-    """A project list page for the public: no upper slip quantile or rank percentile (as public_project)."""
-    return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None} for r in page["items"]]}
+    """A project list page for the public: no upper slip quantile or rank percentile and no drivers (as
+    public_project); the top reason is the first flagged check (the public page's top risk), never a driver."""
+    return {**page, "items": [{**r, "months_p95": None, "tier_rank_pct": None, "drivers_plain": [],
+                               "top_reason": r.get("top_check")} for r in page["items"]]}
+
+
+def public_portfolio(p: dict) -> dict:
+    """portfolio() for the public: the top list's reason from the flagged checks, never a driver (public_page)."""
+    return {**p, "top": [{**r, "top_reason": r.get("top_check")} for r in p["top"]]}
+
+
+def public_map(page: dict) -> dict:
+    """projects_map() for the public: the top reason from the flagged checks, never a driver (public_page)."""
+    return {**page, "items": [{**r, "top_reason": r.get("top_check")} for r in page["items"]]}
+
+
+# ---------------------------------------------------------------- numbers policy (module docstring)
+
+HORIZON = "next two quarters"   # the outlook's horizon: the 2-quarter date-push, cost-revision and slip models
+CHANCES = ((0.75, "very likely"), (0.5, "likely"), (0.25, "possible"))   # a probability at or above; else unlikely
+STRENGTHS = ("strong", "moderate", "slight")   # a driver's tercile by |contribution| among the project's own
+SCHEDULE_OFF, COST_OFF = 0.10, 0.05   # an agency's median schedule or cost bias beyond +-this is later / more
+AGENCY_MIN_N = 5                      # below it an agency is hidden in the matrix (AGENCY_METHOD): too few projects
+EXTRA_BANDS = ((4.5, "a few months"), (9, "about half a year"), (18, "about a year"))   # below; else over a year
+NO_EXTRA = "no measurable extra delay"
+MODEL_CHECKS = {"schedule_slip": "a completion-date push", "cost_escalation": "a cost revision"}
+NO_WORDS = {"outlook": None, "drivers_plain": [], "top_reason": None, "top_check": None}
+HIDDEN_SCORES = ("p_date_push_2q", "p_cost_rev_2q", "p_any_2q", "p_any_4q", "months_p05", "months_p50",
+                 "months_p95", "cost_pct_p05", "cost_pct_p50", "cost_pct_p95", "tier_rank_pct", "tier_by_rank")
+HIDDEN_ROW = ("tier_rank_pct", "p_any_2q", "p_date_push_2q", "p_cost_rev_2q", "months_p50", "months_p95")
+HIDDEN_ANALOGUE = ("distance", "y_months", "y_cost_pct", "y_any", "y_date_push", "y_cost_rev")
+HIDDEN_COMPLETION = ("months_p05", "months_p50", "months_p95", "p05", "p50", "p95")
+HIDDEN_AGENCY = ("schedule_bias", "schedule_bias_raw", "schedule_bias_q25", "schedule_bias_q75",
+                 "schedule_bias_ci_lo", "schedule_bias_ci_hi", "cost_bias", "cost_bias_raw", "cost_bias_q25",
+                 "cost_bias_q75", "cost_bias_ci_lo", "cost_bias_ci_hi", "sector_schedule_bias", "sector_cost_bias",
+                 "shrink_weight", "trend")
+HIDDEN_PRIOR = ("extra_months", "extra_months_lo", "extra_months_hi", "extra_push", "extra_push_lo", "extra_push_hi",
+                "holm_months", "holm_push", "garvit_band")
+HIDDEN_COMPOSITE = ("external_factor_score", "fc_component", "la_component")
+COMPOSITE_STATS = ("mean", "min", "25%", "50%", "75%", "max")
+HIDDEN_JOB = ("realised",)   # the ingest job's live accuracy (backend/live/watcher.accuracy)
+LIFTS = ("lift", "lift_within_sector_year")
+BACKTEST_RATES = ("slip_rate_with", "slip_rate_without")   # the lift is their ratio: hidden with it
+LINK_CI = ("ci_lo", "ci_hi")   # the land-link accuracy check's bootstrap interval (landCoverage.link_check)
+BAND_METHOD_PLAIN = (
+    "The progress band spans three what-if paths: the project keeps its own recent pace, recovers to its sector's "
+    "usual pace, or follows its agency's past pattern; it is a range of scenarios, not a prediction of one path. "
+    "The likely completion is the anticipated completion and the likely further slip over the next two quarters, "
+    "in words.")
+AGENCY_METHOD_PLAIN = (
+    "Each agency is described by how its projects compared with their plan: on time, usually later, about on time "
+    "or usually earlier than planned; on cost, usually costs more, about as planned or usually costs less. The "
+    "words come from the agency's typical project, pulled toward its sector when it has few projects; an agency "
+    f"with fewer than {AGENCY_MIN_N} projects with a known plan is 'too few projects'. Capital and open projects "
+    "are the current portfolio.")
+PRIORS_NOTE_PLAIN = (
+    "Extra delay over the next year measured against matched projects that did not have the issue; groups with too "
+    "few projects are not measured, and the groups are exploratory.")
+_N = r"[+-]?\d+"   # hidden_delay.fmt: '+3', '-2', '0'
+P_RX = re.compile(r"P = (\d*\.?\d+) \(High-tier cut \d*\.?\d+\)")   # ml/risk_profile.py, the model dimensions
+ALERT_P_RX = re.compile(r"P\(date push or cost revision, 2q\) = (\d*\.?\d+)")   # watcher and seed alerts
+ALERT_P2_RX = re.compile(r"\(P = (\d*\.?\d+)\)")                               # the watcher's slip_realised
+AGENCY_RX = re.compile(r"agency timelines run ([+-]?\d+)% vs schedule \(median of (\d+) projects\)"
+                       r"(?:; 2q slip rate \d+%)?")                             # agency_optimism
+SCORE_RX = re.compile(r"\bscore (?:\d*\.?\d+|n/a) \([^)]*\): ")               # external_composite
+NO_EXTRA_RX = re.compile(rf"no measurable extra delay \({_N} months? over the next year, CI {_N} to {_N}; {_N} pts "
+                         rf"date-push risk, CI {_N} to {_N}; (\d+) projects\)")   # hidden_delay.text
+_MO, _PTS = (rf"({_N}) months? over the next year \(CI {_N} to {_N}\)",
+             rf"({_N}) pts date-push risk \(CI {_N} to {_N}\)")
+EXTRA_RX = re.compile(rf"(?:{_MO}(?: and {_PTS})?|{_PTS}), measured on (\d+) projects")
+_ABOUT = r"(?:approximately |about |around )?"   # the worker LLM's memos (plain_memo)
+MEMO_P_RX = re.compile(rf"\b(probability|chance|likelihood) of {_ABOUT}(\d*\.?\d+)(\s?%)?")
+MEMO_EXPOSURE_RX = re.compile(rf"\brisk exposure of {_ABOUT}(?:Rs\.?\s?|INR\s?|Cr\.?\s?)?\d[\d,]*(?:\.\d+)?"
+                              r"(?:\s?(?:million|lakh|crore))?(?:\s?Cr\b)?")
+MEMO_SHAP_RX = re.compile(r"\s?\(SHAP\)|\bSHAP\b\s*")
+
+
+def _finite(v) -> bool:
+    return v is not None and not (isinstance(v, float) and not math.isfinite(v))
+
+
+def chance_word(p) -> str | None:
+    """A probability as the outlook's word, by fixed bands (>= 0.75 very likely, >= 0.5 likely, >= 0.25 possible,
+    else unlikely); None for none."""
+    return next((w for cut, w in CHANCES if p >= cut), "unlikely") if _finite(p) else None
+
+
+def slip_word(months) -> str | None:
+    """The median further slip (months) as a band: under 6 months, 6 to 12 months, 1 to 2 years, over 2 years."""
+    if not _finite(months):
+        return None
+    if months < 6:
+        return "under 6 months"
+    if months < 12:
+        return "6 to 12 months"
+    return "1 to 2 years" if months <= 24 else "over 2 years"
+
+
+def outlook(p_date_push, p_cost_rev, months_p50) -> dict:
+    """{delay, cost, slip, horizon}: the chance of a completion-date push and of a cost revision within the next two
+    quarters in words (chance_word), the likely further slip (slip_word); None where the model gives no number (the
+    Watch tier has no date-based score)."""
+    return {"delay": chance_word(p_date_push), "cost": chance_word(p_cost_rev), "slip": slip_word(months_p50),
+            "horizon": HORIZON}
+
+
+def drivers_plain(shap: list[dict] | None) -> list[dict]:
+    """The SHAP drivers in words, largest first: {label (labels.driver_label), direction 'raises' | 'lowers' (the
+    chance of a slip), strength 'strong' | 'moderate' | 'slight' (its tercile by |contribution| among the project's
+    own drivers: of five, two strong, two moderate, one slight; drivers of equal |contribution| share the strength of
+    the first of them)}; a driver with no effect is left out."""
+    ds = sorted((d for d in shap or [] if _finite(d.get("contribution")) and d["contribution"]),
+                key=lambda d: -abs(d["contribution"]))
+    size = [abs(d["contribution"]) for d in ds]
+    return [{"label": labels.driver_label(d["feature"]), "direction": "raises" if d["contribution"] > 0 else "lowers",
+             "strength": STRENGTHS[3 * size.index(size[i]) // len(ds)]} for i, d in enumerate(ds)]
+
+
+@cached
+def _words(s) -> dict[str, dict]:
+    """Per scored project its words: outlook, drivers_plain, top_reason (the first driver that raises the chance of
+    a slip, else top_check) and top_check (the label of its first flagged check in PLAIN_RISK order, the model's own
+    two left out: they restate the outlook; the public's top reason)."""
+    flagged: dict[str, set] = {}
+    for r in _rows(s, "SELECT project_key AS k, dimension AS d FROM rp WHERE state = 'flagged'"):
+        flagged.setdefault(r["k"], set()).add(r["d"])
+    order = [d for d in PLAIN_RISK if d not in MODEL_CHECKS]
+    out = {}
+    for r in _rows(s, "SELECT project_key AS k, p_date_push_2q, p_cost_rev_2q, months_p50, shap_top5_json FROM cur"):
+        drivers = drivers_plain(json.loads(r["shap_top5_json"] or "[]"))
+        check = next((labels.dimension_label(d) for d in order if d in flagged.get(r["k"], ())), None)
+        out[r["k"]] = {"outlook": outlook(r["p_date_push_2q"], r["p_cost_rev_2q"], r["months_p50"]),
+                       "drivers_plain": drivers,
+                       "top_reason": next((d["label"] for d in drivers if d["direction"] == "raises"), check),
+                       "top_check": check}
+    return out
+
+
+def with_words(rows: list[dict], key: str = "key") -> list[dict]:
+    """rows (project key under key) with their words (_words); a project not scored now gets none (NO_WORDS)."""
+    w = _words()
+    return [{**r, **w.get(r[key], NO_WORDS)} for r in rows]
+
+
+def schedule_word(p: dict) -> str:
+    """An agency matrix point's schedule record in words: 'usually later' / 'usually earlier' than planned when its
+    (shrunk) median schedule bias is beyond +-SCHEDULE_OFF, else 'about on time'; 'too few projects' when hidden."""
+    b = p.get("schedule_bias")
+    if p.get("hidden") or not _finite(b):
+        return "too few projects"
+    return "usually later" if b > SCHEDULE_OFF else "usually earlier" if b < -SCHEDULE_OFF else "about on time"
+
+
+def cost_word(p: dict) -> str:
+    """The cost record in words: 'usually costs more' / 'usually costs less' beyond +-COST_OFF, else 'about as
+    planned'; 'too few projects' when hidden or with fewer than AGENCY_MIN_N projects with both costs."""
+    b = p.get("cost_bias")
+    if p.get("hidden") or (p.get("n_cost") or 0) < AGENCY_MIN_N or not _finite(b):
+        return "too few projects"
+    return "usually costs more" if b > COST_OFF else "usually costs less" if b < -COST_OFF else "about as planned"
+
+
+def _extra_band(months: float) -> str:
+    return next((w for cut, w in EXTRA_BANDS if months < cut), "over a year")
+
+
+def extra_months_word(r: dict) -> str | None:
+    """A measured hidden-delay prior's extra months in words: None when there are too few projects to measure it;
+    NO_EXTRA unless its interval lies above zero (pipeline/hidden_delay.text's test); else a few months, about half
+    a year, about a year or over a year."""
+    m, lo, hi = r.get("extra_months"), r.get("extra_months_lo"), r.get("extra_months_hi")
+    if not r.get("measurable") or not _finite(m):
+        return None
+    return _extra_band(m) if _finite(lo) and lo > 0 and m > 0 else NO_EXTRA
+
+
+def _extra_text(m: re.Match) -> str:
+    months, pts, n = m[1], m[2] or m[3], m[4]
+    parts = []
+    if months is not None:
+        v = int(months)
+        parts.append(f"{_extra_band(v)} of extra delay" if v > 0 else "less delay than similar projects" if v < 0
+                     else NO_EXTRA)
+    if pts is not None:
+        parts.append(f"a {'higher' if int(pts) > 0 else 'lower'} chance of a date push")
+    return " and ".join(parts) + f", measured on {n} projects"
+
+
+def _agency_text(m: re.Match) -> str:
+    word = schedule_word({"schedule_bias": int(m[1]) / 100})
+    how = {"usually later": "later than planned", "usually earlier": "earlier than planned"}.get(word, "about on time")
+    return f"this agency's projects usually finish {how} ({m[2]} projects)"
+
+
+def plain_text(text: str | None, dimension: str | None = None) -> str | None:
+    """An evidence line (a checklist row, an alert, a card) without the model's numbers: a model check's 'P = 0.87
+    (High-tier cut 0.85)' and an alert's 'P(date push or cost revision, 2q) = 0.91' become the outlook's word, the
+    agency's timeline statistics its schedule word, a composite score goes, and a measured hidden delay ('+3 months
+    over the next year (CI 1 to 5), measured on 16 projects') becomes its band with the project count. Report facts
+    (progress, spend, dates, parcels, complexity ratings, months in a stage) stay as written."""
+    if not text:
+        return text
+    what = MODEL_CHECKS.get(dimension)
+    text = P_RX.sub(lambda m: (f"{what} is " if what else "rated ") + f"{chance_word(float(m[1]))} within the "
+                    f"{HORIZON}", text)
+    text = ALERT_P_RX.sub(lambda m: f"a date push or cost revision is {chance_word(float(m[1]))} within the "
+                          f"{HORIZON}", text)
+    text = ALERT_P2_RX.sub(lambda m: f"(rated {chance_word(float(m[1]))})", text)
+    text = AGENCY_RX.sub(_agency_text, text)
+    text = SCORE_RX.sub("", text)
+    text = NO_EXTRA_RX.sub(lambda m: f"{NO_EXTRA} ({m[1]} projects)", text)
+    return EXTRA_RX.sub(_extra_text, text)
+
+
+def _none(d: dict, cols) -> dict:
+    """d with those of cols it has set to None (a hidden number keeps its key, so the shape does not change)."""
+    return {**d, **{c: None for c in cols if c in d}}
+
+
+def _none_deep(v, cols: set):
+    """v (nested dicts and lists) with every key in cols set to None, at any depth."""
+    if isinstance(v, dict):
+        return {k: None if k in cols else _none_deep(x, cols) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_none_deep(x, cols) for x in v]
+    return v
+
+
+def plain_prior(r: dict) -> dict:
+    """A measured hidden-delay prior without its months, shares, intervals and p-values (extra_months_word stays)."""
+    return {**_none(r, HIDDEN_PRIOR), "extra_months_word": extra_months_word(r)}
+
+
+def plain_scores(sc: dict | None) -> dict | None:
+    return sc and {**_none(sc, HIDDEN_SCORES), "shap_top5": []}
+
+
+def plain_row(r: dict) -> dict:
+    """A list row (ROW_SQL) without the model's numbers: the outlook, drivers_plain and top_reason stay."""
+    return _none(r, HIDDEN_ROW)
+
+
+def plain_page(page: dict) -> dict:
+    return {**page, "items": [plain_row(r) for r in page["items"]]}
+
+
+def plain_project(d: dict) -> dict:
+    """The project page without the model's numbers: probabilities, quantiles, rank, SHAP values (drivers_plain and
+    the outlook stay), the composite score, the measured hidden-delay months; the checklist's evidence in words."""
+    ext = d["external"]
+    return {**d, "scores": plain_scores(d["scores"]),
+            "risk_profile": [{**r, "evidence": plain_text(r["evidence"], r["dimension"])} for r in d["risk_profile"]],
+            "external": {**ext, "composite": ext["composite"] and _none(ext["composite"], HIDDEN_COMPOSITE),
+                         "hidden_delay": [plain_prior(p) for p in ext["hidden_delay"]]}}
+
+
+def plain_portfolio(p: dict) -> dict:
+    return {**p, "top": [plain_row(r) for r in p["top"]]}
+
+
+def plain_forecast(f: dict) -> dict:
+    """The forecast without the model's numbers (schemas.Forecast): the completion as its band word, the analogues
+    as name, sector, outcome and years ago (no distance or outcome figures), the summary as counts; the scenario
+    curves, their band and the sector S-curve stay (a picture the chart draws; the UI prints no value of them)."""
+    ana = f["analogues"]
+    n_slipped = sum(a["outcome"] == "slipped" for a in ana)
+    summary = (f"{n_slipped} of the {len(ana)} most similar past projects at this stage slipped or had a cost "
+               "revision within 4 quarters." if ana else "no similar past projects at this stage")
+    return {**f, "analogues": [_none(a, HIDDEN_ANALOGUE) for a in ana], "analogue_summary": summary,
+            "completion": _none(f["completion"], HIDDEN_COMPLETION), "band_method": BAND_METHOD_PLAIN}
+
+
+def plain_agency_matrix(m: dict) -> dict:
+    """The agency matrix without its statistics (medians, quartiles, CIs, shrink weight, trend): the schedule and
+    cost words and the counts stay."""
+    return {**m, "method": AGENCY_METHOD_PLAIN, "points": [_none(p, HIDDEN_AGENCY) for p in m["points"]]}
+
+
+def _plain_cards(cards: list[dict]) -> list[dict]:
+    return [{**_none(c, HIDDEN_ROW), "evidence": [plain_text(e) for e in c.get("evidence") or []]} for c in cards]
+
+
+def plain_external(d: dict) -> dict:
+    """The External Factors summary without the model's numbers: no chance of a slip on the project cards (their
+    outlook stays; their evidence lines in words), no backtest lifts nor the slip rates with and without a flag they
+    are the ratio of (overall and per sector; the counts stay), no composite score distribution or scores, no
+    bootstrap interval on the land-link check (its counts stay), and the measured priors as words."""
+    po, hd, ec, lc = d.get("portal"), d.get("hidden_delay_priors"), d["external_composite"], d.get("land_coverage")
+    return {**d, "factors": {n: {**f, "top": _plain_cards(f["top"])} for n, f in d["factors"].items()},
+            "early_notice": {**d["early_notice"], "top": _plain_cards(d["early_notice"]["top"])},
+            "notice_backtest": _none_deep(d["notice_backtest"], set(LIFTS) | set(BACKTEST_RATES)),
+            "land_coverage": lc and _none_deep(lc, set(LINK_CI)),
+            "external_composite": _none_deep(ec, set(COMPOSITE_STATS) | set(HIDDEN_COMPOSITE)),
+            "portal": po and {**po, "top_overdue": _plain_cards(po.get("top_overdue") or []),
+                              "open_list": _plain_cards(po.get("open_list") or [])},
+            "hidden_delay_priors": hd and {**hd, "note": PRIORS_NOTE_PLAIN,
+                                           "rows": [plain_prior(r) for r in hd.get("rows") or []]}}
+
+
+def plain_bottlenecks(page: dict) -> dict:
+    """Bottlenecks without the members' mean chance of a slip and mean slip (counts and capital stay)."""
+    return {**page, "items": [_plain_bottleneck(b) for b in page["items"]]}
+
+
+def _plain_bottleneck(b: dict) -> dict:
+    return {**_none(b, ("mean_p_any_2q", "mean_months_p50")),
+            "top_members": [_none(m, HIDDEN_ROW) for m in b.get("top_members") or []]}
+
+
+def plain_bottleneck(d: dict) -> dict:
+    return {**d, "bottleneck": _plain_bottleneck(d["bottleneck"]),
+            "members": [_none(m, HIDDEN_ROW) for m in d["members"]]}
+
+
+def plain_alert(a: dict) -> dict:
+    """An alert whose title and detail carry no model number (plain_text: seeded and watcher alerts print the
+    chance of a slip; an early notice quotes checklist evidence)."""
+    return {**a, "title": plain_text(a.get("title")), "detail": plain_text(a.get("detail"))}
+
+
+def plain_signal(s: dict) -> dict:
+    """A news signal (or a feed item's linked project) without the linker's match score."""
+    return {**s, "link_score": None, **({"projects": [plain_signal(p) for p in s["projects"]]}
+                                        if "projects" in s else {})}
+
+
+def plain_job(j: dict | None) -> dict | None:
+    """A job run (schemas.JobRun) without the live accuracy the ingest job's summary counts (HIDDEN_JOB: realised,
+    slipped, flagged and flagged-and-slipped, from which the precision of High / Critical follows; the models page's,
+    the developer's only)."""
+    s = j and j.get("summary")
+    return j and {**j, "summary": _none(s, HIDDEN_JOB) if isinstance(s, dict) else s}
+
+
+def plain_live_status(st: dict) -> dict:
+    """scheduler.status() with each job's last run through plain_job."""
+    return {k: {**v, "last_run": plain_job(v["last_run"])} if isinstance(v, dict) and "last_run" in v else v
+            for k, v in st.items()}
+
+
+def _memo_chance(m: re.Match) -> str:
+    v = float(m[2])
+    return f"{m[1]} (rated {chance_word(v / 100 if m[3] or v > 1 else v)})"
+
+
+def plain_memo(text: str | None) -> str | None:
+    """A worker memo (or its evidence note) without the model's numbers: memos stored before llm/worker.py gave the
+    analyst words (database/dispatch_drafts.json) quote the probability ('slip probability of 0.7636', '69.47%'),
+    a risk exposure (that probability times the cost) and 'SHAP'. The probability becomes the outlook's chance word,
+    the exposure figure and the word SHAP go; report facts (names, MW, km, costs elsewhere) stay."""
+    if not text:
+        return text
+    text = MEMO_P_RX.sub(_memo_chance, text)
+    return MEMO_SHAP_RX.sub("", MEMO_EXPOSURE_RX.sub("risk exposure", text))
+
+
+def plain_draft(d: dict) -> dict:
+    """A dispatch draft (schemas.DispatchDraft) with its memo and evidence notes in words (plain_memo)."""
+    return {**d, "draft_memo": plain_memo(d.get("draft_memo")),
+            "evidence": [{**e, "note": plain_memo(e.get("note"))} for e in d.get("evidence") or []]}
+
+
+# ---------------------------------------------------------------- research
+
+N_RESEARCH_TOP, N_BLOCKERS = 3, 20
+RESEARCH_NOTE = (
+    "Web research is evidence, not a model input. Sweep facts were found by a research agent, some read from the "
+    "article and most judged from a news headline and its feed summary (each fact says which), and checked by a "
+    "second agent; agent facts are news items the in-app research agent judged with the local LLM from the headline "
+    "and feed summary alone. A fact is live when it is negative, not resolved and dated within "
+    f"{LIVE_Q} quarters of the as-of quarter. No news is not no problem: coverage favours large, much-reported "
+    "projects.")
+
+
+def _day(v) -> date | None:
+    """An ISO date or timestamp string (SQLite) -> date."""
+    return date.fromisoformat(v[:10]) if isinstance(v, str) and v else v
+
+
+def _agent_fact(r: dict, asof) -> dict:
+    """A research agent row (db.research_facts) in the gold fact shape, live at the served asof."""
+    ev, pub = _day(r["event_date"]), _day(r["published_date"])
+    return {**{k: v for k, v in r.items() if k not in ("model", "prompt_version")}, "event_date": ev,
+            "published_date": pub, "researched_on": _day(r["researched_on"]), "verified": None, "basis": "headline",
+            "live": is_live(r["direction"], r["status"], ev, pub, asof)}
+
+
+def _cites(f: dict) -> set[tuple[str, str]]:
+    """What a fact cites, for deduplication: its URL and its story, the headline without a trailing ' - Source' or
+    ' | Source' tail, casefolded, punctuation out. The research agent's URLs are Google News redirect links, never the
+    publisher URL the sweep cites, so the same story found by both matches on the headline only."""
+    h = f.get("headline") or ""
+    if f.get("source"):
+        h = re.sub(rf"\s*[-|:\u2013\u2014]\s*{re.escape(f['source'])}\s*$", "", h, flags=re.I)
+    story = " ".join(re.sub(r"[\W_]+", " ", h.casefold()).split())
+    return {("url", f["url"])} | ({("story", story)} if story else set())
+
+
+def _newest(f: dict) -> date:
+    return f["event_date"] or f["published_date"] or date.min
+
+
+def public_facts(facts: list[dict]) -> list[dict]:
+    """Research facts for the public: no match reason, and no headline on the research agent's facts. An agent
+    headline is the raw news feed title (it can name a victim, a farmer or a protester; the privacy floor catches an
+    honorific + name only), and the public cannot read the scout's feed either (signals need insights); its own
+    summary, source, URL and dates stay."""
+    return [{**f, "match_reason": None, **({"headline": None} if f["origin"] == "agent" else {})} for f in facts]
+
+
+def _nest(p: dict | None) -> dict:
+    """research_projects' flattened external columns -> {entry: {field: value} | None} (the sweep's shape)."""
+    out: dict = {}
+    for (entry, field), col in EXT_COLS.items():
+        out.setdefault(entry, {})[field] = (p or {}).get(col)
+    return {e: v if any(x is not None for x in v.values()) else None for e, v in out.items()}
+
+
+@cached
+def _research_sweep(s, key):
+    return (_one(s, "SELECT * FROM rprojects WHERE project_key = ?", [key]),
+            _rows(s, "SELECT * FROM rfacts WHERE project_key = ?", [key]))
+
+
+def research(key: str) -> dict:
+    """One project's web research: the sweep's line (researched_on, latest status, the external block) and its facts
+    merged with the research agent's (origin 'agent', SQLite), newest first; an agent fact whose URL or story
+    (_cites: the normalised headline) the sweep or an earlier agent fact already cites is dropped (two sweep facts
+    from one page stay: they differ in category).
+    searched: the sweep searched it or the agent researched it; with no facts that reads 'searched, nothing found'."""
+    from . import db  # db imports this module
+    asof = state()["asof"]
+    proj, sweep = _research_sweep(key)
+    seen = set().union(*map(_cites, sweep))
+    agent = []
+    for r in db.research_facts(key):
+        cites = _cites(r)
+        if not cites & seen:
+            seen |= cites
+            agent.append(_agent_fact(r, asof))
+    facts = sorted([{**f, "signal_id": None, "judged_at": None} for f in sweep] + agent, key=_newest, reverse=True)
+    agent_at = db.researched(key).get(key)
+    return {"key": key, "researched_on": proj and proj["researched_on"],
+            "searched": bool(proj and proj["searched"]) or agent_at is not None, "agent_researched_at": agent_at,
+            "latest_status": proj and proj["latest_status"], "external": _nest(proj), "n_facts": len(facts),
+            "n_negative_live": sum(f["live"] for f in facts), "facts": facts}
+
+
+def research_brief(key: str) -> dict:
+    """research() for the project page: the counts and the top N_RESEARCH_TOP facts (live blockers first, most
+    severe, then newest)."""
+    d = research(key)
+    top = sorted(d["facts"], key=lambda f: (not f["live"], -f["severity"], -_newest(f).toordinal()))
+    return {**{k: d[k] for k in ("researched_on", "searched", "agent_researched_at", "latest_status", "n_facts",
+                                 "n_negative_live")}, "top": top[:N_RESEARCH_TOP]}
+
+
+def public_research(d: dict) -> dict:
+    """research() for the public: the same facts, redacted by public_facts."""
+    return {**d, "facts": public_facts(d["facts"])}
+
+
+@cached
+def _research_scope(s, scope):
+    """The current projects in scope (key -> name, state, tier), their sweep lines and their sweep facts."""
+    sql, params = _scope_sql(scope)
+    cur = {r["project_key"]: r for r in _rows(s, f"""SELECT project_key, project_name, state, tier FROM cur
+        WHERE {sql}""", params)}
+    inscope = f"project_key IN (SELECT project_key FROM cur WHERE {sql})"
+    projects = _rows(s, f"SELECT project_key, searched, researched_on FROM rprojects WHERE {inscope}", params)
+    return cur, projects, _rows(s, f"SELECT * FROM rfacts WHERE {inscope}", params)
+
+
+def research_summary(scope=None) -> dict:
+    """Web research over the current projects in scope, sweep and agent facts together (deduplicated per project by
+    URL and story as research()): coverage, facts by category x direction with the live ones, by state, and the
+    newest live blockers (severity >= 2) with their project."""
+    from . import db
+    s = state()
+    cur, projects, sweep = _research_scope(scope)
+    seen = {(f["project_key"], c) for f in sweep for c in _cites(f)}
+    agent = []
+    for r in db.research_facts(keys=frozenset(cur)):
+        cites = {(r["project_key"], c) for c in _cites(r)}
+        if not cites & seen:
+            seen |= cites
+            agent.append(_agent_fact(r, s["asof"]))
+    facts = sweep + agent
+    agent_at = {k: t for k, t in db.researched().items() if k in cur}
+    searched = {p["project_key"] for p in projects if p["searched"]} | set(agent_at)
+    live = [f for f in facts if f["live"]]
+
+    def n_keys(rows):
+        return len({f["project_key"] for f in rows})
+
+    by_cat = []
+    for cat, tax in TAXONOMY_OF.items():
+        fs = [f for f in facts if f["category"] == cat]
+        if fs:
+            lv = [f for f in fs if f["live"]]
+            by_cat.append({"category": cat, "taxonomy": tax, **{d: sum(f["direction"] == d for f in fs) for d in (
+                "negative", "positive", "neutral")}, "n_live": len(lv), "n_projects_live": n_keys(lv)})
+    by_state = []
+    for st in sorted({r["state"] for r in cur.values()}, key=str):
+        keys = {k for k, r in cur.items() if r["state"] == st}
+        lv = [f for f in live if f["project_key"] in keys]
+        by_state.append({"state": st, "n_current": len(keys), "n_searched": len(keys & searched),
+                         "n_with_facts": len(keys & {f["project_key"] for f in facts}), "n_negative_live": len(lv),
+                         "n_projects_negative_live": n_keys(lv)})
+    by_state.sort(key=lambda r: (-r["n_negative_live"], -r["n_searched"], str(r["state"])))
+    # one row per project and page (a page can give a land and a forest fact), the newest and most severe
+    first: dict = {}
+    for f in sorted((f for f in live if f["severity"] >= 2), key=lambda f: (_newest(f), f["severity"]), reverse=True):
+        first.setdefault((f["project_key"], f["url"]), f)
+    blockers = list(first.values())[:N_BLOCKERS]
+    dates = [p["researched_on"] for p in projects if p["researched_on"]]
+    return {
+        "asof": s["asof"], "live_window_quarters": LIVE_Q,
+        "researched_on": {"first": min(dates, default=None), "last": max(dates, default=None)},
+        "coverage": {"n_current": len(cur), "n_searched": len(searched),
+                     "n_with_facts": n_keys(facts), "n_facts": len(facts), "n_negative_live": len(live),
+                     "n_projects_negative_live": n_keys(live), "n_agent_facts": len(agent),
+                     "n_agent_projects": len(agent_at)},
+        "by_category": by_cat, "by_state": by_state,
+        "top_recent_blockers": [{**{k: f.get(k) for k in ("fact_id", "project_key", "category", "severity",
+                                                           "event_date", "date_precision", "published_date",
+                                                           "summary", "headline", "source", "url", "origin")},
+                                 **{k: cur[f["project_key"]][k] for k in ("project_name", "state", "tier")}}
+                                for f in blockers],
+        "agent_last_run": max(agent_at.values(), default=None), "note": RESEARCH_NOTE}
+
+
+def public_research_summary(d: dict) -> dict:
+    """research_summary() for the public: the counts, and of the sweep's blockers only headline, URL and dates (the
+    event date, and the publish date for a fact whose source gives no event date; a headline is all a public blocker
+    says, and the research agent's are raw feed titles: see public_facts)."""
+    keep = ("headline", "url", "event_date", "date_precision", "published_date")
+    return {**d, "top_recent_blockers": [{k: f[k] for k in keep} for f in d["top_recent_blockers"]
+                                         if f["origin"] == "sweep"]}
 
 
 @cached
@@ -533,6 +1220,10 @@ def forecast(s, key):
     scen = _rows(s, """SELECT step, quarter, "continue" AS continue_, recover, agency, agency_basis FROM scen
         WHERE project_key = ? ORDER BY step""", [key])
     ana = _rows(s, """SELECT * EXCLUDE (project_key, "asof") FROM ana WHERE project_key = ? ORDER BY rank""", [key])
+    for a in ana:   # the analogue's words: its outcome 4 quarters on, and how long before asof it was at this stage
+        then = a["analogue_period"]
+        a.update(name=a["analogue_name"], outcome={1: "slipped", 0: "held"}.get(a["y_any"], "unknown"),
+                 years_ago=round((s["asof"] - then).days / 365.25) if then else None)
     n_any = sum(1 for a in ana if a["y_any"] == 1)
     months = sorted(a["y_months"] for a in ana if a["y_months"] is not None)
     median = months[len(months) // 2] if months else None
@@ -558,7 +1249,8 @@ def forecast(s, key):
         "band": [{"quarter": p["quarter"], "lo": min(p["continue_"], p["recover"], p["agency"]),
                   "mid": p["continue_"], "hi": max(p["continue_"], p["recover"], p["agency"])} for p in scen
                  if None not in (p["continue_"], p["recover"], p["agency"])],
-        "completion": {"anticipated": ac, "months_p05": cur["months_p05"], "months_p50": cur["months_p50"],
+        "completion": {"anticipated": ac, "band": slip_word(cur["months_p50"]),
+                       "months_p05": cur["months_p05"], "months_p50": cur["months_p50"],
                        "months_p95": cur["months_p95"], "p05": _add_months(ac, cur["months_p05"]),
                        "p50": _add_months(ac, cur["months_p50"]), "p95": _add_months(ac, cur["months_p95"])},
         "band_method": BAND_METHOD,
@@ -648,10 +1340,12 @@ def external_summary(s, scope=None):
         LEFT JOIN composite c USING (project_key)
         WHERE project_key IN (SELECT project_key FROM cur WHERE {sql})""", params)
     stalled = {r["k"] for r in _rows(s, "SELECT project_key AS k FROM cur WHERE stagnation_override")}
+    words = _words()
 
-    def mark(cards):  # the stagnation badge and the flagged factors (from the evidence lines) on every card
+    def mark(cards):  # the stagnation badge, the flagged factors (from the evidence lines) and the outlook on a card
         return [{**r, "stalled": r["project_key"] in stalled,
-                 "factors": list(dict.fromkeys(ln.split(": ", 1)[0] for ln in r.get("evidence") or []))}
+                 "factors": list(dict.fromkeys(ln.split(": ", 1)[0] for ln in r.get("evidence") or [])),
+                 "outlook": words.get(r["project_key"], NO_WORDS)["outlook"]}
                 for r in cards]
 
     inscope = f"project_key IN (SELECT project_key FROM cur WHERE {sql})"
@@ -682,7 +1376,8 @@ def _priors_in_scope(s, block, inscope, params):
         LEFT JOIN portal p USING (project_key) WHERE c.{inscope}""", params)
     n = Counter((h["factor"], h["group"]) for r in rows
                 for h in hidden_delay({"la_state": r["la_state"]}, r, r, s["asof"]) if h["current"])
-    return {**block, "rows": [{**r, "n_current": None if r["factor"] == "land_complexity_nh"
+    return {**block, "rows": [{**r, "extra_months_word": extra_months_word(r),
+                               "n_current": None if r["factor"] == "land_complexity_nh"
                                else n[(r["factor"], r["group"])]} for r in block["rows"]]}
 
 
@@ -789,8 +1484,11 @@ def models(s):
     runs = [{"entry_id": r["entry_id"], "run_id": r["run_id"], "model": r["model"], "target": r["target"],
              "horizon": r["horizon"], "gold_version": r["gold_version"], "created_at": r.get("created_at"),
              "pr_auc": r["metrics"]["pooled"].get("pr_auc"), "ece": r["metrics"]["pooled"].get("ece"),
-             "test_pr_auc": (r["metrics"].get("test") or {}).get("pr_auc"), "champion": r["entry_id"] in champions}
+             "test_pr_auc": (r["metrics"].get("test") or {}).get("pr_auc"), "champion": r["entry_id"] in champions,
+             "artifact_path": r["artifacts"].get("model"), "artifact_sha256": r.get("artifact_sha256")}
             for r in reg.get("runs", [])]
+    sealed = {r["entry_id"]: r.get("artifact_sha256") for r in reg.get("runs", [])}
+    champ = {k: {**c, "artifact_sha256": sealed.get(c["entry_id"])} for k, c in champ.items()}
     return {"champions": champ, "run_id": run_id, "backtest": csv("backtest_summary.csv"),
             "ablation": csv("ablation.csv"),
             "shap_summary": csv("shap_summary.csv", """SELECT feature, "group", mean_abs_shap FROM t
@@ -864,7 +1562,7 @@ def agency_matrix(s, sector=None, ministry=None, include_hidden=False, scope=Non
         WHERE {" AND ".join(conds)} ORDER BY hidden, capital_cr DESC, n_projects DESC, agency LIMIT 500""",
                    [self_] + params)
     return {"asof": s["asof"], "n_agencies": counts["n"], "n_hidden": counts["n_hidden"], "method": AGENCY_METHOD,
-            "points": points}
+            "points": [{**p, "schedule_word": schedule_word(p), "cost_word": cost_word(p)} for p in points]}
 
 
 @cached
@@ -873,10 +1571,12 @@ def agency_known(s, agency):
 
 
 def _top_members(s, rows):
-    """Replace each bottleneck row's member_keys by its first TOP_MEMBERS members (key, name, tier, p, cost)."""
+    """Replace each bottleneck row's member_keys by its first TOP_MEMBERS members (key, name, tier, p, cost, the
+    words)."""
     keys = sorted({k for r in rows for k in r["member_keys"][:TOP_MEMBERS]})
-    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, tier, p_any_2q,
-        anticipated_cost_cr FROM cur WHERE project_key IN ({','.join('?' * len(keys))})""", keys)} if keys else {}
+    got = {r["key"]: r for r in with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, tier,
+        p_any_2q, anticipated_cost_cr FROM cur WHERE project_key IN ({','.join('?' * len(keys))})""", keys))} \
+        if keys else {}
     for r in rows:
         r["top_members"] = [got[k] for k in r.pop("member_keys")[:TOP_MEMBERS] if k in got]
     return rows
@@ -942,9 +1642,9 @@ def bottleneck(s, bid, page=1, size=50, scope=None):
         return None
     keys = b["member_keys"]
     page_keys = keys[(page - 1) * size: page * size]
-    got = {r["key"]: r for r in _rows(s, f"""SELECT project_key AS "key", project_name AS name, sector, state, agency,
-        tier, p_any_2q, months_p50, anticipated_cost_cr FROM cur
-        WHERE project_key IN ({','.join('?' * len(page_keys))})""", page_keys)} if page_keys else {}
+    got = {r["key"]: r for r in with_words(_rows(s, f"""SELECT project_key AS "key", project_name AS name, sector,
+        state, agency, tier, p_any_2q, months_p50, anticipated_cost_cr FROM cur
+        WHERE project_key IN ({','.join('?' * len(page_keys))})""", page_keys))} if page_keys else {}
     ev = {}
     for e in _rows(s, """SELECT * EXCLUDE (bottleneck_id) FROM bmembers WHERE bottleneck_id = ?
             ORDER BY project_key, last_seen DESC""", [bid]):

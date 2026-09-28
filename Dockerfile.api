@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+# PAIMANA api image (docs/DEPLOYMENT.md). python:3.13-slim; the packages are installed into a venv in a throwaway
+# stage so compilers never reach the runtime image; a non-root user; uvicorn with ONE worker: the scheduler
+# (backend/live/scheduler.py) and the LLM gate (llm/client.py) live in the process, so a second worker would run
+# every job twice and let two LLM calls collide. The same image runs the migrate service (python -m alembic upgrade
+# head), the administrator bootstrap and the serving-table load (docker-compose.yml, scripts/first-run.*).
+FROM python:3.13-slim AS build
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+
+FROM python:3.13-slim
+# the uid/gid that owns the bind-mounted dataset/, database/ and temp/ on a Linux host (docs/DEPLOYMENT.md)
+ARG APP_UID=1000
+ARG APP_GID=1000
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH=/opt/venv/bin:$PATH \
+    HOME=/tmp MPLCONFIGDIR=/tmp/mpl NUMBA_CACHE_DIR=/tmp/numba
+# libgomp1 is LightGBM's OpenMP runtime
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g "${APP_GID}" app && useradd -u "${APP_UID}" -g app -d /tmp -s /usr/sbin/nologin app
+COPY --from=build /opt/venv /opt/venv
+WORKDIR /app
+COPY --chown=app:app . /app
+RUN chmod 0755 /app/deploy/api-entrypoint.sh \
+    && mkdir -p dataset model database temp .tmp && chown app:app dataset model database temp .tmp
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD ["python", "-c", "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4); sys.exit(0 if r.status == 200 else 1)"]
+ENTRYPOINT ["/app/deploy/api-entrypoint.sh"]
+# --no-proxy-headers: the api itself believes X-Forwarded-For / -Proto, and only from TRUSTED_PROXIES
+# (backend/auth/middleware.py); uvicorn's own reading with --forwarded-allow-ips * would take the left-most hop, which
+# the client writes. --no-access-log: the api writes its own access log (JSON, no query strings of /api/auth).
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", \
+     "--timeout-graceful-shutdown", "10", "--no-proxy-headers", "--no-access-log"]

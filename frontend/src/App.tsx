@@ -3,7 +3,8 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { ChatWidget } from '@/components/common/ChatWidget'
-import { RoleProvider } from '@/lib/auth/RoleContext'
+import { ErrorBoundary, RouteErrorBoundary } from '@/components/common/ErrorBoundary'
+import { SessionProvider, useSession } from '@/lib/auth/SessionContext'
 import { RequireRole } from '@/lib/auth/RequireRole'
 
 const Home = lazy(() => import('@/views/Home').then(m => ({ default: m.Home })))
@@ -12,36 +13,62 @@ const ProjectStudio = lazy(() => import('@/views/ProjectStudio').then(m => ({ de
 const ExternalFactors = lazy(() => import('@/views/ExternalFactors').then(m => ({ default: m.ExternalFactors })))
 const Models = lazy(() => import('@/views/Models').then(m => ({ default: m.Models })))
 const Login = lazy(() => import('@/views/Login').then(m => ({ default: m.Login })))
+const Signup = lazy(() => import('@/views/Signup').then(m => ({ default: m.Signup })))
+const Reset = lazy(() => import('@/views/Reset').then(m => ({ default: m.Reset })))
 const WorkerConsole = lazy(() => import('@/views/WorkerConsole').then(m => ({ default: m.WorkerConsole })))
 const ApprovalInbox = lazy(() => import('@/views/ApprovalInbox').then(m => ({ default: m.ApprovalInbox })))
 const Agencies = lazy(() => import('@/views/Agencies').then(m => ({ default: m.Agencies })))
 const Bottlenecks = lazy(() => import('@/views/Bottlenecks').then(m => ({ default: m.Bottlenecks })))
 const Radar = lazy(() => import('@/views/Radar').then(m => ({ default: m.Radar })))
+const Admin = lazy(() => import('@/views/Admin').then(m => ({ default: m.Admin })))
 // its own chunk (recharts, motion): the main bundle does not wait for it
 const ProjectDetailDrawer = lazy(() => import('@/views/command-center/ProjectDetailDrawer').then(m => ({ default: m.ProjectDetailDrawer })))
 
+/** the account pages stand alone: no top bar, no side panel, no assistant */
+const BARE = new Set(['/login', '/signup', '/reset'])
+
+const Loading = () => (
+  <div className="mx-auto w-full max-w-[1440px] animate-pulse space-y-6 px-4 py-6 sm:px-6" aria-busy="true" aria-label="Loading the page">
+    <div className="h-7 w-64 rounded-lg bg-surface-input" />
+    <div className="h-28 rounded-xl bg-surface-input/70" />
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="h-64 rounded-xl bg-surface-input/60 lg:col-span-2" />
+      <div className="h-64 rounded-xl bg-surface-input/60" />
+    </div>
+  </div>
+)
+
 export default function App() {
+  return (
+    <SessionProvider>
+      <TooltipProvider>
+        <Shell />
+      </TooltipProvider>
+    </SessionProvider>
+  )
+}
+
+function Shell() {
   const location = useLocation()
-  const isLogin = location.pathname === '/login'
+  const bare = BARE.has(location.pathname)
+  // the routes wait for GET /api/auth/me, so an official never sees the public page flash before their own
+  const { status } = useSession()
 
   return (
-    <RoleProvider>
-    <TooltipProvider>
-      <div className="min-h-dvh bg-surface-base text-fg-base font-sans antialiased selection:bg-accent/30 selection:text-fg-base flex flex-col">
-        {/* Persistent TopBar on every route except the full-bleed login screen */}
-        {!isLogin && <TopBar />}
+    <div className="min-h-dvh bg-surface-base text-fg-base font-sans antialiased selection:bg-accent/30 selection:text-fg-base flex flex-col">
+      {!bare && <TopBar />}
 
-        {/* Dynamic Route Content */}
-        <main className={isLogin ? 'flex-1' : 'flex-1 pb-16'}>
-          <Suspense fallback={
-            <div className="h-48 flex items-center justify-center text-xs text-fg-dimmed">
-              loading module...
-            </div>
-          }>
+      <main className={bare ? 'flex-1' : 'flex-1 pb-16'}>
+        {/* every route, lazy chunk included, sits inside one boundary that offers Reload; a new path starts it clean */}
+        <RouteErrorBoundary key={location.pathname}>
+        <Suspense fallback={<Loading />}>
+          {status === 'loading' ? <Loading /> : (
             <Routes>
               {/* Who opens which page: lib/auth/access.ts (ROUTE_ROLES); the public browses without signing in */}
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/reset" element={<Reset />} />
 
               {/* Project list + search (DETECT); read-only for the public */}
               <Route path="/command" element={<RequireRole><CommandCenter /></RequireRole>} />
@@ -63,19 +90,26 @@ export default function App() {
 
               {/* Worker Console: IPMD only */}
               <Route path="/workers" element={<RequireRole><WorkerConsole /></RequireRole>} />
+              {/* Administration: IPMD analysts with the admin flag (RequireRole checks it) */}
+              <Route path="/admin" element={<RequireRole><Admin /></RequireRole>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </Suspense>
-        </main>
+          )}
+        </Suspense>
+        </RouteErrorBoundary>
+      </main>
 
-        {/* the project side panel, opened from any list with useProjectPanel (?project=KEY) */}
-        {!isLogin && <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>}
+      {/* the project side panel, opened from any list with useProjectPanel (?project=KEY); a panel that fails to
+          draw closes on the next open rather than taking the page with it */}
+      {!bare && (
+        <ErrorBoundary key={location.search} fallback={null}>
+          <Suspense fallback={null}><ProjectDetailDrawer /></Suspense>
+        </ErrorBoundary>
+      )}
 
-        {/* shown to IPMD analysts and ministry officials only (lib/auth/access.ts canChat) */}
-        {!isLogin && <ChatWidget />}
-      </div>
-    </TooltipProvider>
-    </RoleProvider>
+      {/* the project assistant, for every role (lib/auth/access.ts canChat); the backend scopes each tool to the viewer */}
+      {!bare && <ChatWidget />}
+    </div>
   )
 }

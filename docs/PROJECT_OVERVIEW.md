@@ -405,17 +405,19 @@ Built with **React + Vite + TypeScript**, served at `http://localhost:3000`.
 ### Page Map
 
 ```
-/login              Sign-in picker (17 ministries, 140 agencies)
+/login              Sign-in (email and password; "Continue as public")
+/signup             Request access (reviewed by an IPMD administrator)
 /                   Home — role-specific landing
-/command-center     Portfolio table, filters, tier strip
+/command            Portfolio table, filters, tier strip
 /projects/:key      Full project page
 /agencies           Agency performance scatter
 /bottlenecks        Shared blockers
 /radar              News feed + state heat map
-/external-factors   Land, forest, clearance panel
-/models             Model history + calibration
-/worker-console     AI worker control (IPMD only)
+/external           Land, forest, clearance panel
+/models             Model history + calibration (developer only)
+/workers            AI worker control (developer only)
 /approvals          Approve AI-drafted notices (IPMD only)
+/admin              Access requests and users (administrators); the audit log (developer)
 ```
 
 ### Project Detail Drawer
@@ -550,18 +552,23 @@ If a prediction made 6 months ago has now come true:
 
 ## 10. Access Control
 
-Enforced in the backend on every request via headers `X-Paimana-Role` and `X-Paimana-Scope`.
-
-> **Prototype note:** Headers are set by the sign-in screen, not real authentication. Do not expose to the internet without proper auth.
+Enforced in the backend on every request. Officials sign in with an email and password (`/login`); the session is a
+cookie the backend checks, an IPMD administrator approves access requests (`/signup`, `/admin`) and assigns the role
+and scope, and every write is audited. The public needs no account. Details: `docs/ACCESS_CONTROL.md` (roles and
+the endpoint matrix) and `docs/SECURITY.md`.
 
 | Feature | Public | Agency | Ministry | IPMD |
 |---------|--------|--------|----------|------|
 | Home page | Yes | Own projects only | Own ministry | All |
 | Project detail | Limited | Own only | Own ministry | All |
-| Chat | No | No | Yes (scoped) | Yes |
-| Models page | No | No | Read-only | Full |
-| Worker Console | No | No | No | Yes |
+| AI assistant (chat) | Yes (public tools and outputs only, rate-limited) | Yes (scoped) | Yes (scoped) | Yes |
+| Models page | No | No | No | No |
+| Worker Console | No | No | No | No |
 | Approve notices | No | No | No | Yes |
+| Administration | No | No | No | Administrators |
+
+The models page, the worker console, the job controls, the raw model numbers and the audit log belong to the hidden
+developer account alone (created by the bootstrap from `.env.db`, never listed to administrators).
 
 A project outside your scope returns **404 Not Found** (not 403) — no information leaks about its existence.
 

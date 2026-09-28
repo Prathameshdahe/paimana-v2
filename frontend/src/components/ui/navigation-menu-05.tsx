@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/formatters";
-import { useRole } from "@/lib/auth/RoleContext";
+import { useSession } from "@/lib/auth/SessionContext";
 import { canOpen } from "@/lib/auth/access";
 import {
   NavigationMenu,
@@ -36,14 +36,14 @@ const INLINE = 5;
 const linkCls = cn(
   "inline-flex h-8 w-max items-center justify-center rounded-lg px-2.5 text-sm font-medium transition-colors",
   "text-fg-muted hover:bg-surface-elevated hover:text-fg-base",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
   "data-[active]:bg-surface-panel data-[active]:text-fg-base data-[active]:shadow-sm data-[active]:ring-1 data-[active]:ring-border-subtle",
   "data-[state=open]:bg-surface-elevated"
 );
 
 export function NavigationMenuWithActiveItem() {
   const location = useLocation();
-  const { role } = useRole();
+  const { role } = useSession();
   const [open, setOpen] = useState(false);
   const visibleItems = navigationMenuItems.filter((item) => canOpen(role, item.href));
   const isActive = (item: NavItem) =>

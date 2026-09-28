@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db  # noqa: E402
 from backend.live import portals, scheduler, scout, watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 DAY = date(2026, 9, 28)
 EXPORT_HEADER = ["State", "Highway Name", "Chainage", "District", "Sub District", "Village", "Survey No", "Area",
@@ -55,9 +56,8 @@ def streamed(body: bytes, length: int | None = None) -> httpx.Response:
 
 
 @pytest.fixture
-def portal(tmp_path, monkeypatch):
+def portal(fresh_db, tmp_path, monkeypatch):
     """Canned portals behind an httpx MockTransport; every request is logged in calls."""
-    monkeypatch.setenv("PAIMANA_DB", str(tmp_path / "paimana.db"))
     db.init()
     monkeypatch.setattr(portals, "SNAPSHOTS", tmp_path / "parivesh2_snapshots")
     monkeypatch.setattr(portals, "PULLS", tmp_path / "bhoomi_rashi_pulls")
@@ -156,6 +156,8 @@ def test_scheduler_switches(monkeypatch):
     monkeypatch.setattr(scheduler, "STATUS", {j: dict(v) for j, v in scheduler.STATUS.items()})
     monkeypatch.delenv("BHOOMI_PULL", raising=False)
     monkeypatch.delenv("PARIVESH_SNAPSHOT", raising=False)
+    monkeypatch.setenv("RESEARCH_AGENT", "0")     # the research loop: tests/test_research_agent.py
+    monkeypatch.setenv("SECOND_OPINION_JOB", "0")  # the second-opinion loop: tests/test_second_opinion_job.py
     monkeypatch.setattr(scheduler, "PORTALS_FIRST_DELAY_S", 0.05)
     monkeypatch.setattr(scheduler, "SCOUT_FIRST_DELAY_S", 60)
     monkeypatch.setattr(watcher, "watch_once", lambda: None)
@@ -175,12 +177,15 @@ def test_scheduler_switches(monkeypatch):
     assert asyncio.run(names()) == ["watch", "scout", "bhoomi_rashi_pull"] and ran[-1] == "pull 30"
 
 
-def test_trigger_endpoints_are_ipmd_only_and_bhoomi_is_off_by_default(portal, monkeypatch):
+def test_trigger_endpoints_are_the_developers_and_bhoomi_is_off_by_default(portal, monkeypatch):
     monkeypatch.delenv("BHOOMI_PULL", raising=False)
-    with TestClient(app, headers={"X-Paimana-Role": "public"}) as c:
+    with TestClient(app) as c:
         assert c.post("/api/jobs/parivesh-snapshot").status_code == 403
         assert c.post("/api/jobs/bhoomi-pull").status_code == 403
-    with TestClient(app, headers={"X-Paimana-Role": "ipmd_analyst"}) as c:
+        h = as_role(c, "ipmd")      # the job routes are the developer's alone
+        assert c.post("/api/jobs/parivesh-snapshot", headers=h).status_code == 403
+    with TestClient(app) as c:
+        c.headers.update(as_role(c, "developer"))
         assert c.post("/api/jobs/parivesh-snapshot").json()["started"] is True
         assert portals.snapshot_path().exists() and portal == ["dashboard"]   # the background task ran
         s = c.post("/api/jobs/parivesh-snapshot").json()

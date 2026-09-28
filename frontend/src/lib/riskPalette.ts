@@ -9,7 +9,7 @@ import {
   Layers, Map as MapIcon, Newspaper, Pause, Repeat, Scale, Siren, Trees, TrendingDown, TrendingUp, Wallet,
   type LucideIcon,
 } from 'lucide-react'
-import type { Flag, RiskState, Tier, TierFilter } from '@/contracts/project'
+import type { Flag, OpinionConcern, RiskState, Tier, TierFilter } from '@/contracts/project'
 import type { AlertKind, ExternalFactorKey } from '@/contracts/portfolio'
 
 /** the rank tiers; Watch comes after them */
@@ -44,11 +44,14 @@ export const TIER_COLOR: Record<TierFilter, string> = {
   Watch: '#9d93bd',
 }
 
-/** text token per tier (deep variants of TIER_COLOR, readable on the sand canvas) */
+/**
+ * text token per tier (deep variants of TIER_COLOR, readable on the sand canvas). Medium is the neutral slate ink, not
+ * the accent: the accent marks the viewer's own action (a selection, a focus), never data.
+ */
 export const TIER_TEXT: Record<TierFilter, string> = {
   Critical: 'text-critical',
   High: 'text-warning',
-  Medium: 'text-accent',
+  Medium: 'text-fg-muted',
   Low: 'text-stable',
   Watch: 'text-watch',
 }
@@ -57,7 +60,7 @@ export const TIER_TEXT: Record<TierFilter, string> = {
 export const TIER_SENTIMENT = {
   Critical: 'critical',
   High: 'warning',
-  Medium: 'accent',
+  Medium: 'muted',
   Low: 'stable',
   Watch: 'watch',
 } as const satisfies Record<TierFilter, string>
@@ -117,6 +120,20 @@ export const RISK_DIMENSION: Record<string, { label: string; short: string; icon
   external_composite: { label: 'External factor score', short: 'Land + forest', icon: Layers },
 }
 
+/** ml/risk_profile.py's source words for a checklist row, as an officer reads them (backend/labels.py keeps the same) */
+export const SOURCE_LABEL: Record<string, string> = {
+  model: 'model',
+  silver: 'reports',
+  report: 'report remarks',
+  sector_context: 'sector output data',
+  agency_stats: 'agency history',
+  bhoomi_rashi: 'Bhoomi Rashi land records',
+  parivesh_rules: 'Parivesh FC rules',
+  parivesh_portal: 'PARIVESH portal',
+  external_composite: 'land + forest composite',
+  news_research: 'web research',
+}
+
 // unknown gets its own look (dashed, grey) so it never reads as clear
 export const RISK_STATE_CHIP: Record<RiskState, string> = {
   flagged: 'bg-critical/10 text-critical ring-1 ring-inset ring-critical/25',
@@ -170,3 +187,10 @@ export const EVENT_CATEGORY: Record<string, { label: string; color: string; ink:
 export function categoryLabel(c: string | null | undefined): string {
   return c ? (EVENT_CATEGORY[c]?.label ?? c.replace(/_/g, ' ')) : 'uncategorised'
 }
+
+/** the AI second opinion's reading (llm/second_opinion.py): label and Badge variant; it never changes the tier */
+export const CONCERN = {
+  none: { label: 'No added concern', variant: 'stable' },
+  watch: { label: 'Worth watching', variant: 'warning' },
+  concern: { label: 'Concern', variant: 'critical' },
+} as const satisfies Record<OpinionConcern, { label: string; variant: keyof typeof TONE_CHIP }>

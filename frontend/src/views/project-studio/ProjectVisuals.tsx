@@ -1,28 +1,30 @@
 /**
- * The visual blocks of one project, from /api/projects/{key} and /timeline: risk ring and gauges, time vs work,
- * money, progress trend, timeline strip, risk grid, drivers and external issues. The side panel
- * (command-center/ProjectDetailDrawer) and the public project page lay them out; the public gets what the
- * redacted API sends (no drivers, no intervals), so the same blocks simply show less.
+ * The visual blocks of one project, from /api/projects/{key} and /timeline: time vs work, money, the progress trend
+ * (with the last completion-date change marked), the timeline strip, the risk grid and external issues — report
+ * facts — plus, for the developer's Model detail only, the probability gauges, the predicted window and the SHAP
+ * bars. The side panel (command-center/ProjectDetailDrawer) and the project page lay them out; a block shows a
+ * model number only when its caller passes `numbers` (canSeeNumbers), whatever the backend sent.
  */
 import React from 'react'
 import { motion } from 'motion/react'
-import { AlertTriangle, ArrowDown, ArrowUp, LandPlot, Newspaper, Trees } from 'lucide-react'
-import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts'
+import { AlertTriangle, LandPlot, Newspaper, Trees } from 'lucide-react'
+import { Line, LineChart, ReferenceDot, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from 'recharts'
 import { Tooltip, InfoTip } from '@/components/ui/Tooltip'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
-import {
-  FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, RISK_STATE_CHIP, TIER_COLOR, TIER_LABEL, TIER_TEXT, tierKey,
-} from '@/lib/riskPalette'
-import { featureLabel } from '@/lib/featureLabels'
+import { FLAG_ICON, FLAG_LABEL, RISK_DIMENSION, RISK_STATE_CHIP, tierKey } from '@/lib/riskPalette'
 import { cn, formatDate, formatINR, formatProb, orDash } from '@/lib/formatters'
 import { LIVE_QUARTERS, details, formatQuarter, fromMatch, isLive, verdict } from '@/lib/external'
-import type { Flag, HiddenDelayMatch, ProjectDetail, RiskRow, RiskState, ShapValue, Timeline } from '@/contracts/project'
+import { plainText } from '@/lib/outlook'
+import type {
+  Flag, HiddenDelayMatch, ProjectDetail, ResearchBrief, RiskRow, RiskState, Scores, Timeline,
+} from '@/contracts/project'
 
 const EASE = [0.22, 1, 0.36, 1] as const
 const GROW = { duration: 0.7, ease: EASE }
 const clamp = (v: number) => Math.min(100, Math.max(0, v))
 
-function Section({ title, info, right, className, children }: {
+/** the panel block: a rounded box with a title, an optional (i) and a right-hand note (also the research and opinion blocks) */
+export function Section({ title, info, right, className, children }: {
   title: React.ReactNode
   info?: React.ReactNode
   right?: React.ReactNode
@@ -61,9 +63,9 @@ export function ProjectChips({ detail }: { detail: ProjectDetail }) {
   )
 }
 
-// ------------------------------------------------------------------ risk ring
+// ------------------------------------------------------------------ gauges (developer)
 
-/** Half-circle gauge of one probability. */
+/** Half-circle gauge of one probability: the developer's Model detail only. */
 function Gauge({ label, value }: { label: string; value: number | null }) {
   const tone = value === null ? '' : value >= 0.5 ? 'stroke-critical' : value >= 0.2 ? 'stroke-warning' : 'stroke-accent'
   return (
@@ -81,70 +83,18 @@ function Gauge({ label, value }: { label: string; value: number | null }) {
   )
 }
 
-/** the public ring card's one line: where the tier sits in the ranking (ml/score.py TIER_TOP 5/20/50%) */
-const TIER_PLAIN: Record<string, string> = {
-  Critical: 'Among the 5% of open projects most likely to be delayed or cost more in the next six months.',
-  High: 'Among the 20% of open projects most likely to be delayed or cost more in the next six months.',
-  Medium: 'In the riskier half of open projects for a delay or cost revision in the next six months.',
-  Low: 'In the less risky half of open projects for a delay or cost revision in the next six months.',
-  Watch: 'No completion date on record, so the delay risk is not ranked.',
-}
-
-/**
- * Donut of P(date push or cost revision, 2q) in the tier colour, tier inside. full: three gauges beside it;
- * the public: one line on where the tier ranks (progress, cost and dates each have their own block, shown once).
- * The stalled badge sits in the header. Watch (no completion date): a grey-violet ring and no
- * date-based gauges.
- */
-export function RiskRingCard({ detail, full }: { detail: ProjectDetail; full: boolean }) {
-  const s = detail.scores
-  const t = tierKey(s?.tier ?? null)
-  const untiered = t === 'Watch'
-  const p = untiered ? null : (s?.pAny2q ?? null)
-    const R = 52
-  const center = !s ? 'Not scored' : untiered ? 'Watch · no completion date' : TIER_LABEL[t]
-
+/** The four probabilities as gauges (the developer's Model detail; never shown without canSeeNumbers). */
+export function GaugeRow({ scores }: { scores: Scores }) {
+  const untiered = tierKey(scores.tier) === 'Watch'
   return (
-    <Section
-      title={full ? 'Slip risk · next 2 quarters' : 'Delay risk'}
-      info={full
-        ? 'The ring is the chance of a date push or cost revision within 2 quarters, coloured by tier. Tiers go by rank; the probabilities rank projects and are not calibrated frequencies.'
-        : 'How likely the project is to be delayed or cost more in the next six months, compared with other projects.'}
-    >
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-        <div className="relative size-32 shrink-0" role="img" aria-label={`Risk: ${center}${full && p !== null ? `, ${formatProb(p)}` : ''}`}>
-          <svg viewBox="0 0 128 128" className="size-32 -rotate-90" aria-hidden="true">
-            <circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} className="stroke-surface-input" />
-            {p === null ? (
-              <circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} stroke={TIER_COLOR.Watch} strokeOpacity={0.5} />
-            ) : (
-              <motion.circle cx={64} cy={64} r={R} fill="none" strokeWidth={12} strokeLinecap="round" stroke={TIER_COLOR[t]}
-                initial={{ pathLength: 0 }} animate={{ pathLength: p }} transition={{ ...GROW, duration: 0.9 }} />
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-5 text-center">
-            <span className={cn('font-semibold leading-tight', p === null ? 'text-xs text-fg-muted' : cn('text-lg', TIER_TEXT[t]))}>
-              {center}
-            </span>
-            {full && p !== null && <span className="font-mono text-xs tabular-nums text-fg-muted">{formatProb(p)}</span>}
-          </div>
-        </div>
-
-        {full && s ? (
-          <div className="flex flex-1 flex-col gap-3">
-            <div className="flex flex-wrap justify-around gap-3">
-              {!untiered && <Gauge label="Date push · 2q" value={s.pDatePush2q} />}
-              <Gauge label="Cost revision · 2q" value={s.pCostRev2q} />
-              {!untiered && <Gauge label="Any slip · 4q" value={s.pAny4q} />}
-            </div>
-          </div>
-        ) : (
-          s && <p className="min-w-[12rem] flex-1 text-sm leading-relaxed text-fg-muted">{TIER_PLAIN[t]}</p>
-        )}
+    <Section title="Probabilities · next 2 quarters"
+      info="The model's probabilities rank projects against each other (tiers go by rank); they are not calibrated frequencies.">
+      <div className="flex flex-wrap justify-around gap-3">
+        <Gauge label="Any slip · 2q" value={untiered ? null : scores.pAny2q} />
+        <Gauge label="Date push · 2q" value={untiered ? null : scores.pDatePush2q} />
+        <Gauge label="Cost revision · 2q" value={scores.pCostRev2q} />
+        <Gauge label="Any slip · 4q" value={untiered ? null : scores.pAny4q} />
       </div>
-      {!s && detail.master?.lastStatus && (
-        <div className="mt-3 text-xs text-fg-dimmed">Not in the current portfolio · last status: {detail.master.lastStatus}</div>
-      )}
     </Section>
   )
 }
@@ -260,10 +210,29 @@ export function MoneyBar({ detail }: { detail: ProjectDetail }) {
 
 // ------------------------------------------------------------------ trend
 
-const PROGRESS = '#0b7249'
-const SPEND = '#1946b8'
+// grey by default: a coloured mark is a statement (the date push)
+const PROGRESS = 'hsl(var(--color-fg-muted))'
+const SPEND = 'hsl(var(--color-fg-dimmed))'
+const PUSH = 'hsl(var(--color-warning))'
 
-/** Physical progress and spend (as % of the anticipated cost) over the reports, no axes. */
+/** the last report that moved the anticipated completion: when, from and to (from the timeline alone) */
+function lastDateChange(timeline: Timeline | undefined) {
+  const pts = timeline?.points ?? []
+  for (let i = pts.length - 1; i > 0; i--) {
+    const a = pts[i - 1]?.anticipatedCompletion
+    const b = pts[i]?.anticipatedCompletion
+    const p = pts[i]
+    if (a && b && p && a.slice(0, 7) !== b.slice(0, 7)) {
+      return { period: p.period, from: a, to: b, later: Date.parse(b) > Date.parse(a), progress: p.physicalProgressPct }
+    }
+  }
+  return null
+}
+
+/**
+ * Physical progress and spend (as % of the anticipated cost) over the reports, no axes; the report that last moved
+ * the completion date is a marked point with its before and after.
+ */
 export function ProgressTrend({ timeline, error, height = 96 }: { timeline: Timeline | undefined; error: unknown; height?: number }) {
   const rows = (timeline?.points ?? []).map((p) => ({
     t: Date.parse(p.period),
@@ -272,6 +241,8 @@ export function ProgressTrend({ timeline, error, height = 96 }: { timeline: Time
   }))
   const first = rows[0]
   const last = rows.at(-1)
+  const change = lastDateChange(timeline)
+  const pushWord = change?.later ? 'pushed' : 'brought forward'
   const key = (color: string, label: string, dashed?: boolean) => (
     <span className="inline-flex items-center gap-1.5">
       <svg width="16" height="4" aria-hidden="true"><line x1="0" y1="2" x2="16" y2="2" stroke={color} strokeWidth="2.5" strokeDasharray={dashed ? '4 3' : undefined} /></svg>
@@ -310,8 +281,11 @@ export function ProgressTrend({ timeline, error, height = 96 }: { timeline: Time
                     ) : null
                   }
                 />
-                <Line dataKey="spent" stroke={SPEND} strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls animationDuration={700} />
-                <Line dataKey="progress" stroke={PROGRESS} strokeWidth={2.5} dot={false} connectNulls animationDuration={700} />
+                <Line dataKey="spent" stroke={SPEND} strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls isAnimationActive={false} />
+                <Line dataKey="progress" stroke={PROGRESS} strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                {change && change.progress !== null && (
+                  <ReferenceDot x={Date.parse(change.period)} y={change.progress} r={5} fill={PUSH} stroke="hsl(var(--color-surface-panel))" strokeWidth={2} />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -320,6 +294,12 @@ export function ProgressTrend({ timeline, error, height = 96 }: { timeline: Time
             <span>{rows.length} reports</span>
             <span>{formatDate(new Date(last.t).toISOString())}</span>
           </div>
+          {change && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted">
+              <span className="mt-1 size-2 shrink-0 rounded-full bg-warning" aria-hidden="true" />
+              Completion date {pushWord} from {formatDate(change.from)} to {formatDate(change.to)} in the {formatDate(change.period)} report.
+            </p>
+          )}
         </>
       )}
     </Section>
@@ -342,18 +322,18 @@ function monthsBetween(a: string, b: string): number {
 }
 
 /**
- * Sanction -> scheduled -> anticipated -> predicted completion (p50, anticipated + months p50) on one line, the
- * p05-p95 band behind it when the viewer gets intervals, and a today (asof) marker.
+ * Sanction -> scheduled -> expected completion (report facts) on one line with a today (asof) marker. numbers (the
+ * developer's Model detail): also the predicted completion (expected + months p50) and its p05-p95 band.
  */
-export function TimelineStrip({ detail, plain }: { detail: ProjectDetail; plain?: boolean }) {
-  const s = detail.scores
+export function TimelineStrip({ detail, numbers }: { detail: ProjectDetail; numbers?: boolean }) {
+  const s = numbers ? detail.scores : null
   const ant = detail.latest?.anticipatedCompletion ?? null
   const sched = detail.latest?.scheduledCompletion ?? null
   const band = [addMonths(ant, s?.monthsP05), addMonths(ant, s?.monthsP95)] as const
   const marks = [
-    { label: 'Sanctioned', date: detail.master?.sanctionDate ?? null, dot: 'bg-fg-muted' },
-    { label: 'Scheduled', date: sched, dot: 'bg-accent' },
-    { label: plain ? 'Expected' : 'Anticipated', date: ant, dot: 'bg-warning' },
+    { label: 'Sanctioned', date: detail.master?.sanctionDate ?? null, dot: 'bg-fg-dimmed' },
+    { label: 'Scheduled', date: sched, dot: 'bg-fg-muted' },
+    { label: 'Expected', date: ant, dot: 'bg-warning' },
     { label: 'Predicted', date: addMonths(ant, s?.monthsP50), dot: 'bg-critical' },
   ].filter((m): m is { label: string; date: string; dot: string } => !!m.date)
   const today = detail.provenance.asof
@@ -369,8 +349,8 @@ export function TimelineStrip({ detail, plain }: { detail: ProjectDetail; plain?
     <Section
       title="Timeline"
       info={band[0] && band[1]
-        ? 'Predicted: the anticipated completion plus the model’s median slip over the next 2 quarters; the shaded band is its 5th–95th percentile.'
-        : `Predicted: the ${plain ? 'expected' : 'anticipated'} completion plus the expected slip over the next 2 quarters.`}
+        ? 'Predicted: the expected completion plus the model’s median slip over the next 2 quarters; the shaded band is its 5th–95th percentile.'
+        : 'Scheduled: the completion date first planned. Expected: the completion date the latest report gives.'}
       right={slip !== null && slip > 0 && (
         <span className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning">+{slip} mo vs schedule</span>
       )}
@@ -411,16 +391,22 @@ const STATE_WORD: Record<RiskState, string> = { flagged: 'Flagged', clear: 'Clea
 
 /**
  * The 13 checklist dimensions as icon tiles: red flagged, green clear, dashed grey no data; hover shows the
- * evidence line. plain (the public): state only on hover, and the top risks in plain words below.
+ * evidence line (without the model's numbers unless `numbers`). plain (the public): state only on hover, and the top
+ * risks in plain words below.
  */
-export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; plain: boolean; className?: string }) {
+export function RiskGrid({ detail, plain, numbers, className }: {
+  detail: ProjectDetail
+  plain: boolean
+  numbers: boolean
+  className?: string
+}) {
   const byDim = new Map<string, RiskRow>(detail.riskProfile.map((r) => [r.dimension, r]))
   const n = (st: RiskState) => detail.riskProfile.filter((r) => r.state === st).length
 
   return (
     <Section
       className={className}
-      title={plain ? 'What could hold it up' : 'Risk checklist'}
+      title={plain ? 'What could hold it up' : 'All checks at a glance'}
       info="Each tile is one risk check on the latest reports. Grey dashed means there is no data for it, which is not the same as clear."
       right={detail.riskProfile.length > 0 && (
         <span><span className="font-semibold text-critical">{n('flagged')} flagged</span> · {n('clear')} clear · {n('unknown')} no data</span>
@@ -433,16 +419,17 @@ export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; 
           {Object.entries(RISK_DIMENSION).map(([dim, { label, short, icon: Icon }]) => {
             const r = byDim.get(dim)
             const st: RiskState = r?.state ?? 'unknown'
+            const evidence = plainText(r?.evidence, numbers)
             return (
               <Tooltip key={dim} content={
                 <div className="space-y-1">
                   <div className="font-semibold">{label} · {STATE_WORD[st]}</div>
-                  {!plain && r?.evidence && <div className="text-fg-muted">{r.evidence}</div>}
+                  {!plain && evidence && <div className="text-fg-muted">{evidence}</div>}
                   {!plain && r?.asOfDate && <div className="text-fg-dimmed">as of {formatDate(r.asOfDate)}</div>}
                 </div>
               }>
                 <button type="button" aria-label={`${label}: ${STATE_WORD[st]}`}
-                  className={cn('flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40', RISK_STATE_CHIP[st])}>
+                  className={cn('flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', RISK_STATE_CHIP[st])}>
                   <Icon className="size-5" strokeWidth={2} />
                   <span className="text-xs font-medium leading-tight">{short}</span>
                 </button>
@@ -466,36 +453,6 @@ export function RiskGrid({ detail, plain, className }: { detail: ProjectDetail; 
 }
 
 // ------------------------------------------------------------------ drivers, external
-
-/** The three largest SHAP drivers of P(slip, 2q) as bars: red raises the risk, green lowers it. */
-export function TopDrivers({ drivers }: { drivers: ShapValue[] }) {
-  const top = [...drivers].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution)).slice(0, 3)
-  const max = Math.max(...top.map((d) => Math.abs(d.contribution)), 1e-4)
-  return (
-    <Section title="What drives the score"
-      info="The three largest TreeSHAP contributions to P(slip, 2q) of the LightGBM model, in log-odds. The full page lists five with their values.">
-      {top.length === 0 ? (
-        <Empty>No drivers: the slip model does not score this project</Empty>
-      ) : (
-        <div className="space-y-3">
-          {top.map((d) => {
-            const up = d.contribution > 0
-            const Arrow = up ? ArrowUp : ArrowDown
-            return (
-              <div key={d.feature} className="space-y-1" title={`${d.feature} = ${String(d.value ?? 'missing')}`}>
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-fg-base">{featureLabel(d.feature)}</span>
-                  <Arrow className={cn('size-3.5 shrink-0', up ? 'text-critical' : 'text-stable')} aria-label={up ? 'raises risk' : 'lowers risk'} />
-                </div>
-                <Bar pct={(Math.abs(d.contribution) / max) * 100} className={up ? 'bg-critical/80' : 'bg-stable/80'} />
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </Section>
-  )
-}
 
 const OPEN_CATEGORIES: [string, Flag][] = [['land', 'land'], ['forest_env', 'forest'], ['litigation', 'litigation'], ['contractor', 'contractor']]
 
@@ -521,30 +478,31 @@ const INK = { critical: 'text-critical', warning: 'text-warning', stable: 'text-
  * The measured hidden delay of one matched prior, its n and CI behind a tip. A remark status still current at asof
  * reads as the expected hidden delay; an older one only as what projects at that status showed, in muted ink.
  */
-function DelayLine({ m }: { m: HiddenDelayMatch }) {
+function DelayLine({ m, numbers }: { m: HiddenDelayMatch; numbers: boolean }) {
   const e = fromMatch(m)
-  const v = verdict(e)
+  const v = verdict(e, numbers)
   const q = m.asOf ? formatQuarter(m.asOf) : null
   return (
     <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
       <span>{m.current ? `Expected hidden delay${q ? ` (status as of ${q})` : ''}:` : `At the last report (${q ?? 'date unknown'}), projects at that status:`}</span>
       <span className={cn('font-semibold', !m.current || v.tone === 'muted' ? 'text-fg-muted' : INK[v.tone])}>{v.text}</span>
       <InfoTip label="About the measured hidden delay">
-        <p className="font-medium">{m.label}, from the {m.basis}{q ? ` (as of ${q})` : ''}.</p>
+        <p className="font-medium">{m.label ?? 'Measured on matched projects'}{m.basis ? `, from the ${m.basis}` : ''}{q ? ` (as of ${q})` : ''}.</p>
         {!m.current && <p>That status is more than {LIVE_QUARTERS} quarters old, so it is not an expected delay for the coming year.</p>}
-        {details(e).map((line) => <p key={line}>{line}</p>)}
+        {details(e, 15, numbers).map((line) => <p key={line}>{line}</p>)}
       </InfoTip>
     </div>
   )
 }
 
 /** a two- or three-line fact chip: what the outside source says, its dates, the measured hidden delay */
-function Fact({ icon: Icon, title, tone, lines, delays }: {
+function Fact({ icon: Icon, title, tone, lines, delays, numbers }: {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   title: string
   tone: keyof typeof FACT_TONE
   lines: React.ReactNode[]
   delays: HiddenDelayMatch[]
+  numbers: boolean
 }) {
   return (
     <div className={cn('rounded-lg border px-3 py-2', FACT_TONE[tone])}>
@@ -554,7 +512,7 @@ function Fact({ icon: Icon, title, tone, lines, delays }: {
       </div>
       <div className="mt-1 space-y-0.5 pl-5">
         {lines.map((l, i) => <div key={i} className="text-xs text-fg-muted">{l}</div>)}
-        {delays.map((m) => <DelayLine key={m.group} m={m} />)}
+        {delays.map((m) => <DelayLine key={m.group} m={m} numbers={numbers} />)}
       </div>
     </div>
   )
@@ -627,12 +585,45 @@ function landFact(x: ProjectDetail['external'], asof: string) {
   return lines.length || delays.length ? { tone, lines, delays } : null
 }
 
+/** the research and news chip: cited web facts (every role), and the scout's linked news (officials) */
+function NewsChips({ research, news }: { research: ResearchBrief | null | undefined; news?: { n: number; scouted: boolean } }) {
+  if (!research && !news) return null
+  const text = [
+    research && (research.searched ? `${research.nFacts} research fact${research.nFacts === 1 ? '' : 's'}` : 'not researched yet'),
+    news && (news.scouted ? `${news.n} linked news` : 'news not searched yet'),
+  ].filter(Boolean).join(' · ')
+  const live = research?.nNegativeLive ?? 0
+  return (
+    <>
+      {live > 0 && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-critical/10 px-2.5 py-1 text-xs font-medium text-critical ring-1 ring-inset ring-critical/20"
+          title="negative web research facts, not resolved, dated within 4 quarters">
+          <Newspaper className="size-3.5" strokeWidth={2} />
+          {live} live blocker{live === 1 ? '' : 's'} in web research
+        </span>
+      )}
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
+        <Newspaper className="size-3.5" strokeWidth={2} />
+        {text.charAt(0).toUpperCase() + text.slice(1)}
+      </span>
+    </>
+  )
+}
+
 /**
  * External issues: the forest and land facts from outside the reports (PARIVESH stage and dates, the Bhoomi Rashi
  * stretch) with the remark status and the measured hidden delay, then the remark issues, live or stale (last known
- * quarter), and the linked-news count (officials). The public API sends no PARIVESH details or hidden delay.
+ * quarter), and the research and news counts: cited web facts for everyone, linked news for officials. The public
+ * API sends no PARIVESH details or hidden delay.
  */
-export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: { n: number; scouted: boolean } }) {
+export function ExternalChips({ detail, news, research, numbers = false }: {
+  detail: ProjectDetail
+  news?: { n: number; scouted: boolean }
+  /** the project's web research counts (ProjectDetail.research) */
+  research?: ResearchBrief | null
+  /** the measured hidden delay in figures (the developer); else in words */
+  numbers?: boolean
+}) {
   const x = detail.external
   const asof = detail.provenance.asof
   const open = OPEN_CATEGORIES.map(([c, f]) => {
@@ -647,10 +638,10 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
 
   return (
     <Section title="External issues"
-      info={`Forest and land facts from PARIVESH and the Bhoomi Rashi register, with the measured hidden delay for that status on real projects. Remark issues come from the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}; one not mentioned for ${LIVE_QUARTERS} quarters is stale and shows the quarter it was last known${news ? '. News: items the scout linked to this project' : ''}.`}>
+      info={`Forest and land facts from PARIVESH and the Bhoomi Rashi register, with the measured hidden delay for that status on real projects. Remark issues come from the free-text report remarks${until ? `, read up to ${formatDate(until)}` : ' (through 2023)'}; one not mentioned for ${LIVE_QUARTERS} quarters is stale and shows the quarter it was last known. Research facts: cited web sources about this project${news ? '; linked news: items the scout linked to it' : ''}.`}>
       <div className="space-y-2">
-        {forest && <Fact icon={Trees} title="Forest clearance" {...forest} />}
-        {land && <Fact icon={LandPlot} title="Land acquisition" {...land} />}
+        {forest && <Fact icon={Trees} title="Forest clearance" {...forest} numbers={numbers} />}
+        {land && <Fact icon={LandPlot} title="Land acquisition" {...land} numbers={numbers} />}
       </div>
       <div className={cn('flex flex-wrap gap-2', (forest || land) && 'mt-3')}>
         {open.map(({ f, n, live, last }) => {
@@ -671,12 +662,7 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
         {open.length === 0 && !forest && !land && (
           <span className="rounded-full bg-fg-dimmed/10 px-2.5 py-1 text-xs text-fg-muted">No open issue in the remarks</span>
         )}
-        {news && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-inset ring-accent/20">
-            <Newspaper className="size-3.5" strokeWidth={2} />
-            {news.scouted ? `${news.n} linked news` : 'News not searched yet'}
-          </span>
-        )}
+        <NewsChips research={research} news={news} />
       </div>
     </Section>
   )
@@ -686,18 +672,19 @@ export function ExternalChips({ detail, news }: { detail: ProjectDetail; news?: 
 export function VisualsSkeleton() {
   return (
     <div className="animate-pulse space-y-4" aria-busy="true" aria-label="Loading project">
-      <div className="flex items-center gap-6 rounded-xl border border-border-subtle bg-surface-panel p-4">
-        <div className="size-32 rounded-full bg-surface-input" />
-        <div className="flex flex-1 justify-around">
-          {[0, 1, 2].map((i) => <div key={i} className="h-14 w-16 rounded-lg bg-surface-input" />)}
-        </div>
+      <div className="space-y-2">
+        <div className="h-5 w-11/12 rounded bg-surface-input" />
+        <div className="h-5 w-2/3 rounded bg-surface-input" />
       </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => <div key={i} className="h-16 rounded-lg bg-surface-input/80" />)}
+      </div>
+      <div className="h-44 rounded-xl bg-surface-input/70" />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="h-28 rounded-xl bg-surface-input/70" />
         <div className="h-28 rounded-xl bg-surface-input/70" />
       </div>
       <div className="h-36 rounded-xl bg-surface-input/70" />
-      <div className="h-28 rounded-xl bg-surface-input/70" />
     </div>
   )
 }

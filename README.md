@@ -19,7 +19,7 @@ paimana-v2/
     raw/         QPISR PDFs and MoSPI CSVs, never edited; raw/inbox/ takes new reports
     silver/      cleaned observations (Parquet)
     gold/        features, labels, scores, risk profile (Parquet + JSON)
-  database/      paimana.db (SQLite app state, gitignored) and JSON for worker runs and memo drafts
+  database/      postgres/ (schema migrations and Manamrit's loaders; docs/DATABASE.md) and JSON for worker runs and memo drafts
   docs/          design notes and pitch
   temp/          scratch, gitignored
 ```
@@ -90,9 +90,11 @@ at once from "Check inbox now" on Home (IPMD Analyst). New alerts reach the top
 bar bell and the Home inbox through `/api/stream`.
 
 The backend reads `dataset/silver/` and `dataset/gold/` through DuckDB and
-reloads when a new score or profile lands. Alerts, watchlists and the audit log
-are in SQLite (`database/paimana.db`, created on first start); worker runs and
-memo drafts stay JSON in `database/`. Routes are in `backend/routes.py`.
+reloads when a new score or profile lands. Alerts, watchlists, news signals,
+research facts, second opinions, users and the audit log are in PostgreSQL
+(`.env.db` holds the credentials; the schema is migrated on first start:
+`docs/DATABASE.md`); worker runs and memo drafts stay JSON in `database/`.
+Routes are in `backend/routes.py`.
 
 Gotchas:
 
@@ -138,12 +140,12 @@ no LLM call and no cause tags.
 
 ### Live tracking
 
-The backend runs two background loops (`backend/live/scheduler.py`):
+The backend runs these background loops (`backend/live/scheduler.py`):
 
 - **Report watcher**, every `WATCH_INTERVAL_S` seconds (60). Drop a portal
   `Projects_Report.csv` export or a PAIMANA flash PDF into `dataset/raw/inbox/`,
   or upload one with `POST /api/jobs/ingest`. The watcher runs the extractor,
-  the clean merge and `pipeline.run` silver, external, gold, score and profile,
+  the clean merge and `pipeline.run` silver, external, research, gold, score and profile,
   then raises tier-change and new-project alerts and fills realised outcomes
   in `gold/prediction_log.parquet`. `train` is not part of it; retrain by hand
   each month. One portal file takes about two minutes. If a step fails, the old
@@ -153,22 +155,41 @@ The backend runs two background loops (`backend/live/scheduler.py`):
   (watchlists first, then Critical and High) and reads the PIB feed, links items
   to projects and raises `signal` alerts for severity 2 and 3 items.
   `POST /api/jobs/scout?project_key=PRJ-...` scouts one project on the spot.
+- **Research agent**, every `RESEARCH_INTERVAL_H` hours (24; the first run is
+  30 minutes after start; `RESEARCH_AGENT=0` turns it off). For up to
+  `RESEARCH_PER_RUN` projects (20; watchlists for up to half of them, then
+  Critical, High and Watch, the least recently researched first)
+  it refreshes the news, has the local LLM judge each new item from its
+  headline (relevant or not, category, direction, severity, a short summary
+  whose numbers must be in the headline), stores the relevant ones as cited
+  research facts next to the web research sweep, and pauses while a chat
+  answer is using the LLM. `POST /api/jobs/research?project_key=PRJ-...` runs
+  it for one project.
 
 `POST /api/jobs/watch` runs the watcher now. `GET /api/live/status` shows the
 last and next runs and the inbox count, and `GET /api/stream` pushes each new
 alert as a Server-Sent Event. `GET /api/signals/feed` pages the stored signals
 with the state heat and, for each linked project, the first report after the
-news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn both
-loops off; the tests do.
+news that pushed its date or revised its cost. Set `LIVE_JOBS=0` to turn every
+loop off; the tests do.
 
 ### Access by role
 
-The sign-in page picks a role: public (no sign-in needed), agency official (one
-canonical agency), ministry official (one ministry) or IPMD analyst. Every page
-and API answer is cut to that role's projects, and the public gets a simple
-project page without model internals. The role goes to the backend in
-`X-Paimana-*` headers that it trusts: a prototype, not authentication. The
-role-by-page table is in `docs/ACCESS_CONTROL.md`.
+Officials sign in with an email and a password: agency official (one canonical
+agency), ministry official (one ministry) or IPMD analyst. They request access on
+`/signup`, and an IPMD administrator approves the request. The public needs no
+sign-in. Every page and API answer is cut to the signed-in account's projects, and
+the public gets a simple project page without model internals. Sessions are
+HttpOnly cookies, every write carries a CSRF token, and sign-in failures lock an
+email. The first administrator comes from `python -m backend.auth.bootstrap`. The
+role-by-page table and the sign-in rules are in `docs/ACCESS_CONTROL.md`, and the
+API's protections in `docs/SECURITY.md` (API).
+
+## Run in production
+
+One Docker Compose stack (nginx with TLS, the api, PostgreSQL, daily backups) with LM Studio on the host:
+`sh scripts/first-run.sh` on a Linux server, `scripts\first-run.ps1 -Dev` for a laptop demo on
+https://localhost:8443. Everything about it is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Rebuilding data and the model
 
