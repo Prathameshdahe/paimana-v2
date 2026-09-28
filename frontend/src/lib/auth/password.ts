@@ -1,12 +1,15 @@
 /**
  * src/lib/auth/password.ts
  *
- * The password policy as the backend enforces it (backend/auth: at least 12 characters, not a common password, not
- * containing the email's local part), checked here first so a form says what is wrong before it is sent, and a
+ * The password policy as the backend enforces it (backend/auth/passwords.py: at least 12 characters not counting
+ * whitespace at either end, at most 256, at least 5 different characters, not a common password, not containing the
+ * email's local part), checked here first so a form says what is wrong before it is sent, and a
  * strength score by rules: length and the mix of character classes. No library, and no dictionary beyond a short
  * list of the commonest passwords; the backend's list is the one that holds.
  */
 export const MIN_LENGTH = 12
+export const MAX_LENGTH = 256
+export const MIN_DISTINCT = 5
 
 const COMMON = new Set([
   'password', 'password1', 'password12', 'password123', 'password1234', 'passw0rd', 'p@ssw0rd', 'password@123',
@@ -39,9 +42,13 @@ function localPart(email: string | undefined): string | null {
 
 export function checkPassword(password: string, email?: string): PasswordCheck {
   const problems: string[] = []
-  const n = password.length
+  // counted in characters (code points) without the whitespace at either end, as the backend counts them
+  const core = [...password.trim()]
+  const n = core.length
   const lower = password.toLowerCase()
   if (n < MIN_LENGTH) problems.push(`At least ${MIN_LENGTH} characters${n ? ` (${n} so far)` : ''}`)
+  if ([...password].length > MAX_LENGTH) problems.push(`At most ${MAX_LENGTH} characters`)
+  if (n && new Set(core).size < MIN_DISTINCT) problems.push(`At least ${MIN_DISTINCT} different characters`)
   if (COMMON.has(lower) || COMMON.has(lower.replace(/[^a-z0-9]/g, ''))) problems.push('Not a common password')
   const local = localPart(email)
   if (local && lower.includes(local)) problems.push('Not containing the name part of your email')
@@ -61,5 +68,6 @@ export function checkPassword(password: string, email?: string): PasswordCheck {
 
 /** the policy in one line, shown under the password box */
 export const POLICY_TEXT =
-  `At least ${MIN_LENGTH} characters; not a common password and not the name part of your email. ` +
+  `At least ${MIN_LENGTH} characters and ${MIN_DISTINCT} different ones; not a common password and not the name ` +
+  'part of your email. ' +
   'Longer and mixed (letters, digits, symbols) is stronger.'
