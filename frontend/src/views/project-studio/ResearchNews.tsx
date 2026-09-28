@@ -152,7 +152,8 @@ function Body({ data, panel }: { data: ProjectResearch; panel: boolean }) {
 export function ResearchNews({ projectKey, variant }: { projectKey: string | null; variant: 'panel' | 'page' }) {
   const { data, error } = useResearch(projectKey)
   const panel = variant === 'panel'
-  const right = data ? (researchedOn(data) ?? 'Not researched yet') : null
+  // the date sits in the header when there are facts; the empty states say it in their own sentence
+  const right = data && data.facts.length > 0 ? researchedOn(data) : null
 
   let body: ReactNode
   if (error) {
