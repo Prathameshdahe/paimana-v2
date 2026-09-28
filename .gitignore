@@ -47,9 +47,13 @@ mlruns/
 dataset/silver/typed_rows.parquet
 dataset/silver/identity/resolved_rows.parquet
 
-# app state (SQLite), created on backend start
+# the SQLite app state of earlier versions (python -m backend.db.migrate_sqlite copies it into PostgreSQL once)
 database/*.db
 database/*.db-journal
+
+# PostgreSQL backups (scripts/backup) and the TLS certificates of the compose stack
+backups/
+deploy/certs/
 
 # report inbox: files wait here for the live watcher (backend/live/watcher.py)
 dataset/raw/inbox/*
