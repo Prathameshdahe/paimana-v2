@@ -90,11 +90,28 @@ def test_chat_stream_yields_deltas_until_done(monkeypatch):
     assert body["stream"] is True and body["max_tokens"] == 20
 
 
-def test_chat_stream_ends_without_done_and_is_lazy(monkeypatch):
-    seen = fake(monkeypatch, lambda r: httpx.Response(200, content=sse(delta("a"), delta("b"))))
+def test_chat_stream_is_lazy_and_needs_an_end(monkeypatch):
+    stop = json.dumps({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+    seen = fake(monkeypatch, lambda r: httpx.Response(200, content=sse(delta("a"), delta("b"), stop)))
     gen = client.chat_stream([{"role": "user", "content": "x"}])
     assert seen == []  # nothing is sent before the first next()
-    assert "".join(gen) == "ab"
+    assert "".join(gen) == "ab"  # a finish_reason ends it without [DONE]
+    # a stream that just stops (no [DONE], no finish_reason) is a cut-off answer, not a whole one
+    fake(monkeypatch, lambda r: httpx.Response(200, content=sse(delta("a"), delta("b"))))
+    gen = client.chat_stream([{"role": "user", "content": "x"}])
+    assert next(gen) == "a" and next(gen) == "b"
+    with pytest.raises(client.LLMConnectionError, match="before \\[DONE\\]"):
+        next(gen)
+
+
+def test_chat_stream_keeps_unicode_line_separators(monkeypatch):
+    # JSON may carry U+2028, U+2029 and U+0085 raw inside a string; only CR and LF end an event line. The body
+    # arrives in 3-byte pieces, so the multi-byte characters are split between pieces too.
+    text = "Land acquisition is \u0085pending ₹"
+    event = json.dumps({"choices": [{"index": 0, "delta": {"content": text}}]}, ensure_ascii=False)
+    raw = f"data: {event}\r\n\r\ndata: [DONE]\r\n\r\n".encode()
+    fake(monkeypatch, lambda r: httpx.Response(200, content=iter([raw[i:i + 3] for i in range(0, len(raw), 3)])))
+    assert list(client.chat_stream([{"role": "user", "content": "x"}])) == [text]
 
 
 def test_chat_stream_errors(monkeypatch):
@@ -114,12 +131,37 @@ def test_chat_stream_errors(monkeypatch):
     with pytest.raises(client.LLMConnectionError, match="crashed"):
         next(gen)
 
+    for bad in ('{"choices": ["x"]}', '{"choices": [{"delta": "x"}]}', '{"choices": {"delta": {}}}'):
+        fake(monkeypatch, lambda r, bad=bad: httpx.Response(200, content=sse(delta("a"), bad, "[DONE]")))
+        gen = client.chat_stream([{"role": "user", "content": "x"}])
+        assert next(gen) == "a"
+        with pytest.raises(client.LLMConnectionError, match="not a chat completion chunk"):
+            next(gen)
 
-def test_chat_stream_close_early_is_quiet(monkeypatch):
-    fake(monkeypatch, lambda r: httpx.Response(200, content=sse(*[delta(str(i)) for i in range(50)], "[DONE]")))
+
+class Events(httpx.SyncByteStream):
+    """A server-sent-event body that counts what it sent and knows when the client closed it."""
+
+    def __init__(self, events):
+        self.events, self.sent, self.closed = events, 0, False
+
+    def __iter__(self):
+        for e in self.events:
+            self.sent += 1
+            yield e
+
+    def close(self):
+        self.closed = True
+
+
+def test_chat_stream_close_early_closes_the_connection(monkeypatch):
+    body = Events([sse(delta(str(i))) for i in range(50)] + [sse("[DONE]")])
+    fake(monkeypatch, lambda r: httpx.Response(200, stream=body))
     gen = client.chat_stream([{"role": "user", "content": "x"}])
     assert [next(gen), next(gen)] == ["0", "1"]
-    gen.close()  # the viewer pressed stop
+    assert not body.closed
+    gen.close()  # the viewer pressed stop: the response is closed, so LM Studio stops generating
+    assert body.closed and body.sent < 10
 
 
 # ------------------------------------------------------------------ embeddings

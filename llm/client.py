@@ -177,17 +177,40 @@ def _sse_data(line: str) -> str | None:
     return line[5:].strip()
 
 
+_LINE_END = re.compile(r"\r\n|\r|\n")
+
+
+def _lines(parts: Iterator[str]) -> Iterator[str]:
+    """The lines of a decoded text stream, split at CR, LF or CRLF only (the server-sent-events line ends). httpx's
+    iter_lines() uses str.splitlines(), which also splits at U+2028, U+2029, U+0085 and a few control characters,
+    and JSON may carry those raw inside a string: the delta would be cut in two and lost."""
+    buf = ""
+    for part in parts:
+        buf += part
+        *lines, buf = _LINE_END.split(buf)
+        yield from lines
+    if buf:
+        yield buf
+
+
+def _not_a_chunk(data: str) -> LLMConnectionError:
+    return LLMConnectionError(f"LM Studio sent a stream event that is not a chat completion chunk: {data[:300]}")
+
+
 def chat_stream(messages: list[dict], *, max_tokens: int = 400, temperature: float = 0.2,
                 model: str | None = None) -> Iterator[str]:
-    """chat() streamed: yields the content deltas until 'data: [DONE]' or the end of the stream. LLMConnectionError on
-    an HTTP error (raised at the first next()), a dropped connection or an error event."""
+    """chat() streamed: yields the content deltas until 'data: [DONE]' (or the end of the stream after a choice with
+    a finish_reason). LLMConnectionError on an HTTP error (raised at the first next()), a dropped connection, an
+    error event, an event that is not a completion chunk, or a stream that ends before [DONE] and any finish_reason
+    (a truncated answer must not pass as a whole one)."""
     try:
         with _http() as c, c.stream("POST", "/chat/completions",
                                     json=_body(messages, max_tokens, temperature, model, stream=True)) as resp:
             if resp.is_error:
                 resp.read()
                 resp.raise_for_status()
-            for line in resp.iter_lines():
+            finished = False
+            for line in _lines(resp.iter_text()):
                 data = _sse_data(line)
                 if not data:
                     continue
@@ -201,10 +224,19 @@ def chat_stream(messages: list[dict], *, max_tokens: int = 400, temperature: flo
                     continue
                 if chunk.get("error"):
                     raise LLMConnectionError(f"LM Studio stream error: {str(chunk['error'])[:300]}")
-                for choice in chunk.get("choices") or []:
-                    text = (choice.get("delta") or {}).get("content")
-                    if text:
+                choices = chunk.get("choices") or []
+                if not isinstance(choices, list):
+                    raise _not_a_chunk(data)
+                for choice in choices:
+                    delta = (choice.get("delta") or {}) if isinstance(choice, dict) else None
+                    if not isinstance(delta, dict):
+                        raise _not_a_chunk(data)
+                    text = delta.get("content")
+                    if text and isinstance(text, str):
                         yield text
+                    finished = finished or bool(choice.get("finish_reason"))
+            if not finished:
+                raise LLMConnectionError("LM Studio stream ended before [DONE]: the answer may be cut off")
     except httpx.HTTPError as e:
         raise _unreachable(e) from e
 
