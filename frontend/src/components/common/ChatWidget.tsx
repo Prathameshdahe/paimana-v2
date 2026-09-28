@@ -137,7 +137,12 @@ function starters(role: Role | null, portfolio: Portfolio | undefined, open: { t
 export function ChatWidget() {
   const { role } = useRole()
   const scope = useScopeKey()
-  return can(role, 'canChat') ? <Chat key={scope} /> : null
+  // an error in the chat itself (not one answer or card, which have their own) takes the chat away, not the app
+  return can(role, 'canChat') ? (
+    <ErrorBoundary key={scope} fallback={null}>
+      <Chat />
+    </ErrorBoundary>
+  ) : null
 }
 
 function Chat() {

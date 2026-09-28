@@ -82,14 +82,37 @@ export function createSSEParser() {
   }
 }
 
-/** a parsed message -> a typed chat event, or null for an unknown name or data that is not JSON */
+type Fields = Record<string, unknown>
+
+/**
+ * The fields each event must carry for the chat to fold it into an answer: an event without them is dropped here,
+ * since the fold runs in the chat's state update, above any per-answer error boundary.
+ */
+const SHAPE: Record<ChatEventName, (d: Fields) => boolean> = {
+  status: (d) => typeof d.stage === 'string',
+  tool: (d) => typeof d.id === 'string' || typeof d.id === 'number',
+  card: (d) => typeof d.type === 'string' && (d.type !== 'sources' || Array.isArray(d.items)),
+  token: (d) => typeof d.text === 'string',
+  retry: (d) => Array.isArray(d.reasons),
+  done: (d) => typeof d.text === 'string',
+  error: (d) => typeof d.message === 'string',
+}
+
+/**
+ * a parsed message -> a typed chat event, or null for an unknown name, data that is not JSON or not an object
+ * (`data: null`), or an object without the fields its event needs
+ */
 export function toChatEvent(m: SSEMessage): ChatEvent | null {
   if (!EVENTS.has(m.event)) return null
+  let data: unknown
   try {
-    return { event: m.event, data: JSON.parse(m.data) } as ChatEvent
+    data = JSON.parse(m.data)
   } catch {
     return null
   }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return null
+  if (!SHAPE[m.event as ChatEventName](data as Fields)) return null
+  return { event: m.event, data } as ChatEvent
 }
 
 /** the turns to send: earlier turns (text only, cut to MAX_CHARS) then the question, the last MAX_TURNS */
