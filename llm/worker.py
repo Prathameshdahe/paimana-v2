@@ -17,7 +17,7 @@ from backend.schemas import (
     ScoutOutput,
 )
 
-from .client import LLM_MODEL, call_llm
+from .client import LLM_MODEL, call_llm, gate
 
 TOP_N = 10  # Scout only runs on the top-priority projects
 SCOUT_EVIDENCE = 10  # report events and news signals given to the scout, each
@@ -181,14 +181,15 @@ def run_worker_cycle() -> dict:
     processed = 0
 
     for project_row in top:
-        issues, _confidence, _query = auditor(project_row)
-        if issues:
-            alerts_raised += 1
+        with gate():  # one generation at a time on the local model; chat answers go first
+            issues, _confidence, _query = auditor(project_row)
+            if issues:
+                alerts_raised += 1
 
-        fc = forecaster(project_row["project_key"])
-        sc, signals = scout(project_row)
-        an = analyst(fc, sc)
-        draft = dispatcher(an, project_row)
+            fc = forecaster(project_row["project_key"])
+            sc, signals = scout(project_row)
+            an = analyst(fc, sc)
+            draft = dispatcher(an, project_row)
         draft.evidence = [
             EvidenceItem(tag=t.category, source_url=None, note=t.source_note) for t in sc.tags
         ] + [EvidenceItem(tag=s["category"] or "news", source_url=s["url"], note=s["title"]) for s in signals[:5]]

@@ -165,6 +165,19 @@ def test_brief_is_503_quickly_when_the_llm_is_down(client, top_key, monkeypatch)
     brief._down_at = -brief.DOWN_S                     # forget the outage for the next tests
 
 
+def test_brief_waits_for_the_llm_gate_and_says_busy(client, top_key, monkeypatch):
+    other = client.get("/api/projects", params={"size": 1, "page": 3}).json()["items"][0]["key"]
+    calls = []
+    monkeypatch.setattr(llm_client, "complete", lambda system, user: calls.append(user) or "x")
+    monkeypatch.setattr(brief, "BUSY_WAIT_S", 0.2)
+    assert llm_client.LLM_GATE.acquire(timeout=1)       # a chat answer is generating
+    try:
+        r = client.get(f"/api/projects/{other}/brief")
+    finally:
+        llm_client.LLM_GATE.release()
+    assert r.status_code == 503 and "busy" in r.json()["detail"] and calls == []
+
+
 def test_brief_accepts_caches_and_rejects(client, top_key, monkeypatch):
     facts = brief.payload(top_key)
     p = facts["prediction"]

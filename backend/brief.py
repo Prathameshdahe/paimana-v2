@@ -26,6 +26,7 @@ from llm import client
 from . import db, serving
 
 DOWN_S = 30
+BUSY_WAIT_S = 120  # a chat answer takes about a minute at most on the laptop
 _down_at = -DOWN_S  # time.monotonic() of the last unreachable LM Studio
 
 _MONTH = (r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?"
@@ -208,12 +209,16 @@ def generate(key: str) -> dict:
         return {"status": "llm_unavailable", "detail": f"LM Studio was unreachable in the last {DOWN_S} s"}
     reasons, attempts = [], 0
     try:
-        for attempt in range(2):
-            attempts = attempt + 1
-            text = _ask(facts, re.findall(r"'([^']*)'", " ".join(reasons)) if attempt else None)
-            ok, reasons, n = validate(text, facts)
-            if ok:
-                break
+        # one generation at a time on the local model (llm/client.py LLM_GATE); chat answers go first
+        with client.gate(BUSY_WAIT_S) as free:
+            if not free:
+                return {"status": "llm_unavailable", "detail": f"the local LLM stayed busy for {BUSY_WAIT_S} s"}
+            for attempt in range(2):
+                attempts = attempt + 1
+                text = _ask(facts, re.findall(r"'([^']*)'", " ".join(reasons)) if attempt else None)
+                ok, reasons, n = validate(text, facts)
+                if ok:
+                    break
     except client.LLMConnectionError as e:
         _down_at = time.monotonic()
         return {"status": "llm_unavailable", "detail": str(e)[:300]}

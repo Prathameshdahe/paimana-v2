@@ -14,8 +14,8 @@ with prose around it; a reply cut off by max_tokens raises instead of returning 
 The local model generates one answer at a time (about 4 tokens/s on a laptop), so a generation should go through
 LLM_GATE: the caller wraps one call, or the calls of one task, in `with gate(wait_s) as ok:` and does not call when ok
 is False (the wait timed out). The gate is not re-entrant, and chat(), chat_stream() and complete() never take it
-themselves; backend/brief.py and llm/worker.py do not take it yet (to wrap when the chat is integrated), so until
-then a brief can generate alongside a chat answer. A chat request passes chat=True: chat_active() is True while one
+themselves; the chat, the brief (backend/brief.py), the worker cell (llm/worker.py), the research agent and the
+second opinion each take it around their generations. A chat request passes chat=True: chat_active() is True while one
 holds or waits for the gate. A background take (chat=False) first waits while a chat request is active (at most its
 wait_s, or CHAT_YIELD_S when it waits without limit), because a semaphore lets the thread that just released it take
 it again before a woken waiter runs; background jobs also check chat_active() between items and pause
