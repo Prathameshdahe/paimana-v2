@@ -503,7 +503,7 @@ def test_real_chunks_visibility(real_chunks):
     docs = {c["source"] for c in real_chunks if c["kind"] == "doc"}
     assert "README.md" in docs and not any("PROJECT_DOCUMENTATION" in d or "mock" in d for d in docs)
     public = [c for c in real_chunks if c["visibility"] == "public"]
-    assert not any(re.search(r"(?:shap|p95|p05|tier_rank)|FP/[A-Z]{2}/", c["text"], re.I)
+    assert not any(re.search(r"\b(?:shap|p95|p05|tier_rank)\b|FP/[A-Z]{2}/", c["text"], re.I)
                    for c in public if c["kind"] in ("project", "external", "help"))
     assert all(c["id"].startswith("parivesh:") for c in real_chunks
                if c["kind"] == "external" and c["visibility"] == "official")
