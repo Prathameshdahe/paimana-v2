@@ -4,7 +4,7 @@
 !.env.example
 !.env.production.example
 
-# production stack (docs/DEPLOYMENT.md): database dumps and TLS certificates stay on the host
+# production stack: database dumps and TLS certificates stay on the host
 backups/
 deploy/certs/*
 !deploy/certs/README.md
@@ -36,26 +36,38 @@ Thumbs.db
 # large data: shared via the team drive, not git
 Dataset drive folder/
 dataset.zip
-# the demo images for an offline machine (scripts/demo-save.*)
 paimana-demo-images.tar*
 dataset/clean/_parts/
-dataset/clean/performance/performance_detail.csv
-dataset/clean/projects/project_summaries.csv
-dataset/clean/projects/projects_monthly.csv
-dataset/clean/projects/projects_quarterly.csv
 mlruns/
 
-# Silver reproducible outputs (run pipeline.run silver to regenerate)
+# Silver reproducible outputs (python -m pipeline.run silver)
 dataset/silver/typed_rows.parquet
 dataset/silver/identity/resolved_rows.parquet
 
-# the SQLite app state of earlier versions (python -m backend.db.migrate_sqlite copies it into PostgreSQL once)
+# the SQLite app state of earlier versions
 database/*.db
 database/*.db-journal
 
-# report inbox: files wait here for the live watcher (backend/live/watcher.py)
+# report inbox: files wait here for the live watcher
 dataset/raw/inbox/*
 !dataset/raw/inbox/README.md
 
-# the assistant's search index (python -m llm.rag build; rebuilt by the backend when its inputs change)
+# the assistant's search index (rebuilt by the backend when inputs change)
 dataset/rag/
+
+# ── SIH: data and docs kept local, not on GitHub ─────────────────────────────
+
+# All clean dataset CSVs and gold/silver outputs (reproduced by running the pipeline)
+dataset/clean/
+dataset/gold/
+dataset/silver/
+
+# Model run artifacts (reproduced by ml/train.py) — not shared
+model/runs/
+model/experiments/
+model/*.json
+
+# Docs — kept local for team reference, not visible on GitHub
+# README.md is NOT listed here so it stays on GitHub
+docs/*.md
+docs/screenshots/
