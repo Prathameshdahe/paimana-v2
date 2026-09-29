@@ -6,7 +6,9 @@ Run from repo root after the gold build:  python -m pipeline.run train
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet
 Outputs  model/runs/<run_id>/: windows.json, backtest_folds.csv, backtest_summary.csv (b table), ablation.csv
-         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators), intervals.csv
+         (c table), calibration.csv, shap_summary.csv, platt.json (the served calibrators), intervals.csv,
+         slices.csv (the error analysis by sector, cost band, project age, data freshness, progress printed,
+         pre-event cohort, on schedule, report type)
 
 Windows come from coverage, never from fixed years: a quarter is reliable for a target when the fields its label
 compares are >= 80% complete, and a cutoff c is usable when c and c + h are both reliable and c has labelled rows.
@@ -24,7 +26,10 @@ used to take 2025-07 and 2025-10 as validation folds too, so the two blocks shar
 evidence). For the 2-quarter targets flash includes the test cutoff, so there the test fold is no longer independent
 of promotion. Every pooled row also reports the
 not-yet-due slice (nyd_*): rows whose anticipated completion falls after the outcome quarter t + h, the projects an
-early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon).
+early warning is for (the top 50 of a fold is otherwise almost all projects already due inside the horizon), and the
+pre-event cohort (pre_*, backtest.pre_event): rows whose project has shown no cost or date step-up so far, where the
+easy "revised before, revises again" rows are absent. Prevalence (base_rate, n_pos) stands next to every PR-AUC, per
+fold in backtest_folds.csv and per block in backtest_summary.csv, and pr_auc_fold_sd is the fold-to-fold spread.
 
 A target in TRAIN_FROM trains on rows from that date only (none today). A target in CALIBRATED gets a Platt
 calibrator fitted per cutoff on the model's own predictions at the PLATT_FOLDS cutoffs whose labels are realised by
@@ -56,7 +61,9 @@ GOLD = ROOT / "dataset" / "gold"
 SILVER = ROOT / "dataset" / "silver"
 RUNS = ROOT / "model" / "runs"
 
-TARGETS = [("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2), ("y_any", 4)]   # first is the primary target
+# first is the primary target (the tiers rank it); y_any at 1, 2, 4 and 6 quarters are the runway horizons
+# (3, 6, 12 and 18 months): one model per horizon here, and ml/survival.py gives the same four from one hazard model
+TARGETS = [("y_any", 2), ("y_date_push", 2), ("y_cost_rev", 2), ("y_any", 4), ("y_any", 1), ("y_any", 6)]
 # y_any_h2 has its own model: 1 - (1 - p_date)(1 - p_cost) from the date and cost models (which train on more rows)
 # lost 0.020 validation PR-AUC [-0.027, -0.013], and its mean with the direct model 0.009 [-0.013, -0.004]
 NEEDS = {"y_date_push": ["anticipated_completion"], "y_cost_rev": ["anticipated_cost_cr"],
@@ -75,12 +82,24 @@ TRAIN_FROM = {}
 # ECE but doubled flash-block ECE (0.061 -> 0.135, 0.065 -> 0.125) and lowered flash PR-AUC (-0.004, -0.007):
 # calibrators fitted on quarterly-report folds pull scores down where the flash-era slip rate is higher. y_any_h4 got worse on
 # validation (its folds are 4-7 quarters old).
-CALIBRATED = {("y_cost_rev", 2)}
+# target -> calibration method, "platt" or "isotonic" (isotonic_fit: monotone step function fitted on the same
+# out-of-fold predictions; measured against Platt and raw by python -m ml.experiment k1_isotonic, kept only where
+# ECE falls on both blocks without a ranking loss beyond the block's margin)
+CALIBRATION = {("y_cost_rev", 2): "platt"}
+CALIBRATED = set(CALIBRATION)
 PLATT_FOLDS = 4
 PLATT_FILE = "platt.json"
 KS = (50, 100)
 ECE_BINS = 10
 PK = ["project_key", "period"]
+# the error analysis (slices.csv): the scored rows' columns it reads, when the frame has them
+SLICE_COLS = ["sector", "cost_band", "elapsed_ratio", "months_since_last_obs", "physical_progress_pct",
+              "revisions_so_far", "slip_to_date_months", "cost_variation_pct", "period_type"]
+COST_BAND_NAMES = {0: "under 500 cr", 1: "500-1000 cr", 2: "1000-5000 cr", 3: "over 5000 cr"}
+AGE_BINS, AGE_NAMES = [-np.inf, 0.5, 1.0, 1.5, np.inf], ["under half of schedule", "half to due", "due to 1.5x",
+                                                          "over 1.5x schedule"]
+FRESH_BINS, FRESH_NAMES = [-np.inf, 3, 6, np.inf], ["current (3 months)", "4-6 months", "over 6 months"]
+UNKNOWN = "unknown"
 LGB_PARAMS = dict(objective="binary", n_estimators=300, learning_rate=0.05, num_leaves=15, min_child_samples=50,
                   subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0, random_state=0,
                   n_jobs=8, verbose=-1)
@@ -134,9 +153,11 @@ def qindex(s):
     return s.dt.year * 4 + (s.dt.month - 1) // 3
 
 
-def load():
+def load(horizons=None):
+    """Gold features, the labels of the TARGETS horizons (or of horizons), coverage and the gold manifest."""
     feats = pd.read_parquet(GOLD / "features.parquet")
-    labels = {h: pd.read_parquet(GOLD / f"labels_h{h}.parquet") for h in sorted({h for _, h in TARGETS})}
+    hs = sorted(set(horizons) if horizons is not None else {h for _, h in TARGETS})
+    labels = {h: pd.read_parquet(GOLD / f"labels_h{h}.parquet") for h in hs}
     manifest = json.loads((GOLD / "manifest.json").read_text(encoding="utf-8"))
     return feats, labels, pd.read_parquet(SILVER / "coverage.parquet"), manifest
 
@@ -171,9 +192,12 @@ def windows(coverage, d, y, h):
     ok = (n.to_numpy() >= MIN_ROWS) & nq.isin(rel).to_numpy() & (nq + h).isin(rel).to_numpy()
     usable = list(n.index[ok])
     test, rest = usable[-N_TEST:], usable[:-N_TEST]
-    last = qindex([rest[-1]])[0]
+    # validation never takes a flash-era cutoff (disjoint from flash), so its block is the newest reliable block
+    # with a usable cutoff before FLASH_FROM: for the 1-quarter target the newest block is flash-era only
+    before = [c for c in rest if c < FLASH_FROM]
+    last = qindex([before[-1]])[0]
     block = next(b for b in blocks(rel) if b[0] <= last <= b[1])
-    val = [c for c in rest if qindex([c])[0] >= block[0] and c < FLASH_FROM][-N_VAL:]   # disjoint from flash
+    val = [c for c in before if qindex([c])[0] >= block[0]][-N_VAL:]
     flash = [c for c in n.index if c >= FLASH_FROM and n[c] >= MIN_ROWS]
     iso = lambda p: pd.Timestamp(p).date().isoformat()
     return {
@@ -337,6 +361,49 @@ def not_yet_due(d):
     return (d.months_to_anticipated_completion > h_months).to_numpy()
 
 
+def pre_event(d):
+    """The pre-event cohort: rows with no cost or date step-up observed in the project's reported history up to t
+    (revisions_so_far == 0), the projects a first warning is for. The full population includes projects that have
+    already revised, where "revised before, revises again" is easy and lifts PR-AUC; the pre_* metrics score the
+    same predictions on this cohort alone, and the headline number is theirs. A project may still have entered the
+    panel behind its original schedule (the on_schedule slice of slices.csv is the stricter cut). Without the
+    column no row is in the cohort."""
+    if "revisions_so_far" not in d:
+        return np.zeros(len(d), bool)
+    return d.revisions_so_far.eq(0).fillna(False).to_numpy(bool)
+
+
+def binned(s, bins, names):
+    """s cut at bins with names, nulls as UNKNOWN."""
+    return pd.cut(s, bins, labels=names).astype(object).where(s.notna(), UNKNOWN)
+
+
+def slice_labels(d):
+    """dimension -> a label per row of d for the error analysis, from the SLICE_COLS d has (a missing column gives
+    no dimension): sector, cost band, project age (elapsed share of the original schedule), data freshness (months
+    since the last observation), whether physical progress is printed, the pre-event cohort, on schedule and cost
+    (no slip to date and no cost growth against the original), and the report type."""
+    out = {}
+    if "sector" in d:
+        out["sector"] = d.sector.astype(object).where(d.sector.notna(), UNKNOWN)
+    if "cost_band" in d:
+        out["cost_band"] = d.cost_band.map(COST_BAND_NAMES).astype(object).where(d.cost_band.notna(), UNKNOWN)
+    if "elapsed_ratio" in d:
+        out["age"] = binned(d.elapsed_ratio, AGE_BINS, AGE_NAMES)
+    if "months_since_last_obs" in d:
+        out["freshness"] = binned(d.months_since_last_obs.astype("float64"), FRESH_BINS, FRESH_NAMES)
+    if "physical_progress_pct" in d:
+        out["progress_reported"] = np.where(d.physical_progress_pct.notna(), "yes", "no")
+    if "revisions_so_far" in d:
+        out["pre_event"] = np.where(pre_event(d), "no revision yet", "revised before")
+    if "slip_to_date_months" in d and "cost_variation_pct" in d:
+        ok = d.slip_to_date_months.le(0).fillna(False) & d.cost_variation_pct.le(0).fillna(False)
+        out["on_schedule"] = np.where(ok, "on schedule and cost", "behind or over")
+    if "period_type" in d:
+        out["report"] = d.period_type.astype(object).where(d.period_type.notna(), UNKNOWN)
+    return pd.DataFrame({k: np.asarray(v, dtype=object) for k, v in out.items()}, index=d.index)
+
+
 def logit(p):
     p = np.clip(np.asarray(p, float), 1e-6, 1 - 1e-6)
     return np.log(p / (1 - p))
@@ -352,10 +419,31 @@ def platt_fit(y, p):
     return {"a": float(m.coef_[0, 0]), "b": float(m.intercept_[0]), "n": int(len(y)), "n_pos": int(y.sum())}
 
 
+def isotonic_fit(y, p):
+    """Isotonic regression p -> calibrated probability fitted on (y, p), stored as its breakpoints (x, y; applied by
+    linear interpolation, clipped outside), or None below MIN_ROWS rows or with one class. Monotone, so ranks
+    within a fold are unchanged up to the ties it creates (a flat step maps a range of scores to one value)."""
+    from sklearn.isotonic import IsotonicRegression
+    y = np.asarray(y, int)
+    if len(y) < MIN_ROWS or y.min() == y.max():
+        return None
+    m = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(np.asarray(p, float), y)
+    return {"x": [float(v) for v in m.X_thresholds_], "y": [float(v) for v in m.y_thresholds_], "n": int(len(y)),
+            "n_pos": int(y.sum())}
+
+
 def platt_apply(cal, p):
-    """Scores p through a platt_fit result (None or no "a": unchanged)."""
+    """Scores p through a calibrator: a platt_fit result ("a", "b"), an isotonic_fit result ("x", "y"), or None /
+    neither (unchanged)."""
     p = np.asarray(p, float)
-    return p if not cal or "a" not in cal else 1 / (1 + np.exp(-(cal["a"] * logit(p) + cal["b"])))
+    if cal and "a" in cal:
+        return 1 / (1 + np.exp(-(cal["a"] * logit(p) + cal["b"])))
+    if cal and "x" in cal:
+        return np.interp(p, cal["x"], cal["y"])
+    return p
+
+
+FITS = {"platt": platt_fit, "isotonic": isotonic_fit}
 
 
 def calibration_folds(c, h, k=PLATT_FOLDS):
@@ -363,13 +451,14 @@ def calibration_folds(c, h, k=PLATT_FOLDS):
     return [pd.Timestamp(c) - pd.DateOffset(months=3 * (h + j)) for j in range(k)]
 
 
-def calibrate(preds, pool, h):
-    """Each (cutoff, model) of preds through a Platt fit on the same model's pool predictions at the cutoff's
-    calibration folds, whose labels are realised by the cutoff (no leakage). Ranks within a fold are unchanged."""
+def calibrate(preds, pool, h, method="platt"):
+    """Each (cutoff, model) of preds through a calibrator (FITS[method]) fitted on the same model's pool predictions
+    at the cutoff's calibration folds, whose labels are realised by the cutoff (no leakage). Ranks within a fold are
+    unchanged (Platt), or unchanged up to ties (isotonic)."""
     out = []
     for (c, name), g in preds.groupby(["cutoff", "model"], sort=False):
         src = pool[(pool.model == name) & pool.cutoff.isin(calibration_folds(c, h))]
-        out.append(g.assign(p=platt_apply(platt_fit(src.y, src.p), g.p)))
+        out.append(g.assign(p=platt_apply(FITS[method](src.y, src.p), g.p)))
     return pd.concat(out).loc[preds.index]
 
 
@@ -386,12 +475,14 @@ def backtest(d, y, cutoffs, models):
     preds, folds, fitted = [], [], {}
     for c in cutoffs:
         tr, te = d[d.target_period <= c], d[d.period == c]
+        slices_of = {f"slice_{k}": v.to_numpy() for k, v in slice_labels(te).items()}
         for name, (fn, cols, cats) in models.items():
             m, predict = fn(tr, cols, cats, y)
             p = predict(te)
             fitted[c, name] = m
             preds.append(pd.DataFrame({"cutoff": c, "model": name, "project_key": te.project_key.to_numpy(),
-                                       "y": te[y].to_numpy(), "p": p, "not_yet_due": not_yet_due(te)}))
+                                       "y": te[y].to_numpy(), "p": p, "not_yet_due": not_yet_due(te),
+                                       "pre_event": pre_event(te), **slices_of}))
             folds.append({"cutoff": c, "model": name, "n_train": len(tr), "max_train_target": tr.target_period.max(),
                           **score(te[y], p)})
     return pd.concat(preds, ignore_index=True), pd.DataFrame(folds), fitted
@@ -413,20 +504,30 @@ def lead_times(preds, h, k=100):
     return out
 
 
+def fold_mean_pr_auc(d):
+    """Mean of each cutoff's own PR-AUC over the cutoffs of d that have both classes (NaN when none has)."""
+    aps = [average_precision_score(g.y, g.p) for _, g in d.groupby("cutoff") if 0 < g.y.mean() < 1]
+    return float(np.mean(aps)) if aps else np.nan
+
+
 def slice_metrics(d, prefix="nyd_"):
-    """PR-AUC and precision@50 (each fold's own top 50) of the rows of one model's predictions d."""
+    """Pooled and within-cutoff PR-AUC, base rate and precision@50 (each fold's own top 50) of the rows of one
+    model's predictions d (a slice of a block)."""
     both = len(d) and 0 < d.y.mean() < 1
     folds = [(g.y.to_numpy(float), g.p.to_numpy(float)) for _, g in d.groupby("cutoff")]
     slots = sum(min(50, len(y)) for y, _ in folds)
-    return {f"{prefix}n": len(d), f"{prefix}base_rate": float(d.y.mean()) if len(d) else np.nan,
+    return {f"{prefix}n": len(d), f"{prefix}n_pos": int(d.y.sum()) if len(d) else 0,
+            f"{prefix}base_rate": float(d.y.mean()) if len(d) else np.nan,
             f"{prefix}pr_auc": float(average_precision_score(d.y, d.p)) if both else np.nan,
+            f"{prefix}pr_auc_fold_mean": fold_mean_pr_auc(d) if both else np.nan,
             f"{prefix}precision_50": sum(topk(y, p, 50) for y, p in folds) / slots if slots else np.nan}
 
 
 def pooled(preds, folds, h):
     """Pooled metrics per model: PR-AUC, ROC-AUC, Brier and ECE on all fold rows together; Recall@k and
-    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k; nyd_* the
-    same on the not-yet-due slice."""
+    precision@50 as total top-k hits over total positives (or slots), so each fold keeps its own top-k; the
+    within-cutoff PR-AUC (pr_auc_fold_mean, the promotion metric) with its fold-to-fold SD; nyd_* the same on the
+    not-yet-due slice and pre_* on the pre-event cohort (pre_event), the headline population."""
     lead = lead_times(preds, h)
     rows = []
     for name, d in preds.groupby("model", sort=False):
@@ -436,8 +537,35 @@ def pooled(preds, folds, h):
             r[f"hits_{k}"] = f[f"hits_{k}"].sum()
             r[f"recall_{k}"] = r[f"hits_{k}"] / max(f.n_pos.sum(), 1)
         r["precision_50"] = r["hits_50"] / np.minimum(50, f.n).sum()
+        pre = d[d.pre_event.astype(bool)] if "pre_event" in d else d.iloc[:0]
         rows.append({"model": name, "n_folds": len(f), **r, "pr_auc_fold_mean": f.pr_auc.mean(),
-                     "lead_time_q": lead[name], **slice_metrics(d[d.not_yet_due.astype(bool)])})
+                     "pr_auc_fold_sd": float(f.pr_auc.std(ddof=1)) if len(f) > 1 else np.nan,
+                     "lead_time_q": lead[name], **slice_metrics(d[d.not_yet_due.astype(bool)]),
+                     **slice_metrics(pre, "pre_")})
+    return pd.DataFrame(rows)
+
+
+def slices(preds, k=50):
+    """Error analysis of one block's predictions: per model, dimension (the slice_* columns of preds, see
+    slice_labels) and value, the slice's rows, positives, base rate, pooled and within-cutoff PR-AUC, ROC-AUC,
+    Brier and ECE, its share of the block's rows (row_share) and of each fold's top-k flags (topk_share), and
+    lift = topk_share / row_share: where the flags go against where the projects are."""
+    dims = [c for c in preds.columns if c.startswith("slice_")]
+    rows = []
+    for name, d in preds.groupby("model", sort=False):
+        d = d.sort_values(["cutoff", "p", "project_key"], ascending=[True, False, True])
+        top = (d.groupby("cutoff").cumcount() < k).to_numpy()
+        for c in dims:
+            for v, g in d.groupby(c, sort=True):
+                both = 0 < g.y.mean() < 1
+                s = score(g.y, g.p)
+                share = len(g) / len(d)
+                flags = float(top[d[c].eq(v).to_numpy()].sum() / top.sum()) if top.any() else np.nan
+                rows.append({"model": name, "dimension": c.removeprefix("slice_"), "value": v, "n": len(g),
+                             "n_pos": s["n_pos"], "base_rate": s["base_rate"], "pr_auc": s["pr_auc"],
+                             "pr_auc_fold_mean": fold_mean_pr_auc(g) if both else np.nan, "roc_auc": s["roc_auc"],
+                             "brier": s["brier"], "ece": s["ece"], "row_share": share, f"top{k}_share": flags,
+                             "lift": flags / share if share else np.nan})
     return pd.DataFrame(rows)
 
 
@@ -470,6 +598,7 @@ def run(run_dir, extra=None):
     cols = step_cols["lightgbm"]
     assert cols == model_cols(groups)
     wins, all_folds, summary, abl, calib, shap, frames, fold_metrics, platt = {}, [], [], [], [], [], {}, {}, {}
+    slc = []
     latest = feats.period.max()
     for y, h in TARGETS:
         key = f"{y}_h{h}"
@@ -488,19 +617,20 @@ def run(run_dir, extra=None):
         if len(flash):
             splits["flash"] = backtest(d, y, flash, models)[:2]
         method = "none"
-        if (y, h) in CALIBRATED:
-            method = f"platt_k{PLATT_FOLDS}"
+        if (y, h) in CALIBRATION:
+            way = CALIBRATION[y, h]
+            method = f"{way}_k{PLATT_FOLDS}"
             done = {c for p, _ in splits.values() for c in p.cutoff}
             want = {c for x in [*done, latest] for c in calibration_folds(x, h)}
             more = sorted(c for c in want - done if (d.period == c).any())
             pool = pd.concat([p for p, _ in splits.values()] + ([backtest(d, y, more, models)[0]] if more else []))
             pool = pool.drop_duplicates(["cutoff", "model", "project_key"])    # test and flash can share cutoffs
             for split, (p, f) in splits.items():
-                cp = calibrate(p, pool, h)
+                cp = calibrate(p, pool, h, way)
                 splits[split] = (cp, rescore(cp, f))
             # the serving calibrator: the folds realised by the latest period
             now = pool[pool.cutoff.isin(calibration_folds(latest, h))]
-            platt[key] = {name: {**(platt_fit(g.y, g.p) or {}),
+            platt[key] = {name: {**(FITS[way](g.y, g.p) or {}), "method": way,
                                  "fit_cutoffs": sorted(str(c.date()) for c in g.cutoff.unique())}
                           for name, g in now.groupby("model")}
         for split, (p, f) in splits.items():
@@ -508,6 +638,7 @@ def run(run_dir, extra=None):
             all_folds.append(f)
             s = pooled(p, f, h).assign(target=y, horizon=h, split=split, calibration=method)
             summary.append(s)
+            slc.append(slices(p).assign(target=y, horizon=h, split=split))
             for name in names:
                 fold_metrics[key, split, name] = {"pooled": s[s.model == name].iloc[0].drop(
                     ["target", "horizon", "split", "model"]).to_dict(), "folds": f[f.model == name].to_dict("records")}
@@ -558,13 +689,17 @@ def run(run_dir, extra=None):
     abl = abl[lead + ["step", "groups", "n_features", "model"] +
               [c for c in abl.columns if c not in lead + ["step", "groups", "n_features", "model", "split"]]]
     calib = pd.concat(calib, ignore_index=True)[lead + ["model", "bin", "n", "mean_pred", "obs_rate"]]
+    slc = pd.concat(slc, ignore_index=True)
+    slc = slc[lead + ["split"] + [c for c in slc.columns if c not in lead + ["split"]]]
     folds.to_csv(run_dir / "backtest_folds.csv", index=False)
     summary.to_csv(run_dir / "backtest_summary.csv", index=False)
+    slc.to_csv(run_dir / "slices.csv", index=False)
     ivals.to_csv(run_dir / "intervals.csv", index=False)
     abl.to_csv(run_dir / "ablation.csv", index=False)
     calib.to_csv(run_dir / "calibration.csv", index=False)
     pd.concat(shap, ignore_index=True).to_csv(run_dir / "shap_summary.csv", index=False)
-    (run_dir / PLATT_FILE).write_text(json.dumps({"asof": str(latest.date()), "method": f"platt_k{PLATT_FOLDS}",
+    (run_dir / PLATT_FILE).write_text(json.dumps({"asof": str(latest.date()), "folds": PLATT_FOLDS,
+                                                  "method": {f"{y}_h{h}": m for (y, h), m in CALIBRATION.items()},
                                                   **platt}, indent=2), encoding="utf-8")
     (run_dir / "windows.json").write_text(json.dumps({
         "rule": WINDOW_RULE,
@@ -572,7 +707,7 @@ def run(run_dir, extra=None):
         indent=2), encoding="utf-8")
     return {"windows": wins, "frames": frames, "features": cols, "groups": groups, "categorical": cats,
             "metrics": fold_metrics, "summary": summary, "ablation": abl, "manifest": manifest, "platt": platt,
-            "intervals": ivals}
+            "intervals": ivals, "slices": slc}
 
 
 def main(run_id=None, extra=None):

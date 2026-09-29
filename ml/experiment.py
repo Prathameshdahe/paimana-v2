@@ -6,7 +6,8 @@ Run from repo root after the gold build:  python -m ml.experiment <candidate> [-
                                           python -m ml.experiment --list | --table
                                           python -m ml.experiment --seed-sd [--champion-run RUN]
                                           python -m ml.experiment --tune y_any_h2 [--trials 20] [--no-es]
-                                          python -m ml.experiment g_intervals | g2_intervals_asym
+                                          python -m ml.experiment g_intervals | g2_intervals_asym | k1_isotonic |
+                                                                  h1_hurdle          (SPECIAL: no ranking target)
 
 Inputs   gold/features.parquet, gold/labels_h{2,4}.parquet, gold/manifest.json, silver/coverage.parquet,
          silver/observations.parquet (candidates that build features), model/registry.json (the champions)
@@ -58,7 +59,7 @@ import pandas as pd
 from sklearn.metrics import average_precision_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ml import backtest as bt, registry  # noqa: E402
+from ml import backtest as bt, registry, survival  # noqa: E402
 from pipeline import gold  # noqa: E402
 from pipeline.silver import months  # noqa: E402
 
@@ -321,6 +322,39 @@ def bagged(n):
     return make
 
 
+# (m) monotone constraints: the features whose effect on the risk is known to go one way. LightGBM's constraints
+# hold per tree, so the model cannot learn a fold-specific reversal; the plan's "stabler, more explainable, small
+# accuracy cost". implied gap is not a gold feature (its stand-in, a_feasibility's projected_overrun_months, was
+# measured and left out), so the constrained set is prior revisions, stall count, slip to date and cost growth.
+MONOTONE = {"revisions_so_far": 1, "stagnation_quarters": 1, "slip_to_date_months": 1, "cost_variation_pct": 1}
+
+
+def monotone(constraints=MONOTONE):
+    """(m) LightGBM with monotone_constraints on the constrained columns present in the feature list."""
+    def make(seed, ctx, y, h, params):
+        def fit(tr, cols, cats, yy):
+            mc = [constraints.get(c, 0) for c in cols]
+            return lgbm({**params, "monotone_constraints": mc, "monotone_constraints_method": "advanced"})(
+                tr, cols, cats, yy)
+        return fit
+    return make
+
+
+_HAZARDS = {}
+
+
+def survival_fit(seed, ctx, y, h, params):
+    """(s) The discrete-time survival model (ml/survival.py): one hazard LightGBM over person-periods (t, k) with
+    the champion's features plus k, P(event by h) from the cumulative hazard. Its person-periods are realised at
+    t + k (t + k' for a filled zero), and each fold's model trains on those realised by the fold's cutoff, the
+    same information as the champion's label rows. Fitted models are shared across the y_any horizons of one
+    run (the same cutoff gives every horizon)."""
+    key = (y, seed, id(ctx.feats))
+    if key not in _HAZARDS:
+        _HAZARDS[key] = survival.Hazard(ctx.feats, survival.labels(), y)
+    return _HAZARDS[key].fit(h, params)
+
+
 def cross_target(mode):
     """(f) y_any from the date and cost models trained on their own (larger) label sets, both cut at the fold's
     newest training outcome quarter: 'or' = 1 - (1 - p_date)(1 - p_cost), 'avg' = the mean of that and the direct
@@ -496,6 +530,123 @@ def intervals(name="g_intervals", asym=False, out=OUT):
     return t
 
 
+def calibration_methods(name="k1_isotonic", seed=0, out=OUT, targets=None):
+    """(k) Calibration of every target's champion, raw against Platt and isotonic, each fitted per cutoff on the
+    champion's own out-of-fold predictions at the cutoff's calibration folds (backtest.calibration_folds, realised
+    by the cutoff) and applied to the validation and flash blocks: ECE, Brier, within-cutoff and pooled PR-AUC per
+    block. A method passes for a target when its ECE is below raw's on both blocks and its within-cutoff PR-AUC is
+    not below raw's by more than the block's noise margin (isotonic creates ties). Writes
+    model/experiments/<name>.csv."""
+    t0 = time.time()
+    feats, labels, cov, man = bt.load()
+    reg = registry.load()
+    rows = []
+    for y, h in bt.TARGETS:
+        key = f"{y}_h{h}"
+        if targets and key not in targets:
+            continue
+        cols, cats, params, entry_id = champion(reg, key, man)
+        d = bt.frame(feats, labels[h], y, h)
+        blocks, cutoffs = block_cutoffs(cov, d, y, h)
+        need = sorted({c for cs in blocks.values() for x in cs for c in [x, *bt.calibration_folds(x, h)]
+                       if (d.period == c).any()})
+        pool = champion_predictions(man, key, d, y, pd.DatetimeIndex(need), cols, cats,
+                                    {**params, "random_state": seed}).assign(model="m")
+        margins = registry.margins(key)
+        res = {}
+        for b, cs in blocks.items():
+            raw = pool[pool.cutoff.isin(cs)]
+            for method in ("raw", *bt.FITS):
+                p = raw if method == "raw" else bt.calibrate(raw, pool, h, method)
+                m = block_metrics(p, h)
+                res[b, method] = {"candidate": name, "target": key, "block": b, "method": method,
+                                  "champion_entry": entry_id, "n_folds": len(cs), "n_rows": len(p),
+                                  "n_calibration_folds": bt.PLATT_FOLDS, "margin": margins.get(b, 0.0),
+                                  "ece": m.ece, "brier": m.brier, "fold_pr_auc": m[registry.GAIN], "pr_auc": m.pr_auc,
+                                  "precision_50": m.precision_50, "mean_p": float(p.p.mean()),
+                                  "base_rate": m.base_rate}
+        for method in bt.FITS:
+            ok = all(res[b, method]["ece"] < res[b, "raw"]["ece"]
+                     and res[b, method]["fold_pr_auc"] >= res[b, "raw"]["fold_pr_auc"] - margins.get(b, 0.0)
+                     for b in blocks)
+            for b in blocks:
+                res[b, method]["decision"] = "pass" if ok else "fail"
+        for b in blocks:
+            res[b, "raw"]["decision"] = "-"
+        rows += list(res.values())
+        print(f"  {key}: " + "  ".join(f"{b} {m} ECE {r['ece']:.4f} PR-AUC {r['fold_pr_auc']:.4f}"
+                                       for (b, m), r in res.items()) + f"  {time.time() - t0:.0f}s", flush=True)
+    t = pd.DataFrame(rows).assign(runtime_s=round(time.time() - t0, 1))
+    out.mkdir(parents=True, exist_ok=True)
+    t.to_csv(out / f"{name}.csv", index=False)
+    print(f"calibration: {out / f'{name}.csv'}, {time.time() - t0:.0f}s")
+    return t
+
+
+def hurdle(name="h1_hurdle", seed=0, out=OUT):
+    """(h) Point forecasts of the magnitudes (months pushed and cost change % by t + 2q) on the validation and flash
+    cutoffs of their binary counterparts: the served p50 quantile against a two-stage hurdle, P(step) x the
+    conditional magnitude (a LightGBM classifier of y >= the label's step, times expm1 of a LightGBM regressor of
+    log1p(y) fitted on the stepped rows only), and the floors zero and the training mean. MAE, RMSE, bias, and the
+    MAE on the stepped and the unstepped rows. The hurdle passes for a target when its MAE is below p50's on both
+    blocks. Writes model/experiments/<name>.csv."""
+    t0 = time.time()
+    feats, labels, cov, man = bt.load()
+    reg = registry.load()
+    steps = {"y_months": float(gold.DATE_STEP), "y_cost_pct": (gold.COST_STEP - 1) * 100}
+    rows = []
+    for qn, (y, like) in bt.QUANTILE_TARGETS.items():
+        cols, cats, params, entry_id = champion(reg, f"{like}_h2", man)
+        params = {**params, "random_state": seed}
+        d = bt.qframe(feats, labels[2], y)
+        w = bt.windows(cov, bt.frame(feats, labels[2], like, 2), like, 2)
+        step, res = steps[y], {}
+        for b, key in BLOCKS.items():
+            cs = pd.to_datetime(w[key])
+            if not len(cs):
+                continue
+            parts = []
+            for c in cs:
+                tr, te = d[d.target_period <= c], d[d.period == c]
+                pos = (tr[y] >= step).to_numpy()
+                q50 = bt.fit_quantiles(tr, y, cols, cats)(te)[:, 1]
+                p_step = lgbm(params)(tr.assign(_step=pos.astype(int)), cols, cats, "_step")[1](te)
+                rg = lgb.LGBMRegressor(**{k: v for k, v in params.items() if k != "half_life_q"}).fit(
+                    bt.lgb_X(tr[pos], cols, cats), np.log1p(tr.loc[pos, y].clip(lower=0)))
+                mag = np.expm1(rg.predict(bt.lgb_X(te, cols, cats)))
+                parts.append(pd.DataFrame({"cutoff": c, "y": te[y].to_numpy(float), "p50": q50,
+                                           "hurdle": p_step * mag, "zero": 0.0, "train_mean": float(tr[y].mean()),
+                                           "p_step": p_step}))
+            p = pd.concat(parts, ignore_index=True)
+            stepped = (p.y >= step).to_numpy()
+            for method in ("p50", "hurdle", "zero", "train_mean"):
+                e = (p.y - p[method]).to_numpy()
+                res[b, method] = {"candidate": name, "target": qn, "label": y, "block": b, "method": method,
+                                  "champion_entry": entry_id, "n_folds": len(cs), "n": len(p), "step": step,
+                                  "share_stepped": float(stepped.mean()), "mae": float(np.abs(e).mean()),
+                                  "rmse": float(np.sqrt((e ** 2).mean())), "bias": float(e.mean()),
+                                  "mae_stepped": float(np.abs(e[stepped]).mean()) if stepped.any() else np.nan,
+                                  "mae_unstepped": float(np.abs(e[~stepped]).mean()) if (~stepped).any() else np.nan,
+                                  "mean_forecast": float(p[method].mean()), "mean_y": float(p.y.mean())}
+        blocks_here = {b for b, _ in res}
+        ok = all(res[b, "hurdle"]["mae"] < res[b, "p50"]["mae"] for b in blocks_here)
+        for (b, m), r in res.items():
+            r["decision"] = ("pass" if ok else "fail") if m == "hurdle" else "-"
+            rows.append(r)
+        print(f"  {qn}: " + "  ".join(f"{b} {m} MAE {r['mae']:.3f} (stepped {r['mae_stepped']:.2f})"
+                                      for (b, m), r in res.items() if m in ("p50", "hurdle"))
+              + f"  {time.time() - t0:.0f}s", flush=True)
+    t = pd.DataFrame(rows).assign(runtime_s=round(time.time() - t0, 1))
+    out.mkdir(parents=True, exist_ok=True)
+    t.to_csv(out / f"{name}.csv", index=False)
+    print(f"hurdle: {out / f'{name}.csv'}, {time.time() - t0:.0f}s")
+    return t
+
+
+SPECIAL = {"g_intervals": lambda: intervals("g_intervals"), "g2_intervals_asym": lambda: intervals(
+    "g2_intervals_asym", asym=True), "k1_isotonic": calibration_methods, "h1_hurdle": hurdle}
+
+
 CANDIDATES = {
     "null": Candidate("the champion against itself (harness sanity: every delta is 0)"),
     "a_feasibility": Candidate("deadline feasibility: required vs recent pace, projected overrun, deadline in "
@@ -527,6 +678,11 @@ CANDIDATES = {
     "f1_any_or": Candidate("y_any_h2 = 1 - (1 - p_date)(1 - p_cost)", fit=cross_target("or"), targets=("y_any_h2",)),
     "f2_any_avg": Candidate("y_any_h2 = mean(direct, 1 - (1 - p_date)(1 - p_cost))", fit=cross_target("avg"),
                             targets=("y_any_h2",)),
+    # the September 2026 evaluation round (docs/MODEL_EVALUATION_2026-09.md)
+    "m1_monotone": Candidate("monotone constraints on prior revisions, stall count, slip to date and cost growth",
+                             fit=monotone()),
+    "s1_survival": Candidate("discrete-time survival: one hazard LightGBM over (t, k) person-periods, P(event by h) "
+                             "from the cumulative hazard", fit=survival_fit),
 }
 
 
@@ -619,8 +775,12 @@ def seed_sd(seeds=SD_SEEDS, champion_run=None, out=OUT, targets=None):
                                        for r in rows if r["target"] == key) + f"  {time.time() - t0:.0f}s", flush=True)
     t = pd.DataFrame(rows)
     out.mkdir(parents=True, exist_ok=True)
-    t.to_csv(out / "seed_sd.csv", index=False)
-    print(f"seed_sd: {out / 'seed_sd.csv'}, {time.time() - t0:.0f}s")
+    path = out / "seed_sd.csv"
+    if path.exists():           # a run on some targets replaces their rows and keeps the other targets'
+        old = pd.read_csv(path)
+        t = pd.concat([old[~old.target.isin(t.target)], t], ignore_index=True)
+    t.to_csv(path, index=False)
+    print(f"seed_sd: {path}, {time.time() - t0:.0f}s")
     return t
 
 
@@ -717,7 +877,9 @@ def run(name, cand=None, seeds=SEEDS, targets=None, n_boot=BOOT, out=OUT, use_ca
                       "delta_pr_auc": float(np.mean(deltas["pr_auc"])), "pooled_ci_lo": plo, "pooled_ci_hi": phi,
                       "pooled_seed_deltas": "/".join(f"{x:+.4f}" for x in deltas["pr_auc"]),
                       "champion_pooled_seed_sd": sd(ma, "pr_auc"),
-                      **{f"{who}_{k}": mean(ms, k) for k in ["ece", "precision_50", "nyd_pr_auc", "brier", "roc_auc"]
+                      **{f"{who}_{k}": mean(ms, k) for k in ["ece", "precision_50", "nyd_pr_auc", "brier", "roc_auc",
+                                                             "pre_pr_auc_fold_mean", "pre_pr_auc", "pre_n",
+                                                             "pre_base_rate"]
                          for who, ms in (("champion", ma), ("challenger", mc))}}
         gains = {b: r["delta_fold_pr_auc"] for b, r in res.items()}
         ok, why = registry.rule(gains, margins, res["val"]["challenger_ece"], res["val"]["champion_ece"])
@@ -764,11 +926,14 @@ def summary_table(out=OUT, names=None):
             continue
         fm = f"{mine[0][3].margin:.4f}" if mine[0][3] is not None else "-"
         lines += [f"**{key}** (noise margin: validation {mine[0][2].margin:.4f}, flash {fm})", "",
-                  "| Candidate | Val PR-AUC | Flash PR-AUC | Flash P@50 | Val ECE | Val delta [95% CI] | "
-                  "Flash delta [95% CI] | Val folds up | Pooled delta val / flash | Rule | Ship |",
-                  "|---|---|---|---|---|---|---|---|---|---|---|"]
+                  "| Candidate | Val PR-AUC | Val pre-event PR-AUC | Flash PR-AUC | Flash P@50 | Val ECE | "
+                  "Val delta [95% CI] | Flash delta [95% CI] | Val folds up | Pooled delta val / flash | Rule | Ship |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        pre = lambda r: (arrow(r.champion_pre_pr_auc_fold_mean, r.challenger_pre_pr_auc_fold_mean)
+                         if "champion_pre_pr_auc_fold_mean" in r and pd.notna(r.champion_pre_pr_auc_fold_mean)
+                         else "-")
         for _, name, v, f, keep in mine:
-            lines.append(f"| {name} | {arrow(v.champion_fold_pr_auc, v.challenger_fold_pr_auc)} | "
+            lines.append(f"| {name} | {arrow(v.champion_fold_pr_auc, v.challenger_fold_pr_auc)} | {pre(v)} | "
                          + (f"{arrow(f.champion_fold_pr_auc, f.challenger_fold_pr_auc)} | "
                             f"{arrow(f.champion_precision_50, f.challenger_precision_50, 3)} | " if f is not None
                             else "- | - | ")
@@ -799,10 +964,14 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.tune:
         tune(a.tune, a.trials, es=not a.no_es)
-    elif a.candidate in ("g_intervals", "g2_intervals_asym"):
-        intervals(a.candidate, asym=a.candidate == "g2_intervals_asym")
+    elif a.candidate == "k1_isotonic":
+        calibration_methods(targets=a.targets.split(",") if a.targets else None)
+    elif a.candidate in SPECIAL:
+        SPECIAL[a.candidate]()
     elif a.list:
         print("\n".join(f"{n:24s} {c.about}" for n, c in CANDIDATES.items()))
+        print("\n".join(f"{n:24s} (no ranking target: {f.__doc__.strip().splitlines()[0] if f.__doc__ else n})"
+                        for n, f in SPECIAL.items()))
     elif a.table:
         print(summary_table())
     elif a.seed_sd:

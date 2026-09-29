@@ -223,7 +223,7 @@ Rows without an observation at t+h are unlabelled and excluded.
 
 ```
 gold/
-  features.parquet          labels_h2.parquet        labels_h4.parquet
+  features.parquet          labels_h1.parquet .. labels_h6.parquet   (one per quarter ahead to 18 months)
   sector_scurve.parquet     agency_stats.parquet
   predictions_<model_version>_<asof>.parquet
   manifest.json             gold_version, silver_version, cutoffs, row counts, feature list

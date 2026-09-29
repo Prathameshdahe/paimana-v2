@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PARAKH · Logo</title>
+<link rel="icon" href="svg/parakh-favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  The PARAKH logo kit. Open this file in a browser (it needs parakh-logo.js and svg/ next to it).
+  Everything here comes from brand/build_brand.py and frontend/src/components/brand/parakh.css.
+-->
+<style>
+  :root {
+    --navy: #0e1e3a;
+    --ink: #1d2330;
+    --muted: #5b6474;
+    --line: #dcd6ce;
+    --sand: #eeeae5;
+    --chalk: #faf8f5;
+    --night: #151b28;
+    --night-2: #1d2433;
+    --cyan: #1597cc;
+    --stable: #0e9f6e;
+    --watch: #f08a24;
+    --critical: #d92d3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--sand);
+    color: var(--ink);
+    font: 15px/1.55 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+  .word { font-weight: 700; letter-spacing: 0.18em; font-size: 20px; line-height: 1.1; }
+  .tag { font-size: 11px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+       margin: 44px 0 14px; }
+  p { margin: 0 0 10px; max-width: 68ch; }
+  code, pre { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; }
+
+  .stage { display: grid; grid-template-columns: 1fr 1fr; border-radius: 16px; overflow: hidden;
+           border: 1px solid var(--line); }
+  .stage > div { display: grid; place-items: center; padding: 40px 20px; min-height: 340px; }
+  .stage .dark { background: var(--night); }
+  .stage .light { background: var(--chalk); }
+  parakh-logo { cursor: pointer; }
+
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+  .seg { display: inline-flex; padding: 3px; gap: 3px; background: var(--chalk); border: 1px solid var(--line);
+         border-radius: 999px; }
+  .seg button, .btn { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--ink);
+         padding: 6px 14px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .seg button[aria-pressed='true'] { background: var(--ink); color: #fff; }
+  .seg button:focus-visible, .btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .btn { border: 1px solid var(--line); background: var(--chalk); }
+  .note { font-size: 13px; color: var(--muted); }
+
+  .layers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+  .layer { background: var(--chalk); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .layer b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .layer span { font-size: 13.5px; color: var(--muted); }
+
+  .sizes { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 28px; background: var(--chalk);
+           border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  .sizes figure { margin: 0; display: grid; justify-items: center; gap: 8px; }
+  figcaption { font-size: 12px; color: var(--muted); }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .strip { border-radius: 12px; padding: 12px 12px 0; display: flex; gap: 6px; }
+  .strip.l { background: #dee1e6; }
+  .strip.d { background: #202124; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px 10px 0 0;
+         font-size: 12.5px; min-width: 0; }
+  .strip.l .tab { color: #1f1f1f; }
+  .strip.l .tab.on { background: #fff; }
+  .strip.d .tab { color: #e3e3e3; }
+  .strip.d .tab.on { background: #35363a; }
+  .tab img { width: 16px; height: 16px; }
+  .icons { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; margin-top: 14px; }
+  .icons img { display: block; }
+
+  .lockups { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .lockups div { border-radius: 12px; border: 1px solid var(--line); display: grid; place-items: center; padding: 26px; }
+  .lockups .d { background: var(--night); border-color: var(--night); }
+  .lockups .l { background: var(--chalk); }
+  .lockups img { max-width: 100%; height: auto; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--chalk); border: 1px solid var(--line);
+          border-radius: 12px; overflow: hidden; }
+  td { padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  tr:first-child td { border-top: 0; }
+  td:first-child { white-space: nowrap; }
+  pre { background: var(--night-2); color: #dfe7f3; padding: 16px 18px; border-radius: 12px; overflow-x: auto;
+        margin: 0 0 12px; line-height: 1.6; }
+
+  @media (max-width: 760px) {
+    .stage, .tabs, .lockups, .layers { grid-template-columns: 1fr; }
+    .stage > div { min-height: 260px; }
+    td { display: block; }
+    td:first-child { white-space: normal; overflow-wrap: anywhere; padding-bottom: 0; }
+    td + td { border-top: 0; padding-top: 2px; }
+    .strip { overflow: hidden; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <parakh-logo size="44" status="watch"></parakh-logo>
+    <div>
+      <div class="word">PARAKH</div>
+      <div class="tag">Infrastructure Intelligence</div>
+    </div>
+  </header>
+
+  <p>The animated mark in three layers: the lens scans, the network carries a pulse from the pads up to the beacon,
+    and the beacon lifts and rings out. Its colour and pace follow the state. Click a logo, or pick a state.</p>
+
+  <section class="stage" aria-label="The animated mark on dark and light">
+    <div class="dark"><parakh-logo id="hero-dark" size="220" tone="dark" status="watch" intro></parakh-logo></div>
+    <div class="light"><parakh-logo id="hero-light" size="220" tone="light" status="watch" intro></parakh-logo></div>
+  </section>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="State">
+      <button type="button" data-status="stable" aria-pressed="false"><span class="dot" style="background:var(--stable)"></span>Stable</button>
+      <button type="button" data-status="watch" aria-pressed="true"><span class="dot" style="background:var(--watch)"></span>Watch</button>
+      <button type="button" data-status="critical" aria-pressed="false"><span class="dot" style="background:var(--critical)"></span>Critical</button>
+    </div>
+    <button type="button" class="btn" id="replay">Replay intro</button>
+    <button type="button" class="btn" id="motion" aria-pressed="true">Motion on</button>
+    <span class="note">A reduced-motion setting on this device shows the still mark.</span>
+  </div>
+
+  <div class="layers">
+    <div class="layer"><b>A · Lens</b><span>Octagon frame, eye and iris. One short light runs round the frame every
+      nine seconds; with the intro, the lens draws itself first.</span></div>
+    <div class="layer"><b>B · Network</b><span>Three traces leave pads on the iris rim and meet at a hub. A pulse
+      travels each one; the pads flash as it leaves and the hub as the pulses meet.</span></div>
+    <div class="layer"><b>C · Beacon</b><span>The chevrons lift in turn, glow and send out a ring. Stable: green,
+      every 4.8 s. Watch: amber, 3.2 s. Critical: red, 1.6 s, a double ring and red pulses.</span></div>
+  </div>
+
+  <h2>Sizes</h2>
+  <div class="sizes">
+    <figure><parakh-logo size="128" status="watch"></parakh-logo><figcaption>128</figcaption></figure>
+    <figure><parakh-logo size="72" status="watch"></parakh-logo><figcaption>72</figcaption></figure>
+    <figure><parakh-logo size="48" status="watch"></parakh-logo><figcaption>48</figcaption></figure>
+    <figure><parakh-logo size="30" status="watch"></parakh-logo><figcaption>30 · top bar</figcaption></figure>
+    <figure><parakh-logo size="128" status="watch" animated="false" data-fixed></parakh-logo><figcaption>still</figcaption></figure>
+  </div>
+
+  <h2>Favicon</h2>
+  <p>At tab size the full mark blurs, so the favicon keeps the octagon, the eye, a pupil and one chevron. In the
+    dashboard its chevron turns red while an unseen severe alert is waiting.</p>
+  <div class="tabs">
+    <div class="strip l"><div class="tab on"><img src="svg/parakh-favicon.svg" alt="">PARAKH · Early warning</div>
+      <div class="tab"><img src="svg/parakh-favicon-alert.svg" alt="">PARAKH · new alert</div></div>
+    <div class="strip d"><div class="tab on"><img src="svg/parakh-favicon.svg" alt="">PARAKH · Early warning</div>
+      <div class="tab"><img src="svg/parakh-favicon-alert.svg" alt="">PARAKH · new alert</div></div>
+  </div>
+  <div class="icons">
+    <img src="svg/parakh-favicon.svg" width="16" height="16" alt="favicon at 16 px">
+    <img src="svg/parakh-favicon.svg" width="32" height="32" alt="favicon at 32 px">
+    <img src="svg/parakh-favicon.svg" width="48" height="48" alt="favicon at 48 px">
+    <img src="png/parakh-app-icon-512.png" width="96" height="96" alt="app icon" style="border-radius:22px">
+  </div>
+
+  <h2>Lockups</h2>
+  <div class="lockups">
+    <div class="l"><img src="svg/parakh-lockup-horizontal.svg" width="472" height="128" alt="PARAKH horizontal lockup"></div>
+    <div class="d"><img src="svg/parakh-lockup-horizontal-dark.svg" width="472" height="128" alt="PARAKH horizontal lockup, dark"></div>
+    <div class="l"><img src="svg/parakh-lockup-stacked.svg" width="270" height="186" alt="PARAKH stacked lockup"></div>
+    <div class="d"><img src="svg/parakh-lockup-stacked-dark.svg" width="270" height="186" alt="PARAKH stacked lockup, dark"></div>
+  </div>
+
+  <h2>Use it</h2>
+  <p>Any page, no framework:</p>
+<pre>&lt;script src="parakh-logo.js"&gt;&lt;/script&gt;
+&lt;parakh-logo size="96" status="watch" tone="light"&gt;&lt;/parakh-logo&gt;
+
+// from your data: stable | watch | critical
+document.querySelector('parakh-logo').status = 'critical'</pre>
+  <p>In the dashboard (React), the same mark with the beacon driven by the alerts:</p>
+<pre>import { ParakhMark } from '@/components/brand/ParakhMark'
+
+&lt;ParakhMark size={30} status={beacon.status} /&gt;          // top bar, lib/useBeaconStatus.ts
+&lt;ParakhMark size={52} tone="dark" intro /&gt;             // sign-in panel</pre>
+  <p>Anywhere an image goes (slides, documents, a README): the animated SVG plays inside a plain image tag.</p>
+<pre>&lt;img src="brand/svg/parakh-mark-animated.svg" width="128" alt="PARAKH"&gt;</pre>
+
+  <h2>Files</h2>
+  <table>
+    <tr><td><code>parakh-logo.js</code></td><td>The web component <code>&lt;parakh-logo&gt;</code> (attributes status, tone, size, animated, intro, label).</td></tr>
+    <tr><td><code>svg/parakh-mark(-dark).svg</code></td><td>Still mark for light (or dark) backgrounds; plain attributes, safe for slides.</td></tr>
+    <tr><td><code>svg/parakh-mark-animated(-dark).svg</code></td><td>Self-contained animated mark.</td></tr>
+    <tr><td><code>svg/parakh-lockup-*.svg</code></td><td>Mark with the wordmark, horizontal and stacked, light and dark.</td></tr>
+    <tr><td><code>svg/parakh-favicon(-alert).svg</code>, <code>svg/parakh-app-icon.svg</code></td><td>Tab icon (and its alert form) and home-screen icon.</td></tr>
+    <tr><td><code>png/*.png</code></td><td>Transparent PNG exports of the marks and lockups for slides, and the 512 px app icon.</td></tr>
+    <tr><td><code>build_brand.py</code></td><td>Regenerates all of it, plus the dashboard's favicons (<code>python brand/build_brand.py</code>).</td></tr>
+  </table>
+</main>
+
+<script src="parakh-logo.js"></script>
+<script>
+  const heroes = [document.getElementById('hero-dark'), document.getElementById('hero-light')];
+  const buttons = [...document.querySelectorAll('.seg button')];
+  const order = ['stable', 'watch', 'critical'];
+
+  function setStatus(status) {
+    document.querySelectorAll('parakh-logo').forEach((el) => { el.status = status; });
+    buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.status === status)));
+  }
+
+  buttons.forEach((b) => b.addEventListener('click', () => setStatus(b.dataset.status)));
+  document.querySelectorAll('parakh-logo').forEach((el) => el.addEventListener('click', () => {
+    setStatus(order[(order.indexOf(el.status) + 1) % order.length]);
+  }));
+  document.getElementById('replay').addEventListener('click', () => heroes.forEach((h) => h.replay()));
+
+  const motion = document.getElementById('motion');
+  motion.addEventListener('click', () => {
+    const on = motion.getAttribute('aria-pressed') !== 'true';
+    motion.setAttribute('aria-pressed', String(on));
+    motion.textContent = on ? 'Motion on' : 'Motion off';
+    document.querySelectorAll('parakh-logo:not([data-fixed])').forEach((el) => el.setAttribute('animated', String(on)));
+  });
+</script>
+</body>
+</html>

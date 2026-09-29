@@ -11,6 +11,8 @@ import { useMeta, usePortfolio } from '@/lib/queries'
 import { API_BASE, START_BACKEND, isOffline } from '@/lib/api'
 import { formatDate } from '@/lib/formatters'
 import { useAlertStream } from '@/lib/useAlertStream'
+import { useBeaconStatus } from '@/lib/useBeaconStatus'
+import { ParakhMark } from '@/components/brand/ParakhMark'
 import { AlertBell } from './AlertBell'
 import { ChangePasswordDialog } from './ChangePasswordDialog'
 
@@ -30,7 +32,7 @@ function initials(name: string, role: string): string {
 const ITEM = 'flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-fg-muted hover:bg-surface-elevated hover:text-fg-base focus-visible:outline-none focus-visible:bg-surface-elevated focus-visible:text-fg-base'
 
 /**
- * Persistent top bar: logo, the pages the role may open, a compact data pill, the scope the pages are cut to, the
+ * Persistent top bar: the PARAKH mark (its beacon follows the alert bell: lib/useBeaconStatus.ts), the pages the role may open, a compact data pill, the scope the pages are cut to, the
  * alert bell and the account menu (name, email, role and scope; change password, administration for admins, sign
  * out). The public gets a Sign in link; nothing shows in that slot until the session is known. A session that
  * expired mid-way says so under the bar. Model versions live on Models and the project page's provenance line.
@@ -47,13 +49,18 @@ export function TopBar() {
   const demo = useDemo()
   const [menuOpen, setMenuOpen] = useState(false)
   useAlertStream()
+  const beacon = useBeaconStatus()
 
   return (
     <header data-no-print className="sticky top-0 z-40 w-full border-b border-border-subtle bg-surface-base/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
-        <Link to="/" className="flex shrink-0 items-baseline gap-1.5">
-          <span className="text-base font-extrabold tracking-[0.18em] text-fg-base">PAIMANA</span>
-          <span className="text-xs font-semibold tracking-widest text-fg-dimmed">RADAR</span>
+        <Link
+          to="/"
+          title={beacon.label ? `PARAKH · ${beacon.label}` : 'PARAKH'}
+          className="flex shrink-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <ParakhMark size={30} status={beacon.status} />
+          <span className="text-base font-extrabold tracking-[0.18em] text-fg-base">PARAKH</span>
         </Link>
 
         <NavigationMenuWithActiveItem />

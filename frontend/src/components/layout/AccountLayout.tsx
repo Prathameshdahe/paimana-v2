@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/formatters'
+import { ParakhMark } from '@/components/brand/ParakhMark'
 
 const BULLETS = [
   'Ranks every central sector project by its risk of a delay or a cost revision in the next two quarters',
@@ -9,17 +10,23 @@ const BULLETS = [
 
 /**
  * The account pages' frame (sign in, request access, reset): the product and the ministry on a dark left panel,
- * the form card on the right; stacked on a narrow screen. Formal and still: no animation, no gradient, nothing
- * behind the card.
+ * the form card on the right; stacked on a narrow screen. Formal: the PARAKH mark draws itself in and then pulses
+ * slowly; no other animation, no gradient, nothing behind the card.
  */
 export function AccountLayout({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
       <aside className="flex flex-col justify-between bg-fg-base px-6 py-10 text-fg-inverse sm:px-10 lg:w-[40%] lg:px-14 lg:py-14">
         <div>
-          <p className="text-xl font-semibold tracking-[0.18em]">
-            PAIMANA <span className="text-base font-normal tracking-widest text-fg-inverse/70">RADAR</span>
-          </p>
+          <div className="flex items-center gap-3.5">
+            <ParakhMark size={52} tone="dark" intro />
+            <div>
+              <p className="text-xl font-semibold leading-tight tracking-[0.18em]">PARAKH</p>
+              <p className="mt-0.5 text-[0.6875rem] font-medium uppercase tracking-[0.2em] text-fg-inverse/70">
+                Infrastructure Intelligence
+              </p>
+            </div>
+          </div>
           <h1 className="mt-8 max-w-md text-2xl font-semibold leading-snug lg:text-3xl">
             Early Warning Radar for Central Sector Projects
           </h1>

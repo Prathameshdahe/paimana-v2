@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProjectPanel } from '@/lib/useProjectPanel'
 import * as Popover from '@radix-ui/react-popover'
@@ -7,20 +6,11 @@ import { IconChip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ApiErrorNote } from '@/components/common/ApiErrorNote'
 import { useAckAlert, useAlerts } from '@/lib/queries'
+import { markAlertsSeen, useUnseenAlerts } from '@/lib/alertsSeen'
 import { useSession } from '@/lib/auth/SessionContext'
 import { can } from '@/lib/auth/access'
 import { ALERT_KIND_ICON, ALERT_KIND_LABEL, alertVariant } from '@/lib/riskPalette'
 import { formatDateTime } from '@/lib/formatters'
-
-const SEEN_KEY = 'paimana.alertsSeenAt'
-
-function readSeen(): string | undefined {
-  try {
-    return localStorage.getItem(SEEN_KEY) ?? undefined
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * Top-bar bell: open alerts raised since the bell was last opened (all open
@@ -31,9 +21,9 @@ function readSeen(): string | undefined {
 export function AlertBell() {
   const { role } = useSession()
   const panel = useProjectPanel()
-  const [seenAt, setSeenAt] = useState(readSeen)
   const latest = useAlerts({ acked: false, size: 8 })
-  const unread = useAlerts({ acked: false, since: seenAt, size: 1 })
+  // the same query as the PARAKH mark's beacon (lib/alertsSeen.ts), so the badge and the beacon agree
+  const unread = useUnseenAlerts()
   const ack = useAckAlert()
   const n = unread.data?.total ?? 0
   const canAck = can(role, 'canAck')
@@ -42,13 +32,7 @@ export function AlertBell() {
     const newest = latest.data?.items[0]?.createdAt
     if (!newest) return
     // server clock, one second past the newest: `since` is inclusive
-    const next = new Date(Date.parse(newest) + 1000).toISOString()
-    setSeenAt(next)
-    try {
-      localStorage.setItem(SEEN_KEY, next)
-    } catch {
-      // storage disabled: unread resets on reload
-    }
+    markAlertsSeen(new Date(Date.parse(newest) + 1000).toISOString())
   }
 
   return (

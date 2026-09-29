@@ -177,3 +177,77 @@ def test_interval_backtest_trains_on_realised_rows_and_scores_coverage_and_pinba
     late = d.assign(y_months=np.where(d.target_period > cutoffs[0], 1e6, d.y_months))   # outcomes after the cutoff
     q = backtest.quantile_backtest(late, "y_months", cutoffs[:1], ["x"], [])
     assert np.allclose(q[["p05", "p50", "p95"]], p[p.cutoff == cutoffs[0]][["p05", "p50", "p95"]])
+
+
+def test_validation_block_is_the_newest_reliable_block_before_the_flash_era():
+    """A 1-quarter target: the newest reliable block lies entirely in the flash era, so validation comes from the
+    block before it; test stays the newest usable cutoff."""
+    periods = pd.date_range("2022-01-01", "2026-07-01", freq="QS").astype("datetime64[us]")
+    cov = pd.DataFrame({"period": periods, "anticipated_completion": 0.9, "anticipated_cost_cr": 1.0})
+    cov.loc[cov.period.isin(pd.to_datetime(["2025-04-01", "2025-07-01", "2025-10-01"])), "anticipated_completion"] = 0.6
+    t = [p for p in periods if p + pd.DateOffset(months=3) <= periods[-1]]
+    d = pd.DataFrame({"period": np.repeat(t, 150)})
+    w = backtest.windows(cov, d, "y_date_push", 1)
+    assert w["test"] == ["2026-04-01"] and w["validation_block"] == ["2022-01-01", "2025-01-01"]
+    assert w["validation"] == ["2023-07-01", "2023-10-01", "2024-01-01", "2024-04-01", "2024-07-01", "2024-10-01"]
+    assert w["flash"] == ["2025-07-01", "2025-10-01", "2026-01-01", "2026-04-01"]
+
+
+def test_pre_event_cohort_and_slices_in_the_pooled_table():
+    d = labelled(2, n_keys=40)
+    d["revisions_so_far"] = np.tile([0.0, 1.0, 2.0, np.nan], len(d))[:len(d)]
+    d["sector"] = np.where(d.x > 0, "Railways", "Power")
+    d["cost_band"] = np.tile([0.0, 1.0, 2.0, 3.0, np.nan], len(d))[:len(d)]
+    d["elapsed_ratio"] = np.tile([0.2, 0.8, 1.2, 2.0, np.nan], len(d))[:len(d)]
+    d["months_since_last_obs"] = np.tile([3, 6, 9], len(d))[:len(d)]
+    d["physical_progress_pct"] = np.where(d.x > 1, np.nan, 50.0)
+    d["slip_to_date_months"], d["cost_variation_pct"], d["period_type"] = 0.0, np.nan, "quarterly"
+    assert backtest.pre_event(d).tolist()[:4] == [True, False, False, False]        # a null count is not pre-event
+    assert not backtest.pre_event(labelled(2)).any()                                # no column: no cohort
+    lab = backtest.slice_labels(d)
+    assert lab.age.tolist()[:5] == ["under half of schedule", "half to due", "due to 1.5x", "over 1.5x schedule",
+                                    backtest.UNKNOWN]
+    assert lab.cost_band.tolist()[:5] == ["under 500 cr", "500-1000 cr", "1000-5000 cr", "over 5000 cr",
+                                          backtest.UNKNOWN]
+    assert lab.freshness.tolist()[:3] == ["current (3 months)", "4-6 months", "over 6 months"]
+    assert (lab.on_schedule == "behind or over").all()                              # a null cost change: not known
+    assert set(lab.pre_event) == {"no revision yet", "revised before"}
+    cutoffs = Q[5:8]
+    preds, folds, _ = backtest.backtest(d, "y", cutoffs, {"logreg": (backtest.fit_logreg, ["x"], [])})
+    assert {"pre_event", "slice_sector", "slice_age", "slice_pre_event"} <= set(preds.columns)
+    s = backtest.pooled(preds, folds, 2).iloc[0]
+    pre = preds[preds.pre_event.astype(bool)]
+    assert s.pre_n == len(pre) == (d.period.isin(cutoffs) & d.revisions_so_far.eq(0)).sum()
+    assert s.pre_base_rate == pre.y.mean() and 0 < s.pre_pr_auc <= 1 and 0 < s.pre_pr_auc_fold_mean <= 1
+    assert s.pr_auc_fold_sd == pytest.approx(folds.pr_auc.std(ddof=1))
+    t = backtest.slices(preds)
+    sec = t[t.dimension == "sector"].set_index("value")
+    assert set(sec.index) == {"Railways", "Power"} and sec.row_share.sum() == pytest.approx(1)
+    assert sec.top50_share.sum() == pytest.approx(1) and (sec.n_pos <= sec.n).all()
+    assert sec.lift.to_dict() == pytest.approx((sec.top50_share / sec.row_share).to_dict())
+    assert set(t.dimension) == {"sector", "cost_band", "age", "freshness", "progress_reported", "pre_event",
+                                "on_schedule", "report"}
+    plain = backtest.pooled(preds.drop(columns=["pre_event"]), folds, 2).iloc[0]     # cached older predictions
+    assert plain.pre_n == 0 and np.isnan(plain.pre_pr_auc)
+
+
+def test_isotonic_calibrator_fixes_a_skew_keeps_ranks_and_round_trips_through_apply():
+    rng = np.random.default_rng(3)
+    true = rng.uniform(0.05, 0.6, 4000)
+    y = (rng.random(4000) < true).astype(int)
+    skewed = np.clip(true + 0.25, 0, 0.99)
+    cal = backtest.isotonic_fit(y, skewed)
+    assert set(cal) == {"x", "y", "n", "n_pos"} and cal["n"] == 4000
+    fixed = backtest.platt_apply(cal, skewed)
+    assert abs(fixed.mean() - y.mean()) < 0.01 < abs(skewed.mean() - y.mean())
+    order = np.argsort(skewed, kind="stable")
+    assert (np.diff(fixed[order]) >= 0).all()                                    # monotone: ranks kept up to ties
+    assert backtest.isotonic_fit(np.ones(500), skewed[:500]) is None
+    assert (backtest.platt_apply({"n": 3}, skewed) == skewed).all()             # neither kind: unchanged
+    q = pd.date_range("2023-01-01", periods=8, freq="QS")
+    pool = pd.concat([pd.DataFrame({"cutoff": c, "model": "m", "project_key": [f"P{i}" for i in range(500)],
+                                    "y": y[:500], "p": skewed[:500]}) for c in q])
+    target = pool[pool.cutoff == q[-1]]
+    iso, pl = (backtest.calibrate(target, pool, 2, m) for m in ("isotonic", "platt"))
+    assert abs(iso.p.mean() - target.y.mean()) < 0.02 and abs(pl.p.mean() - target.y.mean()) < 0.02
+    assert not np.allclose(iso.p, pl.p) and backtest.CALIBRATED == set(backtest.CALIBRATION)

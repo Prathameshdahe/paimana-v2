@@ -207,3 +207,27 @@ def test_seed_sd_measures_each_block_of_the_champion(harness):
     r = t.loc[("y_any_h2", "flash")]
     assert r.n_folds == 3 and r.n_seeds == 3 and r.fold_pr_auc_sd > 0 and r.margin == 2 * r.fold_pr_auc_sd
     assert len(r.fold_pr_auc_by_seed.split("/")) == 3
+
+
+def test_calibration_experiment_compares_raw_platt_and_isotonic_per_block(harness):
+    _, tmp = harness
+    t = experiment.calibration_methods("k1", out=tmp, targets=["y_any_h2"])
+    assert set(t.method) == {"raw", "platt", "isotonic"} and set(t.block) == {"val", "flash"}
+    assert (t[t.method == "raw"].decision == "-").all() and set(t.decision) <= {"-", "pass", "fail"}
+    by = t.set_index(["block", "method"])
+    for b in ("val", "flash"):
+        assert by.loc[(b, "raw"), "n_rows"] == by.loc[(b, "isotonic"), "n_rows"] > 0
+        assert 0 <= by.loc[(b, "isotonic"), "ece"] <= 1 and 0 < by.loc[(b, "platt"), "fold_pr_auc"] <= 1
+    assert (tmp / "k1.csv").exists()
+
+
+def test_monotone_candidate_constrains_only_the_named_columns_and_survival_candidate_is_catalogued():
+    fit = experiment.monotone({"a": 1})(0, None, "y_any", 2, {**backtest.LGB_PARAMS, "n_estimators": 5, "n_jobs": 1})
+    rng = np.random.default_rng(0)
+    d = pd.DataFrame({"a": rng.normal(size=300), "b": rng.normal(size=300)})
+    d["y"] = ((d.a - d.b + rng.normal(size=300)) > 0).astype(int)
+    m, predict = fit(d, ["a", "b"], [], "y")
+    assert m.get_params()["monotone_constraints"] == [1, 0]
+    x = pd.DataFrame({"a": np.linspace(-3, 3, 50), "b": 0.0})
+    assert (np.diff(predict(x)) >= -1e-9).all()                                # rising in a, unconstrained in b
+    assert {"m1_monotone", "s1_survival"} <= set(experiment.CANDIDATES) and "k1_isotonic" in experiment.SPECIAL

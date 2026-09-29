@@ -13,7 +13,10 @@ that are not completed. Each target's champion from the registry is refitted (it
 registry.fitter) on every label row realised by asof (t + h <= asof, from backtest.TRAIN_FROM where a target has
 one) and scores them; a target in backtest.CALIBRATED goes through the Platt calibrator the champion's train run
 stored (backtest.PLATT_FILE, fitted on the folds realised by that run's latest period). LightGBM quantile regressors
-(5/50/95) trained on the same h=2 rows give the slip-months and cost-% intervals. SHAP top-5 (log-odds
+(5/50/95) trained on the same h=2 rows give the slip-months and cost-% intervals. The runway curve
+(runway_any_1q .. runway_any_6q: P(first date push or cost revision by 3, 6, ..., 18 months) comes from one
+discrete-time survival model (ml/survival.py) with the p_any_2q champion's features and params, next to the
+per-horizon scores p_any_1q, p_any_2q, p_any_4q and p_any_6q; the tiers still rank p_any_2q. SHAP top-5 (log-odds
 contributions) come from the p_any_2q model. Tiers go by rank of p_any_2q, not by threshold. The stagnation rule (no
 progress for 2+ quarters, not at >= 95% progress) is only a flag, stagnation_override, shown as a badge: it used to
 lift the tier, but flagged projects slipped at or below the base rate in the backtest and every lifted tier got less
@@ -36,7 +39,8 @@ from ml import backtest, registry  # noqa: E402
 GOLD, SILVER, PK = backtest.GOLD, backtest.SILVER, backtest.PK
 LOG = GOLD / "prediction_log.parquet"
 PROBS = {"p_date_push_2q": ("y_date_push", 2), "p_cost_rev_2q": ("y_cost_rev", 2), "p_any_2q": ("y_any", 2),
-         "p_any_4q": ("y_any", 4)}
+         "p_any_4q": ("y_any", 4), "p_any_1q": ("y_any", 1), "p_any_6q": ("y_any", 6)}
+RUNWAY = True               # the survival model's runway_any_1q..6q curve (ml/survival.py), next to the per-horizon scores
 QUANTILES = {name: y for name, (y, _) in backtest.QUANTILE_TARGETS.items()}     # h = 2 regression targets
 ALPHAS = backtest.ALPHAS
 TIERS = ["Critical", "High", "Medium", "Low"]
@@ -169,6 +173,13 @@ def main(asof=None):
         for i, s in enumerate(ALPHAS):
             out[f"{name}_{s}"] = q[:, i]
         print(f"  {name}: quantile LightGBM on {len(d)} rows")
+
+    if RUNWAY:
+        from ml import survival
+        rw, n_pp = survival.runway(feats, asof, cur, cols, cats, lead.get("params") or backtest.lgb_params("y_any", 2),
+                                   skip=unseen_missing)
+        out = pd.concat([out, rw], axis=1)
+        print(f"  runway: hazard LightGBM on {n_pp} person-periods, {rw.isna().any(axis=1).sum()} rows not scored")
 
     out["no_completion_date"] = cur.months_to_anticipated_completion.isna()
     out = pd.concat([out, tiers(out.p_any_2q, stagnant(cur), out.no_completion_date)], axis=1)
