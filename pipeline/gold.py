@@ -6,8 +6,8 @@ Run from repo root after the silver build:  python -m pipeline.run gold
 Inputs   silver/observations.parquet, silver/sector_context.parquet, silver/silver_manifest.json,
          gold/project_mentions.parquet, gold/external_fc.parquet, gold/external_land_pairs.parquet (the external
          step, pipeline/external.py)
-Outputs  gold/features.parquet, gold/labels_h2.parquet, gold/labels_h4.parquet, gold/sector_scurve.parquet,
-         gold/agency_stats.parquet, gold/manifest.json
+Outputs  gold/features.parquet, gold/labels_h{1..6}.parquet (HORIZONS), gold/sector_scurve.parquet,
+         gold/agency_stats.parquet, gold/manifest.json (with label_noise and progress_coverage_by_year)
 
 Point-in-time rule: the feature row at (key, t) reads only rows with period <= t. Per-key history comes from
 groupby cumulative ops and backward as-of joins; cross-project statistics use rows at or before t only: the
@@ -34,7 +34,10 @@ from pipeline.silver import ROOT, SILVER, months  # noqa: E402
 
 GOLD = ROOT / "dataset" / "gold"
 
-HORIZONS = (2, 4)
+# every quarter ahead to 18 months: 1, 2, 4 and 6 are the runway horizons (3, 6, 12, 18 months) the models are
+# backtested on (ml/backtest.TARGETS); 3 and 5 complete the quarter-by-quarter event sequence of ml/survival.py
+HORIZONS = (1, 2, 3, 4, 5, 6)
+SHOW_HORIZONS = (1, 2, 4, 6)   # the labelled-rows tables printed at the end of the build
 AGENCY_H = 2              # agency rates come from the 2-quarter labels (more realised outcomes, sooner)
 SHRINK_K = 10             # pseudo-counts pulling agency rates toward the sector rate
 RECENT_Q = 4              # the recent-window agency and sector slip rates count labels realised in the last 4 quarters
@@ -429,6 +432,35 @@ def label_checks(lab, obs, h):
             "no_completed_rows": not bool(done.any()), "unique": not bool(lab.duplicated(PK).any())}
 
 
+def label_noise(labs):
+    """How often a labelled event has gone away one quarter later: among the rows positive for a binary target at
+    horizon h whose label at h + 1 is known, the share that are negative at h + 1 (the pushed date pulled back
+    under 3 months of the value at t, or the cost back under 5% up). target -> h -> {n_events, reverted_next_quarter}.
+    Measured on 2026-09-29: 1-2% for date pushes and 2-5% for cost revisions at every h, so no label requires the
+    step to persist for two observations (it would cost one quarter of lead time for a 2% gain in label purity)."""
+    out = {}
+    for y in BINARY:
+        out[y] = {}
+        for h in sorted(labs):
+            if h + 1 not in labs:
+                continue
+            a = labs[h].loc[labs[h][y].eq(1).fillna(False).to_numpy(bool), PK]
+            b = labs[h + 1].loc[labs[h + 1][y].notna(), PK + [y]].rename(columns={y: "_next"})
+            m = a.merge(b, on=PK, how="inner")
+            out[y][f"h{h}"] = {"n_events": int(len(m)),
+                               "reverted_next_quarter": round(float(m["_next"].eq(0).mean()), 4) if len(m) else None}
+    return out
+
+
+def progress_coverage(obs):
+    """Share of panel rows per calendar year that print a physical progress figure. It is 0 before 2014 and 0.45 in
+    2023: on those rows the model reads the financial trajectory and the dates, not the physical one (the null is
+    LightGBM's flag; a separate progress_source column would repeat it), and the backtest's slices.csv reports the
+    'progress_reported' slice so the difference is visible."""
+    s = obs.groupby(obs["period"].dt.year)["physical_progress_pct"].apply(lambda v: v.notna().mean())
+    return {str(y): round(float(v), 3) for y, v in s.items()}
+
+
 def main(silver=SILVER, out=GOLD):
     """Build features, labels, S-curves and agency stats; run the leakage checks (raise before writing); write."""
     t0 = time.time()
@@ -458,8 +490,9 @@ def main(silver=SILVER, out=GOLD):
         path = out / f"{name}.parquet"
         f.to_parquet(path, index=False, row_group_size=50000)
         digest.update(name.encode() + bytes(1) + path.read_bytes())
+    labs = {h: frames[f"labels_h{h}"] for h in HORIZONS}
     years = {f"h{h}": {str(y): label_summary(g) for y, g in lab.groupby(lab["period"].dt.year)}
-             for h in HORIZONS for lab in [frames[f"labels_h{h}"]]}
+             for h, lab in labs.items()}
     now = datetime.now(timezone.utc)
     silver_man = json.loads((silver / "silver_manifest.json").read_text(encoding="utf-8"))
     man = {
@@ -481,15 +514,23 @@ def main(silver=SILVER, out=GOLD):
         "rows": {name: len(f) for name, f in frames.items()},
         "labelled": {f"h{h}": label_summary(frames[f"labels_h{h}"]) for h in HORIZONS},
         "labelled_by_year": years,
+        "label_noise": label_noise(labs),
+        "progress_coverage_by_year": progress_coverage(obs),
         "checks": checks,
     }
     (out / "manifest.json").write_text(json.dumps(man, indent=2, default=str) + "\n", encoding="utf-8")
     for k, by_year in years.items():
+        if int(k[1:]) not in SHOW_HORIZONS:
+            continue
         table = pd.DataFrame({y: {f"{c} {s}": v for c, st in t.items() for s, v in st.items()}
                               for y, t in by_year.items()}).T
         table = table.astype({c: "int64" for c in table.columns if c.endswith(" n")})
         print(f"labelled rows (n) and positive rate (pos_rate) per year of t, {k}:")
         print(table.to_string())
+    noise = man["label_noise"]
+    print("label noise (share of events gone one quarter later): "
+          + "; ".join(f"{y} " + " ".join(f"{h} {v['reverted_next_quarter']}" for h, v in hs.items())
+                      for y, hs in noise.items()))
     print(f"gold {man['gold_version']} (silver {man['silver_version']}): "
           + ", ".join(f"{v} {n}" for n, v in man["rows"].items()) + f", {time.time() - t0:.1f}s")
     return man

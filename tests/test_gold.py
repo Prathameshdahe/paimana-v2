@@ -312,3 +312,28 @@ def test_external_features_at_t_ignore_later_remarks_and_stretches():
             pd.testing.assert_frame_equal(f[f["period"] <= t].reset_index(drop=True),
                                           b[b["period"] <= t].reset_index(drop=True))
         assert not a[a["period"] > t].equals(b[b["period"] > t])        # the appended rows do reach later t
+
+
+def test_label_noise_counts_events_gone_one_quarter_later():
+    # key 1: pushed 6 months by q1 (event at h1), pulled back to the q0 date at q2 (gone at h2); cost never revised
+    # key 2: pushed 6 months by q1 and still 6 months at q2 (persists)
+    d = pd.concat([obs_rows("PRJ-000001", [(0, 100.0, "2020-01", False), (1, 100.0, "2020-07", False),
+                                           (2, 100.0, "2020-01", False)]),
+                   obs_rows("PRJ-000002", [(0, 100.0, "2020-01", False), (1, 100.0, "2020-07", False),
+                                           (2, 100.0, "2020-07", False)])], ignore_index=True)
+    labs = {h: gold.build_labels(d, h) for h in (1, 2)}
+    noise = gold.label_noise(labs)
+    assert noise["y_date_push"]["h1"] == {"n_events": 2, "reverted_next_quarter": 0.5}
+    assert noise["y_any"]["h1"] == {"n_events": 2, "reverted_next_quarter": 0.5}
+    assert noise["y_cost_rev"]["h1"] == {"n_events": 0, "reverted_next_quarter": None}
+    assert "h2" not in noise["y_date_push"]                                  # no h3 labels to compare with
+    assert set(gold.HORIZONS) == {1, 2, 3, 4, 5, 6} and set(gold.SHOW_HORIZONS) <= set(gold.HORIZONS)
+
+
+def test_progress_coverage_is_the_share_of_rows_with_a_progress_figure():
+    d = panel()
+    cov = gold.progress_coverage(d)
+    y = str(d["period"].dt.year.iloc[0])
+    rows = d[d["period"].dt.year == int(y)]
+    assert cov[y] == pytest.approx(rows["physical_progress_pct"].notna().mean(), abs=1e-3)
+    assert set(cov) == {str(y) for y in d["period"].dt.year.unique()}
