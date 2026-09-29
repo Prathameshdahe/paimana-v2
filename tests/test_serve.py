@@ -235,7 +235,9 @@ def test_real_data_slice(fresh_db):
     d = serve.read(keys)
     n = serve.load(d)
     assert n["core.projects"] == 40 and n["ml.predictions"] == 40 and n["core.project_keys"] >= 40
-    assert n["core.project_timeline"] == len(d.observations) > 40 and n["ml.model_registry"] == 5
+    # one registry row per champion (six targets since the evaluation round) plus the served combination
+    assert n["core.project_timeline"] == len(d.observations) > 40
+    assert n["ml.model_registry"] == len(d.registry["champions"]) + 1 == 7
     assert n["ml.risk_flags"] == int((d.risk_profile["state"] == "flagged").sum()) > 0 and n["ml.forecasts"] == 40
     models = by("ml.model_registry", "model_version")
     assert models[d.pointer["model_version"]]["target_name"] == serve.SERVED
