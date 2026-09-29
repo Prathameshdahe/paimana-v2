@@ -52,7 +52,10 @@ GAIN = "pr_auc_fold_mean"      # the promotion metric: each fold's PR-AUC, avera
 # of these is noise; the harness's ship guard also asks for a bootstrap CI above 0. Re-measure when the features or
 # folds change a lot.
 SEED_SD = {"y_any_h2": {"val": 0.0012, "flash": 0.0067}, "y_date_push_h2": {"val": 0.0028, "flash": 0.0067},
-           "y_cost_rev_h2": {"val": 0.0034, "flash": 0.0053}, "y_any_h4": {"val": 0.0002, "flash": 0.0047}}
+           "y_cost_rev_h2": {"val": 0.0034, "flash": 0.0053}, "y_any_h4": {"val": 0.0002, "flash": 0.0047},
+           # the runway horizons added 2026-09-29 (champions of ML-20260929-070637 on gold 2bc1eebd3f65); y_any_h6
+           # has no flash block (its outcome quarters are not reported yet)
+           "y_any_h1": {"val": 0.0024, "flash": 0.0078}, "y_any_h6": {"val": 0.0006}}
 NOISE_SDS = 2
 BLOCKS = {"val": ("pooled", "folds"), "flash": ("flash", "flash_folds")}    # block -> (pooled key, folds key)
 CANDIDATES = {"logreg": backtest.fit_logreg, "lightgbm": backtest.fit_lgbm}   # logistic is the first-run incumbent
@@ -226,7 +229,8 @@ def register(reg, run_id, res, params, inc, created):
     man, cols, cats = res["manifest"], res["features"], res["categorical"]
     shared = {f: f"model/runs/{run_id}/{f}" for f in ["backtest_folds.csv", "backtest_summary.csv", "ablation.csv",
                                                       "calibration.csv", "shap_summary.csv", "windows.json",
-                                                      "params.json", backtest.PLATT_FILE, "intervals.csv"]}
+                                                      "params.json", backtest.PLATT_FILE, "intervals.csv",
+                                                      "slices.csv"]}
     out = []
     for (y, h), d in res["frames"].items():
         key = f"{y}_h{h}"
