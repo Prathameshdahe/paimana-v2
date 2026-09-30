@@ -33,41 +33,38 @@ temp/*
 .DS_Store
 Thumbs.db
 
-# large data: shared via the team drive, not git
+# large data and ML runs
 Dataset drive folder/
 dataset.zip
 paimana-demo-images.tar*
-dataset/clean/_parts/
 mlruns/
 
-# Silver reproducible outputs (python -m pipeline.run silver)
+# Silver reproducible intermediate outputs
 dataset/silver/typed_rows.parquet
 dataset/silver/identity/resolved_rows.parquet
 
-# the SQLite app state of earlier versions
+# SQLite databases and state
 database/*.db
 database/*.db-journal
+database/*.json
+database/postgres/tests/sample_predictions_v1.csv
+database/postgres/tests/sample_*.json
 
-# report inbox: files wait here for the live watcher
-dataset/raw/inbox/*
-!dataset/raw/inbox/README.md
+# ── SIH Hackathon: Raw datasets and docs kept local (hidden from GitHub) ──────
 
-# the assistant's search index (rebuilt by the backend when inputs change)
+# Raw government reports, uncompressed CSV dumps and inbox
+dataset/raw/pdf/
+dataset/raw/csv/
+dataset/raw/inbox/
+dataset/clean/
 dataset/rag/
 
-# ── SIH: data and docs kept local, not on GitHub ─────────────────────────────
-
-# All clean dataset CSVs and gold/silver outputs (reproduced by running the pipeline)
-dataset/clean/
-dataset/gold/
-dataset/silver/
-
-# Model run artifacts (reproduced by ml/train.py) — not shared
-model/runs/
+# Experimental model artifacts
 model/experiments/
-model/*.json
 
-# Docs — kept local for team reference, not visible on GitHub
-# README.md is NOT listed here so it stays on GitHub
-docs/*.md
-docs/screenshots/
+# Internal documentation and data contracts (root README.md stays on GitHub)
+docs/
+database/postgres/*.md
+database/postgres/README.md
+pipeline/identity/README.md
+frontend/README.md
