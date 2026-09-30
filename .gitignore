@@ -52,7 +52,7 @@ database/postgres/tests/sample_*.json
 
 # ── SIH submission: the data, the trained models and the internal write-ups stay on this machine ──────────────────
 # The repository carries the code only. A fresh clone has no dataset/, model/ or docs/ (except the public help text);
-# the tests that need them skip (tests/conftest.py, needs_local_data) and the demo image is built from a local checkout.
+# the tests that need them skip (tests/localdata.py, tests/conftest.py) and the demo image is built from a local checkout.
 
 # The whole dataset tree: raw reports, silver, gold, features, labels, predictions, external and research sweeps
 dataset/
