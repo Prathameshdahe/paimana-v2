@@ -39,6 +39,10 @@ dataset.zip
 paimana-demo-images.tar*
 mlruns/
 
+# Silver reproducible intermediate outputs
+dataset/silver/typed_rows.parquet
+dataset/silver/identity/resolved_rows.parquet
+
 # SQLite databases and state
 database/*.db
 database/*.db-journal
@@ -46,13 +50,17 @@ database/*.json
 database/postgres/tests/sample_predictions_v1.csv
 database/postgres/tests/sample_*.json
 
-# ── SIH Hackathon: Kept local only (hidden from GitHub) ───────────────────────
+# ── SIH Hackathon: Raw datasets and docs kept local (hidden from GitHub) ──────
 
-# Entire dataset folder (all raw PDFs, CSVs, external data, silver, gold, clean, inbox, RAG)
-dataset/
+# Raw government reports, uncompressed CSV dumps and inbox
+dataset/raw/pdf/
+dataset/raw/csv/
+dataset/raw/inbox/
+dataset/clean/
+dataset/rag/
 
-# All model artifacts, trained weights, run logs, experiments, and schemas
-model/
+# Experimental model artifacts
+model/experiments/
 
 # Internal documentation and data contracts (root README.md stays on GitHub)
 docs/
