@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import db, serving  # noqa: E402
 from backend.access import Viewer  # noqa: E402
 from llm import client, rag  # noqa: E402
+import localdata  # noqa: E402 - tests/localdata.py
 
 REAL_STATE = serving.state
 
@@ -472,6 +473,7 @@ def test_news_chunks_keep_the_newest_per_project(fresh_db, monkeypatch):
 
 @pytest.fixture(scope="module")
 def real_chunks():
+    localdata.require("dataset", "docs")
     db.truncate()   # the real gold and docs, no news or agent facts
     return rag.build_chunks()
 

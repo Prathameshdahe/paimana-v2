@@ -6,6 +6,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import localdata  # noqa: E402 - tests/localdata.py
+
+localdata.require("dataset")   # the raw external CSVs these modules read at import stay on the owner's machine
+
 from pipeline import bhoomi_rashi as B  # noqa: E402
 from pipeline import external as X  # noqa: E402
 

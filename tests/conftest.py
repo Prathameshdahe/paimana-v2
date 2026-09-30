@@ -10,6 +10,8 @@ import os
 
 import pytest
 
+import localdata  # tests/localdata.py: what the repository does not carry
+
 os.environ["LIVE_JOBS"] = "0"  # no background watcher / scout loops in tests (backend/live/scheduler.py)
 
 from backend import settings as cfg  # noqa: E402
@@ -54,3 +56,16 @@ def _empty_app_tables(database):
 def fresh_db(database):
     """An empty app schema for this test (the tests of a module otherwise share one)."""
     db.truncate()
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """dataset/, model/ and docs/ are not in the repository (tests/localdata.py): a test or fixture that dies on a
+    file error naming one of them, while that whole tree is absent, is skipped with the path in the reason."""
+    report = yield
+    if report.failed and call.when in ("setup", "call") and call.excinfo is not None:
+        gone = localdata.skip_if_absent(call.excinfo.value)
+        if gone:
+            report.outcome = "skipped"
+            report.longrepr = (str(item.path), (item.location[1] or 0) + 1, f"Skipped: {localdata._reason(gone)}")
+    return report
