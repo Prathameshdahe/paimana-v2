@@ -50,21 +50,36 @@ database/*.json
 database/postgres/tests/sample_predictions_v1.csv
 database/postgres/tests/sample_*.json
 
-# ── SIH Hackathon: Raw datasets and docs kept local (hidden from GitHub) ──────
+# ── SIH submission: the data, the trained models and the internal write-ups stay on this machine ──────────────────
+# The repository carries the code only. A fresh clone has no dataset/, model/ or docs/ (except the public help text);
+# the tests that need them skip (tests/localdata.py, tests/conftest.py) and the demo image is built from a local checkout.
 
-# Raw government reports, uncompressed CSV dumps and inbox
-dataset/raw/pdf/
-dataset/raw/csv/
-dataset/raw/inbox/
-dataset/clean/
-dataset/rag/
+# The whole dataset tree: raw reports, silver, gold, features, labels, predictions, external and research sweeps
+dataset/
 
-# Experimental model artifacts
-model/experiments/
+# Every trained model and run: registry, joblib / LightGBM files, backtest, calibration, SHAP and slice tables
+model/
 
-# Internal documentation and data contracts (root README.md stays on GitHub)
-docs/
+# Internal documentation and data contracts; docs/HELP.md is the public help text the assistant quotes at runtime,
+# so it is the one file that ships (root README.md is the owner's and ships too)
+docs/*
+!docs/HELP.md
 database/postgres/*.md
 database/postgres/README.md
 pipeline/identity/README.md
 frontend/README.md
+
+# The app's local runtime state (worker drafts carry project names and scores) and samples built from the data
+database/*.json
+database/postgres/tests/sample_*
+frontend/src/mocks/
+
+# Safety net: a data, model or table file added by accident anywhere else stays out too
+*.parquet
+*.joblib
+*.pkl
+*.csv
+*.xlsx
+*.xls
+*.sqlite
+*.sqlite3

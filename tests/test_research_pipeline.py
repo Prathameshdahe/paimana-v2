@@ -6,6 +6,8 @@ import pytest
 
 from pipeline import research as R
 
+import localdata  # tests/localdata.py
+
 ASOF = pd.Timestamp("2026-07-01")
 FACT = {"category": "land", "direction": "negative", "severity": 2, "event_date": "2026-05", "published_date":
         "2026-05-20", "status": "ongoing", "summary": "About 4 km held up over land at 19 locations.",
@@ -41,6 +43,7 @@ def strings(x):
             yield from strings(v)
 
 
+@localdata.needs("dataset")   # the sweep file lives in dataset/raw/external/research
 def test_committed_sweep_names_no_private_person():
     """The privacy floor over every string of every committed line (the queries and URLs are committed too, though
     they never reach gold): no honorific + name outside an organisation or place."""
@@ -50,6 +53,7 @@ def test_committed_sweep_names_no_private_person():
     assert list(strings({"q": ["a", {"b": "Mr Rao"}], "n": 1})) == ["a", "Mr Rao"]
 
 
+@localdata.needs("dataset")
 def test_committed_sweep_validates_without_drops():
     paths, lines = committed()
     known = {r["project_key"] for r in lines}

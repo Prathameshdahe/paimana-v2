@@ -24,6 +24,7 @@ from backend.main import app  # noqa: E402
 from backend.schemas import ScoutOutput, _to_camel  # noqa: E402
 from llm import agent, client as llm_client, rag, second_opinion as so, tools, worker  # noqa: E402
 from pipeline import gold  # noqa: E402
+import localdata  # noqa: E402 - tests/localdata.py
 from viewers import as_role  # noqa: E402
 
 HIDDEN = {_to_camel(k) for k in (
@@ -436,18 +437,18 @@ def test_memo_in_words():
 
 
 def test_dispatch_memos_in_words(client, world, tmp_path, monkeypatch):
-    ipmd = client.get("/api/dispatch", headers=headers(client, world, "ipmd")).json()
-    dev = client.get("/api/dispatch", headers=headers(client, world, "developer")).json()
-    assert len(ipmd) == len(dev) and any("probability of 0." in d["draftMemo"] for d in dev)   # the developer: stored
-    assert not text_leaks(ipmd)
     k = world["key"]["ministry"]
     drafts = [{"id": "m", "project_id": k, "project_name": "X", "draft_memo": MEMO,
                "recommended_recipient_role": "ministry_official", "status": "pending",
                "created_at": "2026-09-21T21:29:01+00:00",
                "evidence": [{"tag": "news", "source_url": None, "note": "a slip probability of 0.91 (SHAP)"}]}]
-    path = tmp_path / "drafts.json"
+    path = tmp_path / "drafts.json"   # the worker's stored memos, staged here (database/dispatch_drafts.json is local state)
     path.write_text(json.dumps(drafts), encoding="utf-8")
     monkeypatch.setattr(store, "DISPATCH_DRAFTS_PATH", str(path))
+    ipmd = client.get("/api/dispatch", headers=headers(client, world, "ipmd")).json()
+    dev = client.get("/api/dispatch", headers=headers(client, world, "developer")).json()
+    assert len(ipmd) == len(dev) == 1 and "probability of 0." in dev[0]["draftMemo"]   # the developer: stored
+    assert "(rated very likely)" in ipmd[0]["draftMemo"] and not text_leaks(ipmd)
     h = headers(client, world, "ministry")
     got = client.get("/api/dispatch", headers=h).json()
     assert len(got) == 1 and "(rated very likely)" in got[0]["draftMemo"] and not text_leaks(got)
@@ -681,6 +682,7 @@ def test_the_help_reads_the_outlook_in_words():
     assert all(f"**{w}**" in text for w in words) and serving.HORIZON in text
 
 
+@localdata.needs("docs")
 def test_model_statistics_docs_only_for_the_developer():
     rows = [rag._chunk("doc:a", "doc", "official", "Method", "how the tiers are cut", "docs/A.md"),
             rag._chunk("doc:b", "doc", "numbers", "Backtest", "validation results", "docs/MODEL_UPGRADES_2026-09.md"),
