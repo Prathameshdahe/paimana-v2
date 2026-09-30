@@ -20,6 +20,7 @@ from backend.access import POLICY  # noqa: E402
 from backend.main import app  # noqa: E402
 from llm import agent, client, rag  # noqa: E402
 from test_live import free_port  # noqa: E402
+import localdata  # noqa: E402 - tests/localdata.py
 from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 Q = "How many Critical projects are in Odisha?"
@@ -178,6 +179,7 @@ def test_rate_limit_windows():
     assert ratelimit.check("o", "ministry_official", t + 5) is not None
 
 
+@localdata.needs("dataset")   # a real server: its start-up loads the gold
 def test_the_stream_is_live_and_a_hang_up_frees_the_llm(monkeypatch):
     long_answer = ["word "] * 40 + ["[1]."]
 

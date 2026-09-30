@@ -17,6 +17,7 @@ from backend import db, serving  # noqa: E402
 from backend.db import accounts  # noqa: E402
 from backend.live import opinions, research, scheduler, scout, watcher  # noqa: E402
 from backend.main import app  # noqa: E402
+import localdata  # noqa: E402 - tests/localdata.py
 from viewers import as_role  # noqa: E402 - tests/viewers.py
 
 
@@ -161,6 +162,7 @@ def real_server():
         thread.join(10)
 
 
+@localdata.needs("dataset")   # a real server: its start-up loads the gold
 def test_stream_pushes_a_new_alert(monkeypatch):
     monkeypatch.setattr(scheduler, "POLL_S", 0.1)
     with real_server() as base:

@@ -16,6 +16,7 @@ from backend.db import serve as dbs  # noqa: E402
 from ml import registry  # noqa: E402
 from pipeline import run as pipeline_run  # noqa: E402
 from pipeline import serve  # noqa: E402
+import localdata  # noqa: E402 - tests/localdata.py
 
 ASOF = pd.Timestamp("2026-07-01")
 TARGETS = ("y_any_h2", "y_date_push_h2", "y_cost_rev_h2", "y_any_h4")
@@ -256,6 +257,7 @@ def test_pipeline_run_has_the_serve_step(monkeypatch):
 
 # ------------------------------------------------------------------ model integrity
 
+@localdata.needs("model")
 def test_registry_is_sealed_and_verifies():
     reg = registry.load()
     checks = registry.verify(reg)
